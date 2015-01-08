@@ -31,8 +31,8 @@ Installing Impera
 =================
 
 For Ubuntu 14.04 (trusty) and Fedora 20, follow the instruction below. For other distributions,
-install from `source <https://github.com/bartv/imp>`. The
-`readme<https://github.com/bartv/imp/blob/master/Readme.md>` contains installation instructions to
+install from `source <https://github.com/bartv/impera>`. The
+`readme<https://github.com/bartv/impera/blob/master/Readme.md>` contains installation instructions to
 install Impera from source.
 
 

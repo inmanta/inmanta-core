@@ -16,12 +16,12 @@ For the install python3-setuptools is also required.
 
 Download a tarball of Impera or checkout the latest from the git repository:
 
-    wget https://github.com/bartv/imp/archive/master.zip
+    wget https://github.com/bartv/impera/archive/master.zip
     unzip master.zip
 
 or
 
-    git clone git@github.com:bartv/imp.git
+    git clone git@github.com:bartv/impera.git
 
 Install Impera:
 
