@@ -1,0 +1,12 @@
+Source: impera
+Maintainer: Bart Vanbrabant <bart@impera.io>
+Section: python
+Priority: optional
+Build-Depends: python3-setuptools, python3-all (>= 3.2), debhelper (>= 7.4.3)
+Standards-Version: 3.9.1
+
+Package: python3-impera
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends}, python3-execnet, python3-blitzdb, python3-colorlog, python3-yaml, python3-tornado, python3-amqp, git, python-virtualenv, python3-antlr3, python3-urllib3, python3-pymongo, apt-utils
+Description: Impera tool
+	The Impera configuration management tool and all of its components

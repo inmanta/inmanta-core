@@ -1,0 +1,5 @@
+
+host1 = std::Host(name = "host-1.example.net", os = "centos-5"):
+    file_1 = std::File(path = "/etc/motd", mode = 644, owner = "root", group = "root",
+        content = "This is a message of the day\n")
+end

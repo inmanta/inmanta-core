@@ -1,0 +1,5 @@
+[config]
+lib-dir = libs:../../model
+export = puppet
+output-dir = output
+

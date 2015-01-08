@@ -1,0 +1,10 @@
+amqp
+execnet
+tornado
+blitzdb
+git+https://github.com/bartv/python3-antlr3#egg=antlr3
+colorlog
+pyyaml
+urllib3
+six
+pymongo

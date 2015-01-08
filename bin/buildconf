@@ -1,0 +1,7 @@
+f19 fedora 19 fedora-package.sh
+f20 fedora 20 fedora-package.sh
+f21 fedora 21 fedora-package.sh
+el6 centos centos6 fedora-package.sh
+el7 centos centos7 fedora-package.sh
+trusty ubuntu 14.04 ubuntu-package.sh
+utopic ubuntu 14.10 ubuntu-package.sh

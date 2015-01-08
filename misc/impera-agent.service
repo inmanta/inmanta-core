@@ -1,0 +1,14 @@
+[Unit]
+Description=The agent of the Impera platform
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/impera -c /etc/impera/agent.cfg -vv agent
+Restart=on-failure
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+
