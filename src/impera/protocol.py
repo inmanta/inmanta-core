@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contect: bart@impera.io
+    Contact: bart@impera.io
 
     This module defines the Impera protocol between components. The protocol is marshaling and
     transport independent. Example support can be json over http and amqp

@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contect: bart@impera.io
+    Contact: bart@impera.io
 """
 
 # pylint: disable-msg=W0613,R0201
