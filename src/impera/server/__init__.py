@@ -77,6 +77,8 @@ class Server(ServerClientEndpoint):
 
         self._db_lock = RLock()
 
+        self.schedule(self.renew_expired_facts, 60)
+
     def check_storage(self):
         """
             Check if the server storage is configured and ready to use.
@@ -122,7 +124,14 @@ class Server(ServerClientEndpoint):
         """
             Send out requests to renew expired facts
         """
-        # TODO
+        resources = {}
+        facts = self._db.filter(Fact, {'value_time': {'$lt': datetime.datetime.now().timestamp() + self._fact_expire}})
+
+        for fact in facts:
+            res = fact.resource
+            if res.pk not in resources:  # query the facts again
+                self.retrieve_facts(res.pk, res)
+                resources[res.pk] = res
 
     def retrieve_facts(self, resource_id, resource):
         """
