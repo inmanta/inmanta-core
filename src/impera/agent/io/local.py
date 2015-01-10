@@ -21,6 +21,9 @@ import os
 import pwd
 import subprocess
 import grp
+import re
+import shutil
+from shlex import shlex
 
 
 try:
@@ -34,6 +37,243 @@ except ImportError:
     getgrnam = None
 
 
+class BashIO(object):
+    """
+        This class provides handler IO methods
+    """
+    def __init__(self, run_as=None):
+        self.run_as = run_as
+
+    def _run_as_args(self, *args):
+        """
+            Build the arguments to run the command as the `run_as` user
+        """
+        if self.run_as is None:
+            return list(args)
+
+        else:
+            arg_str = subprocess.list2cmdline(args)
+            ret = ["sudo", "-u", self.run_as, "sh", "-c", arg_str]
+            return ret
+
+    def is_remote(self):
+        return False
+
+    def hash_file(self, path):
+        result = subprocess.Popen(self._run_as_args("sha1sum", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        data = result.communicate()
+
+        if result.returncode > 0 or len(data[1]) > 0:
+            raise FileNotFoundError()
+
+        return data[0].decode().strip().split(" ")[0]
+
+    def read(self, path):
+        """
+            Read in the file in path and return its content as string (UTF-8)
+        """
+        result = subprocess.Popen(self._run_as_args("cat", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        data = result.communicate()
+
+        if result.returncode > 0 or len(data[1]) > 0:
+            raise FileNotFoundError()
+
+        return data[0].decode()
+
+    def read_binary(self, path):
+        """
+            Return the content of the file
+        """
+        result = subprocess.Popen(self._run_as_args("dd", "if=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        data = result.communicate()
+
+        if result.returncode > 0:
+            raise FileNotFoundError()
+
+        return data[0]
+
+    def run(self, command, arguments=[], env=None):
+        """
+            Execute a command with the given argument and return the result
+        """
+        cmds = [command] + arguments
+        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+
+        data = result.communicate()
+
+        return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
+
+    def file_exists(self, path):
+        """
+            Check if a given file exists
+        """
+        result = subprocess.Popen(self._run_as_args("stat", "-t", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result.communicate()
+
+        if result.returncode > 0:
+            return False
+
+        return True
+
+    def readlink(self, path):
+        """
+            Return the target of the path
+        """
+        result = subprocess.Popen(self._run_as_args("readlink", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        data = result.communicate()
+
+        if result.returncode > 0:
+            print(data, result.returncode)
+            raise FileNotFoundError()
+
+        return data[0].decode().strip()
+
+    def symlink(self, source, target):
+        """
+            Symlink source to target
+        """
+        result = subprocess.Popen(self._run_as_args("ln", "-s", source, target), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result.communicate()
+
+        if result.returncode > 0:
+            return False
+
+        return True
+
+    def is_symlink(self, path):
+        """
+            Is the given path a symlink
+        """
+        result = subprocess.Popen(self._run_as_args("stat", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        data = result.communicate()
+
+        if result.returncode > 0:
+            raise FileNotFoundError()
+
+        if "symbolic link" in data[0].decode().strip():
+            return True
+
+        return False
+
+    def file_stat(self, path):
+        """
+            Do a statcall on a file
+        """
+        result = subprocess.Popen(self._run_as_args("stat", "-c", "%a %U %G", path),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        data = result.communicate()
+
+        if result.returncode > 0:
+            raise FileNotFoundError()
+
+        parts = data[0].decode().strip().split(" ")
+        if len(parts) != 3:
+            raise IOError()
+
+        status = {}
+        status["owner"] = parts[1]
+        status["group"] = parts[2]
+        status["permissions"] = int(parts[0])
+
+        return status
+
+    def remove(self, path):
+        """
+            Remove a file
+        """
+        result = subprocess.Popen(self._run_as_args("rm", "-f", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result.communicate()
+
+        if result.returncode > 0:
+            raise FileNotFoundError()
+
+        return True
+
+    def put(self, path, content):
+        """
+            Put the given content at the given path in UTF-8
+        """
+        result = subprocess.Popen(self._run_as_args("dd", "of=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  stdin=subprocess.PIPE)
+        result.communicate(input=content.encode())
+
+        if result.returncode > 0:
+            raise FileNotFoundError()
+
+        return True
+
+    def chown(self, path, user=None, group=None):
+        """
+            Change the ownership information
+        """
+        args = None
+        if user is not None and group is not None:
+            args = ["chown", "%s:%s" % (user, group)]
+
+        elif user is not None:
+            args = ["chown", user]
+
+        elif group is not None:
+            args = ["chgrp", group]
+
+        if args is not None:
+            result = subprocess.Popen(self._run_as_args(*args), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result.communicate()
+
+            return result.returncode > 0
+
+        return False
+
+    def chmod(self, path, permissions):
+        """
+            Change the permissions
+        """
+        result = subprocess.Popen(self._run_as_args("chmod", permissions, path),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result.communicate()
+
+        return result.returncode > 0
+
+    def mkdir(self, path):
+        """
+            Create a directory
+        """
+        result = subprocess.Popen(self._run_as_args("mkdir", path),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result.communicate()
+
+        return result.returncode > 0
+
+    def rmdir(self, path):
+        """
+            Remove a directory
+        """
+        if path == "/":
+            raise Exception("Please do not ask to do rm -rf /")
+
+        if "*" in path:
+            raise Exception("Do not use wildward in an rm -rf")
+
+        result = subprocess.Popen(self._run_as_args("rm", "-rf", path),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result.communicate()
+
+        return result.returncode > 0
+
+    def close(self):
+        pass
+
+    def __repr__(self):
+        if self.run_as is None:
+            return "BashIO"
+
+        else:
+            return "BashIO_run_as_%s" % self.run_as
+
+    def __str__(self):
+        return repr(self)
+
+
 class LocalIO(object):
     """
         This class provides handler IO methods
@@ -44,8 +284,7 @@ class LocalIO(object):
     def hash_file(self, path):
         sha1sum = hashlib.sha1()
         with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(32768), b''):
-                sha1sum.update(chunk)
+            sha1sum.update(f.read())
 
         return sha1sum.hexdigest()
 
@@ -182,7 +421,7 @@ class LocalIO(object):
         """
             Change the permissions
         """
-        os.chmod(path, permissions)
+        os.chmod(path, int(permissions, 8))
 
     def mkdir(self, path):
         """
@@ -194,7 +433,7 @@ class LocalIO(object):
         """
             Remove a directory
         """
-        os.rmdir(path)
+        shutil.rmtree(path)
 
     def close(self):
         pass
