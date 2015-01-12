@@ -380,6 +380,7 @@ class AMQPTransport(Transport):
     def _do_connect(self):
         # try to connect
         while self._conn is None:
+            time.sleep(10)
             self._connect()
 
         while self._channel.callbacks and self._run:
