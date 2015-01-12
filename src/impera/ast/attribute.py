@@ -79,7 +79,8 @@ class Attribute(object):
         """
             Set a value to this attribute on instance
         """
-        if self.name in instance._attributes and instance._attributes[self.name] is not None:
+        if (self.name in instance._attributes and instance._attributes[self.name] is not None
+                and instance._attributes[self.name] != value):
             raise Exception("Attribute %s.%s can only be set once." %
                             (instance, self.name))
 
