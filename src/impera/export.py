@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def classes(t):
-    if t.__name__ == "EntityType" and t.__module__.startswith("Imp"):
+    if t.__name__ == "EntityType" and t.__module__.startswith("impera"):
         return []
 
     cls_name = t.__name__
@@ -142,7 +142,7 @@ class Exporter(object):
             Run any additional export plug-ins
         """
         export = []
-        for pl in Config.get("config", "export").split(","):
+        for pl in Config.get("config", "export", "").split(","):
             export.append(pl.strip())
 
         for name in export:
