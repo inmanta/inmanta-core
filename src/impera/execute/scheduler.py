@@ -193,7 +193,14 @@ class Scheduler(object):
         ctx = Context(self._graph, self._graph.root_scope, None, None)
         CallbackHandler.run_callbacks("after_types", ctx)
 
-    def print_unresolved(self, stmt):
+    def show_error(self, msg: str, scope: Scope):
+        """
+            Print out an error and the filename and line where it occurs
+        """
+        sys.stderr.write(msg + " (%s:%d) [%s]\n" %
+                         (scope.filename, scope.line, " > ".join(scope.path())))
+
+    def print_unresolved(self, stmt: State):
         """
             If the given stmt is not resolved it will return a list of
             unresolved references.
@@ -204,8 +211,30 @@ class Scheduler(object):
         scope = stmt.get_local_scope()
         for ref in stmt._refs.values():
             if not ref.is_available(scope):
-                sys.stderr.write("\t%s not available in scope %s (%s:%d) [%s]\n" %
-                                 (ref, scope, scope.filename, scope.line, " > ".join(scope.path())))
+                if isinstance(ref, AttributeVariable):
+                    if self._check_required(ref, scope):
+                        continue
+
+                self.show_error("\t%s not available in scope %s" % (ref, scope), scope)
+
+    def _check_required(self, attr_var: AttributeVariable, scope: Scope):
+        """
+            Check if the given attribute of the instance in attr_var is required and not set, and therefore causing
+            this error.
+        """
+        instance = attr_var.instance.value
+        entity = instance.__class__.__entity__
+        attributes = entity.attributes
+        attribute = attr_var.attribute
+
+        if attribute not in attributes:
+            self.show_error("\tEntity %s should have attributes %s" % (entity.get_full_name(), attribute), scope)
+            return
+
+        attr_obj = attributes[attribute]
+        if attr_obj.low > 0:
+            self.show_error("\tAttribute %s of entity %s should have a value." % (attribute, entity.get_full_name()), scope)
+            return
 
     def check_unset_attributes(self, obj):
         """
