@@ -21,6 +21,7 @@
 from impera.execute.util import EntityTypeMeta
 from impera.ast.type import Type
 from impera import stats
+from impera.ast import variables
 
 
 class Entity(Type):
@@ -208,6 +209,16 @@ class Entity(Type):
         for parent in self.parent_entities:
             parent.add_instance(constructor_id, obj)
 
+    def remove_instance(self, obj: EntityTypeMeta):
+        """
+            Remove an instance of this entity from the list 
+        """
+        self._instance_list.remove(obj)
+        del self.ids[obj]
+
+        for parent in self.parent_entities:
+            parent.remove_instance(obj)
+
     def get_instance(self, constructor_id, local_scope):
         """
             Return an instance of the class defined in this entity
@@ -318,7 +329,7 @@ class Entity(Type):
                                      "does not exist in this entity.")
                                     % (", ".join(index_attributes), self.__name, attribute))
 
-    def update_index(self, instance, attribute, value):
+    def update_index(self, instance: EntityTypeMeta, attribute: str, value: variables.Variable):
         """
             Update indexes based on the instance and the attribute that has
             been set
@@ -344,7 +355,29 @@ class Entity(Type):
                 key = ", ".join(key)
 
                 if key in self._index and self._index[key] is not instance:
-                    raise Exception("Duplicate key in index. %s" % key)
+                    # Replace this instances (second) with the existing instance (first)
+                    # 1) copy any already set attributes from the second instance to the first
+                    # 2) set attribute on Python object (second) to indicate that this instance was replaced
+                    # 3) replace all reference of the second instance with references of the first
+                    # 4) remove second from the list of instances in this class
+                    second = instance
+                    first = self._index[key]
+
+                    second.__replaced_by__ = first
+
+                    for k, v in second._attributes.items():
+                        if k not in first._attributes:
+                            setattr(first, k, v)
+
+                        else:
+                            fv = first._attributes[k]
+
+                            if fv != v:
+                                raise Exception("Trying to merge a second instance in index with key " +
+                                                "%s, but attribute %s has two different values (%s != %s)" % (key, k, fv, v))
+
+                    variables.Variable.replace_value(first, second)
+                    self.remove_instance(second)
 
                 self._index[key] = instance
 
