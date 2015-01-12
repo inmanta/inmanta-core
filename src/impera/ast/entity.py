@@ -211,7 +211,7 @@ class Entity(Type):
 
     def remove_instance(self, obj: EntityTypeMeta):
         """
-            Remove an instance of this entity from the list 
+            Remove an instance of this entity from the list
         """
         self._instance_list.remove(obj)
         del self.ids[obj]

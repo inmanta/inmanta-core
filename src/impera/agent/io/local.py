@@ -21,9 +21,7 @@ import os
 import pwd
 import subprocess
 import grp
-import re
 import shutil
-from shlex import shlex
 
 
 try:

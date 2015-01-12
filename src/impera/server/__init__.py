@@ -230,7 +230,7 @@ class Server(ServerClientEndpoint):
 
                 else:
                     with open(file_name, "rb") as fd:
-                        return 200, {"content": fd.read()}
+                        return 200, {"content": fd.read().decode()}
 
             elif operation == "HEAD":
                 if os.path.exists(file_name):
