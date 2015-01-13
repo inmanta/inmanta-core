@@ -701,22 +701,19 @@ class ModuleTool(object):
             raise Exception("downloadpath is required in the project file to install modules.")
 
         module_path = project_data["downloadpath"]
-
         self._install(project, module_path, project.requires())
 
         install_set = self._mod_handled_list
-
         not_listed = []
         for mod in project.modules.values():
             if mod._path not in install_set:
                 not_listed.append(mod)
 
-        # TODO: fix this!
-#         if len(not_listed) > 0:
-#             print("WARNING: The following modules are loaded by Impera but are not listed in the project file or in " +
-#                   "the dependencies of other modules:")
-#             for mod in not_listed:
-#                 print("\t%s (%s)" % (mod._meta["name"], mod._path))
+        if len(not_listed) > 0:
+            print("WARNING: The following modules are loaded by Impera but are not listed in the project file or in " +
+                  "the dependencies of other modules:")
+            for mod in not_listed:
+                print("\t%s (%s)" % (mod._meta["name"], mod._path))
 
     def status(self):
         """

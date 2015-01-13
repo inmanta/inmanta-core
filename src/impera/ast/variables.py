@@ -61,19 +61,6 @@ class Variable(object):
         A variable in the configuration. It represents a value. Comparison and
         mathematical operations are forwarded to the value
     """
-    _instance_var_map = {}
-
-    @classmethod
-    def replace_value(cls, value, new_value):
-        """
-            Replace the value of all variables that point to value with new_value
-        """
-        if value not in cls._instance_var_map:
-            return
-
-        for var in cls._instance_var_map[value]:
-            var._value = new_value
-
     def __init__(self, value):
         self.line = 0
         self.filename = ""
@@ -125,10 +112,6 @@ class Variable(object):
             readonly.
         """
         self.__value = value
-        if value not in self.__class__._instance_var_map:
-            self.__class__._instance_var_map[value] = []
-
-        self.__class__._instance_var_map[value].append(self)
 
     value = property(get_value, set_value)
 
