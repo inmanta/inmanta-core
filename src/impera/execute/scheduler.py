@@ -222,19 +222,22 @@ class Scheduler(object):
             Check if the given attribute of the instance in attr_var is required and not set, and therefore causing
             this error.
         """
-        instance = attr_var.instance.value
-        entity = instance.__class__.__entity__
-        attributes = entity.attributes
-        attribute = attr_var.attribute
+        try:  # catch exceptions, because we are navigating parts of the model that might not have been resolved yet!
+            instance = attr_var.instance.value
+            entity = instance.__class__.__entity__
+            attributes = entity.attributes
+            attribute = attr_var.attribute
 
-        if attribute not in attributes:
-            self.show_error("\tEntity %s should have attributes %s" % (entity.get_full_name(), attribute), scope)
-            return
+            if attribute not in attributes:
+                self.show_error("\tEntity %s should have attributes %s" % (entity.get_full_name(), attribute), scope)
+                return
 
-        attr_obj = attributes[attribute]
-        if attr_obj.low > 0:
-            self.show_error("\tAttribute %s of entity %s should have a value." % (attribute, entity.get_full_name()), scope)
-            return
+            attr_obj = attributes[attribute]
+            if attr_obj.low > 0:
+                self.show_error("\tAttribute %s of entity %s should have a value." % (attribute, entity.get_full_name()), scope)
+                return
+        except:
+            pass
 
     def check_unset_attributes(self, obj):
         """
