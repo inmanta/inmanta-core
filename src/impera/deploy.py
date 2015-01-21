@@ -168,8 +168,8 @@ def deploy(agentname=None, dry_run=True, ip_address=None, list_agents=False):
             client.stop()
 
         server.stop()
-        server_future.cancel()
+        server_future.result()
 
         agent.stop()
-        agent_future.cancel()
+        agent_future.result()
         print("done")
