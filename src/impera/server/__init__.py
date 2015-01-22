@@ -138,7 +138,7 @@ class Server(ServerClientEndpoint):
             Request facts about a resource
         """
         # get the latest resource we have for resource
-        resource_list = list(self._db.filter(ResourceVersion, {"resource": resource}, sort_by="pk", limit=1))
+        resource_list = list(self._db.filter(ResourceVersion, {"resource": resource}, limit=1).sort("pk"))
 
         if len(resource_list) > 0:
             parsed_id = Id.parse_id(resource_id)
@@ -357,7 +357,7 @@ class Server(ServerClientEndpoint):
         if body is None or "id" not in body:
             if operation == "GET":
                 with self._db_lock:
-                    versions = self._db.filter(Version, {}, sort_by="date")
+                    versions = self._db.filter(Version, {}).sort("date")
                 return 200, {"versions": [v.attributes for v in versions]}
 
         else:
