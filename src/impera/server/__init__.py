@@ -25,6 +25,7 @@ from threading import RLock
 from pymongo import Connection
 from blitzdb.backends.mongo import Backend as MongoBackend
 from blitzdb import FileBackend
+from blitzdb import document
 import tornado.escape
 from impera import methods
 from impera import protocol
@@ -38,6 +39,7 @@ from impera.server.persistence import Node, Agent, Version, ResourceVersion, Res
 
 
 LOGGER = logging.getLogger(__name__)
+document.logger.setLevel(document.logging.WARNING)
 
 
 class Server(ServerClientEndpoint):
@@ -138,7 +140,7 @@ class Server(ServerClientEndpoint):
             Request facts about a resource
         """
         # get the latest resource we have for resource
-        resource_list = list(self._db.filter(ResourceVersion, {"resource": resource}, limit=1).sort("pk"))
+        resource_list = list(self._db.filter(ResourceVersion, {"resource": resource}).sort("pk"))
 
         if len(resource_list) > 0:
             parsed_id = Id.parse_id(resource_id)
