@@ -375,15 +375,6 @@ class Constructor(GeneratorStatement):
             added_variables.add(attribute)
             scope.add_variable(attribute, var)
 
-            # Set a attributes with low multiplicity == 0 -> set []
-            attribute_obj = type_class.get_attribute(attribute)
-            if hasattr(attribute_obj, "low") and attribute_obj.low == 0:
-                value = Variable(list())
-                stmt = SetAttribute(object_ref, attribute_obj.name, value)
-                self.copy_location(stmt)
-                stmt.namespace = self.namespace
-                state.add_statement(stmt)
-
         # set the self variable
         scope.add_variable("self", object_ref)
 
@@ -405,6 +396,7 @@ class Constructor(GeneratorStatement):
         if isinstance(type_class, Default):
             type_class = type_class.get_entity()
 
+        # create the instance
         object_instance = type_class.get_instance(ctor_id, local_scope)
         object_instance.__statement__ = state
 
@@ -413,6 +405,7 @@ class Constructor(GeneratorStatement):
         except NotFoundException:
             pass
 
+        # set attributes
         attribute_statements = {}
         if state.has_attribute("new_statements"):
             attribute_statements = state.get_attribute("new_statements")
@@ -423,6 +416,7 @@ class Constructor(GeneratorStatement):
                 value_ref = state.get_ref(attribute_name)
                 stmt.set_value(state, object_instance, value_ref)
 
+        # add anonymous implementations
         if self.implemented:
             # generate an import for the module
             name = Reference(hex(id(self)))
