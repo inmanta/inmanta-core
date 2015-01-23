@@ -20,6 +20,7 @@ import sys
 import os
 import subprocess
 import tempfile
+import hashlib
 
 
 class VirtualEnv(object):
@@ -84,16 +85,47 @@ class VirtualEnv(object):
             cmd = [self.virtual_pip, "install", "-r", requirements_file]
             subprocess.call(cmd)
 
+    def _read_current_requirements_hash(self):
+        """
+            Return the hash of the requirements file used to install the current environment
+        """
+        path = os.path.join(self.env_path, "requirements.sha1sum")
+        if not os.path.exists(path):
+            return ""
+
+        with open(path, "r") as fd:
+            return fd.read().strip()
+
+    def _set_current_requirements_hash(self, new_hash):
+        """
+            Set the current requirements hahs
+        """
+        path = os.path.join(self.env_path, "requirements.sha1sum")
+        with open(path, "w+") as fd:
+            fd.write(new_hash)
+
     def install_from_list(self, requirements_list: list) -> None:
         """
             Install requirements from a list of requirement strings
         """
-        try:
-            requirements_file = tempfile.mktemp()
-            with open(requirements_file, "w+") as fd:
-                fd.write("\n".join(requirements_list))
-                fd.close()
+        requirements_list = sorted(requirements_list)
+        # hash it
+        sha1sum = hashlib.sha1()
+        sha1sum.update("\n".join(requirements_list).encode())
+        new_req_hash = sha1sum.hexdigest()
 
-            self.install_from_file(requirements_file)
-        finally:
-            os.remove(requirements_file)
+        current_hash = self._read_current_requirements_hash()
+        print(new_req_hash, current_hash)
+
+        if new_req_hash != current_hash:
+            try:
+                # create requirements file
+                requirements_file = tempfile.mktemp()
+                with open(requirements_file, "w+") as fd:
+                    fd.write("\n".join(requirements_list))
+                    fd.close()
+
+                self.install_from_file(requirements_file)
+                self._set_current_requirements_hash(new_req_hash)
+            finally:
+                os.remove(requirements_file)
