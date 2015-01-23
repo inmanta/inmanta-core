@@ -324,9 +324,6 @@ class Constructor(GeneratorStatement):
         for name, value in self.__attributes.items():
             # set the attributes passed with the constructor
             stmt = SetAttribute(object_ref, name, value)
-            self.copy_location(stmt)
-            stmt.namespace = self.namespace
-            state.add_statement(stmt)
 
             attributes.add(name)
             state.add_ref(name, value)
@@ -346,13 +343,10 @@ class Constructor(GeneratorStatement):
                     try:
                         value = default.get_default(attribute.name)
                         stmt = SetAttribute(object_ref, attribute.name, value)
-                        self.copy_location(stmt)
-                        stmt.namespace = self.namespace
-                        state.add_statement(stmt)
 
                         attributes.add(attribute.name)
-                        state.add_ref(name, value)
-                        set_attribute_stmts[name] = stmt
+                        state.add_ref(attribute.name, value)
+                        set_attribute_stmts[attribute.name] = stmt
                     except AttributeError:
                         pass
 
@@ -360,9 +354,6 @@ class Constructor(GeneratorStatement):
         for name, value in type_class.get_default_values().items():
             if name not in attributes and value is not None:
                 stmt = SetAttribute(object_ref, name, value)
-                self.copy_location(stmt)
-                stmt.namespace = self.namespace
-                state.add_statement(stmt)
                 state.add_ref(name, value)
                 set_attribute_stmts[name] = stmt
 
@@ -421,6 +412,16 @@ class Constructor(GeneratorStatement):
             local_scope.get_variable("self").value.add_child(object_instance)
         except NotFoundException:
             pass
+
+        attribute_statements = {}
+        if state.has_attribute("new_statements"):
+            attribute_statements = state.get_attribute("new_statements")
+
+        for attribute_name in type_class.get_all_attribute_names():
+            if state.get_ref(attribute_name) is not None and attribute_name in attribute_statements:
+                stmt = attribute_statements[attribute_name]
+                value_ref = state.get_ref(attribute_name)
+                stmt.set_value(state, object_instance, value_ref)
 
         if self.implemented:
             # generate an import for the module

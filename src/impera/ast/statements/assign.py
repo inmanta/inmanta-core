@@ -230,17 +230,21 @@ class SetAttribute(GetAttribute):
         value_ref = state.get_ref("value_ref")
         instance_ref = state.get_ref("instance")
 
+        self.set_value(state, instance_ref.value, value_ref)
+
+    def set_value(self, state, instance, value_ref):
         if isinstance(value_ref.value, list):
-            list_refs = state.get_attribute("list_refs")
-            for item_ref in list_refs:
+            for item_ref in value_ref.value:
                 if isinstance(item_ref, Reference):
                     ref = state.get_local_scope().resolve_reference(item_ref)
-                else:
-                    ref = item_ref
 
-                self.__setattr(instance_ref.value, self.attribute_name, ref)
+                else:
+                    ref = Variable(item_ref)
+
+                self.__setattr(instance, self.attribute_name, ref)
+
         else:
-            self.__setattr(instance_ref.value, self.attribute_name, value_ref)
+            self.__setattr(instance, self.attribute_name, value_ref)
 
     def __repr__(self):
         return "%s.%s = %s" % (self.instance_name, self.attribute_name, self.value)
