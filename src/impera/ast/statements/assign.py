@@ -135,9 +135,16 @@ class SetAttribute(GetAttribute):
         """
         value_ref = state.get_ref("value_ref")
         instance_ref = state.get_ref("instance")
+        local_scope = state.get_local_scope()
 
+        return self.build_action_list(local_scope, value_ref, instance_ref, state=state)
+
+    def build_action_list(self, local_scope, value_ref, instance_ref, instance_type=None, state=None):
         if isinstance(instance_ref.value, list):
             raise Exception("Unable to set attribute on a list.")
+
+        if instance_type is None:
+            instance_type = instance_ref.value.__class__
 
         if isinstance(value_ref.value, list):
             actions = []
@@ -151,14 +158,12 @@ class SetAttribute(GetAttribute):
             if hasattr(namespace, "to_list"):
                 namespace = namespace.to_list()
 
-            local_scope = state.get_local_scope()
-
             for item_ref in value_ref.value:
                 if not isinstance(item_ref, Reference):
                     # a direct value
                     item_value = Variable(item_ref)
                     list_refs.append(item_value)
-                    actions.extend(self._generate_actions(instance_ref, item_value))
+                    actions.extend(self._generate_actions(instance_ref, instance_type, item_value))
 
                 else:
                     if namespace == self.namespace.to_list():
@@ -167,21 +172,21 @@ class SetAttribute(GetAttribute):
                         ref = Reference(item_ref.name, namespace)
 
                     list_refs.append(ref)
-                    actions.extend(self._generate_actions(instance_ref,
-                                                          local_scope.resolve_reference(ref)))
+                    actions.extend(self._generate_actions(instance_ref, instance_type, local_scope.resolve_reference(ref)))
 
-            state.set_attribute("list_refs", list_refs)
+            if state is not None:
+                state.set_attribute("list_refs", list_refs)
         else:
-            actions = self._generate_actions(instance_ref, value_ref)
+            actions = self._generate_actions(instance_ref, instance_type, value_ref)
 
         return actions
 
-    def _generate_actions(self, ref, value_ref):
+    def _generate_actions(self, ref, instance_type, value_ref):
         """
             Generate actions for the given value_ref
         """
         actions = []
-        definition = ref.value.__class__.__definition__
+        definition = instance_type.__definition__
         attr = definition.get_attribute(self.attribute_name)
 
         if attr is None:

@@ -214,16 +214,7 @@ class DynamicState(State):
             if len(ref_def) > 2:
                 ref_type = ref_def[2]
 
-            if ref_type == "use":
-                value_ref = get_ref(self, value)
-                self._refs[name] = value_ref
-
-            elif ref_type == "def":
-                scope = self.get_local_scope()
-                scope.add_placeholder(name.name)
-
-            else:
-                raise Exception("Unknown ref type given by %s" % self)
+            self.add_ref(name, value, ref_type)
 
         # add any statements under this node to the graph as well
         self.statement.new_statements(self)
@@ -257,12 +248,30 @@ class DynamicState(State):
         """
             Get a reference
         """
+        if name not in self._refs:
+            return None
+
         reference = self._refs[name]
 
         if reference.__class__ == Reference:
             return self.get_local_scope().resolve_reference(reference)
 
         return reference
+
+    def add_ref(self, name, value, ref_type="use"):
+        """
+            Allow statements to add references
+        """
+        if ref_type == "use":
+            value_ref = get_ref(self, value)
+            self._refs[name] = value_ref
+
+        elif ref_type == "def":
+            scope = self.get_local_scope()
+            scope.add_placeholder(name.name)
+
+        else:
+            raise Exception("Unknown ref type given by %s" % self)
 
     def get_result(self):
         """
@@ -326,8 +335,7 @@ class DynamicState(State):
                 namespace.
         """
         if statement in self._child_statements:
-            raise Exception("Statement %s already added by %s" %
-                            (statement, self))
+            raise Exception("Statement %s already added by %s" % (statement, self))
 
         namespace = self.namespace
         if child_ns:

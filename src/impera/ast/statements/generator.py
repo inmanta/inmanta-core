@@ -129,6 +129,7 @@ class Implement(GeneratorStatement):
         """
         defaults = []
         select_list = []
+
         for implementation in self.instance_type.implementations:
             if implementation.constraint is None:
                 defaults.append(implementation)
@@ -291,12 +292,23 @@ class Constructor(GeneratorStatement):
         if isinstance(type_class, Default):
             type_class = type_class.get_entity()
 
+        attribute_statements = {}
+        if state.has_attribute("new_statements"):
+            attribute_statements = state.get_attribute("new_statements")
+
+        local_scope = state.get_local_scope()
+
         for attribute_name in type_class.get_all_attribute_names():
             # Set a attributes with low multiplicity == 0 -> set []
             attribute_obj = type_class.get_attribute(attribute_name)
             if hasattr(attribute_obj, "low") and attribute_obj.low == 0:
-                actions.append(("add",
-                                AttributeVariable.create(object_ref, attribute_name)))
+                actions.append(("add", AttributeVariable.create(object_ref, attribute_name)))
+
+            if state.get_ref(attribute_name) is not None and attribute_name in attribute_statements:
+                stmt = attribute_statements[attribute_name]
+                value_ref = state.get_ref(attribute_name)
+                actions.extend(stmt.build_action_list(local_scope, value_ref, object_ref,
+                                                      instance_type=type_class.get_class_type()))
 
         return actions
 
@@ -304,6 +316,7 @@ class Constructor(GeneratorStatement):
         """
             Add any arguments that need to be validated to the graph
         """
+        set_attribute_stmts = {}
         attributes = set()
 
         # Set the value from the constructor
@@ -316,6 +329,8 @@ class Constructor(GeneratorStatement):
             state.add_statement(stmt)
 
             attributes.add(name)
+            state.add_ref(name, value)
+            set_attribute_stmts[name] = stmt
 
         # Set values defined in default constructors
         type_class = state.get_type("classtype")
@@ -336,6 +351,8 @@ class Constructor(GeneratorStatement):
                         state.add_statement(stmt)
 
                         attributes.add(attribute.name)
+                        state.add_ref(name, value)
+                        set_attribute_stmts[name] = stmt
                     except AttributeError:
                         pass
 
@@ -346,6 +363,10 @@ class Constructor(GeneratorStatement):
                 self.copy_location(stmt)
                 stmt.namespace = self.namespace
                 state.add_statement(stmt)
+                state.add_ref(name, value)
+                set_attribute_stmts[name] = stmt
+
+        state.set_attribute("new_statements", set_attribute_stmts)
 
         # Make values of attributes available in subscopes by defining
         # variables with matching names in the subscope
