@@ -251,7 +251,6 @@ class ConstraintType(Type):
         self.__base_type.validate(value)
 
         if not self._constraint(Variable(value)):
-            print(self._constraint)
             raise ValueError("Invalid value '%s'" % value)
 
         return True
