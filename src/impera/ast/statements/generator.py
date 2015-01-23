@@ -396,20 +396,41 @@ class Constructor(GeneratorStatement):
         if isinstance(type_class, Default):
             type_class = type_class.get_entity()
 
-        # create the instance
-        object_instance = type_class.get_instance(ctor_id, local_scope)
-        object_instance.__statement__ = state
-
-        try:
-            local_scope.get_variable("self").value.add_child(object_instance)
-        except NotFoundException:
-            pass
-
-        # set attributes
+        # the attribute that we need to set at construction time
         attribute_statements = {}
         if state.has_attribute("new_statements"):
             attribute_statements = state.get_attribute("new_statements")
 
+        # check if the instance already exists in the index (if there is one)
+        instances = []
+        for index in type_class._index_def:
+            params = []
+            for attr in index:
+                params.append((attr, state.get_ref(attr).value))
+
+            obj = type_class.lookup_index(params)
+            if obj is not None:
+                instances.append(obj)
+
+        if len(instances) > 0:
+            # ensure that instances are all the same objects
+            first = instances[0]
+            for i in instances[1:]:
+                if i != first:
+                    raise Exception("Inconsistent indexes detected!")
+
+            object_instance = first
+        else:
+            # create the instance
+            object_instance = type_class.get_instance(ctor_id, local_scope)
+            object_instance.__statement__ = state
+
+            try:
+                local_scope.get_variable("self").value.add_child(object_instance)
+            except NotFoundException:
+                pass
+
+        # set attributes
         for attribute_name in type_class.get_all_attribute_names():
             if state.get_ref(attribute_name) is not None and attribute_name in attribute_statements:
                 stmt = attribute_statements[attribute_name]
