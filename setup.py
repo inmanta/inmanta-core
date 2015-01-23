@@ -4,7 +4,7 @@ setup(
     name="impera",
     package_dir={"" : "src" },
     packages=find_packages("src"),
-    version="0.2",
+    version="0.3",
     description="Impera management tool",
     author="Bart Vanbrabant",
     author_email="bart@impera.io",
