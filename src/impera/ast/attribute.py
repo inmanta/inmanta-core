@@ -119,11 +119,13 @@ class RelationAttribute(Attribute):
             @param double: Make a double binding of the relation
         """
         if self.low == 1 and self.high == 1:
+            # this relation is handled as a normal attribute
             Attribute.set_attribute(self, instance, value)
 
         else:
             if (self.name not in instance._attributes or instance._attributes[self.name] is None
                     or isinstance(instance._attributes[self.name], Unset)):
+                # initialize the attribute to a variable with an empty list
                 current_value = Variable(list())
                 instance._attributes[self.name] = current_value
 
@@ -136,8 +138,12 @@ class RelationAttribute(Attribute):
 
             value.validate(self.validate)
 
-            # store the value
-            current_value.value.append(value.value)
+            # store the value if it not yet in the list
+            if value.value not in current_value.value:
+                current_value.value.append(value.value)
+
+            else:
+                double = False
 
         # set the other side on value
         if double:
