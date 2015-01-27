@@ -3,7 +3,7 @@
 TDIR=/tmp/build
 
 echo "Checking out latest tag"
-git clone https://github.com/bartv/impera
+git clone https://github.com/impera-io/impera
 cd impera
 git checkout -b $(git tag | sort -n -r | head -n 1)
 

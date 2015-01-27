@@ -236,7 +236,7 @@ class Scheduler(object):
             if attr_obj.low > 0:
                 self.show_error("\tAttribute %s of entity %s should have a value." % (attribute, entity.get_full_name()), scope)
                 return
-        except:
+        except Exception:
             pass
 
     def check_unset_attributes(self, obj):
