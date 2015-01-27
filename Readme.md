@@ -1,5 +1,7 @@
 # Impera Framework
 
+[![docs](https://readthedocs.org/projects/impera/badge/?version=latest)](http://impera.readthedocs.org/en/latest/)
+
 This repository contain the Impera configuration management tool.
 
 ## Requirements
