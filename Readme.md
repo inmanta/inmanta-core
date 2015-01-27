@@ -31,6 +31,8 @@ Now the ``impera`` command should be available.
 
 ## Documentation
 
+http://impera.readthedocs.org/en/latest/
+
 Check the docs/sphinx directory of the source distribution.
 
 ## Author
