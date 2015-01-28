@@ -61,6 +61,11 @@ def check_run(io, testdir):
     assert(result[2] == 0)
     assert(result[0] == "world")
 
+    # check cwd
+    os.makedirs(os.path.join(testdir, "check_run" + str(io)))
+    out, _, _ = io.run("ls", [], cwd=testdir)
+    assert("check_run" + str(io) in out)
+
 
 def check_file_exists(io, testdir):
     assert(io.file_exists(testdir))
