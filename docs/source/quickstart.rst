@@ -31,8 +31,8 @@ Installing Impera
 =================
 
 For Ubuntu 14.04 (trusty) and Fedora 20, follow the instruction below. For other distributions,
-install from `source <https://github.com/bartv/impera>`. The
-`readme<https://github.com/bartv/impera/blob/master/Readme.md>` contains installation instructions to
+install from `source <https://github.com/impera-io/impera>`. The
+`readme<https://github.com/impera-io/impera/blob/master/Readme.md>` contains installation instructions to
 install Impera from source.
 
 
@@ -137,10 +137,10 @@ file and add the following lines:
 .. code-block:: yaml
 
     requires:
-        drupal: git@github.com:bartv/imp-drupal, ">= 0.1"
-        apache: git@github.com:bartv/imp-apache, ">= 0.1"
-        redhat: git@github.com:bartv/imp-redhat, ">= 0.1"
-        ubuntu: git@github.com:bartv/imp-ubuntu, ">= 0.1"
+        drupal: git@github.com:impera-io/drupal, ">= 0.1"
+        apache: git@github.com:impera-io/apache, ">= 0.1"
+        redhat: git@github.com:impera-io/redhat, ">= 0.1"
+        ubuntu: git@github.com:impera-io/ubuntu, ">= 0.1"
 
 Each line under the ``requires:`` attributes lists a required Impera module. The key is the name of the
 module, next is the location of the git project and after the comma is the version identifier.
@@ -173,23 +173,20 @@ website. This composition needs to be put in the main.cf file.
    :linenos:
 
    # define the machine we want to deploy Drupal on
-   vm1=ip::Host(name="vm1", os=redhat::fedora20, ip="IP_OF_VM1")
+   vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
    #vm1=ip::Host(name="vm1", os=ubuntu::ubuntu1404, ip="IP_OF_VM1")
 
-   # add a mysql and apache http server
-   web_server=httpd::Server(host=vm1)
-   mysql_server=mysql::Server(host=vm1)
+    # add a mysql and apache http server
+    web_server=apache::Server(host=vm1)
+    mysql_server=mysql::Server(host=vm1)
 
-   # define a new virtual host to deploy drupal in
-   vhost_name=httpd::VhostName(name="localhost")
-   vhost=httpd::Vhost(webserver=web_server, name=vhost_name,
-                        document_root="/var/www/html/drupal_test")
+    # deploy drupal in that virtual host
+    name=web::Alias(hostname="localhost")
+    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
+                       password="Str0ng-P433w0rd")
+    drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+                        admin_password="test", admin_email="admin@localhost", site_name="localhost")
 
-   # deploy drupal in that virtual host
-   drupal::Common(host=vm1)
-   db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
-                        password="Str0ng-P433w0rd")
-   drupal::Site(vhost=vhost, database=db)
 
 On line 2 we define the server on which we want to deploy Drupal. The name is the hostname of the
 machine, which is later used to determine what configuration needs to be deployed on which machine.
@@ -199,15 +196,12 @@ attribute is the IP address of this host. In this introduction we define this at
 later on we will let Impera manage this automatically. To deploy this on Ubuntu, change this value to
 ubuntu::ubuntu1404.
 
-Lines 5 and 6 deploy an httpd server and mysql server on our server.
+Lines 6 and 7 deploy an httpd server and mysql server on our server.
 
-Lines 9 to 11 define a virtual host in which we want to deploy our Drupal
-website.
+Line 10 defines the name (hostname) of the webapplication and line 13 defines the actual Drupal
+website to deploy.
 
-Line 14 deploys common Drupal configuration on our server and line 17 creates a Drupal site on the
-virtual host we defined previously.
-
-Line 16 defines a database for our Drupal website.
+Line 11 defines a database for our Drupal website.
 
 
 Deploy the configuration model
