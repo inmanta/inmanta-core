@@ -90,12 +90,12 @@ class BashIO(object):
 
         return data[0]
 
-    def run(self, command, arguments=[], env=None):
+    def run(self, command, arguments=[], env=None, cwd=None):
         """
             Execute a command with the given argument and return the result
         """
         cmds = [command] + arguments
-        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
         data = result.communicate()
 
@@ -291,7 +291,7 @@ class LocalIO(object):
             Read in the file in path and return its content as string
         """
         with open(path, "rb") as fd:
-            return str(fd.read().decode())
+            return fd.read().decode()
 
     def read_binary(self, path):
         """
@@ -300,12 +300,12 @@ class LocalIO(object):
         with open(path, "rb") as fd:
             return fd.read()
 
-    def run(self, command, arguments=[], env=None):
+    def run(self, command, arguments=[], env=None, cwd=None):
         """
             Execute a command with the given argument and return the result
         """
         cmds = [command] + arguments
-        result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
         data = result.communicate()
 

@@ -28,13 +28,20 @@ class RemoteIO(object):
         return True
 
     def __init__(self, host):
-        self._gw = multi.makegateway("ssh=root@%s//python=python" % host)
+        self._gw = multi.makegateway("ssh=root@%s//python=python3" % host)
 
     def _execute(self, function_name, *args):
         ch = self._gw.remote_exec(local)
         ch.send((function_name, args))
         result = ch.receive()
         ch.close()
+        return result
+
+    def read_binary(self, path):
+        # remoting can turn this into a string
+        result = self._execute("read_binary", path)
+        if isinstance(result, str):
+            return result.encode()
         return result
 
     def __getattr__(self, name):
