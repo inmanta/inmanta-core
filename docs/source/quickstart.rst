@@ -170,11 +170,11 @@ a composition of the configuration modules to deploy and configure a Drupal
 website. This composition needs to be put in the main.cf file.
 
 .. code-block:: ruby
-   :linenos:
+    :linenos:
 
-   # define the machine we want to deploy Drupal on
-   vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
-   #vm1=ip::Host(name="vm1", os=ubuntu::ubuntu1404, ip="IP_OF_VM1")
+    # define the machine we want to deploy Drupal on
+    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
+    #vm1=ip::Host(name="vm1", os=ubuntu::ubuntu1404, ip="IP_OF_VM1")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -285,24 +285,22 @@ of the virtual machine to the configuration model and assigning the mysql server
 to the new virtual machine.
 
 .. code-block:: ruby
-   :linenos:
+    :linenos:
 
-   # define the machine we want to deploy Drupal on
-   vm1=ip::Host(name="vm1", os=redhat::fedora20, ip="IP_OF_VM1")
-   vm2=ip::Host(name="vm2", os=redhat::fedora20, ip="IP_OF_VM2")
+    # define the machine we want to deploy Drupal on
+    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
+    vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="IP_OF_VM2")
 
-   # add a mysql and apache http server
-   web_server=httpd::Server(host=vm1)
-   mysql_server=mysql::Server(host=vm2)
+    # add a mysql and apache http server
+    web_server=apache::Server(host=vm1)
+    mysql_server=mysql::Server(host=vm2)
 
-   # define a new virtual host to deploy drupal in
-   vhost_name=httpd::VhostName(name="localhost")
-   vhost=httpd::Vhost(webserver=web_server, name=vhost_name, document_root="/var/www/html/drupal_test")
-
-   # deploy drupal in that virtual host
-   drupal::Common(host=vm1)
-   db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test", password="Str0ng-P433w0rd")
-   drupal::Site(vhost=vhost, database=db)
+    # deploy drupal in that virtual host
+    name=web::Alias(hostname="localhost")
+    db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
+                       password="Str0ng-P433w0rd")
+    drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+                        admin_password="test", admin_email="admin@localhost", site_name="localhost")
 
 On line 3 the definition of the new virtual machine is added. On line 7 the
 mysql server is assigned to vm2.
@@ -409,19 +407,15 @@ configuration module.
 
     implementation drupalStackImplementation for DrupalStack:
         # add a mysql and apache http server
-        web=httpd::Server(host=webhost)
-        mysql=mysql::Server(host=mysqlhost)
-
-        # define a new virtual host to deploy drupal in
-        vhost_name=httpd::VhostName(name=vhostname)
-        vhost=httpd::Vhost(webserver=web, name=vhost_name,
-                document_root="/var/www/html/{{ stack_id }}")
+        web_server=apache::Server(host=webhost)
+        mysql_server=mysql::Server(host=mysqlhost)
 
         # deploy drupal in that virtual host
-        drupal::Common(host=webhost)
-        db=mysql::Database(server=mysql, name=stack_id,
-                user=stack_id, password="Str0ng-P433w0rd")
-        drupal::Site(vhost=vhost, database=db)
+        name=web::Alias(hostname="localhost")
+        db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
+                           password="Str0ng-P433w0rd")
+        drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+                            admin_password="test", admin_email="admin@localhost", site_name="localhost")
     end
 
     implement DrupalStack using drupalStackImplementation
