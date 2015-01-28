@@ -92,7 +92,7 @@ Check from the user on vm1 if you can login into vm1 and vm2 as root and accept 
 
 
 Create an Impera project
-=====================
+========================
 
 An Impera project bundles modules that contain configuration information. A project is nothing more
 than a directory with an .impera file, which contains parameters such as the location to search for
@@ -469,8 +469,8 @@ left.
     :linenos:
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora20, ip="IP_OF_VM2")
-    vm2=ip::Host(name="vm2", os=redhat::fedora20, ip="IP_OF_VM2")
+    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM2")
+    vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="IP_OF_VM2")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, stack_id="drupal_test", vhostname="localhost")
 
