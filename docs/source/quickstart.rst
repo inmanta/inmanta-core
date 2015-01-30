@@ -162,7 +162,7 @@ file and add the following lines:
         ubuntu: git@github.com:impera-io/ubuntu, ">= 0.1"
 
 Each line under the ``requires:`` attribute lists a required Impera module. The key is the name of the
-module, next is the location of the git project and after the comma is the version identifier.
+module and the value is the location of the git project, followed by the version identifier (after the comma).
 
 Next, we instruct Impera to download all modules and install the required python modules for the
 plugins and resource handlers. These modules are installed in a virtualenv. Execute the following
