@@ -3,7 +3,7 @@
 Getting started
 ***************
 
-This tutorial gets you started with Impera. The this tutorial learns how to:
+This tutorial gets you started with Impera. You will learn how to:
 
    * Install Impera
    * Create an Impera project
@@ -14,22 +14,22 @@ This tutorial gets you started with Impera. The this tutorial learns how to:
 
 Impera exists of several components:
 
-   * A compiler that builds the configuration model
-   * The central Impera server that stores states
+   * A compiler that builds the configuration model,
+   * The central Impera server that stores states,
    * Impera agents on each managed system that deploy configuration changes.
 
-In the remainder of this chapter we will install the framework but use it without external server and agentless.
+In the remainder of this chapter we will install the framework but use it without external server and without agents.
 
 .. warning::
 
-   DO NOT run this guide on your own machine, or it will be reconfigured. Use a two virtual machines,
+   DO NOT run this guide on your own machine, or it will be reconfigured. Use two virtual machines,
    with hostnames vm1 and vm2 to be fully compatible with this guide. This guide has been tested on Fedora
    21 and Ubuntu 14.04.
 
 Installing Impera
 =================
 
-For Ubuntu 14.04 (trusty) and Fedora 21, follow the instruction below. For other distributions,
+For Ubuntu 14.04 (trusty) and Fedora 21, follow the instructions below. For other distributions,
 install from `source <https://github.com/impera-io/impera>`_. The
 `readme <https://github.com/impera-io/impera/blob/master/Readme.md>`_ contains installation instructions to
 install Impera from source.
@@ -46,7 +46,7 @@ instructions add the repository and install Impera on vm1:
     sudo curl -o /etc/yum.repos.d/impera.repo https://impera.io/repo/impera.repo
     sudo yum install -y python3-impera
 
-On vm2 Impera is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/impera-io/impera/issues/1>_. To install Python 3 on vm2:
+On vm2 Impera is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/impera-io/impera/issues/1>`_. To install Python 3 on vm2:
 
 .. code-block:: sh
 
