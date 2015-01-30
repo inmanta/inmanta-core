@@ -251,6 +251,7 @@ class Client(object):
         total = result.result["total_resources"]
         deployed = 0
         while total > deployed:
+            deployed = 0
             result = self._client.call(methods.VersionMethod, operation="GET", id=last_version["pk"])
 
             status = defaultdict(lambda: 0)
