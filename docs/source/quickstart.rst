@@ -204,7 +204,7 @@ website. This composition needs to be put in the ``main.cf`` file.
     db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                        password="Str0ng-P433w0rd")
     drupal::Application(name=name, container=web_server, database=db, admin_user="root",
-                        admin_password="test", admin_email="admin@localhost", site_name="localhost")
+                        admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
 On line 2 we define the server on which we want to deploy Drupal. The name is the hostname of the
