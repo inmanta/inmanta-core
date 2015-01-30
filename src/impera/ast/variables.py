@@ -204,7 +204,7 @@ class AttributeVariable(Variable):
         """
             Return the version of the instance variable
         """
-        return self.instance.version
+        return self.instance.get_version()
 
     def get_full_name(self):
         """
