@@ -12,27 +12,26 @@ This tutorial gets you started with Impera. The this tutorial learns how to:
    * Deploy the configuration
 
 
-The framework exists of several components:
+Impera exists of several components:
 
-   * A stateless compiler that builds the configuration model
+   * A compiler that builds the configuration model
    * The central Impera server that stores states
    * Impera agents on each managed system that deploy configuration changes.
 
-In the remainder of this chapter we will install the framework but use on a
-single machine.
+In the remainder of this chapter we will install the framework but use it without external server and agentless.
 
 .. warning::
 
-   DO NOT run this guide on your own machine, or it will be reconfigured. Use a virtual machines,
-   with hostname vm1 to be fully compatible with this guide. This guide has been tested on Fedora
-   20 and Ubuntu 14.04.
+   DO NOT run this guide on your own machine, or it will be reconfigured. Use a two virtual machines,
+   with hostnames vm1 and vm2 to be fully compatible with this guide. This guide has been tested on Fedora
+   21 and Ubuntu 14.04.
 
 Installing Impera
 =================
 
-For Ubuntu 14.04 (trusty) and Fedora 20, follow the instruction below. For other distributions,
-install from `source <https://github.com/impera-io/impera>`. The
-`readme<https://github.com/impera-io/impera/blob/master/Readme.md>` contains installation instructions to
+For Ubuntu 14.04 (trusty) and Fedora 21, follow the instruction below. For other distributions,
+install from `source <https://github.com/impera-io/impera>`_. The
+`readme <https://github.com/impera-io/impera/blob/master/Readme.md>`_ contains installation instructions to
 install Impera from source.
 
 
@@ -40,13 +39,18 @@ Fedora
 ------
 
 The packages to install Impera are available in a yum/dnf repository. Following
-instructions add the repository and install Impera:
+instructions add the repository and install Impera on vm1:
 
 .. code-block:: sh
 
     sudo curl -o /etc/yum.repos.d/impera.repo https://impera.io/repo/impera.repo
     sudo yum install -y python3-impera
 
+On vm2 Impera is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/impera-io/impera/issues/1>_. To install Python 3 on vm2:
+
+.. code-block:: sh
+
+    sudo yum install -y python3
 
 Ubuntu
 ------
@@ -67,12 +71,11 @@ signed.
 SSH Root access
 ---------------
 
-In this tutorial we use vm1 as the management machine. This means that we can use a local deploy as
-the root user to manage vm1. Later on in the tutorial we are going to manage a second virtual
-machine remote over ssh. To avoid issues with permissions of files that Impera creates, we will
-also manage vm1 over ssh. This requires root ssh access to vm1 and vm2. This means that our public
-ssh key needs to be installed in the authorized_keys file of the root user. We can do this by
-copying the .ssh directory from our local user to the root users and setting the correct ownership.
+In this tutorial we use agentless deployements, with vm1 as the management machine. 
+This means that it will manage itself and vm2 over ssh. 
+This requires root ssh access to vm1 and vm2. This means that your public ssh key needs to be installed in the authorized_keys file of the root user on both machines. 
+
+If your public key is already installed in the current user, you can copy it to the root user with the following commands.
 
 .. code-block:: sh
 
@@ -81,7 +84,7 @@ copying the .ssh directory from our local user to the root users and setting the
 
 
 In this guide we assume that you can login into the vm2 using the same ssh keypair as you used to
-login into vm1. Use the -A option to ssh when you login into the vm1, *before* you deploy to vm2.
+login into vm1.  Use agent forwarding (the -A option) when you login into the vm1, *before* you deploy to vm2.
 
 Check from the user on vm1 if you can login into vm1 and vm2 as root and accept the host key.
 
@@ -89,6 +92,22 @@ Check from the user on vm1 if you can login into vm1 and vm2 as root and accept 
 
     ssh root@IP_OF_VM1
     ssh root@IP_OF_VM2
+
+SELinux
+-------
+
+In a default Fedora SELinux and possibly the firewall are configured. This may cause
+problems because managing these services is not covered here. We recommend that
+you either set SELinux to permissive mode and disable the firewall with:
+
+.. code-block:: sh
+
+   sudo setenforce 0
+   sudo sed -i "s/SELINUX=enforcing/SELINUX=permissive/g" /etc/sysconfig/selinux
+   sudo systemctl stop firewalld
+
+Or consult the Fedora documentation and change the firewall settings and set the correct SELinux
+booleans.
 
 
 Create an Impera project
@@ -127,11 +146,11 @@ Re-use existing modules
 =======================
 
 At github many modules are already hosted that provide types and refinements for one or more
-operating systems. Our modules are available in the https://github.com/bartv/imp-* repositories.
+operating systems. Our modules are available in the https://github.com/impera-io/ repositories.
 
 Impera downloads these modules and their dependencies. For this tutorial we need the
 apache, drupal configuration modules and the redhat and ubuntu modules for the correct refinements.
-We add these requirements in the project.yml file under the requires attribute. Open the project.yml
+We add these requirements in the ``project.yml`` file under the requires attribute. Open the ``project.yml``
 file and add the following lines:
 
 .. code-block:: yaml
@@ -167,7 +186,7 @@ Compose a configuration model
 The modules we installed in the previous section contain the configuration
 required for certain services or subsystems. In this section we will make
 a composition of the configuration modules to deploy and configure a Drupal
-website. This composition needs to be put in the main.cf file.
+website. This composition needs to be put in the ``main.cf`` file.
 
 .. code-block:: ruby
     :linenos:
@@ -226,21 +245,6 @@ a local deployment, but that means we should run impera as root and this would c
 problems when we deploy changes on the second vm.
 
 
-Making it work
---------------
-
-In a default Fedora SELinux and possibly the firewall are configured. This may cause
-problems because managing these services is not covered here. We recommend that
-you either set SELinux to permissive mode and disable the firewall with:
-
-.. code-block:: sh
-
-   sudo setenforce 0
-   sudo sed -i "s/SELINUX=enforcing/SELINUX=permissive/g" /etc/sysconfig/selinux
-   sudo systemctl stop firewalld
-
-Or consult the Fedora documentation and change the firewall settings and set the correct SELinux
-booleans.
 
 Accessing your new Drupal install
 ---------------------------------
@@ -272,7 +276,7 @@ Managing multiple machines
 
 The real power of Impera appears when you want to manage more than one machine. In this section we will
 move the mysql server from vm1 to a second virtual machine called vm2. We will still manage this
-additional machine in ``single shot`` mode using a remote deploy.
+additional machine in ``single shot mode`` using a remote deploy.
 
 
 
@@ -300,7 +304,7 @@ to the new virtual machine.
     db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                        password="Str0ng-P433w0rd")
     drupal::Application(name=name, container=web_server, database=db, admin_user="root",
-                        admin_password="test", admin_email="admin@localhost", site_name="localhost")
+                        admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 On line 3 the definition of the new virtual machine is added. On line 7 the
 mysql server is assigned to vm2.
@@ -314,9 +318,9 @@ to an IP address we provide this address directly with the -i parameter.
 
 .. code-block:: sh
 
+    impera deploy -a vm2 -i IP_OF_VM2    
     impera deploy -a vm1 -i IP_OF_VM1
-    impera deploy -a vm2 -i IP_OF_VM2
-
+    
 If you browse to the drupal site again, the database should be empty once more.
 
 Create your own modules
@@ -332,8 +336,8 @@ A configuration module requires a specific layout:
 
     * The name of the module is determined by the top-level directory. In this
       directory the only required directory is the ``model`` directory with a file
-      called _init.cf.
-    * What is defined in the _init.cf file is available in the namespace linked with
+      called ``_init.cf``.
+    * What is defined in the ``_init.cf`` file is available in the namespace linked with
       the name of the module. Other files in the model directory create subnamespaces.
     * The files directory contains files that are deployed verbatim to managed
       machines
@@ -364,7 +368,7 @@ A configuration module requires a specific layout:
 
 
 We will create our custom module in the ``libs`` directory of the quickstart project. Our new module
-will call ``lamp`` and the _init.cf file and the module.yml file is required to be a valid Impera
+will call ``lamp`` and the ``_init.cf`` file and the ``module.yml`` file is required to be a valid Impera
 module. The following commands create all directories to develop a full-featured module.
 
 .. code-block:: sh
@@ -378,7 +382,7 @@ module. The following commands create all directories to develop a full-featured
     mkdir lamp/plugins
     touch lamp/plugins/__init__.py
 
-Next, edit the lamp/module.yml file and add meta-data to it:
+Next, edit the ``lamp/module.yml`` file and add meta-data to it:
 
 .. code-block:: yaml
 
@@ -389,7 +393,7 @@ Next, edit the lamp/module.yml file and add meta-data to it:
 Configuration model
 -------------------
 
-In lamp/model/_init.cf we define the configuration model that defines the lamp
+In ``lamp/model/_init.cf`` we define the configuration model that defines the lamp
 configuration module.
 
 .. code-block:: ruby
@@ -420,7 +424,7 @@ configuration module.
 
     implement DrupalStack using drupalStackImplementation
 
-On line 1 to 4 we define an entity which is the definition of a ``concept`` in
+On line 1 to 4 we define an entity which is the definition of a *concept* in
 the configuration model. Entities behave as an interface to a partial
 configuration model that encapsulates parts of the configuration, in this case
 how to configure a LAMP stack. On line 2 and 3 typed attributes are defined
@@ -462,7 +466,7 @@ The composition
 ---------------
 
 With our new LAMP module we can reduce the amount of required configuration code in the main.cf file
-by using more ``reusable`` configure code. Only three lines of site specific configuration code are
+by using more *reusable* configure code. Only three lines of site specific configuration code are
 left.
 
 .. code-block:: ruby
