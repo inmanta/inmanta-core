@@ -117,7 +117,7 @@ An Impera project bundles modules that contain configuration information. A proj
 than a directory with an .impera file, which contains parameters such as the location to search for
 modules and where to find the server.
 
-Here we will create a directory ``quickstart`` with a basic configuration file.
+Here we will create an Impera project ``quickstart`` with a basic configuration file.
 
 .. code-block:: sh
 
@@ -133,11 +133,11 @@ Here we will create a directory ``quickstart`` with a basic configuration file.
     name: quickstart
     modulepath: libs
     downloadpath: libs
-    description: A quickstart project that install a drupal website.
+    description: A quickstart project that installs a drupal website.
     EOF
 
 
-The configuration file defines that re-usable modules are stored in ``libs``. The Impera compiler looks
+The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. The Impera compiler looks
 for a file called ``main.cf`` to start the compilation from.  The last line, creates an empty file.
 
 In the next section we will re-use existing modules to deploy our LAMP stack.
@@ -145,12 +145,12 @@ In the next section we will re-use existing modules to deploy our LAMP stack.
 Re-use existing modules
 =======================
 
-At github many modules are already hosted that provide types and refinements for one or more
+At GitHub, we host already many modules that provide types and refinements for one or more
 operating systems. Our modules are available in the https://github.com/impera-io/ repositories.
 
-Impera downloads these modules and their dependencies. For this tutorial we need the
-apache, drupal configuration modules and the redhat and ubuntu modules for the correct refinements.
-We add these requirements in the ``project.yml`` file under the requires attribute. Open the ``project.yml``
+Impera downloads these modules and their dependencies. For this tutorial, we need the
+apache and drupal configuration modules, and the redhat and ubuntu modules for the correct refinements.
+We add these requirements in the ``project.yml`` file under the ``requires:`` attribute. Open the ``project.yml``
 file and add the following lines:
 
 .. code-block:: yaml
@@ -161,7 +161,7 @@ file and add the following lines:
         redhat: git@github.com:impera-io/redhat, ">= 0.1"
         ubuntu: git@github.com:impera-io/ubuntu, ">= 0.1"
 
-Each line under the ``requires:`` attributes lists a required Impera module. The key is the name of the
+Each line under the ``requires:`` attribute lists a required Impera module. The key is the name of the
 module, next is the location of the git project and after the comma is the version identifier.
 
 Next, we instruct Impera to download all modules and install the required python modules for the
