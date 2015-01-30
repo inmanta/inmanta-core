@@ -115,7 +115,6 @@ class VirtualEnv(object):
         new_req_hash = sha1sum.hexdigest()
 
         current_hash = self._read_current_requirements_hash()
-        print(new_req_hash, current_hash)
 
         if new_req_hash != current_hash:
             try:
