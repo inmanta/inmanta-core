@@ -71,9 +71,9 @@ signed.
 SSH Root access
 ---------------
 
-In this tutorial we use agentless deployements, with vm1 as the management machine. 
-This means that it will manage itself and vm2 over ssh. 
-This requires root ssh access to vm1 and vm2. This means that your public ssh key needs to be installed in the authorized_keys file of the root user on both machines. 
+In this tutorial we use agentless deployments, with vm1 as the management machine. 
+This means that it will manage itself and vm2 over SSH. 
+This requires SSH root access to vm1 and vm2. This means that your public SSH key needs to be installed in the authorized_keys file of the root user on both machines. 
 
 If your public key is already installed in the current user, you can copy it to the root user with the following commands.
 
@@ -83,8 +83,8 @@ If your public key is already installed in the current user, you can copy it to 
     sudo chown -R root:root /root/.ssh
 
 
-In this guide we assume that you can login into the vm2 using the same ssh keypair as you used to
-login into vm1.  Use agent forwarding (the -A option) when you login into the vm1, *before* you deploy to vm2.
+In this guide we assume that you can login into vm2 using the same SSH keypair as you used to
+login into vm1. Use agent forwarding (the -A option) when you login into the vm1, *before* you deploy to vm2.
 
 Check from the user on vm1 if you can login into vm1 and vm2 as root and accept the host key.
 
@@ -96,7 +96,7 @@ Check from the user on vm1 if you can login into vm1 and vm2 as root and accept 
 SELinux
 -------
 
-In a default Fedora SELinux and possibly the firewall are configured. This may cause
+In a default Fedora, SELinux and possibly the firewall are configured. This may cause
 problems because managing these services is not covered here. We recommend that
 you either set SELinux to permissive mode and disable the firewall with:
 
