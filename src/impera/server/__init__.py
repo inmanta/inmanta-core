@@ -324,11 +324,13 @@ class Server(ServerClientEndpoint):
                 if body is not None and "id" in body:
                     node = self._db.get(Node, {"pk": body["id"]})
                     agents = self._db.filter(Agent, {"node": node})
-                    return 200, {"node": node.attributes, "agents": [{k: v for k, v in a.attributes.items()
-                                                                      if k != "node"} for a in agents]}
+                    return 200, {"node": {k: str(v) for k, v in node.attributes.items()},
+                                 "agents": [{k: v for k, v in a.attributes.items() if k != "node"} for a in agents]
+                                 }
 
                 else:
-                    return 200, {"nodes": [x.attributes for x in self._db.filter(Node, {})]}
+                    return 200, {"nodes": [{key: str(value) for key, value in x.attributes.items()}
+                                           for x in self._db.filter(Node, {})]}
 
             except (Node.DoesNotExist, Agent.DoesNotExist):
                 return 404
