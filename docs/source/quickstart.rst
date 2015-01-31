@@ -208,12 +208,12 @@ website. This composition has to be specified in the ``main.cf`` file:
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
-On line 2 we define the server on which we want to deploy Drupal. The name attribute is the hostname of the
+On line 2 we define the server on which we want to deploy Drupal. The *name* attribute is the hostname of the
 machine, which is later used to determine what configuration needs to be deployed on which machine.
-The os attribute defines which operating system this server runs. This attribute can be used to
+The *os* attribute defines which operating system this server runs. This attribute can be used to
 create configuration modules that handle the heterogeneity of different operating systems. 
 The current value refers to Fedora. To deploy this on Ubuntu, change this value to
-ubuntu::ubuntu1404. The ip attribute is the IP address of this host. In this introduction 
+ubuntu::ubuntu1404. The *ip* attribute is the IP address of this host. In this introduction 
 we define this attribute manually, later on we will let Impera manage this automatically. 
 
 Lines 6 and 7 deploy an httpd server and mysql server on our server.
