@@ -2,7 +2,7 @@
 
 [![docs](https://readthedocs.org/projects/impera/badge/?version=latest)](http://impera.readthedocs.org/en/latest/)
 
-This repository contain the Impera configuration management tool.
+This repository contains the Impera configuration management tool.
 
 ## Requirements
 
@@ -12,11 +12,11 @@ in the requirements.txt file. This file can be used by pip to install all depend
 
     pip install -r requirements.txt
 
-For the install python3-setuptools is also required.
+The installation also requires python3-setuptools.
 
-## Install
+## Installation
 
-Download a tarball of Impera or checkout the latest from the git repository:
+Download a tarball of Impera or checkout the latest version from the git repository:
 
     wget https://github.com/bartv/impera/archive/master.zip
     unzip master.zip
