@@ -72,10 +72,10 @@ SSH Root access
 ---------------
 
 In this tutorial we use agentless deployments, with vm1 as the management machine. 
-This means that it will manage itself and vm2 over SSH. 
-This requires SSH root access to vm1 and vm2. This means that your public SSH key needs to be installed in the authorized_keys file of the root user on both machines. 
+This means that it will manage itself and vm2 over SSH, thus requiring SSH root access to vm1 and vm2. 
+Therefore your public SSH key needs to be installed in the ``authorized_keys`` file of the root user on both machines. 
 
-If your public key is already installed in the current user, you can copy it to the root user with the following commands.
+If your public key is already installed in the current user, you can copy it to the root user with the following commands:
 
 .. code-block:: sh
 
@@ -84,7 +84,8 @@ If your public key is already installed in the current user, you can copy it to 
 
 
 In this guide we assume that you can login into vm2 using the same SSH keypair as you used to
-login into vm1. Use agent forwarding (the -A option) when you login into the vm1, *before* you deploy to vm2.
+login into vm1.  Therefore, use agent forwarding (the -A option) when you login into the vm1, 
+*before you continue with this guide*.
 
 Check from the user on vm1 if you can login into vm1 and vm2 as root and accept the host key.
 
@@ -96,7 +97,7 @@ Check from the user on vm1 if you can login into vm1 and vm2 as root and accept 
 SELinux
 -------
 
-In a default Fedora, SELinux and possibly the firewall are configured. This may cause
+In a default Fedora, SELinux and possibly the firewall are configured and activated. This may cause
 problems because managing these services is not covered here. We recommend that
 you either set SELinux to permissive mode and disable the firewall with:
 
@@ -177,8 +178,8 @@ The configuration model
 =======================
 
 In this section we will use the configuration concepts defined in the existing
-modules to create new composition that defines the final configuration model. In
-this guide we assume that drupal will be installed on a server called ``vm1``.
+modules to create a new composition that defines the final configuration model. In
+this guide we assume a server called ``vm1`` on which we will install Drupal.
 
 Compose a configuration model
 -----------------------------
@@ -186,7 +187,7 @@ Compose a configuration model
 The modules we installed in the previous section contain the configuration
 required for certain services or subsystems. In this section we will make
 a composition of the configuration modules to deploy and configure a Drupal
-website. This composition needs to be put in the ``main.cf`` file.
+website. This composition has to be specified in the ``main.cf`` file:
 
 .. code-block:: ruby
     :linenos:
@@ -207,17 +208,17 @@ website. This composition needs to be put in the ``main.cf`` file.
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
-On line 2 we define the server on which we want to deploy Drupal. The name is the hostname of the
+On line 2 we define the server on which we want to deploy Drupal. The name attribute is the hostname of the
 machine, which is later used to determine what configuration needs to be deployed on which machine.
-The os attribute defines what operating system this server runs. This attribute can be used to
-create configuration modules that handle the heterogeneity of different operating systems. The ip
-attribute is the IP address of this host. In this introduction we define this attribute manually,
-later on we will let Impera manage this automatically. To deploy this on Ubuntu, change this value to
-ubuntu::ubuntu1404.
+The os attribute defines which operating system this server runs. This attribute can be used to
+create configuration modules that handle the heterogeneity of different operating systems. 
+The current value refers to Fedora. To deploy this on Ubuntu, change this value to
+ubuntu::ubuntu1404. The ip attribute is the IP address of this host. In this introduction 
+we define this attribute manually, later on we will let Impera manage this automatically. 
 
 Lines 6 and 7 deploy an httpd server and mysql server on our server.
 
-Line 10 defines the name (hostname) of the webapplication and line 13 defines the actual Drupal
+Line 10 defines the name (hostname) of the web application, and line 13 defines the actual Drupal
 website to deploy.
 
 Line 11 defines a database for our Drupal website.
@@ -226,7 +227,7 @@ Line 11 defines a database for our Drupal website.
 Deploy the configuration model
 ------------------------------
 
-The normal mode of operation of Impera uses a central server to deploy configuration. Each managed host
+The normal mode of operation of Impera uses a central server to deploy configurations. Each managed host
 runs a configuration agent that receives configuration updates from a central server. This setup is
 quite elaborate and in this introduction we will use the single shot *deploy* command. This command
 compiles, exports and enforces the configuration for a single machine.
@@ -241,22 +242,22 @@ the Impera project.
 
 The first command compiles the configuration model and does a dry run of the deployment process and
 lists the changes that should be made. The second command does the actual deployment. We could use
-a local deployment, but that means we should run impera as root and this would create permission
-problems when we deploy changes on the second vm.
+a local deployment, but that means we should run Impera as root and this would create permission
+problems when we deploy changes on the second VM.
 
 
 
 Accessing your new Drupal install
 ---------------------------------
 
-Use ssh port-forwarding to forward port 80 on vm1 to your local machine, to
-port 2080 for example (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). This allows you to surf to
+Use SSH port-forwarding to forward port 80 on vm1 to your local machine, for example to
+port 2080 (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). This enables you to surf to
 http://localhost:2080/
 
 .. warning::
 
    Using "localhost" in the url is essential because the configuration model
-   generates a name based virtual host that matches the name *localhost*.
+   generates a name-based virtual host that matches the name *localhost*.
 
 On the first access the database will not have been initialised. Surf to
 http://localhost:2080/install.php
@@ -266,7 +267,7 @@ the point where you can configure details such as the admin user.
 
 .. note::
 
-   Windows users can use putty for ssh access to their servers. Putty also
+   Windows users can use putty for SSH access to their servers. Putty also
    allows port forwarding. You can find more information on this topic here:
    http://the.earth.li/~sgtatham/putty/0.63/htmldoc/Chapter3.html#using-port-forwarding
 
