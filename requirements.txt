@@ -8,3 +8,5 @@ pyyaml
 urllib3
 six
 pymongo
+sphinx-argparse
+sphinx

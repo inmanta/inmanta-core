@@ -23,6 +23,7 @@ Contents
 
     quickstart
     language
+    commands
 
 Additional resources
 --------------------

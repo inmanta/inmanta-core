@@ -133,6 +133,29 @@ log_levels = {
 }
 
 
+def cmd_parser():
+    # create the argument parser
+    parser = ArgumentParser()
+    parser.add_argument("-p", action="store_true", dest="profile", help='Profile this run of the program')
+    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file")
+    parser.add_argument("-s", "--stats", dest="stats", action="store_true",
+                        help="Dump all stats to the stats.json file after running")
+    parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
+    parser.add_argument("--log-file-level", dest="log_file_level", default=2, type=int,
+                        help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG")
+    parser.add_argument('-v', '--verbose', action='count', default=0,
+                        help="Nothing is only errors, -v warning, -vv info and -vvv debug")
+    subparsers = parser.add_subparsers(title="commands")
+    for cmd_name, cmd_options in Commander.commands().items():
+        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"])
+        if cmd_options["parser_config"] is not None:
+            cmd_options["parser_config"](cmd_subparser)
+        cmd_subparser.set_defaults(func=cmd_options["function"])
+        cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
+
+    return parser
+
+
 def app():
     """
         Run the compiler
@@ -171,30 +194,7 @@ def app():
     except ProjectNotFoundExcpetion:
         pass
 
-    # create the argument parser
-    parser = ArgumentParser()
-
-    parser.add_argument("-p", action="store_true", dest="profile",
-                        help='Profile this run of the program')
-    parser.add_argument("-c", "--config", dest="config_file", help="Use this config file")
-    parser.add_argument("-s", "--stats", dest="stats", action="store_true",
-                        help="Dump all stats to the stats.json file after running")
-
-    parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
-    parser.add_argument("--log-file-level", dest="log_file_level", default=2, type=int,
-                        help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG")
-    parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help="Nothing is only errors, -v warning, -vv info and -vvv debug")
-
-    subparsers = parser.add_subparsers(title="commands")
-
-    for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"])
-        if cmd_options["parser_config"] is not None:
-            cmd_options["parser_config"](cmd_subparser)
-
-        cmd_subparser.set_defaults(func=cmd_options["function"])
-        cmd_subparser.set_defaults(require_project=cmd_options["require_project"])
+    parser = cmd_parser()
 
     options, other = parser.parse_known_args()
     options.other = other
