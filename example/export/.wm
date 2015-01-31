@@ -1,5 +1,0 @@
-[config]
-lib-dir = ../../model:libs
-export = dump
-output-dir = output
-

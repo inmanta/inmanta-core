@@ -1,2 +1,0 @@
-
-print(mod::uppercase("hello world"))

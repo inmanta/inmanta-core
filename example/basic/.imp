@@ -1,5 +1,0 @@
-[config]
-lib-dir = libs
-export = database
-output-dir = output
-
