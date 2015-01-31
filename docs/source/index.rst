@@ -1,3 +1,5 @@
+.. _index:
+
 Impera's documentation
 ======================
 
@@ -9,11 +11,35 @@ configuration modules are available on the GitHub project site: https://github.c
 The documentation is work in progress and should grow and improve considerably in a short time
 frame.
 
-Contents:
+Getting Started
+---------------
+
+If you are new to impera, try our :doc:`Getting Started <quickstart>` guide.
+
+Contents
+--------
 
 .. toctree::
-   :maxdepth: 2
 
-   quickstart.rst
-   language.rst
+    quickstart
+    language
 
+Additional resources
+--------------------
+
+* `Impera issue tracker`_
+* `Impera user mailinglist`_
+* `Impera developer mailinglist`_
+* `Impera Twitter`_
+
+.. _Impera user mailinglist: https://groups.google.com/forum/#!forum/impera-users
+.. _Impera developer mailinglist: https://groups.google.com/forum/#!forum/impera-devel
+.. _Impera issue tracker: https://github.com/impera-io/impera/issues
+.. _Impera Twitter: https://twitter.com/impera_io
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
