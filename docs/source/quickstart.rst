@@ -71,9 +71,9 @@ signed.
 SSH Root access
 ---------------
 
-In this tutorial we use agentless deployments, with vm1 as the management machine. 
-This means that it will manage itself and vm2 over SSH, thus requiring SSH root access to vm1 and vm2. 
-Therefore your public SSH key needs to be installed in the ``authorized_keys`` file of the root user on both machines. 
+In this tutorial we use agentless deployments, with vm1 as the management machine.
+This means that it will manage itself and vm2 over SSH, thus requiring SSH root access to vm1 and vm2.
+Therefore your public SSH key needs to be installed in the ``authorized_keys`` file of the root user on both machines.
 
 If your public key is already installed in the current user, you can copy it to the root user with the following commands:
 
@@ -84,7 +84,7 @@ If your public key is already installed in the current user, you can copy it to 
 
 
 In this guide we assume that you can login into vm2 using the same SSH keypair as you used to
-login into vm1.  Therefore, use agent forwarding (the -A option) when you login into the vm1, 
+login into vm1.  Therefore, use agent forwarding (the -A option) when you login into the vm1,
 *before you continue with this guide*.
 
 Check from the user on vm1 if you can login into vm1 and vm2 as root and accept the host key.
@@ -211,10 +211,10 @@ website. This composition has to be specified in the ``main.cf`` file:
 On line 2 we define the server on which we want to deploy Drupal. The *name* attribute is the hostname of the
 machine, which is later used to determine what configuration needs to be deployed on which machine.
 The *os* attribute defines which operating system this server runs. This attribute can be used to
-create configuration modules that handle the heterogeneity of different operating systems. 
+create configuration modules that handle the heterogeneity of different operating systems.
 The current value refers to Fedora. To deploy this on Ubuntu, change this value to
-ubuntu::ubuntu1404. The *ip* attribute is the IP address of this host. In this introduction 
-we define this attribute manually, later on we will let Impera manage this automatically. 
+ubuntu::ubuntu1404. The *ip* attribute is the IP address of this host. In this introduction
+we define this attribute manually, later on we will let Impera manage this automatically.
 
 Lines 6 and 7 deploy an httpd server and mysql server on our server.
 
@@ -319,9 +319,9 @@ to an IP address we provide this address directly with the -i parameter.
 
 .. code-block:: sh
 
-    impera deploy -a vm2 -i IP_OF_VM2    
+    impera deploy -a vm2 -i IP_OF_VM2
     impera deploy -a vm1 -i IP_OF_VM1
-    
+
 If you browse to the drupal site again, the database should be empty once more.
 
 Create your own modules
@@ -337,7 +337,7 @@ A configuration module requires a specific layout:
 
     * The name of the module is determined by the top-level directory. Within this
       module directory, a ``module.yml`` file has to be specified.
-    * The only mandatory subdirectory is the ``model`` directory containing a file 
+    * The only mandatory subdirectory is the ``model`` directory containing a file
       called ``_init.cf``. What is defined in the ``_init.cf`` file is available in the namespace linked with
       the name of the module. Other files in the model directory create subnamespaces.
     * The files directory contains files that are deployed verbatim to managed
@@ -369,8 +369,8 @@ A configuration module requires a specific layout:
 
 
 We will create our custom module in the ``libs`` directory of the quickstart project. Our new module
-will be called *lamp*, and we require the ``_init.cf`` file (in the ``model`` subdirectory) and 
-the ``module.yml`` file to have a valid Impera module. 
+will be called *lamp*, and we require the ``_init.cf`` file (in the ``model`` subdirectory) and
+the ``module.yml`` file to have a valid Impera module.
 The following commands create all directories and files to develop a full-featured module:
 
 .. code-block:: sh
@@ -402,11 +402,14 @@ configuration module.
     :linenos:
 
     entity DrupalStack:
-        string stack_id
-        string vhostname
+        string hostname
+        string admin_user
+        string admin_password
+        string admin_email
+        string site_name
     end
 
-    index DrupalStack(stack_id)
+    index DrupalStack(hostname)
 
     ip::Host webhost [1] -- [0:1] DrupalStack drupal_stack_webhost
     ip::Host mysqlhost [1] -- [0:1] DrupalStack drupal_stack_mysqlhost
@@ -417,26 +420,26 @@ configuration module.
         mysql_server=mysql::Server(host=mysqlhost)
 
         # deploy drupal in that virtual host
-        name=web::Alias(hostname="localhost")
+        name=web::Alias(hostname=hostname)
         db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                            password="Str0ng-P433w0rd")
-        drupal::Application(name=name, container=web_server, database=db, admin_user="root",
-                            admin_password="test", admin_email="admin@localhost", site_name="localhost")
+        drupal::Application(name=name, container=web_server, database=db, admin_user=admin_user,
+                            admin_password=admin_password, admin_email=admin_email, site_name=site_name)
     end
 
     implement DrupalStack using drupalStackImplementation
 
-On lines 1 to 4 we define an entity which is the definition of a *concept* in
+On lines 1 to 7 we define an entity which is the definition of a *concept* in
 the configuration model. Entities behave as an interface to a partial
 configuration model that encapsulates parts of the configuration, in this case
-how to configure a LAMP stack. On lines 2 and 3 typed attributes are defined
+how to configure a LAMP stack. On lines 2 and 6 typed attributes are defined
 which we can later on use in the implementation of an entity instance.
 
-Line 6 defines that *stack_id* is an identifying attribute for instances of
+Line 9 defines that *hostname* is an identifying attribute for instances of
 the DrupalStack entity. This also means that all instances of DrupalStack need
-to have a unique *stack_id* attribute.
+to have a unique *hostname* attribute.
 
-On lines 8 and 9 we define a relation between a Host and our DrupalStack entity.
+On lines 11 and 12 we define a relation between a Host and our DrupalStack entity.
 This relation represents a double binding between these instances and it has a
 multiplicity. The first relation reads as follows:
 
@@ -447,11 +450,11 @@ multiplicity. The first relation reads as follows:
 
 .. warning::
 
-   On lines 8 and 9 we explicity give the DrupalStack side of the relation a
+   On lines 11 and 12 we explicity give the DrupalStack side of the relation a
    multiplicity that starts from zero. Setting this to one would break the ip
    module because each Host would require an instance of DrupalStack.
 
-On lines 11 to 22 an implementation is defined that provides a refinement of the DrupalStack entity.
+On lines 14 to 25 an implementation is defined that provides a refinement of the DrupalStack entity.
 It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining
 DrupalStack in function of other entities, which on their turn do the same. The refinement process
 is evaluated by the compiler and continues until all instances are refined into instances of
@@ -459,10 +462,9 @@ entities that Impera knows how to deploy.
 
 Inside the implementation the attributes and relations of the entity are available as variables.
 They can be hidden by new variable definitions, but are also accessible through the ``self``
-variable (not used in this example). On line 19 an attribute is used in an inline template with the
-{{ }} syntax.
+variable (not used in this example).
 
-And finally on line 24 we link the implementation to the entity itself.
+And finally the implement statement line 27 links the implementation to the entity.
 
 The composition
 ---------------
@@ -478,7 +480,9 @@ required.
     vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM2")
     vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="IP_OF_VM2")
 
-    lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, stack_id="drupal_test", vhostname="localhost")
+    lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
+                      admin_password="test", admin_email="admin@example.com", site_name="localhost")
+
 
 Deploy the changes
 ------------------
