@@ -477,7 +477,7 @@ required.
     :linenos:
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM2")
+    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
     vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="IP_OF_VM2")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
