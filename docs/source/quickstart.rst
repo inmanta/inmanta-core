@@ -204,7 +204,7 @@ website. This composition has to be specified in the ``main.cf`` file:
     name=web::Alias(hostname="localhost")
     db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                        password="Str0ng-P433w0rd")
-    drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+    drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
@@ -304,11 +304,11 @@ to the new virtual machine.
     name=web::Alias(hostname="localhost")
     db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                        password="Str0ng-P433w0rd")
-    drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+    drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 On line 3 the definition of the new virtual machine is added. On line 7 the
-mysql server is assigned to vm2.
+MySQL server is assigned to vm2.
 
 Deploy the configuration model
 ------------------------------
@@ -464,7 +464,7 @@ Inside the implementation the attributes and relations of the entity are availab
 They can be hidden by new variable definitions, but are also accessible through the ``self``
 variable (not used in this example).
 
-And finally the implement statement line 27 links the implementation to the entity.
+And finally the *implement* statement on line 27 links the implementation to the entity.
 
 The composition
 ---------------
