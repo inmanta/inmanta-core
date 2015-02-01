@@ -451,7 +451,7 @@ multiplicity. The first relation reads as follows:
    multiplicity that starts from zero. Setting this to one would break the ip
    module because each Host would require an instance of DrupalStack.
 
-On lines 11 to 26 an implementation is defined that provides a refinement of the DrupalStack entity.
+On lines 11 to 22 an implementation is defined that provides a refinement of the DrupalStack entity.
 It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining
 DrupalStack in function of other entities, which on their turn do the same. The refinement process
 is evaluated by the compiler and continues until all instances are refined into instances of
@@ -462,12 +462,12 @@ They can be hidden by new variable definitions, but are also accessible through 
 variable (not used in this example). On line 19 an attribute is used in an inline template with the
 {{ }} syntax.
 
-And finally on line 28 we link the implementation to the entity itself.
+And finally on line 24 we link the implementation to the entity itself.
 
 The composition
 ---------------
 
-With our new LAMP module we can reduce the amount of required configuration code in the main.cf file
+With our new LAMP module we can reduce the amount of required configuration code in the ``main.cf`` file
 by using more *reusable* configuration code. Only three lines of site-specific configuration code are
 required.
 
