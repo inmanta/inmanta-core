@@ -250,7 +250,7 @@ problems when we deploy changes on the second VM.
 Accessing your new Drupal install
 ---------------------------------
 
-Use SSH port-forwarding to forward port 80 on vm1 to your local machine, for example to
+Use SSH port forwarding to forward port 80 on vm1 to your local machine, for example to
 port 2080 (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). This enables you to surf to
 http://localhost:2080/
 
@@ -267,7 +267,7 @@ the point where you can configure details such as the admin user.
 
 .. note::
 
-   Windows users can use putty for SSH access to their servers. Putty also
+   Windows users can use PuTTY for SSH access to their servers. PuTTY also
    allows port forwarding. You can find more information on this topic here:
    http://the.earth.li/~sgtatham/putty/0.63/htmldoc/Chapter3.html#using-port-forwarding
 
@@ -276,8 +276,8 @@ Managing multiple machines
 ==========================
 
 The real power of Impera appears when you want to manage more than one machine. In this section we will
-move the mysql server from vm1 to a second virtual machine called vm2. We will still manage this
-additional machine in ``single shot mode`` using a remote deploy.
+move the MySQL server from ``vm1`` to a second virtual machine called ``vm2``. We will still manage this
+additional machine in *single shot mode* using a remote deploy.
 
 
 
@@ -286,7 +286,7 @@ Update the configuration model
 ------------------------------
 
 A second virtual machine is easily added to the system by adding the definition
-of the virtual machine to the configuration model and assigning the mysql server
+of the virtual machine to the configuration model and assigning the MySQL server
 to the new virtual machine.
 
 .. code-block:: ruby
@@ -329,19 +329,19 @@ Create your own modules
 
 Impera enables developers of a configuration model to make it modular and
 reusable. In this section we create a configuration module that defines how to
-deploy a LAMP stack with a Drupal site in a two or three tiered deployment.
+deploy a LAMP stack with a Drupal site in a two- or three-tiered deployment.
 
 Module layout
 -------------
 A configuration module requires a specific layout:
 
-    * The name of the module is determined by the top-level directory. In this
-      directory the only required directory is the ``model`` directory with a file
-      called ``_init.cf``.
-    * What is defined in the ``_init.cf`` file is available in the namespace linked with
+    * The name of the module is determined by the top-level directory. Within this
+      module directory, a ``module.yml`` file has to be specified.
+    * The only mandatory subdirectory is the ``model`` directory containing a file 
+      called ``_init.cf``. What is defined in the ``_init.cf`` file is available in the namespace linked with
       the name of the module. Other files in the model directory create subnamespaces.
     * The files directory contains files that are deployed verbatim to managed
-      machines
+      machines.
     * The templates directory contains templates that use parameters from the
       configuration model to generate configuration files.
     * Python files in the plugins directory are loaded by the platform and can
@@ -369,8 +369,9 @@ A configuration module requires a specific layout:
 
 
 We will create our custom module in the ``libs`` directory of the quickstart project. Our new module
-will call ``lamp`` and the ``_init.cf`` file and the ``module.yml`` file is required to be a valid Impera
-module. The following commands create all directories to develop a full-featured module.
+will be called *lamp*, and we require the ``_init.cf`` file (in the ``model`` subdirectory) and 
+the ``module.yml`` file to have a valid Impera module. 
+The following commands create all directories and files to develop a full-featured module:
 
 .. code-block:: sh
 
@@ -394,7 +395,7 @@ Next, edit the ``lamp/module.yml`` file and add meta-data to it:
 Configuration model
 -------------------
 
-In ``lamp/model/_init.cf`` we define the configuration model that defines the lamp
+In ``lamp/model/_init.cf`` we define the configuration model that defines the *lamp*
 configuration module.
 
 .. code-block:: ruby
@@ -425,19 +426,19 @@ configuration module.
 
     implement DrupalStack using drupalStackImplementation
 
-On line 1 to 4 we define an entity which is the definition of a *concept* in
+On lines 1 to 4 we define an entity which is the definition of a *concept* in
 the configuration model. Entities behave as an interface to a partial
 configuration model that encapsulates parts of the configuration, in this case
-how to configure a LAMP stack. On line 2 and 3 typed attributes are defined
+how to configure a LAMP stack. On lines 2 and 3 typed attributes are defined
 which we can later on use in the implementation of an entity instance.
 
-Line 6 defines that stack_id is an identifying attribute for instances of
+Line 6 defines that *stack_id* is an identifying attribute for instances of
 the DrupalStack entity. This also means that all instances of DrupalStack need
-to have a unique stack_id attribute.
+to have a unique *stack_id* attribute.
 
 On lines 8 and 9 we define a relation between a Host and our DrupalStack entity.
 This relation represents a double binding between these instances and it has a
-multiplicity. The first relations reads as following:
+multiplicity. The first relation reads as follows:
 
     * Each DrupalStack instance has exactly one ip::Host instance that is available
       in the webserver attribute.
@@ -446,11 +447,11 @@ multiplicity. The first relations reads as following:
 
 .. warning::
 
-   On line 8 and 9 we explicity give the DrupalStack side of the relation a
+   On lines 8 and 9 we explicity give the DrupalStack side of the relation a
    multiplicity that starts from zero. Setting this to one would break the ip
    module because each Host would require an instance of DrupalStack.
 
-On line 11 to 26 an implementation is defined that provides a refinement of the DrupalStack entity.
+On lines 11 to 26 an implementation is defined that provides a refinement of the DrupalStack entity.
 It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining
 DrupalStack in function of other entities, which on their turn do the same. The refinement process
 is evaluated by the compiler and continues until all instances are refined into instances of
@@ -467,8 +468,8 @@ The composition
 ---------------
 
 With our new LAMP module we can reduce the amount of required configuration code in the main.cf file
-by using more *reusable* configure code. Only three lines of site specific configuration code are
-left.
+by using more *reusable* configuration code. Only three lines of site-specific configuration code are
+required.
 
 .. code-block:: ruby
     :linenos:
