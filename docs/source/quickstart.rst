@@ -251,19 +251,13 @@ Accessing your new Drupal install
 ---------------------------------
 
 Use SSH port forwarding to forward port 80 on vm1 to your local machine, for example to
-port 2080 (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). This enables you to surf to
-http://localhost:2080/
+port 2080 (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). As the database has already been configured,
+you can then immediately surf to `http://localhost:2080/ <http://localhost:2080/>`_ to access your Drupal server.
 
 .. warning::
 
    Using "localhost" in the url is essential because the configuration model
    generates a name-based virtual host that matches the name *localhost*.
-
-On the first access the database will not have been initialised. Surf to
-http://localhost:2080/install.php
-
-The database has already been configured and Drupal should skip this setup to
-the point where you can configure details such as the admin user.
 
 .. note::
 
