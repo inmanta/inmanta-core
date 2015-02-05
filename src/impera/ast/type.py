@@ -52,6 +52,9 @@ class Type(object):
             @param value: The value to cast
         """
         raise NotImplementedError()
+    
+    def __str__(self):
+        return str(self.__class__)
 
 
 class Number(Type):
@@ -94,7 +97,8 @@ class Number(Type):
         except ValueError:
             raise CastException()
 
-    def __str__(self):
+    @classmethod
+    def __str__(cls):
         return "number"
 
 
@@ -127,7 +131,8 @@ class Bool(Type):
 
         raise CastException()
 
-    def __str__(self):
+    @classmethod
+    def __str__(cls):
         return "bool"
 
 
@@ -158,7 +163,8 @@ class NoneType(Type):
         """
         return None
 
-    def __str__(self):
+    @classmethod
+    def __str__(cls):
         return "none"
 
 
@@ -192,7 +198,8 @@ class String(Type, str):
 
         return True
 
-    def __str__(self):
+    @classmethod
+    def __str__(cls):
         return "string"
 
 

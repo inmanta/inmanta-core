@@ -74,6 +74,7 @@ class DefineEntity(DefinitionStatement):
             Evaluate this statement.
         """
         entity_type = Entity(self.name, str(state.namespace))
+        entity_type.comment = self.comment
 
         add_attributes = set()
         for attribute in self.attributes:
