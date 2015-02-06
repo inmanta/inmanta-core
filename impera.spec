@@ -1,5 +1,5 @@
 Name:           python3-impera
-Version:        0.5
+Version:        0.6
 
 Release:        1%{?dist}
 Summary:        Impera configuration management tool

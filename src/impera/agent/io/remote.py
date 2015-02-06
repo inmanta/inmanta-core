@@ -28,7 +28,7 @@ class RemoteIO(object):
         return True
 
     def __init__(self, host):
-        self._gw = multi.makegateway("ssh=root@%s//python=python3" % host)
+        self._gw = multi.makegateway("ssh=root@%s//python=python" % host)
 
     def _execute(self, function_name, *args):
         ch = self._gw.remote_exec(local)

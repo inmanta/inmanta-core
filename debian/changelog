@@ -1,3 +1,10 @@
+impera (0.6) trusty; urgency=medium
+
+  * New release with various bugfixes and improvements
+
+ -- Bart Vanbrabant <bart@impera.io>  Fri, 06 Feb 2015 13:10:43 +0100
+
+
 impera (0.5) trusty; urgency=medium
 
   * New release with various bugfixes and improvements
