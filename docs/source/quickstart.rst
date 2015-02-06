@@ -204,7 +204,7 @@ website. This composition has to be specified in the ``main.cf`` file:
     name=web::Alias(hostname="localhost")
     db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                        password="Str0ng-P433w0rd")
-    drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+    drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
@@ -251,19 +251,13 @@ Accessing your new Drupal install
 ---------------------------------
 
 Use SSH port forwarding to forward port 80 on vm1 to your local machine, for example to
-port 2080 (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). This enables you to surf to
-http://localhost:2080/
+port 2080 (ssh -L 2080:localhost:80 USERNAME@IP_OF_VM1). As the database has already been configured,
+you can then immediately surf to `http://localhost:2080/ <http://localhost:2080/>`_ to access your Drupal server.
 
 .. warning::
 
    Using "localhost" in the url is essential because the configuration model
    generates a name-based virtual host that matches the name *localhost*.
-
-On the first access the database will not have been initialised. Surf to
-http://localhost:2080/install.php
-
-The database has already been configured and Drupal should skip this setup to
-the point where you can configure details such as the admin user.
 
 .. note::
 
@@ -304,11 +298,11 @@ to the new virtual machine.
     name=web::Alias(hostname="localhost")
     db=mysql::Database(server=mysql_server, name="drupal_test", user="drupal_test",
                        password="Str0ng-P433w0rd")
-    drupal::Application(name=name, container=web_server, database=db, admin_user="root",
+    drupal::Application(name=name, container=web_server, database=db, admin_user="admin",
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 On line 3 the definition of the new virtual machine is added. On line 7 the
-mysql server is assigned to vm2.
+MySQL server is assigned to vm2.
 
 Deploy the configuration model
 ------------------------------
@@ -464,7 +458,7 @@ Inside the implementation the attributes and relations of the entity are availab
 They can be hidden by new variable definitions, but are also accessible through the ``self``
 variable (not used in this example).
 
-And finally the implement statement line 27 links the implementation to the entity.
+And finally the *implement* statement on line 27 links the implementation to the entity.
 
 The composition
 ---------------
