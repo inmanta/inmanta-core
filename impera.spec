@@ -1,13 +1,13 @@
 Name:           python3-impera
 Version:        0.6
 
-Release:        1%{?dist}
+Release:        1.%{?tag}%{?dist}
 Summary:        Impera configuration management tool
 
 Group:          Development/Languages
 License:        LGPLv2+
 URL:            http://impera.io
-Source0:        https://github.com/bartv/impera/archive/%{version}.tar.gz#/impera-%{version}.tar.gz
+Source0:        https://github.com/impera-io/impera/archive/%{version}.tar.gz#/impera-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildArch:      noarch

@@ -1,11 +1,23 @@
 #!/bin/bash -xe
 
 TDIR=/tmp/build
+REPO=$2
+TARGET=$3
+TAG=""
 
-echo "Checking out latest tag"
-git clone https://github.com/impera-io/impera
+echo "Checking out code"
+git clone $REPO impera
 cd impera
-git checkout -b $(git tag | sort -n -r | head -n 1)
+if [[ $TARGET == "latest" ]]; then
+	git checkout -b $(git tag | sort -n -r | head -n 1)
+elif [[ $TARGET == "dev" ]]; then
+	# actuall do nothing :)
+	echo "Using dev"
+	TAG=$(date +%Y%m%d%H%M)
+else
+	echo "No build target given!" >&2
+	exit 1
+fi
 
 echo "Creating a source distribution"
 rm -rf dist
@@ -20,10 +32,10 @@ sed -i "s/\%(echo \$HOME)/\/tmp\/build/g" $TDIR/.rpmmacros
 cp dist/impera-*.tar.gz $TDIR/rpmbuild/SOURCES/
 cp impera.spec $TDIR/rpmbuild/SPECS/impera.spec
 
-rpmbuild -D "%_topdir $TDIR/rpmbuild" -bs $TDIR/rpmbuild/SPECS/impera.spec
+rpmbuild -D "tag $TAG" -D "%_topdir $TDIR/rpmbuild" -bs $TDIR/rpmbuild/SPECS/impera.spec
 
 echo "Building RPM"
-rpmbuild -D "%_topdir $TDIR/rpmbuild" --rebuild $TDIR/rpmbuild/SRPMS/*.rpm
+rpmbuild -D "tag $TAG" -D "%_topdir $TDIR/rpmbuild" --rebuild $TDIR/rpmbuild/SRPMS/*.rpm
 
 cp $TDIR/rpmbuild/SRPMS/*.rpm $1
 cp $TDIR/rpmbuild/RPMS/noarch/*.rpm $1

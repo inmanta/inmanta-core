@@ -1,13 +1,24 @@
 #!/bin/bash -xe
 
 TDIR=/tmp/build
+
+REPO=$2
+TARGET=$3
+
+echo "Checking out code"
+git clone $REPO impera
+cd impera
+if [[ $TARGET == "latest" ]]; then
+	git checkout -b $(git tag | sort -n -r | head -n 1)
+elif [[ $TARGET == "dev" ]]; then
+	# actuall do nothing :)
+else
+	echo "No build target given!" >&2
+	exit 1
+fi
+
 rm -rf $TDIR
 mkdir -p $TDIR
-
-echo "Checking out latest tag"
-git clone https://github.com/impera-io/impera
-cd impera
-git checkout -b $(git tag | sort -n -r | head -n 1)
 
 echo "Creating a source distribution"
 rm -rf dist
