@@ -90,7 +90,12 @@ class Number(Type):
             return value
 
         try:
-            return float(value)
+            fl_value = float(value)
+            int_value = int(value)
+            if fl_value == int_value:
+                return int_value
+
+            return fl_value
         except ValueError:
             raise CastException()
 
