@@ -373,7 +373,7 @@ class Server(ServerClientEndpoint):
 
                         ret_val = {"version": version.attributes,
                                    "resources": [{"id": x.resource.id, "updated": x.updated, "agent": x.resource.agent.name,
-                                                  "status": x.status}
+                                                  "status": x.status, "data": x.data}
                                                  for x in self._db.filter(ResourceVersion, {"version": version})]}
                         ret_val["total_resources"] = len(ret_val["resources"])
                         ret_val["completed_resources"] = len(self._db.filter(ResourceVersion,
