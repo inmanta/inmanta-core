@@ -30,6 +30,7 @@ from urllib3 import util, exceptions
 import yaml
 from impera import env
 from impera.config import Config
+from impera import parser
 
 
 LOGGER = logging.getLogger(__name__)
@@ -243,10 +244,11 @@ class Module(object):
         """
             Create a new configuration module
 
-            @param path: Where is the module stored
-            @param load: Try to load the module. Use false if the module does not exist yet and
+            :param project: A reference to the project this module belongs to.
+            :param path: Where is the module stored
+            :param load: Try to load the module. Use false if the module does not exist yet and
                 needs to be installed.
-            @param kwmeta: Meta-data
+            :param kwmeta: Meta-data
         """
         self._project = project
         self._path = path
@@ -260,6 +262,26 @@ class Module(object):
 
             self.load_module_file()
             self.is_versioned()
+
+    def get_name(self):
+        """ Returns the name of the module (if the meta data is set)
+        """
+        if "name" in self._meta:
+            return self._meta["name"]
+
+        return None
+
+    name = property(get_name)
+
+    def get_version(self):
+        """ Return the version of this module
+        """
+        if "version" in self._meta:
+            return self._meta["version"]
+
+        return None
+
+    version = property(get_version)
 
     def get_source(self) -> str:
         """
@@ -431,6 +453,15 @@ class Module(object):
         if self._meta["name"] != os.path.basename(self._path):
             LOGGER.warning("The name in the module file (%s) does not match the directory name (%s)"
                            % (self._meta["name"], os.path.basename(self._path)))
+
+    def get_module_files(self):
+        """ Returns the path of all model files in this module, relative to the module root
+        """
+        files = []
+        for model_file in glob.glob(os.path.join(self._path, "model", "*.cf")):
+            files.append(model_file)
+
+        return files
 
     def load_plugins(self):
         """
@@ -703,10 +734,10 @@ class ModuleTool(object):
         module_path = project_data["downloadpath"]
         self._install(project, module_path, project.requires())
 
-        install_set = self._mod_handled_list
+        install_set = [os.path.realpath(path) for path in self._mod_handled_list]
         not_listed = []
         for mod in project.modules.values():
-            if mod._path not in install_set:
+            if os.path.realpath(mod._path) not in install_set:
                 not_listed.append(mod)
 
         if len(not_listed) > 0:
@@ -773,5 +804,17 @@ class ModuleTool(object):
         """
         subprocess.call(["git", "commit", "-a"])
 
-    def test(self):
-        pass
+    def validate(self):
+        """ Validate the module we are currently in
+        """
+        module = Module(None, os.path.realpath(os.curdir))
+        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
+
+        # compile the source files in the module
+        model_parser = parser.Parser()
+        for model_file in module.get_module_files():
+            try:
+                model_parser.parse(module.name, model_file)
+                LOGGER.info("Successfully parsed %s" % model_file)
+            except Exception:
+                LOGGER.exception("Unable to parse %s" % model_file)
