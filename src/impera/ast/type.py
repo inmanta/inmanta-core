@@ -91,7 +91,11 @@ class Number(Type):
 
         try:
             fl_value = float(value)
-            int_value = int(value)
+            try:
+                int_value = int(value)
+            except ValueError:
+                int_value = 0
+
             if fl_value == int_value:
                 return int_value
 
