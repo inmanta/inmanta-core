@@ -270,7 +270,8 @@ class Exporter(object):
         for unknown in resource.unknowns:
             value = getattr(resource, unknown)
             self._unknown_hosts.add(resource.id.agent_name)
-            self._unknown_objects.add(Exporter.get_id(value.source))
+            if value.source is not None:
+                self._unknown_objects.add(Exporter.get_id(value.source))
 
             self._unknown_per_host[resource.id.agent_name].add(str(resource.id))
             LOGGER.debug("Host %s has unknown values (in resource %s), discarding resources for this host" %
