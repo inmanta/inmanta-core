@@ -211,6 +211,9 @@ class Plugin(object, metaclass=PluginMeta):
                             (self.get_signature(), required, len(args)))
 
         for i in range(len(args)):
+            if isinstance(args[i], Unknown):
+                continue
+
             if self.arguments[i][0] is not None and not self._is_instance(args[i], self.arguments[i][1]):
                 raise Exception(("Invalid type for argument %d of '%s', it should be " +
                                 "%s and %s given.") % (i + 1, self.__class__.__function_name__,
