@@ -8,7 +8,7 @@ This tutorial gets you started with Impera. You will learn how to:
    * Install Impera
    * Create an Impera project
    * Use existing configuration modules
-   * Create a configuration model to deploy a LAMP (Linux, Apache, Mysql and PHP) stack
+   * Create a configuration model to deploy a LAMP (Linux, Apache, MySQL and PHP) stack
    * Deploy the configuration
 
 
@@ -23,7 +23,7 @@ In the remainder of this chapter we will install the framework but use it withou
 .. warning::
 
    DO NOT run this guide on your own machine, or it will be reconfigured. Use two virtual machines,
-   with hostnames vm1 and vm2 to be fully compatible with this guide. This guide has been tested on Fedora
+   with host names vm1 and vm2 to be fully compatible with this guide. This guide has been tested on Fedora
    21 and Ubuntu 14.04.
 
 Installing Impera
