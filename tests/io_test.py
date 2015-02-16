@@ -38,8 +38,8 @@ def check_hash(io, testdir):
 def check_read(io, testdir):
     test_str = "hello é"
     filename = os.path.join(testdir, "readfile")
-    with open(filename, "w+") as fd:
-        fd.write(test_str)
+    with open(filename, "wb+") as fd:
+        fd.write(test_str.encode())
 
     assert(io.read(filename) == test_str)
 
