@@ -69,4 +69,6 @@ class Config(object):
         """
             Override a value
         """
+        if section not in cls._get_instance():
+            cls._get_instance().add_section(section)
         cls._get_instance().set(section, name, value)
