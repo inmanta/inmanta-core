@@ -129,10 +129,10 @@ def check_rmdir(io, testdir):
 
 
 def check_filestat(io, testdir):
-    stat = io.file_stat("/")
-    assert(stat["permissions"] == 555)
-    assert(stat["owner"] == "root")
-    assert(stat["group"] == "root")
+    stat = io.file_stat("/etc")
+    assert_equal(stat["permissions"], 755)
+    assert_equal(stat["owner"], "root")
+    assert_equal(stat["group"], "root")
 
 
 def check_chown(io, testdir):

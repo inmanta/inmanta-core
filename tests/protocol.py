@@ -24,6 +24,8 @@ from concurrent import futures
 import random
 import unittest
 import time
+import tempfile
+import shutil
 
 from nose.tools import assert_equal, assert_count_equal
 
@@ -31,9 +33,11 @@ from nose.tools import assert_equal, assert_count_equal
 class testProtocolClient(unittest.TestCase):
     def __init__(self, methodName='runTest'):
         unittest.TestCase.__init__(self, methodName)
+        self._tempdir = tempfile.mkdtemp()
 
     def setUp(self):
         Config.load_config()
+        Config.set("config", "state-dir", self._tempdir)
         executor = futures.ThreadPoolExecutor(max_workers=2)
         self.server = Server(code_loader=False)
         self.server_future = executor.submit(self.server.start)
@@ -79,3 +83,4 @@ class testProtocolClient(unittest.TestCase):
     def tearDown(self):
         self.server.stop()
         self.server_future.cancel()
+        shutil.rmtree(self._tempdir)
