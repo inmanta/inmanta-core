@@ -26,6 +26,8 @@ import re
 from subprocess import TimeoutExpired
 import subprocess
 from urllib3 import util, exceptions
+import tempfile
+import shutil
 
 import yaml
 from impera import env
@@ -202,7 +204,7 @@ class Project(object):
             Return the requires of this project
         """
         req = {}
-        if "requires" in self._project_data:
+        if "requires" in self._project_data and self._project_data["requires"] is not None:
             for name, spec in self._project_data["requires"].items():
                 source, version = spec.split(",")
                 req[name] = {"source": source.strip(), "version": version.strip()}
@@ -264,7 +266,8 @@ class Module(object):
             self.is_versioned()
 
     def get_name(self):
-        """ Returns the name of the module (if the meta data is set)
+        """
+            Returns the name of the module (if the meta data is set)
         """
         if "name" in self._meta:
             return self._meta["name"]
@@ -274,7 +277,8 @@ class Module(object):
     name = property(get_name)
 
     def get_version(self):
-        """ Return the version of this module
+        """
+            Return the version of this module
         """
         if "version" in self._meta:
             return self._meta["version"]
@@ -455,7 +459,8 @@ class Module(object):
                            % (self._meta["name"], os.path.basename(self._path)))
 
     def get_module_files(self):
-        """ Returns the path of all model files in this module, relative to the module root
+        """
+            Returns the path of all model files in this module, relative to the module root
         """
         files = []
         for model_file in glob.glob(os.path.join(self._path, "model", "*.cf")):
@@ -805,7 +810,8 @@ class ModuleTool(object):
         subprocess.call(["git", "commit", "-a"])
 
     def validate(self):
-        """ Validate the module we are currently in
+        """
+            Validate the module we are currently in
         """
         module = Module(None, os.path.realpath(os.curdir))
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
@@ -818,3 +824,32 @@ class ModuleTool(object):
                 LOGGER.info("Successfully parsed %s" % model_file)
             except Exception:
                 LOGGER.exception("Unable to parse %s" % model_file)
+
+        # create a test project
+        LOGGER.info("Creating a new project to test the module")
+        project_dir = tempfile.mkdtemp()
+        try:
+            lib_dir = os.path.join(project_dir, "libs")
+            os.mkdir(lib_dir)
+
+            LOGGER.info("Cloning %s module" % module.name)
+            proc = subprocess.Popen(["git", "clone", module._path], cwd=lib_dir)
+            proc.wait()
+
+            LOGGER.info("Setting up project")
+            with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
+                fd.write("""name: test
+description: Project to validate module %(name)s
+modulepath: libs
+downloadpath: libs
+requires:
+    %(name)s: %(source)s, "==%(version)s"
+""" % {"name": module.name, "version": module.version, "source": module._path})
+
+            LOGGER.info("Installing dependencies")
+            test_project = Project(project_dir)
+            test_project.use_virtual_env()
+            self._install(test_project, os.path.join(project_dir, "libs"), test_project.requires())
+        finally:
+            # print(project_dir)
+            shutil.rmtree(project_dir)
