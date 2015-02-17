@@ -37,4 +37,4 @@ tests/.coverage
 junit*.xml
 
 build-result
-Dockerfile
+/Dockerfile
