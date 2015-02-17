@@ -12,6 +12,8 @@ if [[ $TARGET == "latest" ]]; then
 	git checkout -b $(git tag | sort -n -r | head -n 1)
 elif [[ $TARGET == "dev" ]]; then
 	# actuall do nothing :)
+	echo "Using dev"
+	TAG=$(date +%Y%m%d%H%M)
 else
 	echo "No build target given!" >&2
 	exit 1

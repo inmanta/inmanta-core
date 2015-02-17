@@ -36,4 +36,4 @@ mkdir -p build-result/$TARGET/$DIST
 chmod 777 build-result/$TARGET/$DIST
 
 docker build -t impera-$DIST-build-env .
-docker run -v $(pwd)/build-result:/builds impera-$DIST-build-env bash $SCRIPT /builds/$TARGET/$DIST $REPO $TARGET
+docker run --rm=true -v $(pwd)/build-result:/builds impera-$DIST-build-env bash $SCRIPT /builds/$TARGET/$DIST $REPO $TARGET
