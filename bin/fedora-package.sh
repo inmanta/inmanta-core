@@ -37,8 +37,8 @@ rpmbuild -D "tag $TAG" -D "%_topdir $TDIR/rpmbuild" -bs $TDIR/rpmbuild/SPECS/imp
 echo "Building RPM"
 rpmbuild -D "tag $TAG" -D "%_topdir $TDIR/rpmbuild" --rebuild $TDIR/rpmbuild/SRPMS/*.rpm
 
-cp $TDIR/rpmbuild/SRPMS/*.rpm $1
-cp $TDIR/rpmbuild/RPMS/noarch/*.rpm $1
+cp $TDIR/rpmbuild/SRPMS/*.rpm $1 || exit 1
+cp $TDIR/rpmbuild/RPMS/noarch/*.rpm $1 || exit 1
 
 cd /code
 cat deps | while read DIR REPO; do
@@ -46,10 +46,10 @@ cat deps | while read DIR REPO; do
     rm -rf $DIR
     git clone $REPO $DIR
     cd $DIR
-    [[ -e fedora.sh ]] && bash fedora.sh $1
+    if [[ -e fedora.sh ]]; then
+        bash fedora.sh $1 || exit 1
+    fi
 done
 
 cd /code
-createrepo $1
-
 rm -rf $TDIR/rpmbuild
