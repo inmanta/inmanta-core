@@ -18,6 +18,7 @@
 
 from argparse import ArgumentParser
 import logging
+import sys
 
 import colorlog
 from impera.command import command, Commander
@@ -176,7 +177,9 @@ def app():
 
     stream = logging.StreamHandler()
     stream.setLevel(logging.INFO)
-    stream.setFormatter(formatter)
+
+    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+        stream.setFormatter(formatter)
 
     logging.root.handlers = []
     logging.root.addHandler(stream)
