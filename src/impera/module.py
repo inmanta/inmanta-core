@@ -289,6 +289,27 @@ class Module(object):
 
     version = property(get_version)
 
+    def _force_http(self, source_string):
+        """
+            Force the given string to http
+        """
+        new_source = source_string
+        try:
+            result = util.parse_url(source_string)
+            if result.scheme != "http" and result.scheme != "https":
+                # try to convert it to an anonymous https url
+                new_source = source_string.replace(result.scheme, "http")
+        except exceptions.LocationParseError:
+            # probably in git@host:repo format
+            m = re.search("^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source_string)
+            if m is not None:
+                new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
+
+        if new_source != source_string:
+            LOGGER.info("Reformated source from %s to %s" % (source_string, new_source))
+
+        return new_source
+
     def get_source(self) -> str:
         """
             Get the source url of this module. If git-http-only is true, we try to convert the all urls that are not valid
@@ -298,22 +319,7 @@ class Module(object):
         if not Config.getboolean("config", "git-http-only", False):
             return source
 
-        new_source = source
-        try:
-            result = util.parse_url(source)
-            if result.scheme != "http" and result.scheme != "https":
-                # try to convert it to an anonymous https url
-                new_source = source.replace(result.scheme, "http")
-        except exceptions.LocationParseError:
-            # probably in git@host:repo format
-            m = re.search("^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source)
-            if m is not None:
-                new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
-
-        if new_source != source:
-            LOGGER.info("Reformated source from %s to %s" % (source, new_source))
-
-        return new_source
+        return self._force_http(source)
 
     source = property(get_source)
 
@@ -541,7 +547,13 @@ class Module(object):
             output = self._call(cmd, modulepath, "git clone")
 
             if output is None:
-                return None
+                new_source = self._force_http(self.source)
+                cmd = ["git", "clone", new_source, self._meta["name"]]
+                output = self._call(cmd, modulepath, "git clone")
+
+                if output is None:
+                    LOGGER.critical("Unable to get module %s" % self._meta["name"])
+                    return None
 
         # reload the module
         module = Module(self._project, self._path)
@@ -590,8 +602,8 @@ class Module(object):
             print("")
             print("Unable to %(cmd_name)s %(name)s, %(cmd_name)s provided this output:" %
                   {"name": self._meta["name"], "cmd_name": cmd_name})
-            print(output[0])
-            print(output[1])
+            print(output[0].decode())
+            print(output[1].decode())
 
             return None
 
