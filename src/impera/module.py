@@ -33,6 +33,7 @@ import yaml
 from impera import env
 from impera.config import Config
 from impera import parser
+from impera.execute import scheduler
 
 
 LOGGER = logging.getLogger(__name__)
@@ -392,6 +393,7 @@ class Module(object):
         if not os.path.exists(os.path.join(self._path, ".git")):
             LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible."
                            % self._meta["name"])
+            return False
 
         if "version" in self._meta:
             version_str = str(self._meta["version"])
@@ -413,17 +415,22 @@ class Module(object):
                 if ref_spec not in refs:
                     LOGGER.warning(("Version %s defined in module %s is not available as tag. Use a or b followed by a number" +
                                    " to indicate a pre release (i.e. 0.2b1 for dev of 0.2)") % (version, self._meta["name"]))
+                    return False
 
                 else:
                     # check that the id of HEAD matches the id of the version tag
                     if refs["HEAD"] != refs[ref_spec]:
                         LOGGER.warning(("Module %s is set to version %s, but current revision (%s) does not match version " +
                                         "tag (%s).") % (self._meta["name"], version, refs["HEAD"], refs[ref_spec]))
+                        return False
 
             else:
                 if ref_spec[:-1] in refs:
                     LOGGER.warning(("Module %s defines this is a development version (a or b appended to version) of %s, but " +
                                    "the release version is already available as tag.") % (self._meta["name"], str(version)))
+                    return False
+
+        return True
 
     @classmethod
     def is_valid_module(cls, module_path):
@@ -813,8 +820,12 @@ class ModuleTool(object):
         """
             Validate the module we are currently in
         """
+        valid = True
         module = Module(None, os.path.realpath(os.curdir))
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
+
+        if not module.is_versioned():
+            valid = False
 
         # compile the source files in the module
         model_parser = parser.Parser()
@@ -823,6 +834,7 @@ class ModuleTool(object):
                 model_parser.parse(module.name, model_file)
                 LOGGER.info("Successfully parsed %s" % model_file)
             except Exception:
+                valid = False
                 LOGGER.exception("Unable to parse %s" % model_file)
 
         # create a test project
@@ -850,6 +862,31 @@ requires:
             test_project = Project(project_dir)
             test_project.use_virtual_env()
             self._install(test_project, os.path.join(project_dir, "libs"), test_project.requires())
+
+            LOGGER.info("Compiling empty initial model")
+            main_cf = os.path.join(project_dir, "main.cf")
+            with open(main_cf, "w+") as fd:
+                fd.write("")
+
+            project = Project(project_dir)
+            Project._project = project
+            project.verify()
+
+            from impera.compiler import main
+            compiler = main.Compiler(main_cf)
+            statements = compiler.compile()
+            sched = scheduler.Scheduler(compiler.graph)
+            success = sched.run(compiler, statements)
+
+            if success:
+                LOGGER.info("Successfully compiled module and its dependencies.")
+            else:
+                LOGGER.warning("Unable to compile module and its dependencies.")
+                valid = False
+
         finally:
             # print(project_dir)
             shutil.rmtree(project_dir)
+
+        if not valid:
+            sys.exit(1)
