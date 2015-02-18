@@ -69,8 +69,7 @@ def modules_parser_config(parser):
     parser.add_argument("cmd", help="The command to run")
 
 
-@command("modules", help_msg="A tool to manage configuration modules in a project", parser_config=modules_parser_config,
-         require_project=True)
+@command("modules", help_msg="A tool to manage configuration modules in a project", parser_config=modules_parser_config)
 def modules(options):
     tool = ModuleTool()
     tool.execute(options.cmd, options.other)
