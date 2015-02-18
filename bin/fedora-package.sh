@@ -40,16 +40,4 @@ rpmbuild -D "tag $TAG" -D "%_topdir $TDIR/rpmbuild" --rebuild $TDIR/rpmbuild/SRP
 cp $TDIR/rpmbuild/SRPMS/*.rpm $1 || exit 1
 cp $TDIR/rpmbuild/RPMS/noarch/*.rpm $1 || exit 1
 
-cd /code
-cat deps | while read DIR REPO; do
-    cd /code
-    rm -rf $DIR
-    git clone $REPO $DIR
-    cd $DIR
-    if [[ -e fedora.sh ]]; then
-        bash fedora.sh $1 || exit 1
-    fi
-done
-
-cd /code
 rm -rf $TDIR/rpmbuild

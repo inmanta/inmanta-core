@@ -1,13 +1,24 @@
-Name:           python3-impera
-Version:        0.6
+# Use release 0 for prerelease version. This also assumes that the source version has an alpha1
+# status
+%define release 0
+%define version 0.7
 
-Release:        1.%{?tag}%{?dist}
+%if 0%{?release}
+%define sourceversion %{version}
+%else
+%define sourceversion %{version}a1
+%endif
+
+Name:           python3-impera
+Version:        %{version}
+
+Release:        %{release}%{?tag}%{?dist}
 Summary:        Impera configuration management tool
 
 Group:          Development/Languages
 License:        LGPLv2+
 URL:            http://impera.io
-Source0:        https://github.com/impera-io/impera/archive/%{version}.tar.gz#/impera-%{version}.tar.gz
+Source0:        https://github.com/impera-io/impera/archive/%{sourceversion}.tar.gz#/impera-%{sourceversion}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildArch:      noarch
@@ -30,17 +41,13 @@ Requires:       python3-pymongo
 Requires:       git
 Requires(pre):  shadow-utils
 
-Obsoletes:      python3-imp <= 0.50
-
 %package server
 Summary:        The configuration and service files to start the Impera server
 Requires:       python3-impera
-Obsoletes:      python3-imp-server <= 0.50
 
 %package agent
 Summary:        The configuration and service files to start the Impera agent
 Requires:       python3-impera
-Obsoletes:      python3-imp-agent <= 0.50
 
 %description
 
@@ -49,7 +56,7 @@ Obsoletes:      python3-imp-agent <= 0.50
 %description agent
 
 %prep
-%setup -q -n impera-%{version}
+%setup -q -n impera-%{sourceversion}
 
 %build
 %{__python3} setup.py build
@@ -73,7 +80,7 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %doc LICENSE docs/*
-%{python3_sitelib}/impera-%{version}-py?.?.egg-info
+%{python3_sitelib}/impera-%{sourceversion}-py*.egg-info
 %{python3_sitelib}/impera
 %{_bindir}/impera
 %attr(-, impera, impera) %{_localstatedir}/lib/impera
