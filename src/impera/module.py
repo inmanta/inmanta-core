@@ -35,6 +35,7 @@ from impera import env
 from impera.config import Config
 from impera import parser
 from impera.execute import scheduler
+from impera.ast import Namespace
 
 
 LOGGER = logging.getLogger(__name__)
@@ -543,11 +544,13 @@ class Module(object):
             if "source" not in self._meta or "version" not in self._meta:
                 raise Exception("Source and version are required to install a configuration module.")
 
+            LOGGER.info("Cloning module %s from %s", self._meta["name"], self.source)
             cmd = ["git", "clone", self.source, self._meta["name"]]
             output = self._call(cmd, modulepath, "git clone")
 
             if output is None:
                 new_source = self._force_http(self.source)
+                LOGGER.info("Cloning module %s from %s", self._meta["name"], new_source)
                 cmd = ["git", "clone", new_source, self._meta["name"]]
                 output = self._call(cmd, modulepath, "git clone")
 
@@ -842,9 +845,16 @@ class ModuleTool(object):
 
         # compile the source files in the module
         model_parser = parser.Parser()
+        ns_root = Namespace("__root__")
+        ns_mod = Namespace(module.name, ns_root)
         for model_file in module.get_module_files():
             try:
-                model_parser.parse(module.name, model_file)
+                ns = ns_mod
+                if not model_file.endswith("_init.cf"):
+                    part_name = model_file.split("/")[-1][:-3]
+                    ns = Namespace(part_name, ns_mod)
+
+                model_parser.parse(ns, model_file)
                 LOGGER.info("Successfully parsed %s" % model_file)
             except Exception:
                 valid = False
