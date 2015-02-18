@@ -30,6 +30,7 @@ import tempfile
 import shutil
 
 import yaml
+import impera
 from impera import env
 from impera.config import Config
 from impera import parser
@@ -872,8 +873,7 @@ requires:
             Project._project = project
             project.verify()
 
-            from impera.compiler import main
-            compiler = main.Compiler(main_cf)
+            compiler = impera.compiler.main.Compiler(main_cf)
             statements = compiler.compile()
             sched = scheduler.Scheduler(compiler.graph)
             success = sched.run(compiler, statements)
