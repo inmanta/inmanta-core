@@ -557,6 +557,9 @@ class Parser(object):
         for_stmt = For(var, loop_var, Reference(module_name, self._current_namespace.to_path()))
 
         module_def = DefineImplementation(module_name)
+        module_def.line = node.line
+        module_def.filename = self._filename
+        module_def.entity = Reference("Entity", ["std"])
         module_def.namespace = self._current_namespace
         for stmt in node.children[2].children:
             module_def.add_statement(self._handle_node(stmt))
