@@ -17,6 +17,8 @@
 """
 # pylint: disable-msg=R0923,W0613
 
+import logging
+
 from . import DefinitionStatement
 from impera.ast.variables import Variable, Reference
 from impera.ast.type import ConstraintType, Type
@@ -24,6 +26,9 @@ from impera.ast.attribute import Attribute, RelationAttribute
 from impera.ast.entity import Implementation, Entity, Default, Implement
 from impera.ast.constraint.expression import Equals
 from impera.execute.scheduler import CallbackHandler
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class DefineEntity(DefinitionStatement):
@@ -122,11 +127,11 @@ class DefineImplementation(DefinitionStatement):
         """
         if self.entity is not None:
             return [("entity", self.entity)]
-        """
-        print("Deprecated: defining implementations without a reference to the entity they implement " +
-              "is deprecated and will be removed in future versions. Use the "+
-              "'implementation %s for Entity:' syntax. at line %d of %s" % (self.name, self.line, self.filename))
-        """
+
+        LOGGER.warning("Deprecated: defining implementations without a reference to the entity they implement " +
+                       "is deprecated and will be removed in future versions. Use the " +
+                       "'implementation %s for Entity:' syntax. at line %d of %s" % (self.name, self.line, self.filename))
+
         return []
 
     def add_statement(self, statement):
