@@ -832,7 +832,7 @@ class ModuleTool(object):
         """
         subprocess.call(["git", "commit", "-a"])
 
-    def validate(self):
+    def validate(self, options=""):
         """
             Validate the module we are currently in
         """
@@ -893,7 +893,10 @@ requires:
 
             project = Project(project_dir)
             Project._project = project
+            LOGGER.info("Verifying module set")
             project.verify()
+            LOGGER.info("Loading all plugins")
+            project.load_plugins()
 
             compiler = impera.compiler.main.Compiler(main_cf)
             statements = compiler.compile()
@@ -907,8 +910,11 @@ requires:
                 valid = False
 
         finally:
-            # print(project_dir)
-            shutil.rmtree(project_dir)
+            if options == "noclean":
+                LOGGER.info("Project not cleanded, root at %s", project_dir)
+
+            else:
+                shutil.rmtree(project_dir)
 
         if not valid:
             sys.exit(1)
