@@ -314,7 +314,7 @@ class IndexLookup(ReferenceStatement):
         self.index_type = index_type
         self.query = query
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see State#types
         """

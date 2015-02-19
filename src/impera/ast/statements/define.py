@@ -49,7 +49,7 @@ class DefineEntity(DefinitionStatement):
         """
         self.attributes.append((attr_type, name, default_value))
 
-    def types(self):
+    def types(self, recursive=False):
         """
             Return a list of tupples with the first element the name of how the
             type should be available and the second element the type.
@@ -188,7 +188,7 @@ class DefineImplement(DefinitionStatement):
         """
         return "Implement(%s)" % (self.entity)
 
-    def types(self):
+    def types(self, recursive=False):
         """
             The types this statement requires
         """
@@ -274,7 +274,7 @@ class DefineTypeConstraint(DefinitionStatement):
 
     expression = property(get_expression, set_expression)
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see Statement#types
         """
@@ -315,7 +315,7 @@ class DefineTypeDefault(DefinitionStatement):
         """
         return "Constructor(%s, %s)" % (self.name, self.ctor)
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see Statement#types
         """
@@ -354,7 +354,7 @@ class DefineRelation(DefinitionStatement):
         """
         return "Relation(%s, %s)" % (self.left[0], self.right[0])
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see Statement#types
         """
@@ -404,7 +404,7 @@ class DefineIndex(DefinitionStatement):
         self.type = entity_type
         self.attributes = attributes
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see Statement#types
         """

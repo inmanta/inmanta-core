@@ -61,7 +61,7 @@ class FunctionCall(CallStatement):
 
         return actions
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see State#types
         """
@@ -211,7 +211,7 @@ class Expression(CallStatement):
         """
         return "Expression(%s)" % ", ".join([str(x) for x in self.arguments])
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see State#types
         """

@@ -40,7 +40,7 @@ class Import(GeneratorStatement):
         self.name = name
         self.child_namespace = True
 
-    def types(self):
+    def types(self, recursive=False):
         """
             A list of types this statement requires
 
@@ -97,7 +97,7 @@ class Implement(GeneratorStatement):
 
         return required
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see DynamicStatement#types
         """
