@@ -265,6 +265,18 @@ class Assign(ReferenceStatement):
         self.name = name
         self.value = value
 
+    def types(self, recursive=False):
+        """
+            @see Statement#types
+        """
+        if not recursive:
+            return []
+
+        if hasattr(self.value, "types"):
+            return self.value.types()
+
+        return []
+
     def actions(self, state):
         """
             If ref is a literal this statement provides the required set

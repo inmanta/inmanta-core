@@ -275,7 +275,7 @@ class Constructor(GeneratorStatement):
 
     attributes = property(get_attributes)
 
-    def types(self):
+    def types(self, recursive=False):
         """
             @see Statement#types()
         """

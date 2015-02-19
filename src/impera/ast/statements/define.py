@@ -121,18 +121,26 @@ class DefineImplementation(DefinitionStatement):
         self.statements = []
         self.entity = None
 
-    def types(self):
+    def types(self, recursive=True):
         """
             The types this statement requires
         """
+        types = []
+
+        if recursive:
+            for stmt in self.statements:
+                types.extend(stmt.types(recursive=True))
+
         if self.entity is not None:
-            return [("entity", self.entity)]
+            types.append(("entity", self.entity))
 
-        LOGGER.warning("Deprecated: defining implementations without a reference to the entity they implement " +
-                       "is deprecated and will be removed in future versions. Use the " +
-                       "'implementation %s for Entity:' syntax. at line %d of %s" % (self.name, self.line, self.filename))
+        else:
+            LOGGER.warning("Deprecated: defining implementations without a reference to the entity they implement " +
+                           "is deprecated and will be removed in future versions. Use the " +
+                           "'implementation %s for std::Entity:' syntax. at line %d of %s" %
+                           (self.name, self.line, self.filename))
 
-        return []
+        return types
 
     def add_statement(self, statement):
         """

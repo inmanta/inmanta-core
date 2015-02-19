@@ -56,10 +56,12 @@ class Statement(object):
         """
         return True
 
-    def types(self):
+    def types(self, recursive=False):
         """
             Return a list of tupples with the first element the name of how the
             type should be available and the second element the type.
+
+            :param recursive: Recurse into embedded statement to retrieve all types
         """
         return []
 
