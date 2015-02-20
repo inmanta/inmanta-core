@@ -55,7 +55,7 @@ class Compiler(object):
 
     def get_parser(self):
         """
-            Get an instace of the parser to parse an input string
+            Get an instace of the compiler to parse an input string
         """
         return self.__parser
 

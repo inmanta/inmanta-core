@@ -49,7 +49,7 @@ class Config(object):
     @classmethod
     def get(cls, section=None, name=None, default_value=None):
         """
-            Get the entire parser or get a value directly
+            Get the entire compiler or get a value directly
         """
         cfg = cls._get_instance()
         if section is None:

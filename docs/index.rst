@@ -33,8 +33,8 @@ Additional resources
 * `Impera developer mailinglist`_
 * `Impera Twitter`_
 
-.. _Impera user mailinglist: https://groups.google.com/forum/#!forum/impera-users
-.. _Impera developer mailinglist: https://groups.google.com/forum/#!forum/impera-devel
+.. _Impera user mailinglist: <https://groups.google.com/forum/#!forum/impera-users>
+.. _Impera developer mailinglist: <https://groups.google.com/forum/#!forum/impera-devel>
 .. _Impera issue tracker: https://github.com/impera-io/impera/issues
 .. _Impera Twitter: https://twitter.com/impera_io
 

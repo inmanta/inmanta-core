@@ -34,7 +34,7 @@ from . import imperaParser
 
 class action(object):
     """
-        Decorator to associate a method with a parser token
+        Decorator to associate a method with a compiler token
     """
     __mapping = {}
 
@@ -588,13 +588,14 @@ class Parser(object):
 
         return ast_node
 
-    def parse(self, namespace, filename):
+    def parse(self, namespace, filename=None, content=None):
         self._stack = []
         self._current_namespace = namespace
         self._filename = filename
 
-        with open(filename, "r") as fd:
-            content = fd.read()
+        if content is None:
+            with open(filename, "r") as fd:
+                content = fd.read()
 
         char_stream = antlr3.ANTLRStringStream(content)
 

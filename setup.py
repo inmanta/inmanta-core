@@ -11,6 +11,6 @@ setup(
     license="LICENSE",
 
     scripts=["bin/impera"],
-    package_data={"" : ["misc/*"]},
+    package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 )

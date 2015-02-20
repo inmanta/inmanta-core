@@ -1,3 +1,6 @@
 include LICENSE
+graft docs
+include tox.ini
+include setup.py
 recursive-include docs *
 recursive-include misc *

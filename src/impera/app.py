@@ -77,7 +77,7 @@ def modules(options):
 
 def export_parser_config(parser):
     """
-        Configure the parser of the export function
+        Configure the compiler of the export function
     """
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
     parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been " +
@@ -134,7 +134,7 @@ log_levels = {
 
 
 def cmd_parser():
-    # create the argument parser
+    # create the argument compiler
     parser = ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help='Profile this run of the program')
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file")
