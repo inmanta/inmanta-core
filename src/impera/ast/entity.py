@@ -56,6 +56,8 @@ class Entity(Type):
         self._instance_attributes = {}
 
         self._instance_list = []
+        
+        self.comment = ""
 
     """
         A list of all instances that exist in the configuration model
