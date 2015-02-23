@@ -96,4 +96,89 @@ end
     tools.assert_equals(stmt.attributes[2][1], "ten")
 
     tools.assert_equals(stmt.attributes[2][2], 5)
-    print(stmt.types())
+
+    tools.assert_equals(len(stmt.types()), 5, "Statement should request 5 types")
+
+
+def test_relation():
+    """ Test definition of relations
+    """
+    statements = parse_code("""
+Test tests [0:] -- [5:10] Foo bars
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return four statements")
+    rel = statements[0]
+
+    tools.assert_equals(len(rel.left), 4)
+    tools.assert_equals(len(rel.right), 4)
+
+    tools.assert_is_instance(rel.left[0], Reference)
+    tools.assert_equals(rel.left[0].name, "Test")
+    tools.assert_is_instance(rel.right[0], Reference)
+    tools.assert_equals(rel.right[0].name, "Foo")
+
+    tools.assert_equals(rel.left[1], "tests")
+    tools.assert_equals(rel.right[1], "bars")
+
+    tools.assert_equals(rel.left[2], [0, None])
+    tools.assert_equals(rel.right[2], [5, 10])
+    tools.assert_equals(statements[0].requires, None)
+
+
+def test_directional_relation():
+    """ Test definition of relations
+    """
+    statements = parse_code("""
+Test tests [0:] -> [5:10] Foo bars
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    tools.assert_equals(statements[0].requires, ">")
+
+    statements = parse_code("""
+Test tests [0:] <- [5:10] Foo bars
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    tools.assert_equals(statements[0].requires, "<")
+
+
+def test_implementation():
+    """ Test the definition of implementations
+    """
+    statements = parse_code("""
+implementation test for Test:
+end
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    tools.assert_equals(len(statements[0].statements), 0)
+    tools.assert_equals(statements[0].name, "test")
+    tools.assert_is_instance(statements[0].entity, Reference)
+
+    statements = parse_code("""
+implementation test for Test:
+    std::File(attr="a")
+    var = hello::func("world")
+end
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    tools.assert_equals(len(statements[0].statements), 2)
+    tools.assert_equals(len(statements[0].types()), 3, "Should require 3 types")
+
+
+def test_implementation_with_for():
+    """ Test the propagation of type requires when using a for
+    """
+    statements = parse_code("""
+implementation test for Test:
+    for v in data:
+        std::template("template")
+    end
+end
+""")
+
+    tools.assert_equals(len(statements), 2, "Should return one statement")
+    tools.assert_equals(len(statements[0].statements), 1)
