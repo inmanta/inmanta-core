@@ -122,6 +122,32 @@ class Server(ServerClientEndpoint):
 
         return dir_map
 
+    def clean_versions(self):
+        """
+            Clean the number of stored version. The number of stored versions is controller by the database>versions parameter.
+            The default number is 2, use -1 for unlimted.
+        """
+        number_versions = int(Config.get("database", "versions", "2"))
+
+        if number_versions < 0:
+            LOGGER.debug("Keeping unlimited number of versions")
+            return
+
+        with self._db_lock:
+            versions = self._db.filter(Version, {})
+            versions_stored = len(versions)
+
+            if versions_stored > number_versions:
+                LOGGER.debug("Removing %s version from the database" % (versions_stored - number_versions))
+
+                for version in [x for x in versions.sort("date")][:-2]:
+                    resources = self._db.filter(ResourceVersion, {"version": version})
+                    LOGGER.debug("Removing %s resources for version %s" % (len(resources), version.pk))
+                    resources.delete()
+                    self._db.delete(version)
+
+            self._db.commit()
+
     def renew_expired_facts(self):
         """
             Send out requests to renew expired facts
@@ -408,6 +434,8 @@ class Server(ServerClientEndpoint):
 
                     self._db.commit()
                     LOGGER.debug("Successfully stored version %d" % v_id)
+
+                    self.clean_versions()
 
                 return 200
 
