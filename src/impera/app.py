@@ -119,12 +119,6 @@ def client(options):
     client = Client()
     client.execute(options.cmd, options.other)
 
-
-@command("bootstrap", help_msg="Bootstrap the infrastructure", require_project=True)
-def bootstrap(options, config):
-    from impera.bootstrap import bootstrap as bootstrap_call
-    bootstrap_call(config)
-
 log_levels = {
     0: logging.ERROR,
     1: logging.WARNING,
