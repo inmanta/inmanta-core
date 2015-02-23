@@ -52,7 +52,7 @@ class Type(object):
             @param value: The value to cast
         """
         raise NotImplementedError()
-    
+
     def __str__(self):
         return str(self.__class__)
 

@@ -56,7 +56,7 @@ class Entity(Type):
         self._instance_attributes = {}
 
         self._instance_list = []
-        
+
         self.comment = ""
 
     """

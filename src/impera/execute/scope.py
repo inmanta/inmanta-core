@@ -60,15 +60,17 @@ class Scope(object):
             Get the name of the scope
         """
         return self.__name
-    
+
     def get_full_name(self):
         """
             Get the name of the scope
         """
-        if(self.parent == None):
+        if self.parent is None:
             return ""
-        if(self.parent.parent == None):
+
+        if self.parent.parent is None:
             return self.__name
+
         else:
             return self.parent.get_full_name() + "::" + self.__name
 
