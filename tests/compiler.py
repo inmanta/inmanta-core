@@ -15,7 +15,6 @@
 
     Contact: bart@impera.io
 """
-
 from impera import app
 from impera import parser
 from impera.ast import Namespace
