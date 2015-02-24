@@ -138,11 +138,11 @@ class Server(ServerClientEndpoint):
             versions_stored = len(versions)
 
             if versions_stored > number_versions:
-                LOGGER.debug("Removing %s version from the database" % (versions_stored - number_versions))
+                LOGGER.debug("Removing old version %s from the database" % (versions_stored - number_versions))
 
                 for version in [x for x in versions.sort("date")][:-2]:
                     resources = self._db.filter(ResourceVersion, {"version": version})
-                    LOGGER.debug("Removing %s resources for version %s" % (len(resources), version.pk))
+                    LOGGER.debug("Removing %s old resources for version %s" % (len(resources), version.pk))
                     resources.delete()
                     self._db.delete(version)
 
