@@ -265,16 +265,17 @@ class Agent(ServerClientEndpoint):
         """
             Process the agent mapping
         """
-        mappings = agent_map.split(",")
         agent_dict = {}
+        if agent_map is not None:
+            mappings = agent_map.split(",")
 
-        for mapping in mappings:
-            parts = mapping.strip().split("=")
-            if len(parts) == 2:
-                key = parts[0].strip()
-                value = parts[1].strip()
-                if key != "" and value != "":
-                    agent_dict[key] = value
+            for mapping in mappings:
+                parts = mapping.strip().split("=")
+                if len(parts) == 2:
+                    key = parts[0].strip()
+                    value = parts[1].strip()
+                    if key != "" and value != "":
+                        agent_dict[key] = value
 
         return agent_dict
 
