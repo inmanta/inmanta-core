@@ -230,9 +230,9 @@ class Agent(ServerClientEndpoint):
     """
     __transports__ = [DirectTransport, AMQPTransport]
 
-    def __init__(self, hostname=None, remote=None, code_loader=True):
+    def __init__(self, hostname=None, agent_map=None, code_loader=True):
         super().__init__("agent", role="agent")
-        self.remote = remote
+        self.agent_map = self._process_map(agent_map)
         self._storage = self.check_storage()
 
         self._dm = DependencyManager()
@@ -260,6 +260,38 @@ class Agent(ServerClientEndpoint):
                         name = name.replace("$node-name", self.node_name)
 
                     self.add_end_point_name(name)
+
+    def _process_map(self, agent_map):
+        """
+            Process the agent mapping
+        """
+        mappings = agent_map.split(",")
+        agent_dict = {}
+
+        for mapping in mappings:
+            parts = mapping.strip().split("=")
+            if len(parts) == 2:
+                key = parts[0].strip()
+                value = parts[1].strip()
+                if key != "" and value != "":
+                    agent_dict[key] = value
+
+        return agent_dict
+
+    def is_local(self, agent_name):
+        """
+            Check if the given agent name is a local or a remote agent
+        """
+        return self.node_name == agent_name or agent_name == "localhost"
+
+    def get_agent_hostname(self, agent_name):
+        """
+            Convert the agent name to a hostname using the agent map
+        """
+        if agent_name in self.agent_map:
+            return self.agent_map[agent_name]
+
+        return agent_name
 
     def check_storage(self):
         """
@@ -444,6 +476,8 @@ class Agent(ServerClientEndpoint):
                 provider = Commander.get_provider(self, resource)
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s" % resource.id)
+                self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
+                self._queue.remove(resource)
                 continue
 
             provider.execute(resource)

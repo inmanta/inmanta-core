@@ -21,6 +21,8 @@ from collections import defaultdict
 import os
 import sys
 import time
+import fnmatch
+import logging
 
 from impera import methods
 from impera import protocol
@@ -31,12 +33,14 @@ from impera.export import Exporter
 from impera.module import Project
 from impera.server import Server
 
+LOGGER = logging.getLogger(__name__)
 
-def deploy_ready(client, host, version):
+
+def deploy_ready(client, agents, version):
     result = client.call(methods.VersionMethod, operation="GET", id=version)
 
-    total = len([x for x in result.result["resources"] if x["agent"] == host])
-    ready = len([x for x in result.result["resources"] if x["agent"] == host and x["updated"]])
+    total = len([x for x in result.result["resources"] if x["agent"] in agents])
+    ready = len([x for x in result.result["resources"] if x["agent"] in agents and x["updated"]])
     if total > 0:
         msg = "%s of %s -> %d%%" % (ready, total, 100 * ready / total)
         printl(msg + "\b" * len(msg))
@@ -44,7 +48,7 @@ def deploy_ready(client, host, version):
     if ready == total:
         status = defaultdict(lambda: 0)
         for res in result.result["resources"]:
-            if res["agent"] == host:
+            if res["agent"] in agents:
                 status[res["status"]] += 1
 
         print("\nStatus report:")
@@ -83,11 +87,18 @@ def create_report(client, changes):
     print(report)
 
 
-def deploy(agentname=None, dry_run=True, ip_address=None, list_agents=False):
+def deploy(agents_spec=None, dry_run=True, agent_map=None, list_agents=False):
     protocol.Transport.offline = True
     protocol.DirectTransport.connections = [("client", "server"), ("server_client", "agent"), ("agent_client", "server")]
 
-    Config.get().set("config", "state-dir", os.path.join(Project.get().project_path, "state"))
+    Config.set("config", "state-dir", os.path.join(Project.get().project_path, "state"))
+
+    agent_list = []
+    if agents_spec is not None:
+        for el in agents_spec.split(","):
+            agent = el.strip()
+            if agent != "":
+                agent_list.append(agent)
 
     # start the agent and a management server and only use direct transports
     printl("Starting embedded agent and server ")
@@ -96,7 +107,8 @@ def deploy(agentname=None, dry_run=True, ip_address=None, list_agents=False):
     server = Server(code_loader=False)
     server_future = executor.submit(server.start)
 
-    agent = Agent(remote=ip_address, hostname=agentname, code_loader=False)
+    # start an agent without hostname to retrieve facts.
+    agent = Agent(agent_map=agent_map, code_loader=False)
     agent_future = executor.submit(agent.start)
     print("done")
 
@@ -121,6 +133,18 @@ def deploy(agentname=None, dry_run=True, ip_address=None, list_agents=False):
         version, resources = export.run(model)
         print("done")
 
+        printl("Determining agents in the model ")
+        agents = set()
+        available_agents = {res.agent_name for res in resources}
+        for aa in available_agents:
+            for agent_pattern in agent_list:
+                if fnmatch.fnmatch(aa, agent_pattern):
+                    LOGGER.info("Adding agent %s to the deployment agent (matching %s)" % (aa, agent_pattern))
+                    agents.add(aa)
+                    agent.add_end_point_name(aa)
+
+        print("done")
+
         if not list_agents:
             printl("Deploying changes of version %s in " % version)
             if dry_run:
@@ -132,12 +156,12 @@ def deploy(agentname=None, dry_run=True, ip_address=None, list_agents=False):
             client.start()
             client.call(methods.DeployVersion, version=version, dry_run=dry_run)
 
-            while deploy_ready(client, agentname, version):
+            while deploy_ready(client, agents, version):
                 time.sleep(1)
 
             # report changes
             result = client.call(methods.VersionMethod, operation="GET", id=version)
-            resources = [x for x in result.result["resources"] if x["agent"] == agentname]
+            resources = [x for x in result.result["resources"] if x["agent"] in agents]
 
             changes = {}
             for resource in resources:

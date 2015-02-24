@@ -95,17 +95,25 @@ def export(options):
 
 
 def deploy_parser_config(parser):
-    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent")
-    parser.add_argument("-i", help="The ip to connect to", dest="ip"),
+    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
+                        "and wildcards are supported")
+    parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map"),
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
 
 
-@command("deploy", help_msg="Deploy the configuration model on the current machine", parser_config=deploy_parser_config,
+@command("deploy", help_msg="""Deploy the configuration model without using a central impera server.
+With the -a option the agents that need to be deployed are selected. This is a comma separated list and 
+each element may have wildcards. The agents that match either the hostname of this machine or localhost use 
+local io, all other agents use remote io over ssh. With the -m option a mapping can be provided: for 
+example to use the ip instead of the agent name.
+
+impera deploy -a *.example.com -m server1.example.com=172.16.0.10
+""", parser_config=deploy_parser_config,
          require_project=True)
 def deploy(options):
     from impera.deploy import deploy
-    deploy(agentname=options.agent, dry_run=options.dryrun, ip_address=options.ip, list_agents=options.list_agents)
+    deploy(agents_spec=options.agent, dry_run=options.dryrun, agent_map=options.map, list_agents=options.list_agents)
 
 
 def client_parser_config(parser):

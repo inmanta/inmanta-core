@@ -196,8 +196,8 @@ class Commander(object):
 
     @classmethod
     def _get_instance(cls, handler_class: type, agent, io) -> ResourceHandler:
-        if handler_class in cls.__handler_cache:
-            return cls.__handler_cache[handler_class]
+        if (handler_class, io) in cls.__handler_cache:
+            return cls.__handler_cache[(handler_class, io)]
 
         new_instance = handler_class(agent, io)
         cls.__handler_cache[handler_class] = new_instance
@@ -212,7 +212,11 @@ class Commander(object):
         """
         resource_id = resource.id
         resource_type = resource_id.entity_type
-        io = get_io(agent.remote)
+        agent_name = agent.get_agent_hostname(resource.id.agent_name)
+        if agent.is_local(agent_name):
+            io = get_io()
+        else:
+            io = get_io(agent_name)
 
         available = []
         if resource_type in cls.__command_functions:
