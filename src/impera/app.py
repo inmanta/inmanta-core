@@ -103,12 +103,12 @@ def deploy_parser_config(parser):
 
 
 @command("deploy", help_msg="""Deploy the configuration model without using a central impera server.
-With the -a option the agents that need to be deployed are selected. This is a comma separated list and 
-each element may have wildcards. The agents that match either the hostname of this machine or localhost use 
-local io, all other agents use remote io over ssh. With the -m option a mapping can be provided: for 
-example to use the ip instead of the agent name.
+ With the -a option the agents that need to be deployed are selected. This is a comma separated list and
+ each element may have wildcards. The agents that match either the hostname of this machine or localhost use
+ local io, all other agents use remote io over ssh. With the -m option a mapping can be provided: for
+ example to use the ip instead of the agent name.
 
-impera deploy -a *.example.com -m server1.example.com=172.16.0.10
+ impera deploy -a *.example.com -m server1.example.com=172.16.0.10
 """, parser_config=deploy_parser_config,
          require_project=True)
 def deploy(options):
