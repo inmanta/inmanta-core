@@ -336,10 +336,7 @@ class Parser(object):
             This is a statement that needs  to be registered in the scope so
             it requires an assignment
         """
-        rhs = self._handle_node(node.children[0])
-        name = str(hex(id(rhs)))
-
-        return Assign(Reference(name), rhs)
+        return self._handle_node(node.children[0])
 
     @action(imperaParser.TRUE)
     def create_true(self, node):
