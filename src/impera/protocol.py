@@ -203,6 +203,7 @@ class Transport(threading.Thread):
         """
             Mark this transport as connected
         """
+        LOGGER.debug("Transport %s is connected", self.get_id())
         self._connected = True
 
     def is_connected(self):
