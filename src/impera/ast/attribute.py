@@ -84,7 +84,11 @@ class Attribute(object):
             raise Exception("Attribute %s.%s can only be set once." %
                             (instance, self.name))
 
-        value.validate(self.validate)
+        try:
+            value.validate(self.validate)
+        except ValueError:
+            raise ValueError("Invalid value %s for attribute %s" % (value, self.name))
+
         instance._attributes[self.name] = value
         Stats.get("set attribute").increment()
 
