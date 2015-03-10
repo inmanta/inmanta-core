@@ -261,9 +261,8 @@ class Entity(Type):
             raise ValueError("Invalid class type %s, should be %s" % (value.__class__.__name__, self))
 
         value_definition = value.__class__.__definition__
-        if not(value_definition is self or self.is_subclass(value_definition)):
-            raise ValueError("Invalid class type for %s, should be %s" %
-                             (value, self))
+        if not (value_definition is self or self.is_subclass(value_definition)):
+            raise ValueError("Invalid class type for %s, should be %s" % (value, self))
 
         return True
 
