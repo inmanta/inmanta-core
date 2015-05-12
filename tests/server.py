@@ -44,13 +44,12 @@ def test_version_removal():
         server_obj = server.Server(code_loader=False)
         server_future = executor.submit(server_obj.start)
 
+        conn = protocol.Client("client", "client", [protocol.RESTTransport, protocol.DirectTransport])
+        conn.start()
         version = int(time.time())
         for _i in range(20):
             version += 1
-            conn = protocol.Client("client", "client", [protocol.RESTTransport, protocol.DirectTransport])
-            conn.start()
             conn.call(methods.VersionMethod, operation="PUT", id=version, version=version, resources=[])
-
             tools.assert_less_equal(len(server_obj._db.filter(server.persistence.Version, {})), 2)
 
         conn.stop()
