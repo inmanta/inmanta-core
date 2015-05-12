@@ -301,8 +301,8 @@ class DynamicState(State):
 
         value = self.statement.evaluate(self, local_scope)
 
-        if hasattr(value, "_get_instance"):
-            value = value._get_instance()
+        if hasattr(value, "instance"):  # still wrapped with proxy
+            raise Exception("Statements should unwrap proxied instances!")
 
         if not isinstance(value, Variable):
             value = Variable(value)
