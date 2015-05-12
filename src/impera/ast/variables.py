@@ -16,8 +16,13 @@
     Contact: bart@impera.io
 """
 
+import logging
+
+
 from impera.execute import NotFoundException
 from impera.execute.util import Unset, EntityType
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Reference(object):
@@ -335,13 +340,10 @@ class ResultVariable(Variable):
             available.
         """
         self._version += 1
-        result = self.statement.get_result()
-        if result is not None:
-            self.__value_cache = result.value
 
     def get_full_name(self):
         """
-            Get the full name of the attribute
+            Get the full name of the variable
         """
         if self.is_available(None):
             return "(%s)" % self.value
@@ -391,3 +393,36 @@ class ResultVariable(Variable):
         return self.statement
 
     __hash__ = Variable.__hash__
+
+
+class LazyVariable(Variable):
+    """
+        The value of this variable is available as a Python functions that needs to be evaluated. The
+        purpose of this type of variable is waiting as long as possible to evaluate the statement which
+        is encapsulated in the Python function.
+    """
+    def __init__(self, value_generator, value_type):
+        Variable.__init__(self, None)
+
+        self._value_generator = value_generator
+        self._type = value_type
+
+    def get_value(self):
+        """
+            Get the value and if it does not exist yet, execute the generator.
+        """
+        if not self.has_value():
+            LOGGER.debug("Lazy evaluation of value.")
+            self.set_value(self._value_generator())
+
+        return Variable.get_value(self)
+
+    value = property(get_value, None)
+
+    def get_value_type(self):
+        """
+            Return the type of the value
+        """
+        return self._type
+
+    type = property(get_value_type)
