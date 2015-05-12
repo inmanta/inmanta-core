@@ -212,6 +212,42 @@ class String(Type, str):
         return "string"
 
 
+class List(Type, list):
+    """
+        This class represents a string type in the configuration model.
+    """
+    def __init__(self):
+        Type.__init__(self)
+        list.__init__(self)
+
+    @classmethod
+    def cast(cls, value):
+        """
+            Cast the given value to a string
+
+            :see CastableType#cast
+        """
+        return list(value)
+
+    @classmethod
+    def validate(cls, value):
+        """
+            Validate the given value to check if it satisfies the constraints
+            associated with this type
+        """
+        if value is None:
+            return True
+
+        if not isinstance(value, list):
+            raise ValueError("Invalid value '%s'" % value)
+
+        return True
+
+    @classmethod
+    def __str__(cls):
+        return "list"
+
+
 class ConstraintType(Type):
     """
         A type that is based on Number or String but defines additional constraint on this type.
@@ -274,4 +310,4 @@ class ConstraintType(Type):
     def __str__(self):
         return "%s::%s" % (self.namespace, self.name)
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": list}
+TYPES = {"string": String, "number": Number, "bool": Bool, "list": List}

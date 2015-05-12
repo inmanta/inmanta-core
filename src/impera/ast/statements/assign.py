@@ -22,6 +22,7 @@ from . import ReferenceStatement
 from impera.ast.variables import Variable, AttributeVariable, Reference
 from impera.execute.proxy import DynamicProxy
 from impera.execute.util import Optional
+from impera.ast.type import List
 
 
 class CreateList(ReferenceStatement):
@@ -60,7 +61,7 @@ class CreateList(ReferenceStatement):
         """
             Create this list
         """
-        qlist = list()
+        qlist = List()
 
         for i in range(len(self.items)):
             value = self.items[i]
