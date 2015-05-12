@@ -165,6 +165,37 @@ class Plugin(object, metaclass=PluginMeta):
 
         return "%s(%s)" % (self.__class__.__function_name__, args)
 
+    def to_type(self, arg_type):
+        """
+            Convert a string representation of a type to a type
+        """
+        if arg_type is None:
+            return None
+
+        if arg_type == "any":
+            return object
+
+        elif arg_type == "expression":
+            return ExpressionState
+
+        else:
+            parts = arg_type.split("::")
+
+            module = parts[0:-1]
+            cls_name = parts[-1]
+
+            if len(module) == 0 and cls_name in ("string", "bool", "number", "list"):
+                module = ["__types__"]
+
+            try:
+                var = self._scope.get_variable(cls_name, module)
+            except NotFoundException:
+                raise NotFoundException("Unable to find type %s" % arg_type)
+
+            return var.value
+
+        raise Exception("Unable to find type for '%s'" % arg_type)
+
     def _is_instance(self, value, arg_type):
         """
             Check if value is of arg_type
@@ -283,11 +314,11 @@ class Plugin(object, metaclass=PluginMeta):
             return e.unknown
 
 
-def plugin(function=None, commands=None):
+def plugin(function=None, commands=None, emits_statements=False):
     """
         Python 3 decorator to register functions with impera
     """
-    def curry_name(name=None, commands=None):
+    def curry_name(name=None, commands=None, emits_statements=False):
         """
             Function to curry the name of the function
         """
@@ -301,7 +332,7 @@ def plugin(function=None, commands=None):
                 """
                 return fnc(*args)
 
-            nonlocal name, commands
+            nonlocal name, commands, emits_statements
 
             if name is None:
                 name = fnc.__name__
@@ -309,7 +340,7 @@ def plugin(function=None, commands=None):
             dictionary = {}
             dictionary["__module__"] = fnc.__module__
             dictionary["__function_name__"] = name
-            dictionary["opts"] = {"bin": commands}
+            dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
 
@@ -320,12 +351,12 @@ def plugin(function=None, commands=None):
 
         return call
 
-    if function is None and commands is not None:
-        return curry_name(commands=commands)
+    if function is None:
+        return curry_name(commands=commands, emits_statements=emits_statements)
 
-    if isinstance(function, str):
-        return curry_name(function)
+    elif isinstance(function, str):
+        return curry_name(function, commands=commands, emits_statements=emits_statements)
 
     elif function is not None:
-        fnc = curry_name()
+        fnc = curry_name(commands=commands, emits_statements=emits_statements)
         return fnc(function)

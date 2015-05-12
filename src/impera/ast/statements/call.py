@@ -17,7 +17,7 @@
 """
 
 from . import CallStatement
-from impera.ast.variables import Variable
+from impera.ast.variables import Variable, LazyVariable
 from impera.stats import Stats
 
 
@@ -96,22 +96,27 @@ class FunctionCall(CallStatement):
         """
         # get the object to call the function on
         function = state.get_type("function_%d" % id(self))
-
         arguments = self.get_argumentlist(state)
-
         function.check_args(arguments)
 
-        result = function(*arguments)
-        Stats.get("function call").increment()
-
-        new_statement = function.emit_statement()
-
-        if new_statement is None:
-            return result
-        else:
+        if function.opts["emits_statements"]:
+            function(*arguments)
+            Stats.get("function call").increment()
+            new_statement = function.emit_statement()
             self.copy_location(new_statement)
             child_state = state.add_statement(new_statement)
             return child_state.get_result_reference()
+
+        def lazy():
+            result = function(*arguments)
+            Stats.get("function call").increment()
+            return result
+
+        return_type = function.to_type(function._return)
+        if return_type is None:
+            return None
+
+        return LazyVariable(lazy, return_type)
 
 
 class Dummy(object):
