@@ -199,11 +199,12 @@ class Server(ServerClientEndpoint):
 
                 return values
 
-            if result.available():
-                return store_facts(result)
+            if result is not None:
+                if result.available():
+                    return store_facts(result)
 
-            else:
-                result.callback(store_facts)
+                else:
+                    result.callback(store_facts)
 
             return None
 
@@ -365,20 +366,41 @@ class Server(ServerClientEndpoint):
 
     @protocol.handle(methods.ResourceMethod)
     def resource(self, operation, body):
-        resource_id = Id.parse_id(body["id"])
+        resource_id = None
+        try:
+            resource_id = Id.parse_id(body["id"])
+        except Exception:
+            pass
 
-        if resource_id.version > 0:
-            with self._db_lock:
-                try:
-                    resv = self._db.get(ResourceVersion, {"pk": "%s_%s" % (resource_id.resource_str(), resource_id.version)})
+        if resource_id is not None:
+            if resource_id.version > 0:
+                with self._db_lock:
+                    try:
+                        resv = self._db.get(ResourceVersion,
+                                            {"pk": "%s_%s" % (resource_id.resource_str(), resource_id.version)})
 
-                    attributes = resv.attributes
-                    del attributes["resource"]
-                    del attributes["version"]
+                        attributes = resv.attributes
+                        del attributes["resource"]
+                        del attributes["version"]
 
-                    return 200, attributes
-                except ResourceVersion.DoesNotExist:
-                    return 404
+                        return 200, attributes
+                    except ResourceVersion.DoesNotExist:
+                        return 404
+
+        elif "agent" in body:
+            agent = body["agent"]
+
+            try:
+                deploy_model = []
+                versions = self._db.filter(Version, {}).sort("date")
+                version = versions[-1]
+                for resource in self._db.filter(ResourceVersion, {"agent_name": agent, "version": version}):
+                    deploy_model.append(resource.data)
+
+                return 200, deploy_model
+
+            except (Version.DoesNotExist, ResourceVersion.DoesNotExist):
+                return 404
 
         return 404
 
@@ -429,7 +451,8 @@ class Server(ServerClientEndpoint):
 
                     for res in resources:
                         resource = Res.deserialize(res)
-                        res_version = ResourceVersion.create(self._db, resource_id=resource.id, version=version, data=res)
+                        res_version = ResourceVersion.create(self._db, resource_id=resource.id, version=version,
+                                                             agent_name=resource.id.agent_name, data=res)
                         res_version.save(self._db)
 
                     self._db.commit()
@@ -523,3 +546,7 @@ class Server(ServerClientEndpoint):
                 LOGGER.exception("An error occured while saving a resource update")
 
         return 200
+
+    @protocol.handle(methods.PingMethod)
+    def ping(self, operation, body):
+        return 200, dict(end_point_names=self.end_point_names, nodename=self.node_name, role=self.role)
