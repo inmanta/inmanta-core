@@ -84,7 +84,7 @@ class ResourceVersion(Document):
         :resource_id impera.resource.Id
     """
     @classmethod
-    def create(cls, db, resource_id, version: int, data):
+    def create(cls, db, resource_id, version: int, agent_name: str, data):
         try:
             resource = db.get(Resource, {"pk": resource_id.resource_str()})
         except Resource.DoesNotExist:
@@ -94,6 +94,7 @@ class ResourceVersion(Document):
         return ResourceVersion(dict(
             resource=resource,
             version=version,
+            agent_name=agent_name,
             data=data,
             updated=False,
             changes={},
