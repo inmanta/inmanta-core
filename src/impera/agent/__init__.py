@@ -261,6 +261,11 @@ class Agent(ServerClientEndpoint):
 
                     self.add_end_point_name(name)
 
+        # do regular deploys
+        # self.last_deploy = 0
+        # self.schedule(self.renew_expired_facts, 60)
+        self.get_latest_version()
+
     def _process_map(self, agent_map):
         """
             Process the agent mapping
@@ -284,6 +289,17 @@ class Agent(ServerClientEndpoint):
             Check if the given agent name is a local or a remote agent
         """
         return self.node_name == agent_name or agent_name == "localhost"
+
+    def get_latest_version(self):
+        """
+            Get the latest version of managed resources for all agents
+        """
+        for agent in self.end_point_names:
+            LOGGER.debug("Getting latest resources for %s" % agent)
+            result = self._client.call(methods.ResourceMethod, operation="POST", agent=agent)
+            print(result)
+            if result is not None and result.code == 200:
+                print(result.result["content"])
 
     def get_agent_hostname(self, agent_name):
         """
