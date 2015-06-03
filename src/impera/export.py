@@ -319,7 +319,7 @@ class Exporter(object):
 
             res = conn.call(methods.CodeMethod, id=version, version=version, sources=sources, requires=list(requires))
 
-            if res.code != 200:
+            if res is None or res.code != 200:
                 raise Exception("Unable to upload handler plugin code to the server")
 
             conn.stop()

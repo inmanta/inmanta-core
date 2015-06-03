@@ -27,6 +27,8 @@ import threading
 import time
 import uuid
 
+from collections import defaultdict
+
 import amqp
 import tornado.ioloop
 from tornado.web import HTTPError
@@ -613,12 +615,12 @@ class DirectTransport(Transport):
     __network__ = False
     __broadcast__ = True
 
-    _transports = {}
+    _transports = defaultdict(list)
     connections = []
 
     @classmethod
     def register_transport(cls, transport):
-        cls._transports[transport.endpoint.name] = transport
+        cls._transports[transport.endpoint.name].append(transport)
 
     def __init__(self, endpoint=None):
         super().__init__(endpoint)
@@ -627,56 +629,73 @@ class DirectTransport(Transport):
 
     def call(self, method, destination=None, **kwargs):
         # select the correct transport
-        target = None
+        targets = []
         for conn in self.connections:
             if conn[0] == self.endpoint.name:
                 if conn[1] in self._transports:
-                    target = self._transports[conn[1]]
+                    targets.extend(self._transports[conn[1]])
 
-        if target is None:
+        if targets is None or len(targets) == 0:
             raise Exception("Unable to find a direct transport to use.")
 
-        if hasattr(target.endpoint, "__methods__"):
-            method_call = None
-            for method_name, method_class in target.endpoint.__methods__.items():
-                if method_class == method:
-                    method_call = getattr(target.endpoint, method_name)
-                    break
+        # ##
+        results = []
+        for target in targets:
+            if hasattr(target.endpoint, "__methods__"):
+                method_call = None
+                for method_name, method_class in target.endpoint.__methods__.items():
+                    if method_class == method:
+                        method_call = getattr(target.endpoint, method_name)
+                        break
 
-            operation = None
-            if "operation" in kwargs:
-                operation = kwargs["operation"]
-
-            if operation == "POST":
                 operation = None
+                if "operation" in kwargs:
+                    operation = kwargs["operation"]
 
-            if method_call is None:
-                return
+                if operation == "POST":
+                    operation = None
 
-            result = method_call(operation=operation, body=kwargs)
+                if method_call is None:
+                    LOGGER.warning("Cannot find method call for operation.")
+                    continue
 
-            if result is None:
-                raise Exception("Handlers for method calls should at least return a status code.")
+                result = method_call(operation=operation, body=kwargs)
 
-            reply = None
-            if isinstance(result, tuple):
-                if len(result) == 2:
-                    code, reply = result
+                if result is None:
+                    LOGGER.error("Handlers for method calls should at least return a status code.")
+                    continue
+
+                reply = None
+                if isinstance(result, tuple):
+                    if len(result) == 2:
+                        code, reply = result
+                    else:
+                        LOGGER.error("Handlers for method call can only return a status code and a reply")
+                        continue
+
                 else:
-                    raise Exception("Handlers for method call can only return a status code and a reply")
+                    code = result
 
-            else:
-                code = result
+                if method.__reply__:
+                    if reply is None:
+                        body = {}
+                    else:
+                        body = reply
 
-            if method.__reply__:
-                if reply is None:
-                    body = {}
-                else:
-                    body = reply
+                    results.append((code, body))
+                elif reply is not None:
+                    LOGGER.warn("Method %s returned a result although it is has not reply!" % self._method_type)
 
-                return Result(code=code, result=body)
-            elif reply is not None:
-                LOGGER.warn("Method %s returned a result although it is has not reply!" % self._method_type)
+        end_result = None
+        if len(results) > 1:
+            end_result = Result(multiple=True)
+            for res in results:
+                end_result.add_result(res)
+
+        elif len(results) == 1:
+            end_result = Result(code=results[0][0], result=results[0][1])
+
+        return end_result
 
 
 class handle(object):
