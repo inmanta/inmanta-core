@@ -59,7 +59,7 @@ class Server(ServerClientEndpoint):
             self._db = FileBackend(os.path.join(self._server_storage["db"]))
             LOGGER.info("Connected to filebackend database")
         elif db_type == "mongo":
-            c = Connection()
+            c = Connection(Config.get("database", "host", "localhost"))
             imp_db = c.imp_db
             self._db = MongoBackend(imp_db)
             LOGGER.info("Connected to mongodb database")
