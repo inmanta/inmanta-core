@@ -1,7 +1,5 @@
-amqp
 execnet
 tornado
-blitzdb
 git+https://github.com/bartv/python3-antlr3#egg=antlr3
 colorlog
 pyyaml
@@ -10,3 +8,5 @@ six
 pymongo
 sphinx-argparse
 sphinx
+cliff
+mongoengine

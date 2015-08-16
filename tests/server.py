@@ -32,8 +32,6 @@ from nose import tools
 def test_version_removal():
     """ Test auto removal of older deploy model versions
     """
-    protocol.Transport.offline = True
-    protocol.DirectTransport.connections = [("client", "server"), ("server_client", "agent"), ("agent_client", "server")]
     try:
         state_dir = tempfile.mkdtemp()
         config.Config.load_config()
@@ -44,15 +42,13 @@ def test_version_removal():
         server_obj = server.Server(code_loader=False)
         server_future = executor.submit(server_obj.start)
 
-        conn = protocol.Client("client", "client", [protocol.RESTTransport, protocol.DirectTransport])
-        conn.start()
+        conn = protocol.Client("client", "client")
         version = int(time.time())
         for _i in range(20):
             version += 1
             conn.call(methods.VersionMethod, operation="PUT", id=version, version=version, resources=[])
             tools.assert_less_equal(len(server_obj._db.filter(server.persistence.Version, {})), 2)
 
-        conn.stop()
     finally:
         server_obj.stop()
         server_future.result()

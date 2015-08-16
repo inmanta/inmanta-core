@@ -23,6 +23,7 @@ import sys
 import colorlog
 from impera.command import command, Commander
 from impera.compiler import do_compile
+from impera import client
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
 from impera.stats import Stats
@@ -40,8 +41,7 @@ def start_server(options):
 @command("agent", help_msg="Start the impera agent")
 def start_agent(options):
     from impera import agent
-    s = agent.Agent()
-    s.start()
+    agent.Agent().start()
 
 
 @command("compile", help_msg="Compile the project to a configuration model", require_project=True)
@@ -82,6 +82,9 @@ def export_parser_config(parser):
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
     parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been " +
                         "submitted in the supplied file")
+    parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
+    parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
+    parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -90,6 +93,16 @@ def export(options):
     result = do_compile()
     if result is None:
         return
+
+    if options.environment is not None:
+        Config.set("config", "environment", options.environment)
+
+    if options.server is not None:
+        Config.set("server_rest_transport", "host", options.server)
+
+    if options.server is not None:
+        Config.set("server_rest_transport", "port", options.port)
+
     export = Exporter(options)
     export.run(result)
 
@@ -122,7 +135,7 @@ def client_parser_config(parser):
 
 @command("client", help_msg="A client to send commands to Impera agents", parser_config=client_parser_config)
 def client(options):
-    from impera.server.client import Client
+    from impera.client import Client
 
     client = Client()
     client.execute(options.cmd, options.other)

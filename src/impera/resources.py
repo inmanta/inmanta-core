@@ -23,6 +23,7 @@ import re
 
 from impera.execute import util
 
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -319,6 +320,14 @@ class Id(object):
         self._attribute_value = attribute_value
         self._version = version
 
+    def to_dict(self):
+        return {"entity_type": self._entity_type,
+                "agent_name": self.agent_name,
+                "attribute": self.attribute,
+                "attribute_value": self.attribute_value,
+                "version": self.version
+                }
+
     def get_entity_type(self):
         return self._entity_type
 
@@ -412,3 +421,21 @@ class Id(object):
     attribute = property(get_attribute)
     attribute_value = property(get_attribute_value)
     version = property(get_version, set_version)
+
+
+class HostNotFoundException(Exception):
+    """
+        This exception is raise when the deployment agent cannot access a host to manage a resource (Use mainly with remote io)
+    """
+    def __init__(self, hostname, user, error):
+        self.hostname = hostname
+        self.user = user
+        self.error = error
+
+    def to_action(self):
+        from impera.data import ResourceAction
+        ra = ResourceAction()  # @UndefinedVariable
+        ra.message = "Failed to access host %s as user %s over ssh." % (self.hostname, self.user)
+        ra.data = {"host": self.hostname, "user": self.user, "error": self.error}
+
+        return ra

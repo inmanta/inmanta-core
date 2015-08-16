@@ -39,27 +39,27 @@ class testProtocolClient(unittest.TestCase):
         Config.load_config()
         Config.set("config", "state-dir", self._tempdir)
         executor = futures.ThreadPoolExecutor(max_workers=2)
+
         self.server = Server(code_loader=False)
         self.server_future = executor.submit(self.server.start)
         # give the server time to start
         time.sleep(1)
 
     def test_client_files(self):
-        c = protocol.Client("client", "client", [protocol.RESTTransport])
-        c.start()
+        c = protocol.Client("client", "client")
         file_name = str(random.randint(0, 10000))
         body = "Hello world\n"
 
         # Check if the file exists
-        result = c.call(methods.FileMethod, operation="HEAD", id="test" + file_name)
+        result = c.stat_file(id="test" + file_name)
         assert_equal(result.code, 404, "The test file should not exist yet")
 
         # Create the file
-        result = c.call(methods.FileMethod, operation="PUT", id="test" + file_name, content=body)
+        result = c.upload_file(id="test" + file_name, content=body)
         assert_equal(result.code, 200, "The test file failed to upload")
 
         # Get the file
-        result = c.call(methods.FileMethod, operation="GET", id="test" + file_name)
+        result = c.get_file(id="test" + file_name)
         assert_equal(result.code, 200, "The test file failed to retrieve")
         assert("content" in result.result)
         assert_equal(result.result["content"], body, "Retrieving the test file failed")
@@ -68,17 +68,15 @@ class testProtocolClient(unittest.TestCase):
         for _n in range(1, 10):
             file_name = "test%d" % random.randint(0, 10000)
             file_names.append(file_name)
-            result = c.call(methods.FileMethod, operation="PUT", id=file_name, content="")
+            result = c.upload_file(id=file_name, content="")
             assert_equal(result.code, 200)
 
-        result = c.call(methods.StatMethod, files=file_names)
+        result = c.stat_files(files=file_names)
         assert_count_equal(result.result["files"], [])
 
         other_files = ["testtest"]
-        result = c.call(methods.StatMethod, files=file_names + other_files)
+        result = c.stat_files(files=file_names + other_files)
         assert_count_equal(result.result["files"], other_files)
-
-        c.stop()
 
     def tearDown(self):
         self.server.stop()

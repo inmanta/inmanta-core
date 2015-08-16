@@ -25,19 +25,21 @@ import sched
 import socket
 import threading
 import time
-import uuid
+import inspect
+import urllib
 
 from collections import defaultdict
 
-import amqp
 import tornado.ioloop
-from tornado.web import HTTPError
 import tornado.web
+import tornado.gen
 from impera import methods
 from impera.config import Config
 
 
 LOGGER = logging.getLogger(__name__)
+_clients = {}
+IMPERA_MT_HEADER = "X-Impera-tid"
 
 
 class Result(object):
@@ -113,7 +115,6 @@ class Transport(threading.Thread):
         :param end_point_name The name of the endpoint to which this transport belongs. This is used
             for logging and configuration purposes
     """
-    __type__ = None
     __data__ = tuple()
     __transport_name__ = None
     __broadcast__ = False
@@ -215,259 +216,90 @@ class Transport(threading.Thread):
         return self._connected
 
 
-class AMQPTransport(Transport):
-    """
-        An amqp based transport.
-    """
-    __type__ = "message"
-    __data__ = ("message",)
-    __transport_name__ = "amqp"
-    __broadcast__ = True
-
-    def __init__(self, endpoint):
-        super().__init__(endpoint)
-
-        self._conn = None
-        self._channel = None
-        self._run = True
-        self._exchange_name = None
-        self._queue_name = None
-
-        # TODO: prune these replies!!!
-        self._replies = {}
-
-    def stop(self):
-        super().stop()
-        self._run = False
-        if self._conn is not None and self._channel is not None:
-            self._channel.close()
-            LOGGER.debug("Closed channel")
-            self._conn.close()
-            LOGGER.debug("Closed connection")
-
-    def _subscribe(self, routing_key):
-        self._channel.queue_bind(exchange=self._exchange_name, queue=self._queue_name,
-                                 routing_key=routing_key)
-        LOGGER.debug("Subscribing to routing key '%s' on queue %s at exchange %s" %
-                     (routing_key, self._queue_name, self._exchange_name))
-
-    def _connect(self):
-        """
-            Connect to AMQP and subscribe
-        """
-        LOGGER.info("Connecting to AMQP server")
-
-        if self.id not in Config.get():
-            LOGGER.error("Unable to get AMQP configuration for %s" % self.id)
-            return
-
-        cfg = Config.get()[self.id]
-
-        try:
-            self._conn = amqp.Connection(host=cfg["host"], userid=cfg["user"], password=cfg["password"],
-                                         virtual_host=cfg["virtualhost"], connect_timeout=5)
-
-            self._exchange_name = cfg["exchange"]
-
-            self._channel = self._conn.channel()
-            self._channel.exchange_declare(exchange=self._exchange_name, type="topic")
-
-            # create a queue for us
-            result = self._channel.queue_declare(exclusive=True, auto_delete=True)
-            queue_name = result[0]
-            self._queue_name = queue_name
-
-            # subscribe messages to the queue
-            self._subscribe("all")
-            self._subscribe("host.%s" % self.endpoint.role)
-            for h in self.endpoint.end_point_names:
-                self._subscribe("host.%s.%s" % (self.endpoint.role, h))
-
-            # start munching from the queue
-            self._channel.basic_consume(queue=queue_name, callback=self.on_message, no_ack=True)
-            LOGGER.info("AMQP transport connected")
-
-            self.set_connected()
-
-        except OSError:
-            # this means the connection failed
-            LOGGER.warning("AMQP connection failed, retrying in 10s")
-            time.sleep(10)
-
-    def on_message(self, msg):
-        """
-            Called when an amqp message is received
-
-            :param msg The message from the amqp library
-        """
-        if "content_type" not in msg.properties or msg.properties["content_type"] != "application/json":
-            LOGGER.error("Only application/json content is supported by the AMQP transport")
-            return
-
-        message = tornado.escape.json_decode(msg.body)
-
-        if "method" not in message or "operation" not in message:
-            LOGGER.error("No method or operation in message")
-            return
-
-        # this is a reply to an outstanding request
-        if "correlation_id" in msg.properties and "reply_to" not in msg.properties:
-            corr_id = msg.properties["correlation_id"]
-            if corr_id not in self._replies:
-                LOGGER.warn("Received a reply to a message we are no longer waiting for")
-            else:
-                self._replies[corr_id].add_result(message)
-                self._replies[corr_id].code = message["code"]
-
-        if hasattr(self.endpoint, "__methods__"):
-            if message["method"] in self.endpoint.__methods__:
-                method_call = getattr(self.endpoint, message["method"])
-                operation = message["operation"]
-                if operation == "POST":
-                    operation = None
-
-                result = method_call(operation=operation, body=message)
-                if result is None:
-                    raise Exception("Handlers for method calls should at least return a status code.")
-
-                reply = None
-                if isinstance(result, tuple):
-                    if len(result) == 2:
-                        code, reply = result
-                    else:
-                        raise Exception("Handlers for method call can only return a status code and a reply")
-
-                else:
-                    code = result
-
-                method = method_call.__protocol_method__
-                if method.__reply__:
-                    if "reply_to" not in msg.properties or "correlation_id" not in msg.properties:
-                        LOGGER.warn("Unable to send reply because of missing reply_to or correlation_id")
-                        return
-
-                    if reply is None:
-                        body = {}
-                    else:
-                        body = reply
-
-                    body["method"] = message["method"]
-                    body["operation"] = "POST"
-                    body["source"] = self.endpoint.end_point_names
-                    body["code"] = code
-
-                    reply_msg = amqp.Message(tornado.escape.json_encode(body))
-                    reply_msg.properties["content_type"] = "application/json"
-                    reply_msg.properties["correlation_id"] = msg.properties["correlation_id"]
-                    LOGGER.debug("Replying to message with correlation_id %s on queue %s" %
-                                 (msg.properties["correlation_id"], msg.properties["reply_to"]))
-
-                    self._channel.basic_publish(reply_msg, exchange="", routing_key=msg.properties["reply_to"])
-
-                elif reply is not None:
-                    LOGGER.warn("Method %s returned a result although it is has not reply!" % self._method_type)
-
-    def run(self):
-        """
-            This method does the actual workmessage
-        """
-        while self._run:
-            try:
-                self._do_connect()
-            except Exception:
-                LOGGER.exception("Something strange happened")
-                pass
-
-            time.sleep(10)
-
-    def _do_connect(self):
-        # try to connect
-        while self._conn is None:
-            self._connect()
-            time.sleep(10)
-
-        while self._channel.callbacks and self._run:
-            try:
-                self._channel.wait()
-
-            except Exception:
-                if self._conn is None or not self._conn.connected:
-                    LOGGER.warning("Connection to server lost, reconnecting")
-                    conn = self._conn
-                    self._conn = None
-                    conn.close()
-                else:
-                    LOGGER.exception("Received exception in MQ handler")
-
-    def call(self, method, destination=None, **kwargs):
-        if not self.is_connected():
-            LOGGER.error("The transport is not yet connected")
-            return
-
-        key = None
-        if destination == "*":
-            key = "all"
-
-        elif destination.startswith("host."):
-            key = destination
-
-        else:
-            raise Exception("Unable to determine routing key based on destination")
-
-        body = kwargs
-        body["method"] = method.__method_name__
-        body["operation"] = "POST"
-        body["source"] = self.endpoint.end_point_names
-
-        msg = amqp.Message(tornado.escape.json_encode(body))
-        msg.properties["content_type"] = "application/json"
-
-        result = None
-        if method.__reply__:
-            corr_id = str(uuid.uuid4())
-            msg.properties["reply_to"] = self._queue_name
-            msg.properties["correlation_id"] = corr_id
-            result = Result(multiple=True)
-            self._replies[corr_id] = result
-
-        self._channel.basic_publish(msg, exchange=self._exchange_name, routing_key=key)
-        return result
-
-
 class RESTHandler(tornado.web.RequestHandler):
     """
         A generic class use by the transport
     """
-    def initialize(self, transport, method_type, method_name):
+    def initialize(self, transport, config):
         self._transport = transport
-        self._method_name = method_name
-        self._method_type = method_type
+        self._config = config
 
-    def _call(self, args, kwargs, operation=None):
+    def _call(self, args, kwargs, operation):
         """
             An rpc like call
         """
         self.set_header("Access-Control-Allow-Origin", "*")
-
-        # can we support this operation
-        if operation is not None and operation != "POST":
-            if not self._method_type.__resource__:
-                raise HTTPError(501, log_message="%s not supported for non resource methods" % operation)
+        if operation.upper() not in self._config:
+            allowed = ", ".join(self._config.keys())
+            self.set_header("Allow", allowed)
+            self.set_status(405, "%s is not supported for this url. Supported methods: %s" % (operation, allowed))
+            return
 
         try:
-            endpoint = self._transport.endpoint
-            if not hasattr(endpoint, self._method_name):
-                raise HTTPError(404, log_message="%s method does not exist on endpoint" % self._method_name)
+            # create message that contains all arguments (id, query args and body)
+            message = self._transport._decode(self.request.body)
+            if message is None:
+                message = {}
 
-            body = self._transport._decode(self.request.body)
+            for key, value in self.request.query_arguments.items():
+                if len(value) == 1:
+                    message[key] = value[0].decode("latin-1")
+                else:
+                    message[key] = [v.decode("latin-1") for v in value]
 
-            if "id" in kwargs and (body is None or "id" not in body):
-                if body is None:
-                    body = {}
-                body["id"] = kwargs["id"]
+            if "id" in kwargs and (message is None or "id" not in message):
+                message["id"] = kwargs["id"]
 
-            method_call = getattr(endpoint, self._method_name)
-            result = method_call(operation=operation, body=body)
+            # validate message against config
+            config = self._config[operation][0]
+            if "id" in config and config["id"] and "id" not in message:
+                self.set_status(500, "Invalid request. It should contain an id in the url.")
+                return
+
+            if "mt" in config and config["mt"]:
+                if IMPERA_MT_HEADER not in self.request.headers:
+                    self.set_status(500, "This is multi-tenant method, it should contain a tenant id")
+                    return
+
+                else:
+                    message["tid"] = self.request.headers[IMPERA_MT_HEADER]
+                    self.add_header(IMPERA_MT_HEADER, message["tid"])
+
+            # validate message against the arguments
+            argspec = inspect.getfullargspec(self._config[operation][2])
+            args = argspec.args
+
+            if "self" in args:
+                args.remove("self")
+
+            all_fields = set(message.keys())
+            if argspec.defaults is not None:
+                defaults_start = len(args) - len(argspec.defaults)
+            else:
+                defaults_start = -1
+
+            for i in range(len(args)):
+                arg = args[i]
+                if arg not in message:
+                    if defaults_start > 0 and (i - defaults_start) < len(argspec.defaults) and \
+                       argspec.defaults[i - defaults_start] is None:
+                        # a default value of none is provided
+                        message[arg] = None
+                    else:
+                        self.set_status(500, "Invalid request. Field '%s' is required." % arg)
+                        return
+                else:
+                    all_fields.remove(arg)
+
+            if len(all_fields) > 0 and argspec.varkw is None:
+                self.set_status(500, ("Request contains fields %s " % all_fields) +
+                                "that are not declared in method and no kwargs argument is provided.")
+                return
+
+            LOGGER.debug("Calling method %s on %s" % self._config[operation][1])
+            method_call = getattr(self._config[operation][1][0], self._config[operation][1][1])
+
+            result = method_call(**message)
             if result is None:
                 raise Exception("Handlers for method calls should at least return a status code.")
 
@@ -482,34 +314,54 @@ class RESTHandler(tornado.web.RequestHandler):
                 code = result
 
             if reply is not None:
-                if self._method_type.__reply__:
+                if "reply" in self._config[operation][0] and self._config[operation][0]:
                     self.write(tornado.escape.json_encode(reply))
                     self.set_header("Content-Type", "application/json")
+
                 else:
-                    LOGGER.warn("Method %s returned a result although it is has not reply!" % self._method_type)
+                    LOGGER.warn("Method %s returned a result although it is has not reply!")
 
             self.set_status(code)
+
         except Exception:
             LOGGER.exception("An exception occured")
             self.set_status(500)
 
+        self.finish()
+
+    @tornado.gen.coroutine
     def head(self, *args, **kwargs):
         self._call(operation="HEAD", args=args, kwargs=kwargs)
 
+    @tornado.gen.coroutine
     def get(self, *args, **kwargs):
         self._call(operation="GET", args=args, kwargs=kwargs)
 
+    @tornado.gen.coroutine
     def post(self, *args, **kwargs):
-        self._call(args=args, kwargs=kwargs)
+        self._call(operation="POST", args=args, kwargs=kwargs)
 
+    @tornado.gen.coroutine
     def delete(self, *args, **kwargs):
-        self._transport.message(operation="DELETE", args=args, kwargs=kwargs)
+        self._call(operation="DELETE", args=args, kwargs=kwargs)
 
+    @tornado.gen.coroutine
+    def patch(self, *args, **kwargs):
+        self._call(operation="PATCH", args=args, kwargs=kwargs)
+
+    @tornado.gen.coroutine
     def put(self, *args, **kwargs):
         self._call(operation="PUT", args=args, kwargs=kwargs)
 
+    @tornado.gen.coroutine
     def options(self, *args, **kwargs):
-        self._call(operation="OPTIONS", args=args, kwargs=kwargs)
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, " +
+                        IMPERA_MT_HEADER)
+
+        self.set_status(200)
+        self.finish()
 
 
 class RESTTransport(Transport):
@@ -517,7 +369,6 @@ class RESTTransport(Transport):
         A REST (json body over http) transport. Only methods that operate on resource can use all
         HTTP verbs. For other methods the POST verb is used.
     """
-    __type__ = "rpc"
     __data__ = ("message", "blob")
     __transport_name__ = "rest"
 
@@ -525,25 +376,58 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
 
+    def _create_base_url(self, properties, msg=None):
+        """
+            Create a url for the given protocol properties
+        """
+        url = ""
+        if "id" in properties and properties["id"]:
+            if msg is None:
+                url = "/%s/(?P<id>.*)" % properties["method_name"]
+            else:
+                url = "/%s/%s" % (properties["method_name"], msg["id"])
+
+        elif "index" in properties and properties["index"]:
+            url = "/%s" % properties["method_name"]
+        else:
+            url = "/%s" % properties["method_name"]
+
+        return url
+
     def start_endpoint(self):
         """
             Start the transport
         """
+        url_map = {}
+        for method, method_handlers in self.endpoint.__methods__.items():
+            properties = method.__protocol_properties__
+            call = (self.endpoint, method_handlers[0])
+
+            url = self._create_base_url(properties)
+
+            if url not in url_map:
+                url_map[url] = []
+
+            url_map[url].append((properties, call, method.__wrapped__))
+
+            # ##
+#             argspec = inspect.getfullargspec(method_handlers[1])
+#             args = argspec.args
+#             if "id" in args:
+#                 args.remove("id")
+#             if "self" in args:
+#                 args.remove("self")
+#             print(properties["operation"], url, args, method_handlers[1])
+            # ##
+
         handlers = []
+        for url, configs in url_map.items():
+            handler_config = {}
+            for cfg in configs:
+                handler_config[cfg[0]["operation"]] = cfg
 
-        for name, method in self.endpoint.__methods__.items():
-            if method.__resource__:
-                handlers.append((
-                    "/%s/(?P<id>.*)" % method.__method_name__, RESTHandler,
-                    {"transport": self, "method_type": method, "method_name": name}
-                ))
-
-                if method.__index__:
-                    handlers.append(("/%s" % method.__method_name__, RESTHandler,
-                                     {"transport": self, "method_type": method, "method_name": name}))
-            else:
-                handlers.append(("/%s" % method.__method_name__, RESTHandler,
-                                 {"transport": self, "method_type": method, "method_name": name}))
+            handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
+            LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
 
         port = 8888
         if self.id in Config.get() and "port" in Config.get()[self.id]:
@@ -554,6 +438,7 @@ class RESTTransport(Transport):
         super().start()
 
     def run(self):
+        LOGGER.debug("Starting tornado IOLoop")
         tornado.ioloop.IOLoop.instance().start()
 
     def stop_endpoint(self):
@@ -580,27 +465,50 @@ class RESTTransport(Transport):
 
         return (host, port)
 
-    def call(self, method, destination=None, **kwargs):
-        if destination is not None:
-            raise Exception("The REST transport can only communication with a single end-point")
-
+    def call(self, properties, args, kwargs={}):
         host, port = self._get_client_config()
         conn = client.HTTPConnection(host, port)
 
-        if "operation" in kwargs:
-            operation = kwargs["operation"]
+        operation = properties["operation"]
+
+        # create the message
+        msg = kwargs
+
+        # map the argument in arg to names
+        argspec = inspect.getfullargspec(properties["method"])
+        for i in range(len(args)):
+            msg[argspec.args[i + 1]] = args[i]
+
+        url = self._create_base_url(properties, msg)
+
+        headers = {}
+        if properties["mt"]:
+            if "tid" not in msg:
+                raise Exception("A multi-tenant method call should contain a tid parameter.")
+
+            headers[IMPERA_MT_HEADER] = msg["tid"]
+            del msg["tid"]
+
+        if not (operation == "POST" or operation == "PUT" or operation == "PATCH"):
+            qs_map = msg.copy()
+            if "id" in qs_map:
+                del qs_map["id"]
+
+            # encode arguments in url
+            if len(qs_map) > 0:
+                url += "?" + urllib.parse.urlencode(qs_map)
+
+            body = ""
         else:
-            operation = "POST"
+            body = tornado.escape.json_encode(msg)
 
-        if "id" in kwargs:
-            url = "/%s/%s" % (method.__method_name__, kwargs["id"])
-        else:
-            url = "/%s" % method.__method_name__
+        LOGGER.debug("Calling server with url %s", url)
 
-        body = tornado.escape.json_encode(kwargs)
-
-        conn.request(operation, url, body)
-        res = conn.getresponse()
+        try:
+            conn.request(operation, url, body, headers)
+            res = conn.getresponse()
+        except Exception as e:
+            return Result(code=500, result=str(e))
 
         return Result(code=res.status, result=self._decode(res.read()))
 
@@ -609,7 +517,6 @@ class DirectTransport(Transport):
     """
         Communicate directly within the same python process
     """
-    __type__ = "rpc"
     __data__ = ("message", "blob")
     __transport_name__ = "direct"
     __network__ = False
@@ -701,6 +608,11 @@ class DirectTransport(Transport):
 class handle(object):
     """
         Decorator for subclasses of an endpoint to handle protocol methods
+
+        :param method A subclass of method that defines the method
+        :param operation The operation to use (POST, GET, PUT, HEAD, ...)
+        :param id Is the special parameter id required
+        :param index Does this method handle the index
     """
     def __init__(self, method):
         self.method = method
@@ -709,6 +621,16 @@ class handle(object):
         """
             The wrapping
         """
+        class_name = self.method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
+        module = inspect.getmodule(self.method)
+        method_class = getattr(module, class_name)
+
+        if not hasattr(method_class, "__method_name__"):
+            raise Exception("%s should have a __method_name__ variable." % method_class)
+
+        if "method_name" not in self.method.__protocol_properties__:
+            self.method.__protocol_properties__["method_name"] = method_class.__method_name__
+
         function.__protocol_method__ = self.method
         return function
 
@@ -721,9 +643,15 @@ class EndpointMeta(type):
         if "__methods__" not in dct:
             dct["__methods__"] = {}
 
+        methods = {}
         for name, attr in dct.items():
             if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
-                dct["__methods__"][name] = attr.__protocol_method__
+                if attr.__protocol_method__ in methods:
+                    raise Exception("Unable to register multiple handlers for the same method.")
+
+                methods[attr.__protocol_method__] = (name, attr)
+
+        dct["__methods__"] = methods
 
         return type.__new__(cls, class_name, bases, dct)
 
@@ -732,8 +660,8 @@ class Scheduler(threading.Thread):
     """
         An event scheduler class
     """
-    def __init__(self):
-        super().__init__(name="Scheduler", daemon=True)
+    def __init__(self, daemon=True):
+        super().__init__(name="Scheduler", daemon=daemon)
         self._sched = sched.scheduler()
         self._scheduled = set()
         self._running = True
@@ -746,7 +674,7 @@ class Scheduler(threading.Thread):
             :param interval The interval between execution of actions
             :param now Execute the first action now and schedule subsequent invocations
         """
-        LOGGER.debug("Scheduling action every %d seconds", interval)
+        LOGGER.debug("Scheduling action %s every %d seconds", action, interval)
 
         def action_function():
             LOGGER.info("Calling %s" % action)
@@ -798,6 +726,7 @@ class Endpoint(object):
         """
             Add an additional name to this endpoint to which it reacts and sends out in heartbeats
         """
+        LOGGER.debug("Adding '%s' as endpoint", name)
         self._end_point_names.append(name)
 
     def clear_end_points(self):
@@ -838,10 +767,13 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
     __methods__ = {}
 
-    def __init__(self, name, role):
+    def __init__(self, name, role, transport=RESTTransport):
         super().__init__(name, role)
-        self._transports = []
+        self._transport = transport
+        self._transport_instance = None
         self._sched = Scheduler()
+
+        self.running = True
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
@@ -850,149 +782,83 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         """
             Start this end-point using the central configuration
         """
-        LOGGER.debug("Starting transports for endpoint %s", self.name)
-        for transport in self.__class__.__transports__:
-            tr = Transport.create(transport, self)
-            if tr is not None:
-                tr.start_endpoint()
-                self._transports.append(tr)
+        LOGGER.debug("Starting transport for endpoint %s", self.name)
+        self._transport_instance = Transport.create(self._transport, self)
+
+        if self._transport_instance is not None:
+            self._transport_instance.start_endpoint()
 
         LOGGER.debug("Starting scheduler")
         self._sched.start()
+
+        while self.running:
+            try:
+                time.sleep(0.1)
+            except KeyboardInterrupt:
+                self.stop()
 
     def stop(self):
         """
             Stop the end-point and all of its transports
         """
-        for transport in self._transports:
-            transport.stop_endpoint()
-            LOGGER.debug("Stopped %s", transport)
+        self.running = False
+        if self._transport_instance is not None:
+            self._transport_instance.stop_endpoint()
+            LOGGER.debug("Stopped %s", self._transport_instance)
 
         self._sched.stop()
 
 
-class ServerClientEndpoint(ServerEndpoint):
+class ClientMeta(type):
     """
-        A server end point that also connects to an AMQP transport as a client and sends out
-        regular heartbeats
+        A meta class that programs all protocol method call into the Client class.
     """
-    def __init__(self, name, role):
-        super().__init__(name, role)
-        self._client = Client("%s_client" % name, role="client", transports=[AMQPTransport, RESTTransport, DirectTransport])
-        self._heartbeat_interval = int(Config.get("config", "heartbeat-interval", 60))
+    def __new__(cls, class_name, bases, dct):
+        classes = methods.Method.__subclasses__()  # @UndefinedVariable
 
-        self.running = True
+        for mcls in classes:
+            for attr in dir(mcls):
+                attr_fn = getattr(mcls, attr)
+                if attr[0:2] != "__" and hasattr(attr_fn, "__wrapped__"):
+                    dct[attr] = attr_fn
 
-    def send_heartbeat(self):
-        """
-            Send a heartbeat message
-        """
-        self._client.call(methods.HeartBeatMethod, destination="*", endpoint_names=self.end_point_names,
-                          nodename=self.node_name, role=self.role, interval=self._heartbeat_interval)
-
-    def start(self, wait_func=None):
-        """
-            Start the client and schedule a heartbeat
-        """
-        super().start()
-
-        # start an amqp client
-        self._client.start()
-
-        # start the heartbeat
-        self.schedule(self.send_heartbeat, self._heartbeat_interval)
-
-        while self.running:
-            try:
-                if wait_func is not None:
-                    wait_func()
-                else:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                super().stop()
-                break
-
-    def stop(self):
-        """
-            Stop this instance
-        """
-        super().stop()
-        self.running = False
+        return type.__new__(cls, class_name, bases, dct)
 
 
-class Client(Endpoint):
+class Client(Endpoint, metaclass=ClientMeta):
     """
         A client that communicates with end-point based on its configuration
     """
-    def __init__(self, name, role, transports):
-        super().__init__(name, role)
-        self._transport_list = transports
-        self._transports = []
+    def __init__(self, name, role, transport=RESTTransport):
+        Endpoint.__init__(self, name, role)
+        self._transport = transport
+        self._transport_instance = None
 
-    def start(self):
-        """
-            Start the transports of this client
-        """
         LOGGER.debug("Start transports for client %s", self.name)
-        for transport in self._transport_list:
-            tr = Transport.create(transport, self)
-            if tr is not None:
-                tr.start_client()
-                self._transports.append(tr)
+        tr = Transport.create(self._transport, self)
+        self._transport_instance = tr
 
-    def stop(self):
-        """
-            Stop the transports of this client
-        """
-        LOGGER.debug("Stop transports of for client %s", self.name)
-        for transport in self._transports:
-            transport.stop()
-
-    def select_transport(self, multiple_destinations=False, blob=False):
-        """
-            Select a transport to use based on the given criteria
-        """
-        for transport in self._transports:
-            if ((transport.__class__.__broadcast__ == multiple_destinations or not multiple_destinations) and
-                    (not blob or "blob" in transport.__class__.__data__)):
-
-                return transport
-
-        return None
-
-    def all_transports_connected(self):
+    def is_transport_connected(self):
         """
             Check if all transports are connected
         """
-        for tr in self._transports:
-            if not tr.is_connected():
-                return False
+        if self._transport_instance is None:
+            return False
 
-        return True
+        return self._transport_instance.is_connected()
 
-    def call(self, method, destination=None, async=False, **kwargs):
+    def _call(self, args, kwargs, protocol_properties):
         """
-            Execute a method call
+            Execute the rpc call
         """
-        blob = method.__data_type__ == "blob"
+        method = protocol_properties["method"]
+        class_name = method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
+        module = inspect.getmodule(method)
+        method_class = getattr(module, class_name)
 
-        transport = self.select_transport(destination is not None, blob)
+        if not hasattr(method_class, "__method_name__"):
+            raise Exception("%s should have a __method_name__ variable." % method_class)
 
-        if transport is None:
-            LOGGER.debug("No transport available")
-            return
+        protocol_properties["method_name"] = method_class.__method_name__
 
-        result = transport.call(method, destination, **kwargs)
-
-        if result is None:
-            return
-        elif result.available():
-            return result
-        elif async:
-            return result
-        else:
-            # wait for it to become available
-            while not result.available():
-                time.sleep(0.01)
-
-            return result
+        return self._transport_instance.call(protocol_properties, args, kwargs)

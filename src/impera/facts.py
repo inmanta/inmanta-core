@@ -15,12 +15,16 @@
 
     Contact: bart@impera.io
 """
+import logging
 
-from impera import protocol, methods
+
+from impera import protocol
 from impera.config import Config
 from impera.execute.util import Unknown
-from impera.export import Exporter, Offline
+from impera.export import Exporter, Offline, unknown_parameters
 from impera.stats import Stats
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_fact(res, fact_name: str, default_value=None) -> "any":
@@ -35,16 +39,19 @@ def get_fact(res, fact_name: str, default_value=None) -> "any":
 
     else:
         try:
-            client = protocol.Client("client", "client", [protocol.RESTTransport, protocol.DirectTransport])
-            client.start()
-            result = client.call(methods.GetFact, resource_id=resource_id, fact_name=fact_name)
+            client = protocol.Client("facts", "client")
+
+            result = client.get_param(tid=Config.get("config", "environment"), id=fact_name, resource_id=resource_id)
 
             if result.code == 200:
                 fact_value = result.result["value"]
             else:
+                LOGGER.debug("Param %s of resource %s is unknown", fact_name, resource_id)
                 fact_value = Unknown(source=res)
+                unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
         except ConnectionRefusedError:
             fact_value = Unknown(source=res)
+            unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
 
     if isinstance(fact_value, Unknown) and default_value is not None:
         return default_value

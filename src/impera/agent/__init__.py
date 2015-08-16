@@ -18,17 +18,19 @@
 
 from collections import defaultdict
 import logging
+import os
 from threading import enumerate
 import time
-import os
+import threading
 
+from impera import env
 from impera import protocol, methods
 from impera.agent.handler import Commander
 from impera.config import Config
 from impera.loader import CodeLoader
-from impera.protocol import ServerClientEndpoint, DirectTransport, AMQPTransport
+from impera.protocol import DirectTransport, Scheduler
 from impera.resources import Resource, Id
-from impera import env
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -223,15 +225,17 @@ class QueueManager(object):
             LOGGER.info("\t-> %s" % r.requires_queue)
 
 
-class Agent(ServerClientEndpoint):
+class Agent(threading.Thread):
     """
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
-    __transports__ = [DirectTransport, AMQPTransport]
-
     def __init__(self, hostname=None, agent_map=None, code_loader=True):
-        super().__init__("agent", role="agent")
+        super().__init__()
+
+        if agent_map is None:
+            agent_map = Config.get("config", "agent-map", None)
+
         self.agent_map = self._process_map(agent_map)
         self._storage = self.check_storage()
 
@@ -240,6 +244,10 @@ class Agent(ServerClientEndpoint):
 
         self._last_update = 0
 
+        self._env_id = Config.get("config", "environment")
+        if self._env_id is None:
+            raise Exception("The agent requires an environment to be set.")
+
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
             self._env.use_virtual_env()
@@ -247,8 +255,9 @@ class Agent(ServerClientEndpoint):
         else:
             self._loader = None
 
+        self._client = protocol.Client("agent", "agent")
         if hostname is not None:
-            self.add_end_point_name(hostname)
+            self._client.add_end_point_name(hostname)
 
         else:
             # load agent names from the config file
@@ -257,14 +266,32 @@ class Agent(ServerClientEndpoint):
                 names = [x.strip() for x in agent_names.split(",")]
                 for name in names:
                     if "$" in name:
-                        name = name.replace("$node-name", self.node_name)
+                        name = name.replace("$node-name", self._client.node_name)
 
-                    self.add_end_point_name(name)
+                    self._client.add_end_point_name(name)
 
         # do regular deploys
-        # self.last_deploy = 0
-        # self.schedule(self.renew_expired_facts, 60)
-        self.get_latest_version()
+        self._heart_beat_interval = 10
+        self._deploy_interval = 600
+
+        self._sched = Scheduler()
+
+        self._sched.add_action(self.beat, self._heart_beat_interval, True)
+        self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
+
+        self.latest_version = 0
+
+        self._sched.start()
+
+    def run(self):
+        """
+            Run a deploy thread
+        """
+        while True:
+            if self._queue.size() > 0:
+                self.deploy_config()
+
+            time.sleep(1)
 
     def _process_map(self, agent_map):
         """
@@ -288,18 +315,44 @@ class Agent(ServerClientEndpoint):
         """
             Check if the given agent name is a local or a remote agent
         """
-        return self.node_name == agent_name or agent_name == "localhost"
+        return self._client.node_name == agent_name or agent_name == "localhost"
 
     def get_latest_version(self):
         """
             Get the latest version of managed resources for all agents
         """
-        for agent in self.end_point_names:
-            LOGGER.debug("Getting latest resources for %s" % agent)
-            result = self._client.call(methods.ResourceMethod, operation="POST", agent=agent)
-            print(result)
-            if result is not None and result.code == 200:
-                print(result.result["content"])
+        for agent in self._client.end_point_names:
+            self.get_latest_version_for_agent(agent)
+
+    def get_latest_version_for_agent(self, agent):
+        """
+            Get the latest version for the given agent (this is also how we are notified
+        """
+        LOGGER.debug("Getting latest resources for %s" % agent)
+        result = self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
+        if result.code == 404:
+            LOGGER.info("No released configuration model version available for agent %s", agent)
+        elif result.code != 200:
+            LOGGER.warning("Got an error while pulling resources for agent %s", agent)
+
+        else:
+            release_status = result.result["release_status"]
+            dry_run = False
+            deploy = False
+            if release_status == "DRYRUN":
+                dry_run = True
+            elif release_status == "DEPLOY":
+                deploy = True
+
+            if not dry_run and not deploy:
+                # this should not happen
+                return
+
+            for res in result.result["resources"]:
+                resource = Resource.deserialize(res)
+                resource.dry_run = dry_run
+                self.update(resource)
+                LOGGER.debug("Received update for %s", resource.id)
 
     def get_agent_hostname(self, agent_name):
         """
@@ -341,28 +394,40 @@ class Agent(ServerClientEndpoint):
 
         return dir_map
 
-    def _busy_deploy(self):
-        if self._queue.size() > 0:
-            self.deploy_config()
-
-        time.sleep(1)
-
-    def start(self):
+    def beat(self):
         """
-            Start the agent and execute the deployment main loop here
+            Send a heart beat to the server to indicate we are there
         """
-        LOGGER.debug("Starting agent")
-        super().start(self._busy_deploy)
+        result = self._client.heartbeat(endpoint_names=self._client.end_point_names, nodename=self._client.node_name,
+                                        role=self._client.role, interval=self._heart_beat_interval, environment=self._env_id)
 
-    def stop(self):
-        super().stop()
-        Commander.close()
+        if result.code != 200:
+            msg = ""
+            if "message" in result.result:
+                msg = result.result["message"]
+            LOGGER.warning("Got non successful response on a heartbeat: %s", msg)
+            return
 
-    @protocol.handle(methods.PingMethod)
-    def ping(self, operation, body):
-        return 200, dict(end_point_names=self.end_point_names, nodename=self.node_name, role=self.role)
+        if "requests" in result.result and len(result.result["requests"]) > 0:
+            LOGGER.info("Received requests from server after heartbeat.")
 
-    @protocol.handle(methods.StatusMethod)
+            fact_requests = {}
+            for request in result.result["requests"]:
+                agent = request["agent"]
+                for item in request["items"]:
+                    if "method" in item:
+                        if item["method"] == "version":
+                            self.get_latest_version_for_agent(agent)
+                        elif item["method"] == "fact":
+                            key = (item["environment"], item["resource_id"])
+                            if key not in fact_requests:
+                                fact_requests[key] = item["resource"]
+
+            for key, resource in fact_requests.items():
+                LOGGER.info("Requesting facts for resource %s in environment %s", key[0], key[1])
+                self.get_facts(key[0], key[1], resource)
+
+    # @protocol.handle(methods.StatusMethod)
     def status(self, operation, body):
         if "id" not in body:
             return 500
@@ -389,40 +454,30 @@ class Agent(ServerClientEndpoint):
         else:
             return 501
 
-    @protocol.handle(methods.RetrieveFacts)
-    def facts(self, operation, body):
-        if "resource_id" not in body or "resource" not in body:
-            return 500
-
-        if operation is None:
-            resource_id = Id.parse_id(body["resource_id"])
+    def get_facts(self, environment, resource_id, resource):
+        try:
+            resource_obj = Resource.deserialize(resource)
+            provider = Commander.get_provider(self, resource_obj)
 
             try:
-                resource = Resource.deserialize(body["resource"])
-                provider = Commander.get_provider(self, resource)
-
-                try:
-                    result = provider.check_facts(resource)
-                    return 200, {"resource_id": body["resource_id"], "facts": result}
-
-                except Exception:
-                    LOGGER.exception("Unable to retrieve fact")
-                    return 404, {"resource_id": body["resource_id"]}
+                result = provider.check_facts(resource_obj)
+                for param, value in result.items():
+                    self._client.set_param(tid=environment, resource_id=resource_id, source="fact", id=param, value=value)
 
             except Exception:
-                LOGGER.exception("Unable to find a handler for %s" % resource_id)
-                return 500
+                LOGGER.exception("Unable to retrieve fact")
 
-        return 501
+        except Exception:
+            LOGGER.exception("Unable to find a handler for %s" % resource_id)
 
-    @protocol.handle(methods.GetQueue)
+    # @protocol.handle(methods.GetQueue)
     def queue(self, operation, body):
         """
             Return the current items in the queue
         """
         return 200, {"queue": ["%s" % (x.id) for x in self._queue.all()]}
 
-    @protocol.handle(methods.GetAgentInfo)
+    # @protocol.handle(methods.GetAgentInfo)
     def info(self, operation, body):
         """
             Return statistics about this agent
@@ -431,17 +486,16 @@ class Agent(ServerClientEndpoint):
                      "queue length": self._queue.size(),
                      "queue ready length": self._queue.ready_size()}
 
-    @protocol.handle(methods.CodeDeploy)
-    def code_deploy(self, operation, body):
-        version = body["version"]
-        modules = body["modules"]
-        requires = body["requires"]
-
+    def code_deploy(self, environment, version):
+        """
+            Fetch the code for the given version and deploy it
+        """
         if self._loader is not None:
-            self._env.install_from_list(requires)
-            self._loader.deploy_version(version, modules)
+            result = self._client.get_code(environment, version)
 
-        return 200
+            if result.code == 200:
+                self._env.install_from_list(result.result["requires"])
+                self._loader.deploy_version(version, result.result["sources"])
 
     def update(self, res_obj):
         """
@@ -453,7 +507,7 @@ class Agent(ServerClientEndpoint):
         self._queue.add_resource(res_obj)
         self._last_update = time.time()
 
-    @protocol.handle(methods.ResourceUpdate)
+    # @protocol.handle(methods.ResourceUpdate)
     def resource_update(self, operation, body):
         resource = Resource.deserialize(body["resource"])
 
@@ -468,7 +522,7 @@ class Agent(ServerClientEndpoint):
 
         return 404
 
-    @protocol.handle(methods.ResourceUpdated)
+    # @protocol.handle(methods.ResourceUpdated)
     def resource_updated_received(self, operation, body):
         rid = body["id"]
         version = body["version"]
@@ -512,7 +566,7 @@ class Agent(ServerClientEndpoint):
         """
             Retrieve a file from the fileserver identified with the given hash
         """
-        result = self._client.call(methods.FileMethod, operation="GET", id=hash_id)
+        result = self._client.get_file(hash_id)
 
         if result.code == 404:
             return None
@@ -534,8 +588,15 @@ class Agent(ServerClientEndpoint):
 
         self._dm.resource_update(resource.id.resource_str(), resource.id.version, reload_resource, deploy_result)
 
-        # send out the resource update
-        self._client.call(methods.ResourceUpdated, destination="*", id=resource.id.resource_str(),
-                          version=resource.id.version, reload=reload_resource, changes=changes, status=status)
+        if resource.dry_run:
+            action = "dryrun"
+        else:
+            action = "deploy"
 
-        return 200
+        if status == "dry" or status == "deployed":
+            level = "INFO"
+        else:
+            level = "ERROR"
+
+        self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action,
+                                      message=status, extra_data=changes)

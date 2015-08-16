@@ -16,8 +16,9 @@
     Contact: bart@impera.io
 """
 
-from execnet import multi
+from execnet import multi, gateway_bootstrap
 from . import local
+from impera import resources
 
 
 class RemoteIO(object):
@@ -28,7 +29,10 @@ class RemoteIO(object):
         return True
 
     def __init__(self, host):
-        self._gw = multi.makegateway("ssh=root@%s//python=python" % host)
+        try:
+            self._gw = multi.makegateway("ssh=root@%s//python=python" % host)
+        except gateway_bootstrap.HostNotFound as e:
+            raise resources.HostNotFoundException(hostname=host, user="root", error=e)
 
     def _execute(self, function_name, *args):
         ch = self._gw.remote_exec(local)

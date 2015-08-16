@@ -23,7 +23,7 @@ import logging
 import os
 import time
 
-from impera import protocol, methods
+from impera import protocol
 from impera.agent.handler import Commander
 from impera.execute import NotFoundException
 from impera.execute.util import Unknown
@@ -32,6 +32,8 @@ from impera.config import Config
 from impera.module import Project
 
 LOGGER = logging.getLogger(__name__)
+
+unknown_parameters = []
 
 
 def classes(t):
@@ -221,15 +223,14 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
+        if len(self._resources) == 0:
+            LOGGER.warning("Empty deployment model.")
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(json.dumps(resources).encode("utf-8"))
 
-        else:
-            self.deploy_code(self._version)
-
-            if len(self._resources) > 0 and not offline:
-                self.commit_resources(self._version, resources)
+        elif len(self._resources) > 0 and not offline:
+            self.commit_resources(self._version, resources)
 
         LOGGER.info("Committed resources with version %d" % self._version)
         return self._version, self._resources
@@ -298,7 +299,7 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, version=None):
+    def deploy_code(self, tid, version=None):
         """
             Deploy code to the server
         """
@@ -314,15 +315,11 @@ class Exporter(object):
 
             LOGGER.info("Uploading source files")
 
-            conn = protocol.Client("client", "client", [protocol.RESTTransport, protocol.DirectTransport])
-            conn.start()
-
-            res = conn.call(methods.CodeMethod, id=version, version=version, sources=sources, requires=list(requires))
+            conn = protocol.Client("compiler", "client")
+            res = conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
 
             if res is None or res.code != 200:
                 raise Exception("Unable to upload handler plugin code to the server")
-
-            conn.stop()
 
         else:
             LOGGER.info("Offline mode, so not sending configuration to the server")
@@ -331,8 +328,14 @@ class Exporter(object):
         """
             Commit the entire list of resource to the configurations server.
         """
-        conn = protocol.Client("client", "client", [protocol.RESTTransport, protocol.DirectTransport])
-        conn.start()
+        tid = Config.get("config", "environment", None)
+        if tid is None:
+            LOGGER.error("The environment for this model should be set!")
+            return
+
+        self.deploy_code(tid, version)
+
+        conn = protocol.Client("compiler", "client")
         if not self._offline:
             LOGGER.info("Uploading %d files" % len(self._file_store))
 
@@ -340,7 +343,7 @@ class Exporter(object):
             # if they are already uploaded
             hashes = list(self._file_store.keys())
 
-            res = conn.call(methods.StatMethod, files=hashes)
+            res = conn.stat_files(files=hashes)
 
             if res.code != 200:
                 raise Exception("Unable to check status of files at server")
@@ -350,7 +353,7 @@ class Exporter(object):
             LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
             for hash_id in to_upload:
                 content = self._file_store[hash_id]
-                res = conn.call(methods.FileMethod, operation="PUT", id=hash_id, content=content)
+                res = conn.upload_file(id=hash_id, content=content)
 
                 if res.code != 200:
                     LOGGER.error("Unable to upload file with hash %s" % hash_id)
@@ -359,12 +362,12 @@ class Exporter(object):
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
+        for res in resources:
+            LOGGER.debug("  %s", res["id"])
 
-        res = conn.call(methods.VersionMethod, operation="PUT", id=version, version=version, resources=resources)
+        res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters)
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates")
-
-        conn.stop()
 
     def get_unknown_resources(self, hostname):
         """
