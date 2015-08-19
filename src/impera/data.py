@@ -138,7 +138,7 @@ class Agent(Document):
     """
     environment = ReferenceField(Environment)
     node = ReferenceField(Node, required=True)
-    name = StringField(required=True, unique_with="environment")
+    name = StringField(required=True, unique_with=["environment", "node"])
     role = StringField(choices=ROLES, required=True)
     last_seen = DateTimeField()
     interval = IntField()
