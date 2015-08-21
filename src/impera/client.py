@@ -385,7 +385,7 @@ class VersionList(Lister):
                     )
         else:
             print("Failed to list environments: " + result.result["message"], file=self.app.stderr)
-            return ()
+            return ((), ())
 
 
 class AgentList(Lister):
