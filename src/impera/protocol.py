@@ -455,6 +455,7 @@ class RESTTransport(Transport):
         """
             Load the configuration for the client
         """
+        LOGGER.debug("Getting config in section %s", self.id)
         port = 8888
         if self.id in Config.get() and "port" in Config.get()[self.id]:
             port = Config.get()[self.id]["port"]
