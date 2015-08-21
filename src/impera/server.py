@@ -36,6 +36,7 @@ from impera.resources import Id
 import uuid
 import tornado
 from collections import defaultdict
+import sys
 
 
 LOGGER = logging.getLogger(__name__)
@@ -258,6 +259,7 @@ class Server(protocol.ServerEndpoint):
             param = params[0]
             param.source = source
             param.value = value
+            param.updated = datetime.datetime.now()
             param.save()
 
         # check if the parameter is an unknown
@@ -780,6 +782,7 @@ class Server(protocol.ServerEndpoint):
 
             TODO: store logs
         """
+        impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
         project_dir = os.path.join(self._server_storage["environments"], environment_id)
 
         try:
@@ -819,10 +822,10 @@ class Server(protocol.ServerEndpoint):
         proc.wait()
 
         LOGGER.info("Installing and updating modules")
-        subprocess.Popen(["impera", "modules", "install"], cwd=project_dir).wait()
-        subprocess.Popen(["impera", "modules", "update"], cwd=project_dir).wait()
+        subprocess.Popen(impera_path + ["modules", "install"], cwd=project_dir, env=os.environ.copy()).wait()
+        subprocess.Popen(impera_path + ["modules", "update"], cwd=project_dir, env=os.environ.copy()).wait()
 
         LOGGER.info("Recompiling configuration model")
-        proc = subprocess.Popen(["impera", "export", "-e", environment_id, "--server_address", "localhost",
-                                 "--server_port", "8888"], cwd=project_dir)
+        proc = subprocess.Popen(impera_path + ["export", "-e", environment_id, "--server_address", "localhost",
+                                "--server_port", "8888"], cwd=project_dir, env=os.environ.copy())
         proc.wait()
