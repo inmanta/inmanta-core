@@ -273,13 +273,13 @@ class Agent(threading.Thread):
         # do regular deploys
         self._heart_beat_interval = 10
         self._deploy_interval = 600
+        self.latest_version = 0
+        self.latest_code_version = 0
 
         self._sched = Scheduler()
 
         self._sched.add_action(self.beat, self._heart_beat_interval, True)
         self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
-
-        self.latest_version = 0
 
         self._sched.start()
 
@@ -324,6 +324,19 @@ class Agent(threading.Thread):
         for agent in self._client.end_point_names:
             self.get_latest_version_for_agent(agent)
 
+    def _ensure_code(self, environment, version):
+        """
+            Ensure that the code for the given environment and version is loaded
+        """
+        if self.latest_code_version < version and self._loader is not None:
+            result = self._client.get_code(environment, version)
+
+            if result.code == 200:
+                self._env.install_from_list(result.result["requires"])
+                self._loader.deploy_version(version, result.result["sources"])
+
+                self.latest_code_version = version
+
     def get_latest_version_for_agent(self, agent):
         """
             Get the latest version for the given agent (this is also how we are notified
@@ -348,11 +361,16 @@ class Agent(threading.Thread):
                 # this should not happen
                 return
 
-            for res in result.result["resources"]:
-                resource = Resource.deserialize(res)
-                resource.dry_run = dry_run
-                self.update(resource)
-                LOGGER.debug("Received update for %s", resource.id)
+            self._ensure_code(self._env_id, result.result["version"])
+
+            try:
+                for res in result.result["resources"]:
+                    resource = Resource.deserialize(res)
+                    resource.dry_run = dry_run
+                    self.update(resource)
+                    LOGGER.debug("Received update for %s", resource.id)
+            except TypeError as e:
+                LOGGER.error("Failed to receive update", e)
 
     def get_agent_hostname(self, agent_name):
         """
@@ -403,7 +421,7 @@ class Agent(threading.Thread):
 
         if result.code != 200:
             msg = ""
-            if "message" in result.result:
+            if result.result is not None and "message" in result.result:
                 msg = result.result["message"]
             LOGGER.warning("Got non successful response on a heartbeat: %s", msg)
             return
@@ -486,16 +504,16 @@ class Agent(threading.Thread):
                      "queue length": self._queue.size(),
                      "queue ready length": self._queue.ready_size()}
 
-    def code_deploy(self, environment, version):
-        """
-            Fetch the code for the given version and deploy it
-        """
-        if self._loader is not None:
-            result = self._client.get_code(environment, version)
-
-            if result.code == 200:
-                self._env.install_from_list(result.result["requires"])
-                self._loader.deploy_version(version, result.result["sources"])
+#     def code_deploy(self, environment, version):
+#         """
+#             Fetch the code for the given version and deploy it
+#         """
+#         if self._loader is not None:
+#             result = self._client.get_code(environment, version)
+#
+#             if result.code == 200:
+#                 self._env.install_from_list(result.result["requires"])
+#                 self._loader.deploy_version(version, result.result["sources"])
 
     def update(self, res_obj):
         """
