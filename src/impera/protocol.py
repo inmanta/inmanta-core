@@ -263,6 +263,10 @@ class RESTHandler(tornado.web.RequestHandler):
 
                 else:
                     message["tid"] = self.request.headers[IMPERA_MT_HEADER]
+                    if message["tid"] == "":
+                        self.set_status(500, "%s header set without value." % IMPERA_MT_HEADER)
+                        return
+
                     self.add_header(IMPERA_MT_HEADER, message["tid"])
 
             # validate message against the arguments
