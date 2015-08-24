@@ -70,11 +70,13 @@ class Server(protocol.ServerEndpoint):
             self._loader = None
 
         self._fact_expire = int(Config.get("server", "fact-expire", 3600))
+        self._fact_renew = int(Config.get("server", "fact-renew", self._fact_expire / 3))
+
         self.add_end_point_name(self.node_name)
 
         self._db_lock = RLock()
 
-        self.schedule(self.renew_expired_facts, int(Config.get("server", "fact-renew", self._fact_expire / 3)))
+        self.schedule(self.renew_expired_facts, self._fact_renew)
 
         self._requests = defaultdict(dict)
         self._recompiles = defaultdict(lambda: None)
@@ -186,7 +188,7 @@ class Server(protocol.ServerEndpoint):
         """
         LOGGER.info("Renewing expired parameters")
 
-        updated_before = datetime.datetime.now() - datetime.timedelta(0, self._fact_expire)
+        updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
         expired_params = data.Parameter.objects(updated__lt=updated_before)  # @UndefinedVariable
 
         for param in expired_params:
@@ -241,6 +243,7 @@ class Server(protocol.ServerEndpoint):
         if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, params[0].to_dict()
 
+        self._request_parameter(param)
         return 410
 
     @protocol.handle(methods.ParameterMethod.set_param)
