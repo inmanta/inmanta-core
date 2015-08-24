@@ -59,7 +59,8 @@ class Server(protocol.ServerEndpoint):
         self._db = None
         if usedb:
             self._db = connect(Config.get("database", "name", "impera"), host=Config.get("database", "host", "localhost"))
-            LOGGER.info("Connected to mongodb database")
+            LOGGER.info("Connected to mongodb database %s on %s", Config.get("database", "name", "impera"),
+                        Config.get("database", "host", "localhost"))
 
         if code_loader:
             self._env = env.VirtualEnv(self._server_storage["env"])

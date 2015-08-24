@@ -144,12 +144,16 @@ class ProjectList(Lister):
         result = client.list_projects()
 
         if result.code == 200:
-            return (('ID', 'Name'),
-                    ((n['id'], n['name']) for n in result.result)
-                    )
+            if len(result.result) > 0:
+                return (('ID', 'Name'),
+                        ((n['id'], n['name']) for n in result.result)
+                        )
+
+            print("No projects defined.")
+            return ((), ())
         else:
             print("Failed to list project: " + result.result["message"], file=self.app.stderr)
-            return ()
+            return ((), ())
 
 
 class ProjectDelete(Command):
@@ -253,10 +257,14 @@ class EnvironmentList(Lister):
 
                 data.append((prj_name, env['project'], env['name'], env['id']))
 
-            return (('Project name', 'Project ID', 'Environment', 'Environment ID'), data)
+            if len(data) > 0:
+                return (('Project name', 'Project ID', 'Environment', 'Environment ID'), data)
+
+            print("No environment defined.")
+            return ((), ())
         else:
             print("Failed to list environments: " + result.result["message"], file=self.app.stderr)
-            return ()
+            return ((), ())
 
 
 class EnvironmentShow(ShowOne):
