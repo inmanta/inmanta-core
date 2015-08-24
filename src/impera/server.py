@@ -24,6 +24,9 @@ from threading import RLock
 import subprocess
 import re
 import threading
+import sys
+from collections import defaultdict
+import uuid
 
 from mongoengine import connect, errors
 from impera import methods
@@ -33,10 +36,7 @@ from impera import data
 from impera.config import Config
 from impera.loader import CodeLoader
 from impera.resources import Id
-import uuid
 import tornado
-from collections import defaultdict
-import sys
 
 
 LOGGER = logging.getLogger(__name__)
@@ -69,14 +69,15 @@ class Server(protocol.ServerEndpoint):
         else:
             self._loader = None
 
-        self._fact_expire = int(Config.get("config", "fact-expire", 3600))
+        self._fact_expire = int(Config.get("server", "fact-expire", 3600))
         self.add_end_point_name(self.node_name)
 
         self._db_lock = RLock()
 
-        self.schedule(self.renew_expired_facts, int(Config.get("config", "fact-renew", self._fact_expire / 3)))
+        self.schedule(self.renew_expired_facts, int(Config.get("server", "fact-renew", self._fact_expire / 3)))
 
         self._requests = defaultdict(dict)
+        self._recompiles = defaultdict(lambda: None)
 
     def check_keys(self):
         """
@@ -782,9 +783,31 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.NotifyMethod.notify_change)
     def notify_change(self, id):
         LOGGER.info("Received change notification for environment %s", id)
-        threading.Thread(target=self._recompile_environment, args=(id, True)).start()
+        self._async_recompile(id, True)
 
         return 200
+
+    def _async_recompile(self, environment_id, update_repo):
+        """
+            Recompile an environment in a different thread and taking wait time into account.
+        """
+        last_recompile = self._recompiles[environment_id]
+        wait_time = Config.get("server", "auto-recompile-wait", 600)
+        if last_recompile is self:
+            LOGGER.info("Already recompiling")
+            return
+
+        if last_recompile is None or (datetime.datetime.now() - datetime.timedelta(0, wait_time)) > last_recompile:
+            if last_recompile is None:
+                LOGGER.info("First recompile")
+            else:
+                LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
+
+            self._recompiles[environment_id] = self
+            threading.Thread(target=self._recompile_environment, args=(environment_id, update_repo)).start()
+
+        else:
+            LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
 
     def _recompile_environment(self, environment_id, update_repo=False):
         """
@@ -839,3 +862,5 @@ class Server(protocol.ServerEndpoint):
         proc = subprocess.Popen(impera_path + ["export", "-e", environment_id, "--server_address", "localhost",
                                 "--server_port", "8888"], cwd=project_dir, env=os.environ.copy())
         proc.wait()
+
+        self._recompiles[environment_id] = datetime.datetime.now()
