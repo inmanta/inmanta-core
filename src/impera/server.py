@@ -73,7 +73,7 @@ class Server(protocol.ServerEndpoint):
 
         self._db_lock = RLock()
 
-        self.schedule(self.renew_expired_facts, self._fact_expire)
+        self.schedule(self.renew_expired_facts, int(Config.get("config", "fact-renew", self._fact_expire / 3)))
 
         self._requests = defaultdict(dict)
 
