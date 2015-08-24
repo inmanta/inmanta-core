@@ -389,7 +389,7 @@ class VersionList(Lister):
 
         if result.code == 200:
             return (('Created at', 'Version', 'Release status'),
-                    ((x['date'], x['version'], x['release_status']) for x in result.result)
+                    ((x['date'], x['version'], x['release_status']) for x in result.result["versions"])
                     )
         else:
             print("Failed to list environments: " + result.result["message"], file=self.app.stderr)

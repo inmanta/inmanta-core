@@ -483,11 +483,20 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         models = data.ConfigurationModel.objects(environment=env).order_by("-version")  # @UndefinedVariable
+        count = len(models)
 
         if start is not None:
             models = models[int(start):int(limit) + int(start)]
 
-        return 200, [m.to_dict() for m in models]
+        d = {"versions": [m.to_dict() for m in models]}
+
+        if start is not None:
+            d["start"] = start
+            d["limit"] = limit
+
+        d["count"] = count
+
+        return 200, d
 
     @protocol.handle(methods.CMVersionMethod.get_version)
     def get_version(self, tid, id):
