@@ -286,6 +286,8 @@ class CMVersionMethod(Method):
             Returns a list of all available versions
 
             :param tid The id of the environment
+            :param start Optional, parameter to control the amount of results that are returned. 0 is the latest version.
+            :param limit Optional, parameter to control the amount of results returned.
         """
 
     @protocol(operation="GET", id=True, mt=True)
