@@ -407,14 +407,16 @@ class Server(protocol.ServerEndpoint):
             return 404
 
     @protocol.handle(methods.NodeMethod.list_agents)
-    def list_agent(self):
+    def list_agent(self, environment):
         response = []
         for node in data.Node.objects():  # @UndefinedVariable
             agents = data.Agent.objects(node=node)  # @UndefinedVariable
             node_dict = node.to_dict()
-            node_dict["agents"] = [{"environment": str(a.environment.id), "name": a.name, "role": a.role} for a in agents]
+            node_dict["agents"] = [{"environment": str(a.environment.id), "name": a.name, "role": a.role} for a in agents
+                                   if environment is None or str(a.environment.id) == environment]
 
-            response.append(node_dict)
+            if len(node_dict["agents"]) > 0:
+                response.append(node_dict)
 
         return 200, response
 

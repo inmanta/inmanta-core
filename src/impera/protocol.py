@@ -285,7 +285,7 @@ class RESTHandler(tornado.web.RequestHandler):
             for i in range(len(args)):
                 arg = args[i]
                 if arg not in message:
-                    if defaults_start > 0 and (i - defaults_start) < len(argspec.defaults) and \
+                    if defaults_start >= 0 and (i - defaults_start) < len(argspec.defaults) and \
                        argspec.defaults[i - defaults_start] is None:
                         # a default value of none is provided
                         message[arg] = None

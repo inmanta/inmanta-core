@@ -384,10 +384,11 @@ class NodeMethod(Method):
     __method_name__ = "agent"
 
     @protocol(operation="GET", index=True)
-    def list_agents(self):
+    def list_agents(self, environment=None):
         """
-            Return a list of all nodes
+            Return a list of all nodes and the agents for these nodes
 
+            :param environment An optional environment. If set, only the agents that belong to this environment are returned
             :return A list of nodes
         """
 
