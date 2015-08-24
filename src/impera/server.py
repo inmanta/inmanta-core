@@ -472,13 +472,20 @@ class Server(protocol.ServerEndpoint):
                      "release_status": data.RELEASE_STATUS[cm.release_status]}
 
     @protocol.handle(methods.CMVersionMethod.list_versions)
-    def list_version(self, tid):
+    def list_version(self, tid, start=None, limit=None):
+        if (start is None and limit is not None) or (limit is None and start is not None):
+            return 500, {"message": "Start and limit should always be set together."}
+
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
         models = data.ConfigurationModel.objects(environment=env).order_by("-version")  # @UndefinedVariable
+
+        if start is not None:
+            models = models[int(start):int(limit) + int(start)]
+
         return 200, [m.to_dict() for m in models]
 
     @protocol.handle(methods.CMVersionMethod.get_version)

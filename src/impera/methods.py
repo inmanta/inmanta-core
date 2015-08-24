@@ -281,7 +281,7 @@ class CMVersionMethod(Method):
     __method_name__ = "cmversion"
 
     @protocol(index=True, operation="GET", mt=True)
-    def list_versions(self, tid):
+    def list_versions(self, tid, start=None, limit=None):
         """
             Returns a list of all available versions
 
