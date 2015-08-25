@@ -551,7 +551,7 @@ class Server(protocol.ServerEndpoint):
             pass
 
         cm = data.ConfigurationModel(environment=env, version=version, date=datetime.datetime.now(),
-                                     release_status=0)
+                                     release_status=0, progress={})
         cm.save()
 
         for res_dict in resources:
@@ -607,6 +607,8 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The request version does not exist."}
 
         model = models[0]  # there can only be one per id/tid
+        n_resources = len(data.ResourceVersion.objects(model=model))  # @UndefinedVariable
+        progress = {"TOTAL": n_resources, "WAITING": n_resources, "ERROR": 0, "DONE": 0}
 
         changed = False
         if dryrun:
@@ -614,6 +616,7 @@ class Server(protocol.ServerEndpoint):
                 return 500, {"message": "A dry run was already requested for this version."}
             else:
                 model.release_status = 1
+                model.progress[data.RELEASE_STATUS[1]] = progress
                 model.save()
                 changed = True
 
@@ -622,6 +625,7 @@ class Server(protocol.ServerEndpoint):
                 return 500, {"message": "A deploy was already requested for this version."}
             else:
                 model.release_status = 2
+                model.progress[data.RELEASE_STATUS[2]] = progress
                 model.save()
                 changed = True
 
@@ -697,12 +701,21 @@ class Server(protocol.ServerEndpoint):
                              data.RELEASE_STATUS[resv.status])
 
             else:
+                model = resv.model
+                model_status = data.RELEASE_STATUS[model.release_status]
+                progress = model.progress[model_status]
+
                 resv.status = new_status
+                progress["WAITING"] -= 1
                 if level == "INFO":
                     resv.status_result = 2
+                    progress["DONE"] += 1
                 elif level == "ERROR":
                     resv.status_result = 3
+                    progress["ERROR"] += 1
 
+                model.progress[model_status] = progress
+                model.save()
                 resv.save()
 
         return 200

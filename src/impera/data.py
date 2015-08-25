@@ -254,6 +254,7 @@ class ConfigurationModel(Document):
     date = DateTimeField()
     release_status = IntField(choices=RELEASE_STATUS, default=0)
     status_result = IntField(choices=STATUS_RESULT, default=0)
+    progress = MapField(DynamicField())
 
     def to_dict(self):
         return {"version": self.version,
@@ -261,6 +262,7 @@ class ConfigurationModel(Document):
                 "date": self.date.isoformat(),
                 "release_status": RELEASE_STATUS[self.release_status] if self.release_status in RELEASE_STATUS else 0,
                 "status_result": STATUS_RESULT[self.status_result] if self.status_result in STATUS_RESULT else 0,
+                "progress": self.progress
                 }
 
 
