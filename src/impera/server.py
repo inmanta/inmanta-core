@@ -842,16 +842,18 @@ class Server(protocol.ServerEndpoint):
         # checkout repo
         if not os.path.exists(os.path.join(project_dir, ".git")):
             LOGGER.info("Cloning repository into environment directory %s", project_dir)
-            proc = subprocess.Popen(["git", "clone", env.repo_url, "."], cwd=project_dir)
-            proc.wait()
+            proc = subprocess.Popen(["git", "clone", env.repo_url, "."], cwd=project_dir, stderr=subprocess.PIPE,
+                                    stdout=subprocess.PIPE)
+            log_out, log_err = proc.communicate()
 
         elif update_repo:
             LOGGER.info("Fetching changes from repo %s", env.repo_url)
-            proc = subprocess.Popen(["git", "fetch", env.repo_url], cwd=project_dir)
-            proc.wait()
+            proc = subprocess.Popen(["git", "fetch", env.repo_url], cwd=project_dir, stderr=subprocess.PIPE,
+                                    stdout=subprocess.PIPE)
+            log_out, log_err = proc.communicate()
 
         # verify if branch is correct
-        proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE)
+        proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, _ = proc.communicate()
 
         o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
@@ -859,19 +861,24 @@ class Server(protocol.ServerEndpoint):
 
         if env.repo_branch != branch_name:
             LOGGER.info("Repository is at %s branch, switching to %s", branch_name, env.repo_branch)
-            proc = subprocess.Popen(["git", "checkout", env.repo_branch], cwd=project_dir)
-            proc.wait()
+            proc = subprocess.Popen(["git", "checkout", env.repo_branch], cwd=project_dir, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            log_out, log_err = proc.communicate()
 
-        proc = subprocess.Popen(["git", "pull"], cwd=project_dir)
-        proc.wait()
+        proc = subprocess.Popen(["git", "pull"], cwd=project_dir, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        log_out, log_err = proc.communicate()
 
         LOGGER.info("Installing and updating modules")
-        subprocess.Popen(impera_path + ["modules", "install"], cwd=project_dir, env=os.environ.copy()).wait()
-        subprocess.Popen(impera_path + ["modules", "update"], cwd=project_dir, env=os.environ.copy()).wait()
+        log_out, log_err = subprocess.Popen(impera_path + ["modules", "install"], cwd=project_dir, env=os.environ.copy(),
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        log_out, log_err = subprocess.Popen(impera_path + ["modules", "update"], cwd=project_dir, env=os.environ.copy(),
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
         LOGGER.info("Recompiling configuration model")
-        proc = subprocess.Popen(impera_path + ["export", "-e", environment_id, "--server_address", "localhost",
-                                "--server_port", "8888"], cwd=project_dir, env=os.environ.copy())
-        proc.wait()
+        proc = subprocess.Popen(impera_path + ["-vvv", "export", "-e", environment_id, "--server_address", "localhost",
+                                "--server_port", "8888"], cwd=project_dir, env=os.environ.copy(), stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        log_out, log_err = proc.communicate()
 
         self._recompiles[environment_id] = datetime.datetime.now()
