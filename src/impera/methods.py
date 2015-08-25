@@ -291,12 +291,15 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_version(self, tid, id):
+    def get_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
         """
             Get a particular version and a list of all resources in this version
 
             :param tid The id of the environment
             :param id The id of the version to retrieve
+            :param include_logs If true, a log of all operations on all resources is included
+            :param log_filter Filter log to only include actions of the specified type
+            :param limit The maximal number of actions to return per resource (starting from the latest)
         """
 
     @protocol(operation="PUT", mt=True)

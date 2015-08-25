@@ -501,7 +501,7 @@ class Server(protocol.ServerEndpoint):
         return 200, d
 
     @protocol.handle(methods.CMVersionMethod.get_version)
-    def get_version(self, tid, id):
+    def get_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -513,8 +513,29 @@ class Server(protocol.ServerEndpoint):
 
             d = {"model": version.to_dict()}
 
-            d["resources"] = [x.to_dict() for x in resources]
-            d["progress"] = d["model"]["progress"][d["model"]["release_status"]]
+            d["resources"] = []
+            for res in resources:
+                res_dict = res.to_dict()
+
+                if bool(include_logs):
+                    if log_filter is not None:
+                        actions = data.ResourceAction.objects(resource_version=res, action=log_filter)  # @UndefinedVariable
+                    else:
+                        actions = data.ResourceAction.objects(resource_version=res)  # @UndefinedVariable
+
+                    actions = actions.order_by("-timestamp")
+
+                    if limit is not None:
+                        actions = actions[0:int(limit)]
+
+                    res_dict["actions"] = [x.to_dict() for x in actions]
+
+                d["resources"].append(res_dict)
+
+            if d["model"]["release_status"] in d["model"]["progress"]:
+                d["progress"] = d["model"]["progress"][d["model"]["release_status"]]
+            else:
+                d["progress"] = {}
 
             return 200, d
         except errors.DoesNotExist:
