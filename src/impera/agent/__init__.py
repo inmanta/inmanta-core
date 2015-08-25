@@ -478,7 +478,7 @@ class Agent(threading.Thread):
         try:
             data = resource["fields"]
             data["id"] = resource_id
-            resource_obj = Resource.deserialize(resource)
+            resource_obj = Resource.deserialize(data)
             provider = Commander.get_provider(self, resource_obj)
 
             try:
