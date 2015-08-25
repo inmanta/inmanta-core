@@ -660,6 +660,18 @@ class Server(protocol.ServerEndpoint):
 
         ra.save()
 
+        # update the state of the resource
+        if action == "dryrun":
+            if resv.state == "deploy":
+                LOGGER.error("Trying to set state to dryrun when state is already deployed!")
+            else:
+                resv.state = "dryrun"
+                resv.save()
+
+        elif action == "deploy":
+            resv.state = "depoyed"
+            resv.save()
+
         return 200
 
     # Project handlers

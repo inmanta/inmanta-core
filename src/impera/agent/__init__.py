@@ -365,7 +365,9 @@ class Agent(threading.Thread):
 
             try:
                 for res in result.result["resources"]:
-                    resource = Resource.deserialize(res)
+                    data = res["fields"]
+                    data["id"] = res["id"]
+                    resource = Resource.deserialize(data)
                     resource.dry_run = dry_run
                     self.update(resource)
                     LOGGER.debug("Received update for %s", resource.id)
@@ -474,6 +476,8 @@ class Agent(threading.Thread):
 
     def get_facts(self, environment, resource_id, resource):
         try:
+            data = resource["fields"]
+            data["id"] = resource_id
             resource_obj = Resource.deserialize(resource)
             provider = Commander.get_provider(self, resource_obj)
 
@@ -525,20 +529,20 @@ class Agent(threading.Thread):
         self._queue.add_resource(res_obj)
         self._last_update = time.time()
 
-    # @protocol.handle(methods.ResourceUpdate)
-    def resource_update(self, operation, body):
-        resource = Resource.deserialize(body["resource"])
-
-        # depending on the transport we still need to filter out resources not meant for this agent
-        if resource.id.agent_name in self.end_point_names:
-            if "dry_run" in body and body["dry_run"]:
-                resource.dry_run = True
-
-            self.update(resource)
-            LOGGER.debug("Received update for %s", body["resource"]["id"])
-            return 200
-
-        return 404
+#     # @protocol.handle(methods.ResourceUpdate)
+#     def resource_update(self, operation, body):
+#         resource = Resource.deserialize(body["resource"])
+#
+#         # depending on the transport we still need to filter out resources not meant for this agent
+#         if resource.id.agent_name in self.end_point_names:
+#             if "dry_run" in body and body["dry_run"]:
+#                 resource.dry_run = True
+#
+#             self.update(resource)
+#             LOGGER.debug("Received update for %s", body["resource"]["id"])
+#             return 200
+#
+#         return 404
 
     # @protocol.handle(methods.ResourceUpdated)
     def resource_updated_received(self, operation, body):

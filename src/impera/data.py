@@ -206,6 +206,9 @@ class ResourceAction(Document):
                 }
 
 
+STATES = ("stored", "dryrun", "deployed")
+
+
 class ResourceVersion(Document):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
@@ -221,11 +224,14 @@ class ResourceVersion(Document):
     resource = ReferenceField(Resource, required=True)
     model = ReferenceField("ConfigurationModel", required=True)
     attributes = MapField(DynamicField())
+    state = StringField(choices=STATES, default="stored")
 
     def to_dict(self):
-        data = {key: value for key, value in self.attributes.items()}
+        data = {}
+        data["fields"] = {key: value for key, value in self.attributes.items()}
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
+        data["state"] = self.state
 
         return data
 
