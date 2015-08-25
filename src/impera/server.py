@@ -655,7 +655,8 @@ class Server(protocol.ServerEndpoint):
         if len(resv) == 0:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
-        ra = data.ResourceAction(resource_version=resv[0], action=action, message=message, data=extra_data, level=level,
+        resv = resv[0]
+        ra = data.ResourceAction(resource_version=resv, action=action, message=message, data=extra_data, level=level,
                                  timestamp=datetime.datetime.now())
 
         ra.save()
