@@ -293,7 +293,7 @@ class Server(protocol.ServerEndpoint):
             del d["value"]
             return_value.append(d)
 
-        return 200, return_value
+        return 200, {"parameters": return_value, "expire": self._fact_expire}
 
     @protocol.handle(methods.FileMethod.upload_file)
     def upload_file(self, id, content):
