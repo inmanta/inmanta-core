@@ -532,9 +532,9 @@ class Server(protocol.ServerEndpoint):
             d["progress"] = states
 
             if release_status in states and states[release_status] == states["TOTAL"]:
-                d["progress"]["done"] = True
+                d["progress"]["DONE"] = True
             else:
-                d["progress"]["done"] = False
+                d["progress"]["DONE"] = False
 
             return 200, d
         except errors.DoesNotExist:
