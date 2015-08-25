@@ -274,7 +274,7 @@ class Server(protocol.ServerEndpoint):
             for p in params:
                 p.delete()
 
-            threading.Thread(target=self._recompile_environment, args=(tid, False)).start()
+            self._async_recompile(tid, False)
 
         return 200, param.to_dict()
 
