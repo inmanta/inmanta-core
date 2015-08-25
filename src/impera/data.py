@@ -279,11 +279,3 @@ class Code(Document):
     version = StringField()
     sources = DynamicField()
     requires = DynamicField()
-
-
-class Repository(Document):
-    """
-        A Git repository that contains an Impera configuration project
-    """
-    url = StringField()
-    branch = StringField(unique_with="url")

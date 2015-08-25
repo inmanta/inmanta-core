@@ -468,6 +468,7 @@ class RESTTransport(Transport):
         if self.id in Config.get() and "host" in Config.get()[self.id]:
             host = Config.get()[self.id]["host"]
 
+        LOGGER.debug("Using %s:%s", host, port)
         return (host, port)
 
     def call(self, properties, args, kwargs={}):
