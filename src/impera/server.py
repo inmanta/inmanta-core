@@ -243,8 +243,7 @@ class Server(protocol.ServerEndpoint):
         if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, params[0].to_dict()
 
-        self._request_parameter(param)
-        return 410
+        return self._request_parameter(param)
 
     @protocol.handle(methods.ParameterMethod.set_param)
     def set_param(self, tid, id, source, value, resource_id=""):
