@@ -703,18 +703,16 @@ class Server(protocol.ServerEndpoint):
             else:
                 model = resv.model
                 model_status = data.RELEASE_STATUS[model.release_status]
-                progress = model.progress[model_status]
 
                 resv.status = new_status
-                progress["WAITING"] -= 1
+                model.progress[model_status]["WAITING"] -= 1
                 if level == "INFO":
                     resv.status_result = 2
-                    progress["DONE"] += 1
+                    model.progress[model_status]["DONE"] += 1
                 elif level == "ERROR":
                     resv.status_result = 3
-                    progress["ERROR"] += 1
+                    model.progress[model_status]["ERROR"] += 1
 
-                model.progress[model_status] = progress
                 model.save()
                 resv.save()
 
