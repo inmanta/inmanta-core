@@ -206,7 +206,8 @@ class ResourceAction(Document):
                 }
 
 
-STATES = ("stored", "dryrun", "deployed")
+RELEASE_STATUS = {0: "AVAILABLE", 1: "DRYRUN", 2: "DEPLOY"}
+STATUS_RESULT = {0: "WAITING", 1: "IN PROGRESS", 2: "SUCCESS", 3: "ERROR"}
 
 
 class ResourceVersion(Document):
@@ -218,25 +219,26 @@ class ResourceVersion(Document):
         :param resource The resource for which this defines the state
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
+        :param status The deploy status of the resource
+        :param status_result The result of the deploy
     """
     environment = ReferenceField(Environment, required=True)
     rid = StringField(required=True, unique_with="environment")
     resource = ReferenceField(Resource, required=True)
     model = ReferenceField("ConfigurationModel", required=True)
     attributes = MapField(DynamicField())
-    state = StringField(choices=STATES, default="stored")
+    status = IntField(choices=RELEASE_STATUS, default=0)
+    status_result = IntField(choices=STATUS_RESULT, default=0)
 
     def to_dict(self):
         data = {}
         data["fields"] = {key: value for key, value in self.attributes.items()}
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
-        data["state"] = self.state
+        data["state"] = RELEASE_STATUS[self.status] if self.status in RELEASE_STATUS else 0
+        data["result"] = STATUS_RESULT[self.status_result] if self.status_result in STATUS_RESULT else 0
 
         return data
-
-
-RELEASE_STATUS = {0: "AVAILABLE", 1: "DRYRUN", 2: "DEPLOY"}
 
 
 class ConfigurationModel(Document):
@@ -251,10 +253,15 @@ class ConfigurationModel(Document):
     environment = ReferenceField(Environment)
     date = DateTimeField()
     release_status = IntField(choices=RELEASE_STATUS, default=0)
+    status_result = IntField(choices=STATUS_RESULT, default=0)
 
     def to_dict(self):
-        return {"version": self.version, "environment": str(self.environment.id), "date": self.date.isoformat(),
-                "release_status": RELEASE_STATUS[self.release_status] if self.release_status in RELEASE_STATUS else 0}
+        return {"version": self.version,
+                "environment": str(self.environment.id),
+                "date": self.date.isoformat(),
+                "release_status": RELEASE_STATUS[self.release_status] if self.release_status in RELEASE_STATUS else 0,
+                "status_result": STATUS_RESULT[self.status_result] if self.status_result in STATUS_RESULT else 0,
+                }
 
 
 class Code(Document):

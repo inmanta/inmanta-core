@@ -511,7 +511,32 @@ class Server(protocol.ServerEndpoint):
             version = data.ConfigurationModel.objects().get(version=id)  # @UndefinedVariable
             resources = data.ResourceVersion.objects(model=version)  # @UndefinedVariable
 
-            return 200, {"model": version.to_dict(), "resources": [x.to_dict() for x in resources]}
+            d = {"model": version.to_dict()}
+
+            resource_list = []
+            states = defaultdict(lambda: 0)
+            release_status = d["model"]["release_status"]
+
+            for x in resources:
+                x = x.to_dict()
+                resource_list.append(x)
+
+                status = x["state"]
+                if status == release_status and x["result"] == "ERROR":
+                    states["ERROR"] += 1
+                else:
+                    states[status] += 1
+
+            states["TOTAL"] = len(resource_list)
+            d["resources"] = resource_list
+            d["progress"] = states
+
+            if release_status in states and states[release_status] == states["TOTAL"]:
+                d["progress"]["done"] = True
+            else:
+                d["progress"]["done"] = False
+
+            return 200, d
         except errors.DoesNotExist:
             return 404, {"message": "The given configuration model does not exist yet."}
 
@@ -662,16 +687,26 @@ class Server(protocol.ServerEndpoint):
         ra.save()
 
         # update the state of the resource
+        new_status = -1
         if action == "dryrun":
-            if resv.state == "deploy":
-                LOGGER.error("Trying to set state to dryrun when state is already deployed!")
-            else:
-                resv.state = "dryrun"
-                resv.save()
+            new_status = 1
 
         elif action == "deploy":
-            resv.state = "deployed"
-            resv.save()
+            new_status = 2
+
+        if new_status >= 0:
+            if resv.status > new_status:
+                LOGGER.error("Trying to set status to %s when status is already %s!", data.RELEASE_STATUS[new_status],
+                             data.RELEASE_STATUS[resv.status])
+
+            else:
+                resv.status = new_status
+                if level == "INFO":
+                    resv.status_result = 2
+                elif level == "ERROR":
+                    resv.status_result = 3
+
+                resv.save()
 
         return 200
 
