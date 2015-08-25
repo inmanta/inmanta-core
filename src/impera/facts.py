@@ -39,7 +39,7 @@ def get_fact(res, fact_name: str, default_value=None) -> "any":
 
     else:
         try:
-            client = protocol.Client("facts", "client")
+            client = protocol.Client("compiler", "client")
 
             result = client.get_param(tid=Config.get("config", "environment"), id=fact_name, resource_id=resource_id)
 
