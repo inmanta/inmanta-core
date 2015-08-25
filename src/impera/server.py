@@ -670,7 +670,7 @@ class Server(protocol.ServerEndpoint):
                 resv.save()
 
         elif action == "deploy":
-            resv.state = "depoyed"
+            resv.state = "deployed"
             resv.save()
 
         return 200
