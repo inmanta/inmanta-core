@@ -89,19 +89,19 @@ def export_parser_config(parser):
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
 def export(options):
-    from impera.export import Exporter
-    result = do_compile()
-    if result is None:
-        return
-
     if options.environment is not None:
         Config.set("config", "environment", options.environment)
 
     if options.server is not None:
-        Config.set("server_rest_transport", "host", options.server)
+        Config.set("compiler_rest_transport", "host", options.server)
 
     if options.server is not None:
-        Config.set("server_rest_transport", "port", options.port)
+        Config.set("compiler_rest_transport", "port", options.port)
+
+    from impera.export import Exporter
+    result = do_compile()
+    if result is None:
+        return
 
     export = Exporter(options)
     export.run(result)
