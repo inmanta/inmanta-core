@@ -684,7 +684,7 @@ class Server(protocol.ServerEndpoint):
                              id, tid, data.RELEASE_STATUS[new_status], data.RELEASE_STATUS[resv.status])
 
             elif resv.status == new_status:
-                LOGGER.error("%s in env %s already has status %s", id, tid, data.RELEASE_STATUS[new_status])
+                LOGGER.info("%s in env %s already has status %s", id, tid, data.RELEASE_STATUS[new_status])
 
             else:
                 model = resv.model
