@@ -522,19 +522,16 @@ class Server(protocol.ServerEndpoint):
                 resource_list.append(x)
 
                 status = x["state"]
-                if status == release_status and x["result"] == "ERROR":
-                    states["ERROR"] += 1
+                if status == release_status:
+                    if x["result"] == "ERROR":
+                        states["ERROR"] += 1
+                    states["DONE"] += 1
                 else:
                     states[status] += 1
 
             states["TOTAL"] = len(resource_list)
             d["resources"] = resource_list
             d["progress"] = states
-
-            if release_status in states and states[release_status] == states["TOTAL"]:
-                d["progress"]["DONE"] = True
-            else:
-                d["progress"]["DONE"] = False
 
             return 200, d
         except errors.DoesNotExist:
