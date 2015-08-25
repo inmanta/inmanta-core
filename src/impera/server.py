@@ -514,20 +514,20 @@ class Server(protocol.ServerEndpoint):
             d = {"model": version.to_dict()}
 
             resource_list = []
-            states = defaultdict(lambda: 0)
+            states = {"ERROR": 0, "DONE": 0, "WAITING": 0}
             release_status = d["model"]["release_status"]
 
             for x in resources:
                 x = x.to_dict()
                 resource_list.append(x)
 
-                status = x["state"]
-                if status == release_status:
+                if x["state"] == release_status:
                     if x["result"] == "ERROR":
                         states["ERROR"] += 1
-                    states["DONE"] += 1
+                    else:
+                        states["DONE"] += 1
                 else:
-                    states[status] += 1
+                    states["WAITING"] += 1
 
             states["TOTAL"] = len(resource_list)
             d["resources"] = resource_list
