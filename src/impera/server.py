@@ -680,8 +680,11 @@ class Server(protocol.ServerEndpoint):
 
         if new_status >= 0:
             if resv.status > new_status:
-                LOGGER.error("Trying to set status to %s when status is already %s!", data.RELEASE_STATUS[new_status],
-                             data.RELEASE_STATUS[resv.status])
+                LOGGER.error("Trying to set status of %s in env %s to %s when status is already %s!",
+                             id, tid, data.RELEASE_STATUS[new_status], data.RELEASE_STATUS[resv.status])
+
+            elif resv.status == new_status:
+                LOGGER.error("%s in env %s already has status %s", id, tid, data.RELEASE_STATUS[new_status])
 
             else:
                 model = resv.model
