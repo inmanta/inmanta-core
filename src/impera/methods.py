@@ -313,7 +313,7 @@ class CMVersionMethod(Method):
             :param unknowns A list of unknown parameters that caused the model to be incomplete
         """
 
-    @protocol(operation="POST", mt=True, index=True)
+    @protocol(operation="POST", mt=True)
     def release_version(self, tid, id, dryrun, push):
         """
             Release version of the configuration model for deployment.
