@@ -77,6 +77,8 @@ class Server(protocol.ServerEndpoint):
         self._db_lock = RLock()
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
+        self.schedule(self._purge_versions, int(Config.get("server", "purge-versions-interval", 3600)))
+        self._purge_versions()
 
         self._requests = defaultdict(dict)
         self._recompiles = defaultdict(lambda: None)
@@ -86,6 +88,21 @@ class Server(protocol.ServerEndpoint):
             Check if the ssh key(s) credentials of this server are configured properly
         """
         # TODO
+
+    def _purge_versions(self):
+        """
+            Purge versions from the database
+        """
+        envs = data.Environment.objects()  # @UndefinedVariable
+        for env in envs:
+            # get available versions
+            n_versions = int(Config.get("server", "available-versions-to-keep", 2))
+            versions = data.ConfigurationModel.objects(release_status=0, environment=env)  # @UndefinedVariable
+            if len(versions) > n_versions:
+                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env.id)
+                versions = versions.order_by("-date")[n_versions:]
+                for v in versions:
+                    v.delete()
 
     def check_storage(self):
         """

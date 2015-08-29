@@ -240,6 +240,10 @@ class ResourceVersion(Document):
 
         return data
 
+    def delete(self):
+        ResourceAction.objects(resource_version=self).delete()
+        Document.delete(self)
+
 
 class ConfigurationModel(Document):
     """
@@ -264,6 +268,10 @@ class ConfigurationModel(Document):
                 "status_result": STATUS_RESULT[self.status_result] if self.status_result in STATUS_RESULT else 0,
                 "progress": self.progress
                 }
+
+    def delete(self):
+        ResourceVersion.objects(model=self).delete()
+        Document.delete(self)
 
 
 class Code(Document):
