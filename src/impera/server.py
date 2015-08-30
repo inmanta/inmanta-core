@@ -27,6 +27,7 @@ import threading
 import sys
 from collections import defaultdict
 import uuid
+import json
 
 from mongoengine import connect, errors
 from impera import methods
@@ -358,30 +359,30 @@ class Server(protocol.ServerEndpoint):
         return 200, {"files": response}
 
     @protocol.handle(methods.FileDiff.diff)
-    def file_diff(self, operation, body):
+    def file_diff(self, a, b):
         """
             Diff the two files identified with the two hashes
         """
-        if body["a"] == "" or body["a"] == 0:
+        if a == "" or a == 0:
             a_lines = []
         else:
-            a_path = os.path.join(self._server_storage["files"], body["a"])
+            a_path = os.path.join(self._server_storage["files"], a)
             with open(a_path, "r") as fd:
                 a_lines = fd.readlines()
 
-        if body["b"] == "" or body["b"] == 0:
+        if b == "" or b == 0:
             b_lines = []
         else:
-            b_path = os.path.join(self._server_storage["files"], body["b"])
+            b_path = os.path.join(self._server_storage["files"], b)
             with open(b_path, "r") as fd:
                 b_lines = fd.readlines()
 
         try:
-            diff = difflib.unified_diff(a_lines, b_lines, fromfile=body["a"], tofile=body["b"])
+            diff = difflib.unified_diff(a_lines, b_lines, fromfile=a, tofile=b)
         except FileNotFoundError:
             return 404
 
-        return 200, "".join(diff)
+        return 200, {"diff": list(diff)}
 
     @protocol.handle(methods.HeartBeatMethod.heartbeat)
     def heartbeat(self, endpoint_names, nodename, role, interval, environment):
@@ -703,6 +704,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
         resv = resv[0]
+        extra_data = json.dumps(extra_data)
         ra = data.ResourceAction(resource_version=resv, action=action, message=message, data=extra_data, level=level,
                                  timestamp=datetime.datetime.now())
 
@@ -962,3 +964,4 @@ class Server(protocol.ServerEndpoint):
         log_out, log_err = proc.communicate()
 
         self._recompiles[environment_id] = datetime.datetime.now()
+

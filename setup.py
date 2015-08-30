@@ -35,6 +35,7 @@ setup(
 
         'version-list = impera.client:VersionList',
         'version-release = impera.client:VersionRelease',
+        'version-report = impera.client:VersionReport',
 
         'agent-list = impera.client:AgentList',
 

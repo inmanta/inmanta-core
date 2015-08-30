@@ -16,9 +16,10 @@
     Contact: bart@impera.io
 """
 
+import json
+
 from mongoengine import Document
-from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DictField, \
-    DynamicField
+from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField
 from impera.resources import Id
 
 
@@ -195,14 +196,14 @@ class ResourceAction(Document):
     timestamp = DateTimeField(required=True)
     message = StringField()
     level = StringField(choices=LOGLEVEL, default="INFO")
-    data = DictField()
+    data = StringField()
 
     def to_dict(self):
         return {"action": self.action,
                 "timestamp": self.timestamp.isoformat(),
                 "message": self.message,
                 "level": self.level,
-                "data": self.data,
+                "data": json.loads(self.data) if self.data is not None else None,
                 }
 
 

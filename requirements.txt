@@ -10,3 +10,4 @@ sphinx-argparse
 sphinx
 cliff
 mongoengine
+blessings

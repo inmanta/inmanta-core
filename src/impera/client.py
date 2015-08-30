@@ -26,6 +26,8 @@ from cliff.lister import Lister
 from cliff.show import ShowOne
 from cliff.command import Command
 from impera.config import Config
+from _collections import defaultdict
+from blessings import Terminal
 
 LOGGER = logging.getLogger(__name__)
 
@@ -602,3 +604,90 @@ class ParamGet(ShowOne):
         else:
             print("Failed to get parameter: " + result.result["message"], file=self.app.stderr)
             return ((), ())
+
+
+class VersionReport(Command):
+    """
+        Create a dryrun or deploy report from a version
+    """
+    log = logging.getLogger(__name__)
+
+    def get_parser(self, prog_name):
+        parser = super(VersionReport, self).get_parser(prog_name)
+        client_parser(parser)
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
+        parser.add_argument("-i", "--version", dest="version", help="The version to create a report from")
+        parser.add_argument("-l", dest="details", action="store_true", help="Show a detailed version of the report")
+        parser.add_argument("release", help="Create the report from a dryrun or deploy")
+        return parser
+
+    def take_action(self, parsed_args):
+        Config.load_config()
+        Config.set("cmdline_rest_transport", "host", parsed_args.host)
+        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
+        client = protocol.Client("cmdline", "client")
+
+        if parsed_args.env is None:
+            print("The environment is a required argument.", file=self.app.stderr)
+            return ((), ())
+
+        if parsed_args.version is None:
+            print("The version is a required argument.", file=self.app.stderr)
+            return ((), ())
+
+        if parsed_args.release != "deploy" and parsed_args.release != "dryrun":
+            print("Only deploy or dryrun reports can be created.", file=self.app.stderr)
+            return
+
+        result = client.get_version(tid=parsed_args.env, id=parsed_args.version, include_logs=True,
+                                    log_filter=parsed_args.release)
+
+        if result.code == 200:
+            term = Terminal()
+            agents = defaultdict(lambda: defaultdict(lambda: []))
+            for res in result.result["resources"]:
+                if (len(res["actions"]) > 0 and len(res["actions"][0]["data"]) > 0) or parsed_args.details:
+                    agents[res["id_fields"]["agent_name"]][res["id_fields"]["entity_type"]].append(res)
+
+            for agent in sorted(agents.keys()):
+                print(term.bold("Agent: %s" % agent))
+                print("=" * 72)
+
+                for type in sorted(agents[agent].keys()):
+                    print("{t.bold}Resource type:{t.normal} {type} ({attr})".
+                          format(type=type, attr=agents[agent][type][0]["id_fields"]["attribute"], t=term))
+                    print("-" * 72)
+
+                    for res in agents[agent][type]:
+                        print((term.bold + "%s" + term.normal + " (state=%s, last_result=%s, #actions=%d)") %
+                              (res["id_fields"]["attribute_value"], res["state"], res["result"], len(res["actions"])))
+                        # for dryrun show only the latest, for deploy all
+                        if parsed_args.release == "dryrun":
+                            if len(res["actions"]) > 0:
+                                action = res["actions"][0]
+                                print("* last check: %s" % action["timestamp"])
+                                print("* result: %s" % ("error" if action["level"] != "INFO" else "success"))
+                                if len(action["data"]) == 0:
+                                    print("* no changes")
+                                else:
+                                    print("* changes:")
+                                    for field in sorted(action["data"].keys()):
+                                        values = action["data"][field]
+                                        if field == "hash":
+                                            print("  - content:")
+                                            diff_value = client.diff(values[0], values[1]).result
+                                            print("    " + "    ".join(diff_value["diff"]))
+                                        else:
+                                            print("  - %s:" % field)
+                                            print("    " + term.bold + "from:" + term.bold + " %s" % values[0])
+                                            print("    " + term.bold + "to:" + term.bold + " %s" % values[1])
+
+                                        print("")
+
+                                print("")
+                        else:
+                            pass
+
+                    print("")
+        else:
+            print("Failed to get a report for configuration model version: " + result.result["message"], file=self.app.stderr)
