@@ -679,8 +679,8 @@ class VersionReport(Command):
                                             print("    " + "    ".join(diff_value["diff"]))
                                         else:
                                             print("  - %s:" % field)
-                                            print("    " + term.bold + "from:" + term.bold + " %s" % values[0])
-                                            print("    " + term.bold + "to:" + term.bold + " %s" % values[1])
+                                            print("    " + term.bold + "from:" + term.normal + " %s" % values[0])
+                                            print("    " + term.bold + "to:" + term.normal + " %s" % values[1])
 
                                         print("")
 
