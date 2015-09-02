@@ -168,7 +168,7 @@ class Resource(Document):
         :param attribute_value The value of the identifying attribute
     """
     environment = ReferenceField(Environment)
-    resource_id = StringField(required=True, unique_with="agent")
+    resource_id = StringField(required=True, unique_with=["agent", "enviroment"])
 
     resource_type = StringField(required=True)
     agent = StringField(required=True)
