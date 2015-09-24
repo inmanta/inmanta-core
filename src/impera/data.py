@@ -168,7 +168,7 @@ class Resource(Document):
         :param attribute_value The value of the identifying attribute
     """
     environment = ReferenceField(Environment)
-    resource_id = StringField(required=True, unique_with=["agent", "environment"])
+    resource_id = StringField(required=True, unique_with="environment")
 
     resource_type = StringField(required=True)
     agent = StringField(required=True)
@@ -227,13 +227,14 @@ class ResourceVersion(Document):
     rid = StringField(required=True, unique_with="environment")
     resource = ReferenceField(Resource, required=True)
     model = ReferenceField("ConfigurationModel", required=True)
-    attributes = MapField(DynamicField())
+    attributes = MapField(StringField())
     status = IntField(choices=RELEASE_STATUS, default=0)
     status_result = IntField(choices=STATUS_RESULT, default=0)
 
     def to_dict(self):
         data = {}
-        data["fields"] = {key: value for key, value in self.attributes.items()}
+        data["fields"] = {key.replace("\uff0e", ".").replace("\uff04", "$"): json.loads(value)
+                          for key, value in self.attributes.items()}
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
         data["state"] = RELEASE_STATUS[self.status] if self.status in RELEASE_STATUS else 0

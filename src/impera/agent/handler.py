@@ -146,7 +146,7 @@ class ResourceHandler(object):
 #             LOGGER.warning("Handler not available for resource %s with messsage: %s" % (resource, e.message))
 #             status = "unavailable"
 
-        except Exception:
+        except Exception as e:
             LOGGER.exception("An error occurred during deployment of %s" % resource.id)
             status = "failed"
 

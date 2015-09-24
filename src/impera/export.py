@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import time
+import glob
 
 from impera import protocol
 from impera.agent.handler import Commander
@@ -30,6 +31,7 @@ from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project
+from impera.agent import Agent
 
 LOGGER = logging.getLogger(__name__)
 
@@ -188,6 +190,56 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
+    def _get_unkown_policy(self, agent_name):
+        """
+            Determine the unknown handling policy for the given agent
+        """
+        default_policy = Config.get("unknown_handler", "default", "prune-agent")
+
+        if "unknown_handler" not in Config._get_instance():
+            return default_policy
+
+        for agent_pattern, policy in Config._get_instance()["unknown_handler"].items():
+            if agent_pattern == "default":
+                continue
+
+            if glob.fnmatch.fnmatchcase(agent_name, agent_pattern):
+                return policy
+
+        return default_policy
+
+    def _filter_unknowns(self):
+        """
+            Filter unknown resources from the configuration model
+        """
+        pruned_all = set()
+        pruned_resources = set()
+        for res_id in list(self._resources.keys()):
+            res = self._resources[res_id]
+            host = self._resource_to_host[res_id]
+            policy = self._get_unkown_policy(host)
+            if host in self._unknown_hosts and policy == "prune-agent":
+                del self._resources[res_id]
+                pruned_all.add(host)
+
+            elif len(res.unknowns) > 0 and policy == "prune-resource":
+                # will not happen in current code, resource is never added to the model
+                del self._resources[res_id]
+                pruned_resources.add(host)
+
+        if len(self._unknown_hosts) > 0:
+            LOGGER.info("The configuration of the following hosts is not exported due to unknown " +
+                        "configuration parameters (prune-agent policy):")
+            hosts = sorted(list(pruned_all))
+            for host in hosts:
+                LOGGER.info(" - %s" % host)
+
+            LOGGER.info("Some resources of the following hosts is not exported due to unknown " +
+                        "configuration parameters (prune-resource policy):")
+            hosts = sorted(list(pruned_resources))
+            for host in hosts:
+                LOGGER.info(" - %s" % host)
+
     def run(self, scope, offline=False):
         """
         Run the export functions
@@ -207,17 +259,7 @@ class Exporter(object):
         self._call_dep_manager(scope)
 
         # filter out any resource that belong to hosts that have unknown values
-        for res_id in list(self._resources.keys()):
-            host = self._resource_to_host[res_id]
-            if host in self._unknown_hosts:
-                del self._resources[res_id]
-
-        if len(self._unknown_hosts) > 0:
-            LOGGER.info(
-                "The configuration of the following hosts is not exported due to unknown configuration parameters:")
-            hosts = sorted(list(self._unknown_hosts))
-            for host in hosts:
-                LOGGER.info(" - %s" % host)
+        self._filter_unknowns()
 
         # validate the dependency graph
         self._validate_graph()
@@ -275,15 +317,9 @@ class Exporter(object):
                 self._unknown_objects.add(Exporter.get_id(value.source))
 
             self._unknown_per_host[resource.id.agent_name].add(str(resource.id))
-            LOGGER.debug("Host %s has unknown values (in resource %s), discarding resources for this host" %
-                         (resource.id.agent_name, resource.id))
-            return
-
-        if resource.id.agent_name in self._unknown_hosts:
-            return
+            LOGGER.debug("Host %s has unknown values (in resource %s)" % (resource.id.agent_name, resource.id))
 
         resource.set_version(self._version)
-
         self._resources[resource.id] = resource
         self._resource_to_host[resource.id] = resource.id.agent_name
 
@@ -319,7 +355,7 @@ class Exporter(object):
             res = conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
 
             if res is None or res.code != 200:
-                raise Exception("Unable to upload handler plugin code to the server")
+                raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
         else:
             LOGGER.info("Offline mode, so not sending configuration to the server")

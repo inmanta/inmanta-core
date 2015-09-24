@@ -28,6 +28,7 @@ import sys
 from collections import defaultdict
 import uuid
 import json
+import glob
 
 from mongoengine import connect, errors
 from impera import methods
@@ -83,6 +84,8 @@ class Server(protocol.ServerEndpoint):
 
         self._requests = defaultdict(dict)
         self._recompiles = defaultdict(lambda: None)
+
+        self._requires_agents = {}
 
     def check_keys(self):
         """
@@ -148,6 +151,11 @@ class Server(protocol.ServerEndpoint):
         dir_map["environments"] = environments_dir
         if not os.path.exists(environments_dir):
             os.mkdir(environments_dir)
+
+        env_agent_dir = os.path.join(server_state_dir, "agents")
+        dir_map["agents"] = env_agent_dir
+        if not os.path.exists(env_agent_dir):
+            os.mkdir(env_agent_dir)
 
         return dir_map
 
@@ -248,6 +256,7 @@ class Server(protocol.ServerEndpoint):
                 if len(rvs) == 0:
                     return 404, {"message": "The parameter does not exist."}
 
+                self._ensure_agent(tid, resource.agent)
                 self.queue_request(tid, resource.agent, {"method": "fact", "resource_id": resource_id, "environment": tid,
                                                          "name": id, "resource": rvs[0].to_dict()})
 
@@ -600,7 +609,7 @@ class Server(protocol.ServerEndpoint):
             attributes = {}
             for field, value in res_dict.items():
                 if field != "id":
-                    attributes[field] = value
+                    attributes[field.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(value)
 
             rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=resource, model=cm, attributes=attributes)
             rv.save()
@@ -616,6 +625,70 @@ class Server(protocol.ServerEndpoint):
         LOGGER.debug("Successfully stored version %d" % version)
 
         return 200
+
+    def _agent_matches(self, agent_name):
+        agent_globs = [x.strip() for x in Config.get("server", "agent_autostart", "iaas_*").split(",")]
+
+        for agent_glob in agent_globs:
+            if glob.fnmatch.fnmatchcase(agent_name, agent_glob):
+                return True
+
+        return False
+
+    def _ensure_agent(self, environment_id, agent_name):
+        """
+            Ensure that the agent is running if required
+        """
+        if self._agent_matches(agent_name):
+            LOGGER.debug("%s matches agents managed by server, ensuring it is started.", agent_name)
+            agent_data = None
+            if environment_id in self._requires_agents:
+                agent_data = self._requires_agents[environment_id]
+
+                if agent_name in agent_data["agents"]:
+                    return
+
+            if agent_data is None:
+                agent_data = {"agents": set(), "process": None}
+                self._requires_agents[environment_id] = agent_data
+
+            agent_data["agents"].add(agent_name)
+
+            agent_names = ",".join(agent_data["agents"])
+
+            # generate config file
+            config = """[config]
+heartbeat-interval = 60
+state-dir=/var/lib/impera
+
+agent-names = %(agents)s
+environment=%(env_id)s
+agent-map=%(agent_map)s
+
+[agent_rest_transport]
+port = 8888
+host = localhost
+""" % {"agents": agent_names, "env_id": environment_id, "agent_map":
+                ",".join(["%s=localhost" % x for x in agent_data["agents"]])}
+
+            config_dir = os.path.join(self._server_storage["agents"], environment_id)
+            if not os.path.exists(config_dir):
+                os.mkdir(config_dir)
+
+            config_path = os.path.join(config_dir, "agent.cfg")
+            with open(config_path, "w+") as fd:
+                fd.write(config)
+
+            proc = self._fork_impera(["-vvv", "-c", config_path, "agent"])
+
+            if agent_data["process"] is not None:
+                LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
+                agent_data["process"].terminate()
+
+            threading.Thread(target=proc.communicate).start()
+            agent_data["process"] = proc
+
+            LOGGER.debug("Started new agent with PID %s", proc.pid)
 
     @protocol.handle(methods.CMVersionMethod.release_version)
     def release_version(self, tid, id, dryrun, push):
@@ -659,6 +732,7 @@ class Server(protocol.ServerEndpoint):
                 agents.add(rv.resource.agent)
 
             for agent in agents:
+                self._ensure_agent(tid, agent)
                 self.queue_request(tid, agent, {"method": "version", "version": id, "environment": tid})
 
         return 200, model.to_dict()
@@ -901,6 +975,16 @@ class Server(protocol.ServerEndpoint):
 
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
+
+    def _fork_impera(self, args, cwd=None):
+        """
+            For an impera process from the same code base as the current code
+        """
+        impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
+        proc = subprocess.Popen(impera_path + args, cwd=cwd, env=os.environ.copy(),
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        return proc
 
     def _recompile_environment(self, environment_id, update_repo=False):
         """

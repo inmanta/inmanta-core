@@ -135,7 +135,7 @@ class Environment(Method):
         """
             Modify the given environment
 
-            :param id The id of the project this environment belongs to
+            :param id The id of the environment
             :param name The name of the environment
             :param repository The url (in git form) of the repository
             :param branch The name of the branch in the repository
