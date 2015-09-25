@@ -234,7 +234,7 @@ class ResourceVersion(Document):
     def to_dict(self):
         data = {}
         data["fields"] = {key.replace("\uff0e", ".").replace("\uff04", "$"): json.loads(value)
-                          for key, value in self.attributes.items()}
+                          for key, value in self.attributes.items() if isinstance(value, str)}
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
         data["state"] = RELEASE_STATUS[self.status] if self.status in RELEASE_STATUS else 0
