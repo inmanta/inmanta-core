@@ -42,6 +42,10 @@ class provider(object):
         return function
 
 
+class SkipResource(Exception):
+    pass
+
+
 class ResourceHandler(object):
     """
         A baseclass for classes that handle resource on a platform
@@ -146,9 +150,15 @@ class ResourceHandler(object):
 #             LOGGER.warning("Handler not available for resource %s with messsage: %s" % (resource, e.message))
 #             status = "unavailable"
 
+        except SkipResource as e:
+            status = "skipped"
+            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
+            changes = e.args
+
         except Exception as e:
             LOGGER.exception("An error occurred during deployment of %s" % resource.id)
             status = "failed"
+            changes = e.args
 
         finally:
             self._agent.resource_updated(resource, reload_requires=changed, changes=changes, status=status)

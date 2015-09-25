@@ -31,7 +31,6 @@ from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project
-from impera.agent import Agent
 
 LOGGER = logging.getLogger(__name__)
 
@@ -265,8 +264,10 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
+
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
+
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(json.dumps(resources).encode("utf-8"))
@@ -400,7 +401,7 @@ class Exporter(object):
         LOGGER.info("Sending resource updates to server")
         for res in resources:
             LOGGER.debug("  %s", res["id"])
-
+        
         res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters)
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates")
