@@ -959,7 +959,7 @@ host = localhost
             Recompile an environment in a different thread and taking wait time into account.
         """
         last_recompile = self._recompiles[environment_id]
-        wait_time = Config.get("server", "auto-recompile-wait", 600)
+        wait_time = int(Config.get("server", "auto-recompile-wait", 600))
         if last_recompile is self:
             LOGGER.info("Already recompiling")
             return

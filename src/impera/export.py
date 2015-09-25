@@ -401,7 +401,7 @@ class Exporter(object):
         LOGGER.info("Sending resource updates to server")
         for res in resources:
             LOGGER.debug("  %s", res["id"])
-        
+
         res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters)
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates")
