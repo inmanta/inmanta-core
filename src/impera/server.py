@@ -985,6 +985,14 @@ host = localhost
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         return proc
+    
+    def _runCompileStage(self,name,cmd,cwd, **kwargs):
+        start = datetime.datetime.now()
+        proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE,
+                                    stdout=subprocess.PIPE,**kwargs)
+        log_out, log_err = proc.communicate()
+        stop =  datetime.datetime.now()
+        return data.Report(started=start,completed=stop,name=name,command = repr(cmd),errstream = log_err, outstream=log_out)
 
     def _recompile_environment(self, environment_id, update_repo=False):
         """
@@ -994,13 +1002,15 @@ host = localhost
         """
         impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
         project_dir = os.path.join(self._server_storage["environments"], environment_id)
-
+        requested = datetime.datetime.now()
+        stages = []
+        
         try:
             env = data.Environment.objects().get(id=environment_id)  # @UndefinedVariable
         except errors.DoesNotExist:
             LOGGER.error("Environment %s does not exist.", environment_id)
             return
-
+        
         if not os.path.exists(project_dir):
             LOGGER.info("Creating project directory for environment %s at %s", environment_id, project_dir)
             os.mkdir(project_dir)
@@ -1008,44 +1018,38 @@ host = localhost
         # checkout repo
         if not os.path.exists(os.path.join(project_dir, ".git")):
             LOGGER.info("Cloning repository into environment directory %s", project_dir)
-            proc = subprocess.Popen(["git", "clone", env.repo_url, "."], cwd=project_dir, stderr=subprocess.PIPE,
-                                    stdout=subprocess.PIPE)
-            log_out, log_err = proc.communicate()
+            stages.append(self._runCompileStage("Cloning repository",["git", "clone", env.repo_url, "."], project_dir))
+            
+            
 
         elif update_repo:
             LOGGER.info("Fetching changes from repo %s", env.repo_url)
-            proc = subprocess.Popen(["git", "fetch", env.repo_url], cwd=project_dir, stderr=subprocess.PIPE,
-                                    stdout=subprocess.PIPE)
-            log_out, log_err = proc.communicate()
-
+            stages.append(self._runCompileStage("Fetching changes",["git", "fetch", env.repo_url], project_dir))
+ 
         # verify if branch is correct
         proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out, _ = proc.communicate()
-
+ 
         o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
         branch_name = o.group(1)
-
+ 
         if env.repo_branch != branch_name:
             LOGGER.info("Repository is at %s branch, switching to %s", branch_name, env.repo_branch)
-            proc = subprocess.Popen(["git", "checkout", env.repo_branch], cwd=project_dir, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            log_out, log_err = proc.communicate()
+            stages.append(self._runCompileStage("switching branch",["git", "checkout", env.repo_branch], project_dir))
 
-        proc = subprocess.Popen(["git", "pull"], cwd=project_dir, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        log_out, log_err = proc.communicate()
-
+ 
+        stages.append(self._runCompileStage("Pulling updates",["git", "pull"], project_dir))
+# 
         LOGGER.info("Installing and updating modules")
-        log_out, log_err = subprocess.Popen(impera_path + ["modules", "install"], cwd=project_dir, env=os.environ.copy(),
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        log_out, log_err = subprocess.Popen(impera_path + ["modules", "update"], cwd=project_dir, env=os.environ.copy(),
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-
+        stages.append(self._runCompileStage("Installing modules",impera_path + ["modules", "install"], project_dir))
+        #LOGGER.info("process says: %s %s", log_out,log_err)
+        stages.append(self._runCompileStage("Updating modules",impera_path + ["modules", "update"], project_dir, env=os.environ.copy()))
+ 
         LOGGER.info("Recompiling configuration model")
-        proc = subprocess.Popen(impera_path + ["-vvv", "export", "-e", environment_id, "--server_address", "localhost",
-                                "--server_port", "8888"], cwd=project_dir, env=os.environ.copy(), stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        log_out, log_err = proc.communicate()
+        stages.append(self._runCompileStage("Recompiling configuration model",impera_path + ["-vvv", "export", "-e", environment_id, "--server_address", "localhost",
+                                "--server_port", "8888"], project_dir, env=os.environ.copy()))
 
-        self._recompiles[environment_id] = datetime.datetime.now()
+        end = datetime.datetime.now()
+        self._recompiles[environment_id] = end
+        data.Compile(environment=env,started=requested,completed=end,reports=stages).save()
 

@@ -19,8 +19,10 @@
 import json
 
 from mongoengine import Document
-from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField
+from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,\
+    EmbeddedDocumentField, EmbeddedDocumentListField
 from impera.resources import Id
+from mongoengine.document import EmbeddedDocument
 
 
 class Environment(Document):
@@ -153,7 +155,60 @@ class Agent(Document):
                 "environment": str(self.environment.id),
                 }
 
+class Report(EmbeddedDocument):
+    """
+        A report of a substep of compilation
 
+        :param started when the substep started
+        :param completed when it ended
+        :param command the command that was executed
+        :param name The name of this step
+        :param errstream what was reported on system err
+        :param outstream what was reported on system out
+    """
+    started = DateTimeField(required=True)
+    completed = DateTimeField(required=True)
+    command = StringField(required=True)
+    name = StringField(required=True)
+    errstream = StringField(required=True)
+    outstream = StringField(required=True)
+    
+
+    def to_dict(self):
+        return {"started": self.started.isoformat(),
+                "completed":self.completed.isoformat(),
+                "command": self.command,
+                "name": self.name,
+                "errstream": self.errstream,
+                "outstream": self.outstream
+                }
+        
+
+class Compile(Document):
+    """
+        A run of the compiler
+
+        :param environment The environment this resource is defined in
+        :param node The node on which this agent is deployed
+        :param resources A list of resources that this agent handles
+        :param name The name of this agent
+        :param role The role of this agent
+        :param last_seen When did the server receive data from the node for the last time.
+        :param interval The reporting interval of this agent
+    """
+    environment = ReferenceField(Environment)
+    started = DateTimeField()
+    completed = DateTimeField()
+    reports = EmbeddedDocumentListField(Report)
+    
+
+    def to_dict(self):
+        return {"environment": str(self.environment.id),
+                "started": self.started.isoformat(),
+                "completed":self.completed.isoformat(),
+                "reports": [v.to_dict() for v in self.reports],
+                }
+        
 class Resource(Document):
     """
         A resource that can be managed by an agent.
@@ -295,3 +350,4 @@ class Code(Document):
     version = StringField()
     sources = DynamicField()
     requires = DynamicField()
+
