@@ -189,12 +189,9 @@ class Compile(Document):
         A run of the compiler
 
         :param environment The environment this resource is defined in
-        :param node The node on which this agent is deployed
-        :param resources A list of resources that this agent handles
-        :param name The name of this agent
-        :param role The role of this agent
-        :param last_seen When did the server receive data from the node for the last time.
-        :param interval The reporting interval of this agent
+        :param started Time the compile started
+        :param completed Time to compile was completed 
+        :param reports Per stage reports
     """
     environment = ReferenceField(Environment)
     started = DateTimeField()
