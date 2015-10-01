@@ -39,6 +39,7 @@ from impera.config import Config
 from impera.loader import CodeLoader
 from impera.resources import Id
 import tornado
+import dateutil
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1039,7 +1040,6 @@ host = localhost
 
  
         stages.append(self._runCompileStage("Pulling updates",["git", "pull"], project_dir))
-# 
         LOGGER.info("Installing and updating modules")
         stages.append(self._runCompileStage("Installing modules",impera_path + ["modules", "install"], project_dir))
         #LOGGER.info("process says: %s %s", log_out,log_err)
@@ -1053,3 +1053,32 @@ host = localhost
         self._recompiles[environment_id] = end
         data.Compile(environment=env,started=requested,completed=end,reports=stages).save()
 
+
+    @protocol.handle(methods.CompileReport.get_reports)
+    def get_reports(self, environment=None, start=None, limit=None):
+        if (start is None and limit is not None) or (limit is None and start is not None):
+            return 500, {"message": "Start and limit should always be set together."}
+        
+        
+        queryparts = {}
+        
+        if environment is not None:
+            try:
+                env = data.Environment.objects().get(id=environment)  # @UndefinedVariable
+                queryparts["environment"]=env  
+            except errors.DoesNotExist:
+                return 404, {"message": "The given environment id does not exist!"}
+        
+        
+        if(start is not None):
+            queryparts["started__gt"]=dateutil.parser.parse(start)
+            
+        models = data.Compile.objects(**queryparts).order_by("-version")  # @UndefinedVariable
+        
+
+        if limit is not None:
+            models = models[:int(limit)]
+
+        d = {"reports": [m.to_dict() for m in models]}
+
+        return 200, d
