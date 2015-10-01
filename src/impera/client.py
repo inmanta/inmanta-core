@@ -419,7 +419,7 @@ class AgentList(Lister):
 
         if result.code == 200:
             data = []
-            for node in result.result:
+            for node in result.result["nodes"]:
                 for agent in node["agents"]:
                     data.append((node["hostname"], agent["name"], agent["role"], agent["environment"], node["last_seen"]))
 

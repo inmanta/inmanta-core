@@ -450,7 +450,7 @@ class Server(protocol.ServerEndpoint):
             if len(node_dict["agents"]) > 0:
                 response.append(node_dict)
 
-        return 200, response
+        return 200, {"nodes": response, "servertime": datetime.datetime.now().isoformat()}
 
     @protocol.handle(methods.ResourceMethod.get_resource)
     def get_resource_state(self, tid, id, logs):
