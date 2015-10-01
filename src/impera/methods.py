@@ -303,7 +303,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="DELETE", id=True, mt=True)
-    def delete_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
+    def delete_version(self, tid, id):
         """
             Delete a particular version and resources
 
