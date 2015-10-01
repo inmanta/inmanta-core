@@ -965,7 +965,10 @@ host = localhost
 
     @protocol.handle(methods.NotifyMethod.is_compiling)
     def is_compiling(self, id):
-        return 200, {"is_compiling": self._recompiles[id] is self}
+        if self._recompiles[id] is self:
+            return 200
+
+        return 404
 
     @protocol.handle(methods.NotifyMethod.notify_change)
     def notify_change(self, id):
