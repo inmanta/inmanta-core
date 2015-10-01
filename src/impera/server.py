@@ -443,7 +443,8 @@ class Server(protocol.ServerEndpoint):
         for node in data.Node.objects():  # @UndefinedVariable
             agents = data.Agent.objects(node=node)  # @UndefinedVariable
             node_dict = node.to_dict()
-            node_dict["agents"] = [{"environment": str(a.environment.id), "name": a.name, "role": a.role} for a in agents
+            node_dict["agents"] = [{"environment": str(a.environment.id), "name": a.name, "role": a.role,
+                                    "interval": a.interval} for a in agents
                                    if environment is None or str(a.environment.id) == environment]
 
             if len(node_dict["agents"]) > 0:
