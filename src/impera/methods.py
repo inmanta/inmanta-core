@@ -302,6 +302,15 @@ class CMVersionMethod(Method):
             :param limit The maximal number of actions to return per resource (starting from the latest)
         """
 
+    @protocol(operation="DELETE", id=True, mt=True)
+    def delete_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
+        """
+            Delete a particular version and resources
+
+            :param tid The id of the environment
+            :param id The id of the version to retrieve
+        """
+
     @protocol(operation="PUT", mt=True)
     def put_version(self, tid, version, resources, unknowns=None):
         """

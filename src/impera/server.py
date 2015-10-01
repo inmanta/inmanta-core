@@ -568,6 +568,21 @@ class Server(protocol.ServerEndpoint):
         except errors.DoesNotExist:
             return 404, {"message": "The given configuration model does not exist yet."}
 
+    @protocol.handle(methods.CMVersionMethod.delete_version)
+    def delete_version(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            version = data.ConfigurationModel.objects().get(version=id)  # @UndefinedVariable
+            version.delete()
+
+            return 200
+        except errors.DoesNotExist:
+            return 404, {"message": "The given configuration model does not exist yet."}
+
     @protocol.handle(methods.CMVersionMethod.put_version)
     def put_version(self, tid, version, resources, unknowns):
         try:
