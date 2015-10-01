@@ -348,6 +348,12 @@ class NotifyMethod(Method):
             :param id The id of the environment
         """
 
+    @protocol(operation="HEAD", id=True)
+    def is_compiling(self, id):
+        """
+           Is a compiler running for the given environment
+        """
+
 
 class ParameterMethod(Method):
     """

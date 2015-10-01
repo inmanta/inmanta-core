@@ -963,6 +963,10 @@ host = localhost
 
         return 200
 
+    @protocol.handle(methods.NotifyMethod.is_compiling)
+    def is_compiling(self, id):
+        return 200, {"is_compiling": self._recompiles[id] is self}
+
     @protocol.handle(methods.NotifyMethod.notify_change)
     def notify_change(self, id):
         LOGGER.info("Received change notification for environment %s", id)
