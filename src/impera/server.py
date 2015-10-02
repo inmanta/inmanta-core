@@ -446,6 +446,8 @@ class Server(protocol.ServerEndpoint):
 
         self.queue_request(tid, id, {"method": "version", "version": -1, "environment": tid})
 
+        return 200
+
     @protocol.handle(methods.NodeMethod.list_agents)
     def list_agent(self, environment):
         response = []
