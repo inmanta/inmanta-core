@@ -198,6 +198,10 @@ class ResourceAction(Document):
     level = StringField(choices=LOGLEVEL, default="INFO")
     data = StringField()
 
+    meta = {
+        'indexes': ['resource_version']
+    }
+
     def to_dict(self):
         return {"action": self.action,
                 "timestamp": self.timestamp.isoformat(),
