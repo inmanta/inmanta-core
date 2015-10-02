@@ -968,7 +968,7 @@ host = localhost
         if self._recompiles[id] is self:
             return 200
 
-        return 404
+        return 204
 
     @protocol.handle(methods.NotifyMethod.notify_change)
     def notify_change(self, id):
