@@ -438,6 +438,7 @@ class Agent(threading.Thread):
                     if "method" in item:
                         if item["method"] == "version":
                             self.get_latest_version_for_agent(agent)
+
                         elif item["method"] == "fact":
                             key = (item["environment"], item["resource_id"])
                             if key not in fact_requests:

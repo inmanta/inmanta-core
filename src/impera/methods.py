@@ -422,6 +422,16 @@ class NodeMethod(Method):
             :return The requested node
         """
 
+    @protocol(operation="POST", id=True, mt=True)
+    def trigger_agent(self, tid, id):
+        """
+            Request an agent to reload resources
+
+            :param tid The environment this agent is defined in
+            :param id The name of the agent
+            :return The requested node
+        """
+
 
 class CodeMethod(Method):
     """

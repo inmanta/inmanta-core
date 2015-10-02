@@ -437,6 +437,15 @@ class Server(protocol.ServerEndpoint):
         except errors.DoesNotExist:
             return 404
 
+    @protocol.handle(methods.NodeMethod.trigger_agent)
+    def trigger_agent(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        self.queue_request(tid, id, {"method": "version", "version": -1, "environment": tid})
+
     @protocol.handle(methods.NodeMethod.list_agents)
     def list_agent(self, environment):
         response = []
