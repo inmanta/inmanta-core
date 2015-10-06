@@ -67,12 +67,13 @@ def list_commands(options):
 
 def modules_parser_config(parser):
     parser.add_argument("cmd", help="The command to run")
+    parser.add_argument("-b", dest="branch", help="Override versions and pull from branch when possible")
 
 
 @command("modules", help_msg="A tool to manage configuration modules in a project", parser_config=modules_parser_config)
 def modules(options):
     tool = ModuleTool()
-    tool.execute(options.cmd, options.other)
+    tool.execute(options.cmd, [options.branch]+options.other)
 
 
 def export_parser_config(parser):

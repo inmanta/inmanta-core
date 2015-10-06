@@ -289,6 +289,17 @@ class Module(object):
         return None
 
     version = property(get_version)
+    
+    def get_branch(self):
+        """
+            Return the version of this module
+        """
+        if "branch" in self._meta:
+            return self._meta["branch"]
+
+        return None
+
+    branch = property(get_branch)
 
     def _force_http(self, source_string):
         """
@@ -571,6 +582,14 @@ class Module(object):
 
         # if version in versions:
         #    print(version)
+        
+    def checkout_branch(self, branch):
+        """
+            Checkout the given branch
+        """
+         
+        self._call(["git", "checkout", branch], self._path, "git checkout branch")
+        
 
     def versions(self):
         """
@@ -727,7 +746,7 @@ class ModuleTool(object):
         for mod in Project.get().sorted_modules():
             mod.update()
 
-    def _install(self, project, module_path, requires):
+    def _install(self, project, module_path, requires,branch=None):
         """
             Do a recursive install
         """
@@ -738,13 +757,16 @@ class ModuleTool(object):
                 new_mod = module.install(module_path)
 
                 new_mod.python_install()
-                new_mod.checkout_version(StrictVersion("0.1"))
+                if branch is not None:
+                    new_mod.checkout_branch(branch)
+                else:    
+                    new_mod.checkout_version(StrictVersion("0.1"))  
 
                 self._mod_handled_list.add(mod_path)
 
-                self._install(project, module_path, new_mod.requires())
+                self._install(project, module_path, new_mod.requires(),branch)
 
-    def install(self):
+    def install(self,branch=None):
         """
             Install all modules the project requires
         """
@@ -760,7 +782,7 @@ class ModuleTool(object):
             raise Exception("downloadpath is required in the project file to install modules.")
 
         module_path = project_data["downloadpath"]
-        self._install(project, module_path, project.requires())
+        self._install(project, module_path, project.requires(),branch)
 
         install_set = [os.path.realpath(path) for path in self._mod_handled_list]
         not_listed = []
