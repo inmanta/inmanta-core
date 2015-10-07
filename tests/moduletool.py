@@ -32,7 +32,7 @@ def createRepos():
     reporoot = os.path.join(tempdir,"repos")
     os.makedirs(reporoot)
     
-    mod1 = makemodule(reporoot,"mod1",[])
+    mod1 = makemodule(reporoot,"mod1",[("mod3","")])
     commitmodule(mod1,"first commit")
     goodIds["mod1"]=addFile(mod1, "signal","present","second commit")
     
