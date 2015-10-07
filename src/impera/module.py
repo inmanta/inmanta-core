@@ -99,8 +99,8 @@ class Project(object):
         self._freeze_versions = self._load_freeze(self.freeze_file)
 
         self.virtualenv = env.VirtualEnv(os.path.join(path, "env"))
-
-        self.modules = self.discover(self.modulepath)
+        self.reloadModules()
+        
 
     @classmethod
     def get_project_dir(cls, cur_dir):
@@ -135,20 +135,14 @@ class Project(object):
         if not os.path.exists(freeze_file):
             return {}
 
-        versions = {}
+        
         with open(freeze_file, "r") as fd:
-            for line in fd.readlines():
-                line = line.strip()
-                if line != "" or not line.startswith("#"):
-                    parts = line.split(" ")
-                    if len(parts) == 2:
-                        name, version = parts[0], StrictVersion(parts[1])
+            return yaml.load(fd)
 
-                        versions[name] = version
-                    else:
-                        print("Ignoring line, invalid format: %s" % line)
-
-        return versions
+    
+    def reloadModules(self):
+        self.modules = self.discover(self.modulepath)
+        
 
     def load_plugins(self) -> None:
         """
@@ -180,19 +174,32 @@ class Project(object):
         return modules
 
     def verify(self) -> None:
+       
+        
         # verify module dependencies
         result = True
         for module in self.modules.values():
             result &= module.verify_requires(self.modules)
 
             if module._meta["name"] in self._freeze_versions:
-                mod_version = StrictVersion(str(module._meta["version"]))
-                freeze_version = self._freeze_versions[module._meta["name"]]
+                versioninfo = self._freeze_versions[module._meta["name"]]
+                def shouldequal(one,field,thingname):
+                    if not field in versioninfo:
+                        return 
+                    other= versioninfo[field]
+                    if one != other:
+                        raise Exception("The installed %s (%s) of module %s, does not match the %s in the module file (%s)."
+                                    % (thingname,one,module._meta["name"],thingname,other)) 
 
-                if mod_version != freeze_version:
-                    raise Exception("The installed version %s of module %s, does not match the version in the module file %s."
-                                    % (mod_version, module._meta["name"], freeze_version))
-
+                
+                
+              
+                shouldequal(str(module._meta["version"]),"version","version")
+                shouldequal(str(module.get_scm_url()),"repo","repo url")
+                shouldequal(str(module.get_scm_version()),"hash","hash")
+                shouldequal(str(module.get_scm_branch()),"branch","branch")
+                
+                
         if not result:
             raise Exception("Not all module dependencies have been met.")
 
@@ -290,17 +297,6 @@ class Module(object):
 
     version = property(get_version)
     
-    def get_branch(self):
-        """
-            Return the version of this module
-        """
-        if "branch" in self._meta:
-            return self._meta["branch"]
-
-        return None
-
-    branch = property(get_branch)
-
     def _force_http(self, source_string):
         """
             Force the given string to http
@@ -574,6 +570,24 @@ class Module(object):
 
         return module
 
+    def get_scm_url(self):
+        try:
+            return subprocess.check_output(["git" ,"config","--get","remote.origin.url"], cwd=self._path).decode("utf-8") .strip()
+        except:
+            return None
+       
+    def get_scm_version(self):
+        try:
+            return subprocess.check_output(["git" ,"rev-parse","HEAD"], cwd=self._path).decode("utf-8") .strip()
+        except:
+            return None
+        
+    def get_scm_branch(self):
+        try:
+            return subprocess.check_output(["git" ,"rev-parse","--abbrev-ref","HEAD"], cwd=self._path).decode("utf-8") .strip()
+        except:
+            return None
+        
     def checkout_version(self, version: Version):
         """
             Checkout the given version
@@ -588,7 +602,7 @@ class Module(object):
             Checkout the given branch
         """
          
-        self._call(["git", "checkout", branch], self._path, "git checkout branch")
+        self._call(["git", "checkout", branch], self._path, "git checkout ")
         
 
     def versions(self):
@@ -746,7 +760,7 @@ class ModuleTool(object):
         for mod in Project.get().sorted_modules():
             mod.update()
 
-    def _install(self, project, module_path, requires,branch=None):
+    def _install(self, project, module_path, requires):
         """
             Do a recursive install
         """
@@ -757,14 +771,12 @@ class ModuleTool(object):
                 new_mod = module.install(module_path)
 
                 new_mod.python_install()
-                if branch is not None:
-                    new_mod.checkout_branch(branch)
-                else:    
-                    new_mod.checkout_version(StrictVersion("0.1"))  
-
+                
+                new_mod.checkout_branch(module.version)
+               
                 self._mod_handled_list.add(mod_path)
 
-                self._install(project, module_path, new_mod.requires(),branch)
+                self._install(project, module_path, new_mod.requires())
 
     def install(self,branch=None):
         """
@@ -782,7 +794,7 @@ class ModuleTool(object):
             raise Exception("downloadpath is required in the project file to install modules.")
 
         module_path = project_data["downloadpath"]
-        self._install(project, module_path, project.requires(),branch)
+        self._install(project, module_path, project.requires())
 
         install_set = [os.path.realpath(path) for path in self._mod_handled_list]
         not_listed = []
@@ -795,6 +807,7 @@ class ModuleTool(object):
                   "the dependencies of other modules:")
             for mod in not_listed:
                 print("\t%s (%s)" % (mod._meta["name"], mod._path))
+        project.reloadModules()
 
     def status(self):
         """
@@ -827,20 +840,28 @@ class ModuleTool(object):
 
                     break
 
-        file_content = ""
-
+        file_content = {}
+        
         for mod in Project.get().sorted_modules():
-            version = str(mod._meta["version"])
-            if "a" in version or "b" in version:
-                print("Cannot include an alpha (a) or beta (b) version in a freeze file because" +
-                      ("only exact git tags are allowed. Please create a version for module %s" % mod._meta["name"]) +
-                      " which now has version %s" % version)
-                return
-
-            file_content += "%s %s\n" % (mod._meta["name"], version)
+            version = str(mod.get_version())
+            modc = {'version':version}
+            
+            repo = mod.get_scm_url()
+            tag = mod.get_scm_version()
+            
+            if repo is not None:
+                modc["repo"]=repo
+                modc["hash"]=tag
+            
+            branch = mod.get_scm_branch()
+            
+            if branch is not None:
+                modc["branch"]=branch
+            
+            file_content[mod._meta["name"]] = modc
 
         with open(project.freeze_file, "w+") as fd:
-            fd.write(file_content)
+            fd.write(yaml.dump(file_content))
 
     def verify(self):
         """
