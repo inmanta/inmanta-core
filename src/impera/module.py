@@ -804,7 +804,7 @@ class ModuleTool(object):
         
         while len(worklist) != 0:
             work = worklist.pop(0)
-            print(work)
+            LOGGER.info("requesting install for: %s",work)
             worklist.extend(self._install(project, module_path, work))
 
         install_set = [os.path.realpath(path) for path in self._mod_handled_list]
