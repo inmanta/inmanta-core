@@ -23,7 +23,6 @@ import sys
 import colorlog
 from impera.command import command, Commander
 from impera.compiler import do_compile
-from impera import client
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
 from impera.stats import Stats
@@ -127,18 +126,6 @@ def deploy_parser_config(parser):
 def deploy(options):
     from impera.deploy import deploy
     deploy(agents_spec=options.agent, dry_run=options.dryrun, agent_map=options.map, list_agents=options.list_agents)
-
-
-def client_parser_config(parser):
-    parser.add_argument("cmd", help="The command to run")
-
-
-@command("client", help_msg="A client to send commands to Impera agents", parser_config=client_parser_config)
-def client(options):
-    from impera.client import Client
-
-    client = Client()
-    client.execute(options.cmd, options.other)
 
 log_levels = {
     0: logging.ERROR,

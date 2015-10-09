@@ -238,12 +238,14 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="GET", mt=True, index=True)
-    def get_resources_for_agent(self, tid, agent):
+    def get_resources_for_agent(self, tid, agent, version=None):
         """
-            Return the most recent state for the resources associated with agent
+            Return the most recent state for the resources associated with agent, or the version requested
 
             :param tid The id of the environment this resource belongs to
             :param agent The agent
+            :param version The version to retrieve. If none, the latest available version is returned. With a specific version
+                           that version is returned, even if it has not been released yet.
         """
 
     @protocol(operation="HEAD", mt=True, id=True, destination="agent")
@@ -323,14 +325,22 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def release_version(self, tid, id, dryrun, push):
+    def release_version(self, tid, id, push):
         """
             Release version of the configuration model for deployment.
 
             :param tid The id of the environment
             :param id The version of the CM to deploy
-            :param dryrun Should this be a dry run
             :param push Notify all agents to deploy the version
+        """
+
+    @protocol(operation="PATCH", mt=True, id=True)
+    def dryrun_version(self, tid, id):
+        """
+            Do a dryrun
+
+            :param tid The id of the environment
+            :param id The version of the CM to deploy
         """
 
 

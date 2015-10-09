@@ -211,7 +211,7 @@ class ResourceAction(Document):
                 }
 
 
-RELEASE_STATUS = {0: "AVAILABLE", 1: "DRYRUN", 2: "DEPLOY"}
+RELEASE_STATUS = {0: "AVAILABLE", 2: "DEPLOY"}
 STATUS_RESULT = {0: "WAITING", 1: "IN PROGRESS", 2: "SUCCESS", 3: "ERROR"}
 
 
@@ -266,7 +266,7 @@ class ConfigurationModel(Document):
         :param created The date this configuration model was created
     """
     version = IntField(required=True, unique_with="environment")
-    environment = ReferenceField(Environment)
+    environment = ReferenceField(Environment, required=True)
     date = DateTimeField()
     release_status = IntField(choices=RELEASE_STATUS, default=0)
     status_result = IntField(choices=STATUS_RESULT, default=0)

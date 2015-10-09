@@ -24,11 +24,11 @@ import time
 import threading
 
 from impera import env
-from impera import protocol, methods
+from impera import protocol
 from impera.agent.handler import Commander
 from impera.config import Config
 from impera.loader import CodeLoader
-from impera.protocol import DirectTransport, Scheduler
+from impera.protocol import Scheduler
 from impera.resources import Resource, Id
 
 
@@ -350,14 +350,7 @@ class Agent(threading.Thread):
 
         else:
             release_status = result.result["release_status"]
-            dry_run = False
-            deploy = False
-            if release_status == "DRYRUN":
-                dry_run = True
-            elif release_status == "DEPLOY":
-                deploy = True
-
-            if not dry_run and not deploy:
+            if release_status != "DEPLOY":
                 # this should not happen
                 return
 
@@ -368,11 +361,41 @@ class Agent(threading.Thread):
                     data = res["fields"]
                     data["id"] = res["id"]
                     resource = Resource.deserialize(data)
-                    resource.dry_run = dry_run
                     self.update(resource)
                     LOGGER.debug("Received update for %s", resource.id)
             except TypeError as e:
                 LOGGER.error("Failed to receive update", e)
+
+    def run_dryrun(self, agent, version):
+        """
+           Run a dryrun of the given version
+        """
+        result = self._client.get_resources_for_agent(tid=self._env_id, agent=agent, version=version)
+        if result.code == 404:
+            LOGGER.info("Version %s does not exist", version)
+        elif result.code != 200:
+            LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
+
+        self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
+
+        try:
+            for res in result.result["resources"]:
+                data = res["fields"]
+                data["id"] = res["id"]
+                resource = Resource.deserialize(data)
+                LOGGER.debug("Running dryrun for %s", resource.id)
+
+                try:
+                    provider = Commander.get_provider(self, resource)
+                except Exception:
+                    LOGGER.exception("Unable to find a handler for %s" % resource.id)
+                    self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
+                    continue
+
+                provider.execute(resource, dry_run=True)
+
+        except TypeError:
+            LOGGER.error("Unable to process resource for dryrun")
 
     def get_agent_hostname(self, agent_name):
         """
@@ -444,11 +467,13 @@ class Agent(threading.Thread):
                             if key not in fact_requests:
                                 fact_requests[key] = item["resource"]
 
+                        elif item["method"] == "dryrun":
+                            self.run_dryrun(agent, int(item["version"]))
+
             for key, resource in fact_requests.items():
                 LOGGER.info("Requesting facts for resource %s in environment %s", key[0], key[1])
                 self.get_facts(key[0], key[1], resource)
 
-    # @protocol.handle(methods.StatusMethod)
     def status(self, operation, body):
         if "id" not in body:
             return 500
@@ -493,14 +518,12 @@ class Agent(threading.Thread):
         except Exception:
             LOGGER.exception("Unable to find a handler for %s" % resource_id)
 
-    # @protocol.handle(methods.GetQueue)
     def queue(self, operation, body):
         """
             Return the current items in the queue
         """
         return 200, {"queue": ["%s" % (x.id) for x in self._queue.all()]}
 
-    # @protocol.handle(methods.GetAgentInfo)
     def info(self, operation, body):
         """
             Return statistics about this agent
@@ -508,17 +531,6 @@ class Agent(threading.Thread):
         return 200, {"threads": [x.name for x in enumerate()],
                      "queue length": self._queue.size(),
                      "queue ready length": self._queue.ready_size()}
-
-#     def code_deploy(self, environment, version):
-#         """
-#             Fetch the code for the given version and deploy it
-#         """
-#         if self._loader is not None:
-#             result = self._client.get_code(environment, version)
-#
-#             if result.code == 200:
-#                 self._env.install_from_list(result.result["requires"])
-#                 self._loader.deploy_version(version, result.result["sources"])
 
     def update(self, res_obj):
         """
@@ -530,22 +542,6 @@ class Agent(threading.Thread):
         self._queue.add_resource(res_obj)
         self._last_update = time.time()
 
-#     # @protocol.handle(methods.ResourceUpdate)
-#     def resource_update(self, operation, body):
-#         resource = Resource.deserialize(body["resource"])
-#
-#         # depending on the transport we still need to filter out resources not meant for this agent
-#         if resource.id.agent_name in self.end_point_names:
-#             if "dry_run" in body and body["dry_run"]:
-#                 resource.dry_run = True
-#
-#             self.update(resource)
-#             LOGGER.debug("Received update for %s", body["resource"]["id"])
-#             return 200
-#
-#         return 404
-
-    # @protocol.handle(methods.ResourceUpdated)
     def resource_updated_received(self, operation, body):
         rid = body["id"]
         version = body["version"]
@@ -596,7 +592,7 @@ class Agent(threading.Thread):
         else:
             return result.result["content"]
 
-    def resource_updated(self, resource, reload_requires=False, changes={}, status=""):
+    def resource_updated(self, resource, reload_requires=False, changes={}, status="", dry_run=False):
         """
             A resource with id $rid calls this method to indicate that it is now at version $version.
         """
@@ -611,7 +607,7 @@ class Agent(threading.Thread):
 
         self._dm.resource_update(resource.id.resource_str(), resource.id.version, reload_resource, deploy_result)
 
-        if resource.dry_run:
+        if dry_run:
             action = "dryrun"
         else:
             action = "deploy"

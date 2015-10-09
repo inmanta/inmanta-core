@@ -98,12 +98,12 @@ class Server(protocol.ServerEndpoint):
             Purge versions from the database
         """
         envs = data.Environment.objects()  # @UndefinedVariable
-        for env in envs:
+        for env_item in envs:
             # get available versions
             n_versions = int(Config.get("server", "available-versions-to-keep", 2))
-            versions = data.ConfigurationModel.objects(release_status=0, environment=env)  # @UndefinedVariable
+            versions = data.ConfigurationModel.objects(release_status=0, environment=env_item)  # @UndefinedVariable
             if len(versions) > n_versions:
-                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env.id)
+                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                 versions = versions.order_by("-date")[n_versions:]
                 for v in versions:
                     v.delete()
@@ -179,8 +179,8 @@ class Server(protocol.ServerEndpoint):
 
         if resource_id is not None and resource_id != "":
             # get the latest version
-            versions = data.ConfigurationModel.\
-                objects(environment=env, release_status__gt=0).order_by("-version").limit(1)  # @UndefinedVariable
+            versions = (data.ConfigurationModel.
+                        objects(environment=env, release_status__gt=0).order_by("-version").limit(1))  # @UndefinedVariable
 
             if len(versions) == 0:
                 return 404, {"message": "The environment associated with this parameter does not have any releases."}
@@ -234,8 +234,8 @@ class Server(protocol.ServerEndpoint):
         if len(params) == 0:
             if resource_id is not None and resource_id != "":
                 # get the latest version
-                versions = data.ConfigurationModel.\
-                    objects(environment=env, release_status__gt=0).order_by("-version").limit(1)  # @UndefinedVariable
+                versions = (data.ConfigurationModel.
+                            objects(environment=env, release_status__gt=0).order_by("-version").limit(1))  # @UndefinedVariable
 
                 if len(versions) == 0:
                     return 404, {"message": "The parameter does not exist."}
@@ -440,7 +440,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.NodeMethod.trigger_agent)
     def trigger_agent(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -487,21 +487,28 @@ class Server(protocol.ServerEndpoint):
         return 200, {"resource": resv[0].to_dict(), "logs": action_list}
 
     @protocol.handle(methods.ResourceMethod.get_resources_for_agent)
-    def get_resources_for_agent(self, tid, agent):
+    def get_resources_for_agent(self, tid, agent, version):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
+        if version is None:
+            versions = (data.ConfigurationModel.
+                        objects(environment=env, release_status__gt=0).order_by("-version").limit(1))  # @UndefinedVariable
+
+            if len(versions) == 0:
+                return 404
+
+            cm = versions[0]
+
+        else:
+            try:
+                cm = (data.ConfigurationModel.objects().get(environment=env, version=version))  # @UndefinedVariable
+            except errors.DoesNotExist:
+                return 404, {"message": "The given version does not exist"}
+
         deploy_model = []
-        versions = data.ConfigurationModel.\
-            objects(environment=env, release_status__gt=0).order_by("-version").limit(1)  # @UndefinedVariable
-
-        if len(versions) == 0:
-            return 404
-
-        cm = versions[0]
-
         resources = data.ResourceVersion.objects(environment=env, model=cm)  # @UndefinedVariable
         for rv in resources:
             if rv.resource.agent == agent:
@@ -542,7 +549,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.CMVersionMethod.get_version)
     def get_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -583,7 +590,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.CMVersionMethod.delete_version)
     def delete_version(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -718,7 +725,7 @@ host = localhost
             LOGGER.debug("Started new agent with PID %s", proc.pid)
 
     @protocol.handle(methods.CMVersionMethod.release_version)
-    def release_version(self, tid, id, dryrun, push):
+    def release_version(self, tid, id, push):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -733,23 +740,13 @@ host = localhost
         progress = {"TOTAL": n_resources, "WAITING": n_resources, "ERROR": 0, "DONE": 0}
 
         changed = False
-        if dryrun:
-            if model.release_status >= 1:
-                return 500, {"message": "A dry run was already requested for this version."}
-            else:
-                model.release_status = 1
-                model.progress[data.RELEASE_STATUS[1]] = progress
-                model.save()
-                changed = True
-
+        if model.release_status >= 2:
+            return 500, {"message": "A deploy was already requested for this version."}
         else:
-            if model.release_status >= 2:
-                return 500, {"message": "A deploy was already requested for this version."}
-            else:
-                model.release_status = 2
-                model.progress[data.RELEASE_STATUS[2]] = progress
-                model.save()
-                changed = True
+            model.release_status = 2
+            model.progress[data.RELEASE_STATUS[2]] = progress
+            model.save()
+            changed = True
 
         if push and changed:
             # fetch all resource in this cm and create a list of distinct agents
@@ -763,6 +760,31 @@ host = localhost
                 self.queue_request(tid, agent, {"method": "version", "version": id, "environment": tid})
 
         return 200, model.to_dict()
+
+    @protocol.handle(methods.CMVersionMethod.dryrun_version)
+    def dryrun_version(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        models = data.ConfigurationModel.objects(environment=env, version=id)  # @UndefinedVariable
+        if len(models) == 0:
+            return 404, {"message": "The request version does not exist."}
+
+        model = models[0]  # there can only be one per id/tid
+
+        # fetch all resource in this cm and create a list of distinct agents
+        rvs = data.ResourceVersion.objects(model=model, environment=env)  # @UndefinedVariable
+        agents = set()
+        for rv in rvs:
+            agents.add(rv.resource.agent)
+
+        for agent in agents:
+            self._ensure_agent(tid, agent)
+            self.queue_request(tid, agent, {"method": "dryrun", "version": id, "environment": tid})
+
+        return 200
 
     @protocol.handle(methods.CodeMethod.upload_code)
     def upload_code(self, tid, id, sources, requires):
@@ -812,36 +834,21 @@ host = localhost
         ra.save()
 
         # update the state of the resource
-        new_status = -1
-        if action == "dryrun":
-            new_status = 1
+        if action == "deploy":
+            model = resv.model
+            model_status = data.RELEASE_STATUS[model.release_status]
 
-        elif action == "deploy":
-            new_status = 2
+            resv.status = 2
+            model.progress[model_status]["WAITING"] -= 1
+            if level == "INFO":
+                resv.status_result = 2
+                model.progress[model_status]["DONE"] += 1
+            elif level == "ERROR":
+                resv.status_result = 3
+                model.progress[model_status]["ERROR"] += 1
 
-        if new_status >= 0:
-            if resv.status > new_status:
-                LOGGER.error("Trying to set status of %s in env %s to %s when status is already %s!",
-                             id, tid, data.RELEASE_STATUS[new_status], data.RELEASE_STATUS[resv.status])
-
-            elif resv.status == new_status:
-                LOGGER.info("%s in env %s already has status %s", id, tid, data.RELEASE_STATUS[new_status])
-
-            else:
-                model = resv.model
-                model_status = data.RELEASE_STATUS[model.release_status]
-
-                resv.status = new_status
-                model.progress[model_status]["WAITING"] -= 1
-                if level == "INFO":
-                    resv.status_result = 2
-                    model.progress[model_status]["DONE"] += 1
-                elif level == "ERROR":
-                    resv.status_result = 3
-                    model.progress[model_status]["ERROR"] += 1
-
-                model.save()
-                resv.save()
+            model.save()
+            resv.save()
 
         return 200
 
@@ -861,8 +868,8 @@ host = localhost
         try:
             # delete all environments first
             envs = data.Environment.objects(project=id)  # @UndefinedVariable
-            for env in envs:
-                self.delete_environment(env.id)
+            for env_item in envs:
+                self.delete_environment(env_item)
 
             # now delete the project itself
             project = data.Project.objects().get(id=id)  # @UndefinedVariable
@@ -1082,4 +1089,3 @@ host = localhost
         log_out, log_err = proc.communicate()
 
         self._recompiles[environment_id] = datetime.datetime.now()
-

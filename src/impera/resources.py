@@ -237,7 +237,6 @@ class Resource(object):
         self.unknowns = set()
         self.model = None
         self.do_reload = False
-        self.dry_run = False
         self.require_failed = False
 
         if not hasattr(self.__class__, "fields"):

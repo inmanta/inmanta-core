@@ -119,12 +119,11 @@ class ResourceHandler(object):
         """
         raise NotImplementedError()
 
-    def execute(self, resource):
+    def execute(self, resource, dry_run=False):
         """
             Update the given resource
         """
         self.pre(resource)
-        deploy = not resource.dry_run
         changed = False
         changes = {}
         status = "nop"
@@ -133,7 +132,7 @@ class ResourceHandler(object):
                 LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
                 status = "skipped"
 
-            elif deploy:
+            elif not dry_run:
                 changed = self.do_changes(resource)
                 if hasattr(changed, "__len__"):
                     changes = changed
@@ -146,10 +145,6 @@ class ResourceHandler(object):
                 changes = self.list_changes(resource)
                 status = "dry"
 
-#         except HandlerNotAvailableException as e:
-#             LOGGER.warning("Handler not available for resource %s with messsage: %s" % (resource, e.message))
-#             status = "unavailable"
-
         except SkipResource as e:
             status = "skipped"
             LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
@@ -161,7 +156,7 @@ class ResourceHandler(object):
             changes = e.args
 
         finally:
-            self._agent.resource_updated(resource, reload_requires=changed, changes=changes, status=status)
+            self._agent.resource_updated(resource, reload_requires=changed, changes=changes, status=status, dry_run=dry_run)
 
         self.post(resource)
         return changed

@@ -19,6 +19,7 @@
     services connected to the Impera message bus.
 """
 
+from collections import defaultdict
 import logging
 
 from impera import protocol
@@ -26,7 +27,6 @@ from cliff.lister import Lister
 from cliff.show import ShowOne
 from cliff.command import Command
 from impera.config import Config
-from _collections import defaultdict
 from blessings import Terminal
 
 LOGGER = logging.getLogger(__name__)
