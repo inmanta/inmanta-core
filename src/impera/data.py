@@ -20,7 +20,7 @@ import json
 
 from mongoengine import Document
 from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,\
-    EmbeddedDocumentField, EmbeddedDocumentListField
+    EmbeddedDocumentListField
 from impera.resources import Id
 from mongoengine.document import EmbeddedDocument
 
@@ -155,6 +155,7 @@ class Agent(Document):
                 "environment": str(self.environment.id),
                 }
 
+
 class Report(EmbeddedDocument):
     """
         A report of a substep of compilation
@@ -172,17 +173,16 @@ class Report(EmbeddedDocument):
     name = StringField(required=True)
     errstream = StringField(required=True)
     outstream = StringField(required=True)
-    
 
     def to_dict(self):
         return {"started": self.started.isoformat(),
-                "completed":self.completed.isoformat(),
+                "completed": self.completed.isoformat(),
                 "command": self.command,
                 "name": self.name,
                 "errstream": self.errstream,
                 "outstream": self.outstream
                 }
-        
+
 
 class Compile(Document):
     """
@@ -190,22 +190,22 @@ class Compile(Document):
 
         :param environment The environment this resource is defined in
         :param started Time the compile started
-        :param completed Time to compile was completed 
+        :param completed Time to compile was completed
         :param reports Per stage reports
     """
     environment = ReferenceField(Environment)
     started = DateTimeField()
     completed = DateTimeField()
     reports = EmbeddedDocumentListField(Report)
-    
 
     def to_dict(self):
         return {"environment": str(self.environment.id),
                 "started": self.started.isoformat(),
-                "completed":self.completed.isoformat(),
+                "completed": self.completed.isoformat(),
                 "reports": [v.to_dict() for v in self.reports],
                 }
-        
+
+
 class Resource(Document):
     """
         A resource that can be managed by an agent.
@@ -347,4 +347,3 @@ class Code(Document):
     version = StringField()
     sources = DynamicField()
     requires = DynamicField()
-
