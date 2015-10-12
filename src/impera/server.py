@@ -39,6 +39,7 @@ from impera.config import Config
 from impera.loader import CodeLoader
 from impera.resources import Id
 import tornado
+import dateutil
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1027,6 +1028,14 @@ host = localhost
 
         return proc
 
+    def _run_compile_stage(self, name, cmd, cwd, **kwargs):
+        start = datetime.datetime.now()
+        proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, **kwargs)
+        log_out, log_err = proc.communicate()
+        stop = datetime.datetime.now()
+        return data.Report(started=start, completed=stop, name=name, command=repr(cmd),
+                           errstream=log_err, outstream=log_out)
+
     def _recompile_environment(self, environment_id, update_repo=False):
         """
             Recompile an environment
@@ -1035,6 +1044,8 @@ host = localhost
         """
         impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
         project_dir = os.path.join(self._server_storage["environments"], environment_id)
+        requested = datetime.datetime.now()
+        stages = []
 
         try:
             env = data.Environment.objects().get(id=environment_id)  # @UndefinedVariable
@@ -1049,15 +1060,11 @@ host = localhost
         # checkout repo
         if not os.path.exists(os.path.join(project_dir, ".git")):
             LOGGER.info("Cloning repository into environment directory %s", project_dir)
-            proc = subprocess.Popen(["git", "clone", env.repo_url, "."], cwd=project_dir, stderr=subprocess.PIPE,
-                                    stdout=subprocess.PIPE)
-            log_out, log_err = proc.communicate()
+            stages.append(self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."], project_dir))
 
         elif update_repo:
             LOGGER.info("Fetching changes from repo %s", env.repo_url)
-            proc = subprocess.Popen(["git", "fetch", env.repo_url], cwd=project_dir, stderr=subprocess.PIPE,
-                                    stdout=subprocess.PIPE)
-            log_out, log_err = proc.communicate()
+            stages.append(self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir))
 
         # verify if branch is correct
         proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1068,24 +1075,46 @@ host = localhost
 
         if env.repo_branch != branch_name:
             LOGGER.info("Repository is at %s branch, switching to %s", branch_name, env.repo_branch)
-            proc = subprocess.Popen(["git", "checkout", env.repo_branch], cwd=project_dir, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            log_out, log_err = proc.communicate()
+            stages.append(self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir))
 
-        proc = subprocess.Popen(["git", "pull"], cwd=project_dir, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        log_out, log_err = proc.communicate()
-
+        stages.append(self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir))
         LOGGER.info("Installing and updating modules")
-        log_out, log_err = subprocess.Popen(impera_path + ["modules", "install"], cwd=project_dir, env=os.environ.copy(),
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
-        log_out, log_err = subprocess.Popen(impera_path + ["modules", "update"], cwd=project_dir, env=os.environ.copy(),
-                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        stages.append(self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir))
+        stages.append(self._run_compile_stage("Updating modules", impera_path + ["modules", "update"], project_dir,
+                                              env=os.environ.copy()))
 
         LOGGER.info("Recompiling configuration model")
-        proc = subprocess.Popen(impera_path + ["-vvv", "export", "-e", environment_id, "--server_address", "localhost",
-                                "--server_port", "8888"], cwd=project_dir, env=os.environ.copy(), stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-        log_out, log_err = proc.communicate()
+        stages.append(self._run_compile_stage("Recompiling configuration model",
+                                              impera_path + ["-vvv", "export", "-e", environment_id, "--server_address",
+                                                             "localhost", "--server_port", "8888"],
+                                              project_dir, env=os.environ.copy()))
 
-        self._recompiles[environment_id] = datetime.datetime.now()
+        end = datetime.datetime.now()
+        self._recompiles[environment_id] = end
+        data.Compile(environment=env, started=requested, completed=end, reports=stages).save()
+
+    @protocol.handle(methods.CompileReport.get_reports)
+    def get_reports(self, environment=None, start=None, limit=None):
+        if (start is None and limit is not None) or (limit is None and start is not None):
+            return 500, {"message": "Start and limit should always be set together."}
+
+        queryparts = {}
+
+        if environment is not None:
+            try:
+                env = data.Environment.objects().get(id=environment)  # @UndefinedVariable
+                queryparts["environment"] = env
+            except errors.DoesNotExist:
+                return 404, {"message": "The given environment id does not exist!"}
+
+        if start is not None:
+            queryparts["started__gt"] = dateutil.parser.parse(start)
+
+        models = data.Compile.objects(**queryparts).order_by("-version")  # @UndefinedVariable
+
+        if limit is not None:
+            models = models[:int(limit)]
+
+        d = {"reports": [m.to_dict() for m in models]}
+
+        return 200, d

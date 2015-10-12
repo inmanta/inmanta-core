@@ -481,3 +481,15 @@ class FileDiff(Method):
         """
             Returns the diff of the files with the two given ids
         """
+
+class CompileReport(Method):
+    """
+        Get a list of compile reports
+    """
+    __method_name__ = "compilereport"
+
+    @protocol(operation="GET", index=True)
+    def get_reports(self, environment=None,start=None, limit=None):
+        """
+            Return compile reports newer then start
+        """

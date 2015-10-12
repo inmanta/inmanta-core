@@ -19,8 +19,10 @@
 import json
 
 from mongoengine import Document
-from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField
+from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,\
+    EmbeddedDocumentListField
 from impera.resources import Id
+from mongoengine.document import EmbeddedDocument
 
 
 class Environment(Document):
@@ -151,6 +153,56 @@ class Agent(Document):
                 "interval": self.interval,
                 "node": self.node.hostname,
                 "environment": str(self.environment.id),
+                }
+
+
+class Report(EmbeddedDocument):
+    """
+        A report of a substep of compilation
+
+        :param started when the substep started
+        :param completed when it ended
+        :param command the command that was executed
+        :param name The name of this step
+        :param errstream what was reported on system err
+        :param outstream what was reported on system out
+    """
+    started = DateTimeField(required=True)
+    completed = DateTimeField(required=True)
+    command = StringField(required=True)
+    name = StringField(required=True)
+    errstream = StringField(required=True)
+    outstream = StringField(required=True)
+
+    def to_dict(self):
+        return {"started": self.started.isoformat(),
+                "completed": self.completed.isoformat(),
+                "command": self.command,
+                "name": self.name,
+                "errstream": self.errstream,
+                "outstream": self.outstream
+                }
+
+
+class Compile(Document):
+    """
+        A run of the compiler
+
+        :param environment The environment this resource is defined in
+        :param started Time the compile started
+        :param completed Time to compile was completed
+        :param reports Per stage reports
+    """
+    environment = ReferenceField(Environment)
+    started = DateTimeField()
+    completed = DateTimeField()
+    reports = EmbeddedDocumentListField(Report)
+
+    def to_dict(self):
+        return {"environment": str(self.environment.id),
+                "started": self.started.isoformat(),
+                "completed": self.completed.isoformat(),
+                "reports": [v.to_dict() for v in self.reports],
                 }
 
 
