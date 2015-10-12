@@ -19,8 +19,8 @@
 import json
 
 from mongoengine import Document
-from mongoengine.fields import StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,\
-    EmbeddedDocumentListField
+from mongoengine.fields import (StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,
+                                EmbeddedDocumentListField)
 from impera.resources import Id
 from mongoengine.document import EmbeddedDocument
 
