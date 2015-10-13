@@ -1094,9 +1094,10 @@ host = localhost
         data.Compile(environment=env, started=requested, completed=end, reports=stages).save()
 
     @protocol.handle(methods.CompileReport.get_reports)
-    def get_reports(self, environment=None, start=None, limit=None):
-        if (start is None and limit is not None) or (limit is None and start is not None):
-            return 500, {"message": "Start and limit should always be set together."}
+    def get_reports(self, environment=None, start=None, end=None, limit=None):
+        argscount = len([x for x in [start,end,limit] if x is not None])
+        if (argscount==3):
+            return 500, {"message": "Limit, start and end can not be set togheter"}
 
         queryparts = {}
 
@@ -1110,10 +1111,18 @@ host = localhost
         if start is not None:
             queryparts["started__gt"] = dateutil.parser.parse(start)
 
-        models = data.Compile.objects(**queryparts).order_by("-version")  # @UndefinedVariable
+        if end is not None:
+            queryparts["started__lt"] = dateutil.parser.parse(end)
 
-        if limit is not None:
-            models = models[:int(limit)]
+        if limit is not None and end is not None:
+            #no negative indices supprted
+            models = data.Compile.objects(**queryparts).order_by("started")  # @UndefinedVariable
+            models = list(models[:int(limit)])
+            models.reverse()
+        else:
+            models = data.Compile.objects(**queryparts).order_by("-started")  # @UndefinedVariable
+            if limit is not None:
+                models = models[:int(limit)]
 
         d = {"reports": [m.to_dict() for m in models]}
 
