@@ -1095,8 +1095,8 @@ host = localhost
 
     @protocol.handle(methods.CompileReport.get_reports)
     def get_reports(self, environment=None, start=None, end=None, limit=None):
-        argscount = len([x for x in [start,end,limit] if x is not None])
-        if (argscount==3):
+        argscount = len([x for x in [start, end, limit] if x is not None])
+        if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set togheter"}
 
         queryparts = {}
@@ -1115,7 +1115,7 @@ host = localhost
             queryparts["started__lt"] = dateutil.parser.parse(end)
 
         if limit is not None and end is not None:
-            #no negative indices supprted
+            # no negative indices supprted
             models = data.Compile.objects(**queryparts).order_by("started")  # @UndefinedVariable
             models = list(models[:int(limit)])
             models.reverse()
