@@ -124,42 +124,43 @@ class ResourceHandler(object):
             Update the given resource
         """
         self.pre(resource)
-        changed = False
-        changes = {}
-        status = "nop"
+        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
         try:
             if resource.require_failed:
                 LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
-                status = "skipped"
+                results["status"] = "skipped"
 
             elif not dry_run:
                 changed = self.do_changes(resource)
+                changes = {}
                 if hasattr(changed, "__len__"):
                     changes = changed
                     changed = len(changes) > 0
 
                 if changed:
                     LOGGER.info("%s was changed" % resource.id)
-                status = "deployed"
+
+                results["changed"] = changed
+                results["changes"] = changes
+                results["status"] = "deployed"
+
             else:
                 changes = self.list_changes(resource)
-                status = "dry"
+                results["changes"] = changes
+                results["status"] = "dry"
 
         except SkipResource as e:
-            status = "skipped"
+            results["log_msg"] = e.args
+            results["status"] = "skipped"
             LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
-            changes = e.args
 
         except Exception as e:
             LOGGER.exception("An error occurred during deployment of %s" % resource.id)
-            status = "failed"
-            changes = e.args
-
-        finally:
-            self._agent.resource_updated(resource, reload_requires=changed, changes=changes, status=status, dry_run=dry_run)
+            results["log_msg"] = e.args
+            results["status"] = "failed"
 
         self.post(resource)
-        return changed
+        return results
 
     def facts(self, resource):
         """

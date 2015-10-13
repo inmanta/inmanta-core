@@ -366,7 +366,7 @@ class Agent(threading.Thread):
             except TypeError as e:
                 LOGGER.error("Failed to receive update", e)
 
-    def run_dryrun(self, agent, version):
+    def run_dryrun(self, agent, version, dry_run_id):
         """
            Run a dryrun of the given version
         """
@@ -392,7 +392,10 @@ class Agent(threading.Thread):
                     self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
                     continue
 
-                provider.execute(resource, dry_run=True)
+                results = provider.execute(resource, dry_run=True)
+
+                self._client.dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                           changes=results["changes"], log_msg=results["log_msg"])
 
         except TypeError:
             LOGGER.error("Unable to process resource for dryrun")
@@ -468,7 +471,7 @@ class Agent(threading.Thread):
                                 fact_requests[key] = item["resource"]
 
                         elif item["method"] == "dryrun":
-                            self.run_dryrun(agent, int(item["version"]))
+                            self.run_dryrun(agent, int(item["version"]), item["dryrun"])
 
             for key, resource in fact_requests.items():
                 LOGGER.info("Requesting facts for resource %s in environment %s", key[0], key[1])
@@ -570,7 +573,9 @@ class Agent(threading.Thread):
                 self._queue.remove(resource)
                 continue
 
-            provider.execute(resource)
+            results = provider.execute(resource)
+            self.resource_updated(resource, reload_requires=results["changed"], changes=results["changes"],
+                                  status=results["status"], log_msg=results["log_msg"])
 
             if resource.do_reload and provider.can_reload():
                 LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
@@ -592,7 +597,7 @@ class Agent(threading.Thread):
         else:
             return result.result["content"]
 
-    def resource_updated(self, resource, reload_requires=False, changes={}, status="", dry_run=False):
+    def resource_updated(self, resource, reload_requires=False, changes={}, status="", log_msg=""):
         """
             A resource with id $rid calls this method to indicate that it is now at version $version.
         """
@@ -607,10 +612,7 @@ class Agent(threading.Thread):
 
         self._dm.resource_update(resource.id.resource_str(), resource.id.version, reload_resource, deploy_result)
 
-        if dry_run:
-            action = "dryrun"
-        else:
-            action = "deploy"
+        action = "deploy"
 
         if status == "dry" or status == "deployed":
             level = "INFO"
@@ -618,4 +620,4 @@ class Agent(threading.Thread):
             level = "ERROR"
 
         self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action,
-                                      message=status, extra_data=changes)
+                                      message="%s: %s" % (status, log_msg), extra_data=changes)

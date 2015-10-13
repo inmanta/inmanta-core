@@ -334,13 +334,50 @@ class CMVersionMethod(Method):
             :param push Notify all agents to deploy the version
         """
 
-    @protocol(operation="PATCH", mt=True, id=True)
-    def dryrun_version(self, tid, id):
+
+class DryRunMethod(Method):
+    """
+        Method for requesting and quering a dryrun
+    """
+    __method_name__ = "dryrun"
+
+    @protocol(operation="POST", mt=True, id=True)
+    def dryrun_request(self, tid, id):
         """
             Do a dryrun
 
             :param tid The id of the environment
             :param id The version of the CM to deploy
+        """
+
+    @protocol(operation="GET", mt=True)
+    def dryrun_list(self, tid, version=None):
+        """
+            Create a list of dry runs
+
+            :param tid The id of the environment
+            :param version Only for this version
+        """
+
+    @protocol(operation="GET", mt=True, id=True)
+    def dryrun_report(self, tid, id):
+        """
+            Create a dryrun report
+
+            :param tid The id of the environment
+            :param id The version dryrun to report
+        """
+
+    @protocol(operation="PUT", mt=True, id=True)
+    def dryrun_update(self, tid, id, resource, changes, log_msg=None):
+        """
+            Store dryrun results at the server
+
+            :param tid The id of the environment
+            :param id The version dryrun to report
+            :param resource The id of the resource
+            :param changes The required changes
+            :param log_msg An optional log message (for example to report an error)
         """
 
 

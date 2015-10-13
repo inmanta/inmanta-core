@@ -173,6 +173,7 @@ class Report(EmbeddedDocument):
     name = StringField(required=True)
     errstream = StringField(required=True)
     outstream = StringField(required=True)
+    returncode = IntField()
 
     def to_dict(self):
         return {"started": self.started.isoformat(),
@@ -180,7 +181,8 @@ class Report(EmbeddedDocument):
                 "command": self.command,
                 "name": self.name,
                 "errstream": self.errstream,
-                "outstream": self.outstream
+                "outstream": self.outstream,
+                "returncode": self.returncode
                 }
 
 
@@ -335,6 +337,7 @@ class ConfigurationModel(Document):
 
     def delete(self):
         ResourceVersion.objects(model=self).delete()
+        DryRun.objects(model=self).delete()
         Document.delete(self)
 
 
@@ -351,3 +354,34 @@ class Code(Document):
     version = StringField()
     sources = DynamicField()
     requires = DynamicField()
+
+
+class DryRun(Document):
+    """
+        A dryrun of a model version
+
+        :param id The id of this dryrun
+        :param environment The environment this code belongs to
+        :param model The configuration model
+        :param date The date the run was requested
+        :param resource_total The number of resources that do a dryrun for
+        :param resource_todo The number of resources left to do
+        :param resources Changes for each of the resources in the version
+    """
+    id = UUIDField(primary_key=True)
+    environment = ReferenceField(Environment)
+    model = ReferenceField(ConfigurationModel)
+    date = DateTimeField()
+    resource_total = IntField()
+    resource_todo = IntField()
+    resources = MapField(StringField())
+
+    def to_dict(self):
+        return {"id": str(self.id),
+                "environment": str(self.environment.id),
+                "model": str(self.model.version),
+                "date": self.date.isoformat(),
+                "total": self.resource_total,
+                "todo": self.resource_todo,
+                "resources": {k: json.loads(v) for k, v in self.resources.items()}
+                }

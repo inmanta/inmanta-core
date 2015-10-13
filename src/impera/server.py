@@ -762,8 +762,8 @@ host = localhost
 
         return 200, model.to_dict()
 
-    @protocol.handle(methods.CMVersionMethod.dryrun_version)
-    def dryrun_version(self, tid, id):
+    @protocol.handle(methods.DryRunMethod.dryrun_request)
+    def dryrun_request(self, tid, id):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -775,15 +775,86 @@ host = localhost
 
         model = models[0]  # there can only be one per id/tid
 
+        # Create a dryrun document
+        dryrun_id = str(uuid.uuid4())
+        dryrun = data.DryRun(id=dryrun_id, environment=env, model=model, date=datetime.datetime.now())
+
         # fetch all resource in this cm and create a list of distinct agents
         rvs = data.ResourceVersion.objects(model=model, environment=env)  # @UndefinedVariable
+        dryrun.resource_total = len(rvs)
+        dryrun.resource_todo = dryrun.resource_total
+
         agents = set()
         for rv in rvs:
             agents.add(rv.resource.agent)
 
         for agent in agents:
             self._ensure_agent(tid, agent)
-            self.queue_request(tid, agent, {"method": "dryrun", "version": id, "environment": tid})
+            self.queue_request(tid, agent, {"method": "dryrun", "version": id, "environment": tid, "dryrun": dryrun_id})
+
+        dryrun.save()
+
+        return 200, {"dryrun": dryrun.to_dict()}
+
+    @protocol.handle(methods.DryRunMethod.dryrun_list)
+    def dryrun_list(self, tid, version=None):
+        query_args = {}
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            query_args["environment"] = env
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        if version is not None:
+            models = data.ConfigurationModel.objects(environment=env, version=version)  # @UndefinedVariable
+            if len(models) == 0:
+                return 404, {"message": "The request version does not exist."}
+
+            model = models[0]  # there can only be one per id/tid
+            query_args["model"] = model
+
+        dryruns = data.DryRun.objects(**query_args)  # @UndefinedVariable
+
+        if len(dryruns) == 0:
+            return 404
+
+        return 200, {"dryruns": [{"id": str(x.id), "version": x.model.version,
+                                  "date": x.date.isoformat(), "total": x.resource_total,
+                                  "todo": x.resource_todo
+                                  } for x in dryruns]}
+
+    @protocol.handle(methods.DryRunMethod.dryrun_report)
+    def dryrun_report(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            dryrun = data.DryRun.objects().get(id=id)  # @UndefinedVariable
+            return 200, {"dryrun": dryrun.to_dict()}
+        except errors.DoesNotExist:
+            return 404, {"message": "The given dryrun does not exist!"}
+
+    @protocol.handle(methods.DryRunMethod.dryrun_update)
+    def dryrun_update(self, tid, id, resource, changes, log_msg=None):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            dryrun = data.DryRun.objects().get(id=id)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given dryrun does not exist!"}
+
+        if resource in dryrun.resources:
+            return 500, {"message": "A dryrun was already stored for this resource."}
+
+        dryrun.resources[resource] = json.dumps({"changes": changes, "log": log_msg})
+        dryrun.resource_todo -= 1
+
+        dryrun.save()
 
         return 200
 
@@ -1032,9 +1103,10 @@ host = localhost
         start = datetime.datetime.now()
         proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, **kwargs)
         log_out, log_err = proc.communicate()
+        returncode = proc.returncode
         stop = datetime.datetime.now()
-        return data.Report(started=start, completed=stop, name=name, command=repr(cmd),
-                           errstream=log_err, outstream=log_out)
+        return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
+                           errstream=log_err, outstream=log_out, returncode=returncode)
 
     def _recompile_environment(self, environment_id, update_repo=False):
         """
