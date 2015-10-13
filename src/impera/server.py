@@ -1000,7 +1000,7 @@ host = localhost
             env.repo_branch = branch
             env.save()
 
-            return 200, env.to_dict()
+            return 200, {"environment": env.to_dict()}
         except errors.DoesNotExist:
             return 500, {"message": "The project id for the environment does not exist."}
 
@@ -1021,7 +1021,7 @@ host = localhost
 
             env.save()
 
-            return 200, env.to_dict()
+            return 200, {"environment": env.to_dict()}
 
         except errors.DoesNotExist:
             return 404, {"message": "The environment id does not exist."}
@@ -1030,24 +1030,22 @@ host = localhost
     def get_environment(self, id):
         try:
             env = data.Environment.objects().get(id=id)  # @UndefinedVariable
-            env.save()
-
-            return 200, env.to_dict()
+            return 200, {"environment": env.to_dict()}
 
         except errors.DoesNotExist:
             return 404, {"message": "The environment id does not exist."}
 
     @protocol.handle(methods.Environment.list_environments)
     def list_environments(self):
-        return 200, [x.to_dict() for x in data.Environment.objects()]  # @UndefinedVariable
+        return 200, {"environments": [x.to_dict() for x in data.Environment.objects()]}  # @UndefinedVariable
 
     @protocol.handle(methods.Environment.delete_environment)
     def delete_environment(self, id):
         try:
             # delete everything with a reference to this environment
             # delete the environment
-            project = data.Environment.objects().get(id=id)  # @UndefinedVariable
-            project.delete()
+            env = data.Environment.objects().get(id=id)  # @UndefinedVariable
+            env.delete()
         except errors.DoesNotExist:
             return 404, {"message": "The environment with given id does not exist."}
 
