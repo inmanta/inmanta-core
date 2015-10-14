@@ -366,7 +366,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="GET", mt=True, id=True)
-    def dryrun_report(self, tid: uuid.UUID, id: int):
+    def dryrun_report(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Create a dryrun report
 
@@ -375,7 +375,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="PUT", mt=True, id=True)
-    def dryrun_update(self, tid: uuid.UUID, id: int, resource: str, changes: dict, log_msg: str=None):
+    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
         """
             Store dryrun results at the server
 
