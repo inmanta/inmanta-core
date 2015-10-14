@@ -792,6 +792,7 @@ host = localhost
         for rv in rvs:
             agents.add(rv.resource.agent)
 
+        tid = str(tid)
         for agent in agents:
             self._ensure_agent(tid, agent)
             self.queue_request(tid, agent, {"method": "dryrun", "version": id, "environment": tid, "dryrun": dryrun_id})
