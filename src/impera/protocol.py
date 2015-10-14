@@ -223,6 +223,11 @@ class RESTHandler(tornado.web.RequestHandler):
         self._transport = transport
         self._config = config
 
+    def return_error_msg(self, status=500, msg=""):
+        self.write(tornado.escape.json_encode({"message": msg}))
+        self.set_header("Content-Type", "application/json")
+        self.set_status(status, msg)
+
     def _call(self, args, kwargs, operation):
         """
             An rpc like call
@@ -231,7 +236,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if operation.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self.set_status(405, "%s is not supported for this url. Supported methods: %s" % (operation, allowed))
+            self.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" % (operation, allowed))
             return
 
         try:
@@ -252,18 +257,18 @@ class RESTHandler(tornado.web.RequestHandler):
             # validate message against config
             config = self._config[operation][0]
             if "id" in config and config["id"] and "id" not in message:
-                self.set_status(500, "Invalid request. It should contain an id in the url.")
+                self.return_error_msg(500, "Invalid request. It should contain an id in the url.")
                 return
 
             if "mt" in config and config["mt"]:
                 if IMPERA_MT_HEADER not in self.request.headers:
-                    self.set_status(500, "This is multi-tenant method, it should contain a tenant id")
+                    self.return_error_msg(500, "This is multi-tenant method, it should contain a tenant id")
                     return
 
                 else:
                     message["tid"] = self.request.headers[IMPERA_MT_HEADER]
                     if message["tid"] == "":
-                        self.set_status(500, "%s header set without value." % IMPERA_MT_HEADER)
+                        self.return_error_msg(500, "%s header set without value." % IMPERA_MT_HEADER)
                         return
 
                     self.add_header(IMPERA_MT_HEADER, message["tid"])
@@ -289,14 +294,14 @@ class RESTHandler(tornado.web.RequestHandler):
                         # a default value of none is provided
                         message[arg] = None
                     else:
-                        self.set_status(500, "Invalid request. Field '%s' is required." % arg)
+                        self.return_error_msg(500, "Invalid request. Field '%s' is required." % arg)
                         return
                 else:
                     all_fields.remove(arg)
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                self.set_status(500, ("Request contains fields %s " % all_fields) +
-                                "that are not declared in method and no kwargs argument is provided.")
+                self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
+                                      "that are not declared in method and no kwargs argument is provided.")
                 return
 
             LOGGER.debug("Calling method %s on %s" % self._config[operation][1])
@@ -326,9 +331,9 @@ class RESTHandler(tornado.web.RequestHandler):
 
             self.set_status(code)
 
-        except Exception:
+        except Exception as e:
             LOGGER.exception("An exception occured")
-            self.set_status(500)
+            self.return_error_msg(500, "An exception occured: " + " ".join(e.args))
 
         self.finish()
 
