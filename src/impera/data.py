@@ -229,6 +229,20 @@ class Resource(Document):
     attribute_name = StringField(required=True)
     attribute_value = StringField(required=True)
 
+    version_latest = IntField(default=0)
+    version_deployed = IntField(default=0)
+
+    def to_dict(self):
+        return {"id": self.resource_id,
+                "id_fields": {"type": self.resource_type,
+                              "agent": self.agent,
+                              "attribute": self.attribute_name,
+                              "value": self.attribute_value,
+                              },
+                "latest_version": self.version_latest,
+                "deployed_version": self.version_deployed
+                }
+
 
 ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "other")
 LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "TRACE")

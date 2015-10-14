@@ -154,9 +154,13 @@ class Environment(Method):
         """
 
     @protocol(operation="GET", id=True)
-    def get_environment(self, id):
+    def get_environment(self, id, versions=None, resources=None):
         """
             Get an environment and all versions associated
+
+            :param id The id of the environment to return
+            :param versions Include this many available version for this environment.
+            :param resources Include this many available resources for this environment.
         """
 
 

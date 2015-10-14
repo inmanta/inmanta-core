@@ -628,6 +628,7 @@ class Server(protocol.ServerEndpoint):
             if len(resource) > 0:
                 if len(resource) == 1:
                     resource = resource[0]
+                    resource.version_latest = version
 
                 else:
                     raise Exception("A resource id should be unique in an environment! (env=%s, resource=%s" %
@@ -638,8 +639,9 @@ class Server(protocol.ServerEndpoint):
                                          resource_type=resource_obj.get_entity_type(),
                                          agent=resource_obj.get_agent_name(),
                                          attribute_name=resource_obj.get_attribute(),
-                                         attribute_value=resource_obj.get_attribute_value())
-                resource.save()
+                                         attribute_value=resource_obj.get_attribute_value(), version_latest=version)
+
+            resource.save()
 
             attributes = {}
             for field, value in res_dict.items():
@@ -919,6 +921,9 @@ host = localhost
                 resv.status_result = 3
                 model.progress[model_status]["ERROR"] += 1
 
+            resv.resource.version_deployed = model.version
+            resv.resource.save()
+
             model.save()
             resv.save()
 
@@ -933,7 +938,7 @@ host = localhost
         except errors.NotUniqueError:
             return 500, {"message": "A project with name %s already exists." % name}
 
-        return 200, project.to_dict()
+        return 200, {"project": project.to_dict()}
 
     @protocol.handle(methods.Project.delete_project)
     def delete_project(self, id):
@@ -969,7 +974,7 @@ host = localhost
 
     @protocol.handle(methods.Project.list_projects)
     def list_projects(self):
-        return 200, [x.to_dict() for x in data.Project.objects()]  # @UndefinedVariable
+        return 200, {"projects": [x.to_dict() for x in data.Project.objects()]}  # @UndefinedVariable
 
     @protocol.handle(methods.Project.get_project)
     def get_project(self, id):
@@ -980,8 +985,8 @@ host = localhost
             project_dict = project.to_dict()
             project_dict["environments"] = [str(e.id) for e in environments]
 
-            return 200, project_dict
-        except errors.DoesNotExist:
+            return 200, {"project": project_dict}
+        except (errors.DoesNotExist, ValueError):
             return 404, {"message": "The project with given id does not exist."}
 
         return 500
@@ -1027,10 +1032,23 @@ host = localhost
             return 404, {"message": "The environment id does not exist."}
 
     @protocol.handle(methods.Environment.get_environment)
-    def get_environment(self, id):
+    def get_environment(self, id, versions=None, resources=None):
+        versions = 0 if versions is None else versions
+        resources = 0 if resources is None else resources
+
         try:
             env = data.Environment.objects().get(id=id)  # @UndefinedVariable
-            return 200, {"environment": env.to_dict()}
+            env_dict = env.to_dict()
+
+            if versions > 0:
+                v = data.ConfigurationModel.objects(environment=env).order_by("-date").limit(versions)  # @UndefinedVariable
+                env_dict["versions"] = [x.to_dict() for x in v]
+
+            if resources > 0:
+                r = data.Resource.objects(environment=env)  # @UndefinedVariable
+                env_dict["resources"] = [x.to_dict() for x in r]
+
+            return 200, {"environment": env_dict}
 
         except errors.DoesNotExist:
             return 404, {"message": "The environment id does not exist."}
