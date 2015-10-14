@@ -299,7 +299,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_version(self, tid: uuid.UUID, id: uuid.UUID, include_logs: bool=None, log_filter: str=None, limit: int=None):
+    def get_version(self, tid: uuid.UUID, id: int, include_logs: bool=None, log_filter: str=None, limit: int=None):
         """
             Get a particular version and a list of all resources in this version
 
@@ -311,7 +311,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="DELETE", id=True, mt=True)
-    def delete_version(self, tid: uuid.UUID, id: uuid.UUID):
+    def delete_version(self, tid: uuid.UUID, id: int):
         """
             Delete a particular version and resources
 
@@ -331,7 +331,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def release_version(self, tid: uuid.UUID, id: uuid.UUID, push: bool):
+    def release_version(self, tid: uuid.UUID, id: int, push: bool):
         """
             Release version of the configuration model for deployment.
 

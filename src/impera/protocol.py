@@ -306,7 +306,8 @@ class RESTHandler(tornado.web.RequestHandler):
                         try:
                             message[arg] = arg_type(message[arg])
                         except (ValueError, TypeError):
-                            self.return_error_msg(500, "Invalid type for argument %s" % arg)
+                            self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
+                                                  (arg, arg_type, message[arg].__class__))
                             return
 
             if len(all_fields) > 0 and argspec.varkw is None:
