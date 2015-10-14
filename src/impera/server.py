@@ -820,9 +820,6 @@ host = localhost
 
         dryruns = data.DryRun.objects(**query_args)  # @UndefinedVariable
 
-        if len(dryruns) == 0:
-            return 404
-
         return 200, {"dryruns": [{"id": str(x.id), "version": x.model.version,
                                   "date": x.date.isoformat(), "total": x.resource_total,
                                   "todo": x.resource_todo
