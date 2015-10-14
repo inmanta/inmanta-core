@@ -426,7 +426,7 @@ class Server(protocol.ServerEndpoint):
                 response.append({"items": self._requests[environment][nh], "agent": nh})
                 del self._requests[environment][nh]
 
-        return 200, {"requests": response, "environment": environment}
+        return 200, {"requests": response, "environment": str(environment)}
 
     @protocol.handle(methods.NodeMethod.get_agent)
     def get_agent(self, id):
@@ -969,7 +969,6 @@ host = localhost
 
         except errors.NotUniqueError:
             return 500, {"message": "A project with name %s already exists." % name}
-
 
     @protocol.handle(methods.Project.list_projects)
     def list_projects(self):
