@@ -709,7 +709,7 @@ host = localhost
 """ % {"agents": agent_names, "env_id": environment_id, "agent_map":
                 ",".join(["%s=localhost" % x for x in agent_data["agents"]])}
 
-            config_dir = os.path.join(self._server_storage["agents"], environment_id)
+            config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
             if not os.path.exists(config_dir):
                 os.mkdir(config_dir)
 
@@ -1129,7 +1129,7 @@ host = localhost
             TODO: store logs
         """
         impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
-        project_dir = os.path.join(self._server_storage["environments"], environment_id)
+        project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
         requested = datetime.datetime.now()
         stages = []
 
