@@ -1171,7 +1171,7 @@ host = localhost
 
         LOGGER.info("Recompiling configuration model")
         stages.append(self._run_compile_stage("Recompiling configuration model",
-                                              impera_path + ["-vvv", "export", "-e", environment_id, "--server_address",
+                                              impera_path + ["-vvv", "export", "-e", str(environment_id), "--server_address",
                                                              "localhost", "--server_port", "8888"],
                                               project_dir, env=os.environ.copy()))
 
