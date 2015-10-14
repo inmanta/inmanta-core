@@ -423,6 +423,7 @@ class Server(protocol.ServerEndpoint):
                 agent[0].save()
 
             # check if there is something we need to push to the client
+            environment = str(environment)
             if environment in self._requests and nh in self._requests[environment]:
                 response.append({"items": self._requests[environment][nh], "agent": nh})
                 del self._requests[environment][nh]
