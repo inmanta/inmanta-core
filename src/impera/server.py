@@ -1033,8 +1033,8 @@ host = localhost
 
     @protocol.handle(methods.Environment.get_environment)
     def get_environment(self, id, versions=None, resources=None):
-        versions = 0 if versions is None else versions
-        resources = 0 if resources is None else resources
+        versions = 0 if versions is None else int(versions)
+        resources = 0 if resources is None else int(resources)
 
         try:
             env = data.Environment.objects().get(id=id)  # @UndefinedVariable
