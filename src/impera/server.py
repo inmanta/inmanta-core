@@ -164,6 +164,7 @@ class Server(protocol.ServerEndpoint):
         """
             Queue a request for the agent in the given environment
         """
+        environment = str(environment)
         LOGGER.debug("Queueing request for agent %s in environment %s", agent, environment)
         if agent not in self._requests[environment]:
             self._requests[environment][agent] = []
@@ -729,6 +730,7 @@ host = localhost
 
     @protocol.handle(methods.CMVersionMethod.release_version)
     def release_version(self, tid, id, push):
+        tid = str(tid)
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
