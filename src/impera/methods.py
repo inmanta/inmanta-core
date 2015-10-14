@@ -193,7 +193,7 @@ class FileMethod(Method):
     __method_name__ = "file"
 
     @protocol(operation="PUT", id=True, data_type="blob")
-    def upload_file(self, id: uuid.UUID, content: str):
+    def upload_file(self, id: str, content: str):
         """
             Upload a new file
 
@@ -202,7 +202,7 @@ class FileMethod(Method):
         """
 
     @protocol(operation="HEAD", id=True)
-    def stat_file(self, id: uuid.UUID):
+    def stat_file(self, id: str):
         """
             Does the file exist
 
@@ -210,7 +210,7 @@ class FileMethod(Method):
         """
 
     @protocol(operation="GET", id=True, data_type="blob")
-    def get_file(self, id: uuid.UUID):
+    def get_file(self, id: str):
         """
             Retrieve a file
 
@@ -348,7 +348,7 @@ class DryRunMethod(Method):
     __method_name__ = "dryrun"
 
     @protocol(operation="POST", mt=True, id=True)
-    def dryrun_request(self, tid: uuid.UUID, id: uuid.UUID):
+    def dryrun_request(self, tid: uuid.UUID, id: int):
         """
             Do a dryrun
 
@@ -366,7 +366,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="GET", mt=True, id=True)
-    def dryrun_report(self, tid: uuid.UUID, id: uuid.UUID):
+    def dryrun_report(self, tid: uuid.UUID, id: int):
         """
             Create a dryrun report
 
@@ -375,7 +375,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="PUT", mt=True, id=True)
-    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
+    def dryrun_update(self, tid: uuid.UUID, id: int, resource: str, changes: dict, log_msg: str=None):
         """
             Store dryrun results at the server
 
@@ -415,7 +415,7 @@ class ParameterMethod(Method):
     __method_name__ = "parameter"
 
     @protocol(operation="GET", mt=True, id=True)
-    def get_param(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str=None):
+    def get_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Get a parameter from the server.
 
@@ -430,7 +430,7 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def set_param(self, tid: uuid.UUID, id: uuid.UUID, source: str, value: str, resource_id: str=None):
+    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None):
         """
             Set a parameter on the server
 
@@ -466,7 +466,7 @@ class NodeMethod(Method):
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_agent(self, tid: uuid.UUID, id: uuid.UUID):
+    def get_agent(self, tid: uuid.UUID, id: str):
         """
             Return the node and the agents on this node for the given id
 
@@ -476,7 +476,7 @@ class NodeMethod(Method):
         """
 
     @protocol(operation="POST", id=True, mt=True)
-    def trigger_agent(self, tid: uuid.UUID, id: uuid.UUID):
+    def trigger_agent(self, tid: uuid.UUID, id: str):
         """
             Request an agent to reload resources
 
@@ -493,7 +493,7 @@ class CodeMethod(Method):
     __method_name__ = "code"
 
     @protocol(operation="PUT", id=True, mt=True)
-    def upload_code(self, tid: uuid.UUID, id: uuid.UUID, sources: str, requires: list):
+    def upload_code(self, tid: uuid.UUID, id: int, sources: str, requires: list):
         """
             Upload the supporting code to the server
 
@@ -504,7 +504,7 @@ class CodeMethod(Method):
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_code(self, tid: uuid.UUID, id: uuid.UUID):
+    def get_code(self, tid: uuid.UUID, id: int):
         """
             Get the code for a given version of the configuration model
 
