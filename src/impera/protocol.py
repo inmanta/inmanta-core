@@ -34,6 +34,9 @@ import tornado.web
 import tornado.gen
 from impera import methods
 from impera.config import Config
+import uuid
+from datetime import datetime
+import json
 
 
 LOGGER = logging.getLogger(__name__)
@@ -195,7 +198,7 @@ class Transport(threading.Thread):
             Decode a response body
         """
         if body is not None and len(body) > 0:
-            body = tornado.escape.json_decode(body)
+            body = json.loads(tornado.escape.to_basestring(body))
         else:
             body = None
 
@@ -215,6 +218,24 @@ class Transport(threading.Thread):
         return self._connected
 
 
+def custom_json_encoder(o):
+    """
+        A custom json encoder that knows how to encode other types commonly used by Impera
+    """
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime.datetime):
+        return o.isoformat()
+
+    raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def json_encode(value):
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+
+
 class RESTHandler(tornado.web.RequestHandler):
     """
         A generic class use by the transport
@@ -224,7 +245,7 @@ class RESTHandler(tornado.web.RequestHandler):
         self._config = config
 
     def return_error_msg(self, status=500, msg=""):
-        self.write(tornado.escape.json_encode({"message": msg}))
+        self.write(json_encode({"message": msg}))
         self.set_header("Content-Type", "application/json")
         self.set_status(status, msg)
 
@@ -334,7 +355,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
             if reply is not None:
                 if "reply" in self._config[operation][0] and self._config[operation][0]:
-                    self.write(tornado.escape.json_encode(reply))
+                    self.write(json_encode(reply))
                     self.set_header("Content-Type", "application/json")
 
                 else:
@@ -521,7 +542,7 @@ class RESTTransport(Transport):
 
             body = ""
         else:
-            body = tornado.escape.json_encode(msg)
+            body = json_encode(msg)
 
         LOGGER.debug("Calling server with url %s", url)
 
