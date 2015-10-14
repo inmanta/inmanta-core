@@ -365,7 +365,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         except Exception as e:
             LOGGER.exception("An exception occured")
-            self.return_error_msg(500, "An exception occured: " + " ".join(e.args))
+            self.return_error_msg(500, "An exception occured: " + str(e.args))
 
         self.finish()
 
