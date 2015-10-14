@@ -299,6 +299,16 @@ class RESTHandler(tornado.web.RequestHandler):
                 else:
                     all_fields.remove(arg)
 
+                # validate the type
+                if arg in argspec.annotations:
+                    arg_type = argspec.annotations[arg]
+                    if message[arg] is not None and not isinstance(message[arg], arg_type):
+                        try:
+                            message[arg] = arg_type(message[arg])
+                        except (ValueError, TypeError):
+                            self.return_error_msg(500, "Invalid type for argument %s" % arg)
+                            return
+
             if len(all_fields) > 0 and argspec.varkw is None:
                 self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
                                       "that are not declared in method and no kwargs argument is provided.")

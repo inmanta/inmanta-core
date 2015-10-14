@@ -18,6 +18,7 @@
 
 from functools import wraps
 from impera.data import ROLES, ACTIONS, LOGLEVEL
+import uuid
 
 
 def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
@@ -89,13 +90,13 @@ class Project(Method):
         """
 
     @protocol(operation="POST", id=True)
-    def modify_project(self, id, name):
+    def modify_project(self, id: uuid.UUID, name: str):
         """
             Modify the given project
         """
 
     @protocol(operation="DELETE", id=True)
-    def delete_project(self, id):
+    def delete_project(self, id: uuid.UUID):
         """
             Delete the given project and all related data
         """
@@ -107,7 +108,7 @@ class Project(Method):
         """
 
     @protocol(operation="GET", id=True)
-    def get_project(self, id):
+    def get_project(self, id: uuid.UUID):
         """
             Get a project and a list of the ids of all environments
         """
@@ -120,7 +121,7 @@ class Environment(Method):
     __method_name__ = "environment"
 
     @protocol(operation="PUT")
-    def create_environment(self, project_id, name, repository=None, branch=None):
+    def create_environment(self, project_id: uuid.UUID, name: str, repository: str=None, branch: str=None):
         """
             Create a new environment
 
@@ -131,7 +132,7 @@ class Environment(Method):
         """
 
     @protocol(operation="POST", id=True)
-    def modify_environment(self, id, name, repository=None, branch=None):
+    def modify_environment(self, id: uuid.UUID, name: str, repository: str=None, branch: str=None):
         """
             Modify the given environment
 
@@ -142,7 +143,7 @@ class Environment(Method):
         """
 
     @protocol(operation="DELETE", id=True)
-    def delete_environment(self, id):
+    def delete_environment(self, id: uuid.UUID):
         """
             Delete the given environment and all related data
         """
@@ -154,7 +155,7 @@ class Environment(Method):
         """
 
     @protocol(operation="GET", id=True)
-    def get_environment(self, id, versions=None, resources=None):
+    def get_environment(self, id: uuid.UUID, versions: int=None, resources: int=None):
         """
             Get an environment and all versions associated
 
@@ -171,14 +172,15 @@ class HeartBeatMethod(Method):
     __method_name__ = "heartbeat"
 
     @protocol(reply=False)
-    def heartbeat(self, endpoint_names, nodename, role, interval, environment):
+    def heartbeat(self, endpoint_names: list, nodename: str, role: str, interval: int, environment: uuid.UUID):
         """
             Broadcast a heart beat to everyone
 
-            :param node The name of the node from which the heart beat comes
             :param endpoint_names The names of the endpoints on this node
+            :param nodename The name of the node from which the heart beat comes
             :param role The role of the compnent sending the heart beat
             :param interval The expected interval between heart beats
+            :param environment The environment this agent belongs to
         """
         if role not in ROLES:
             raise Exception("Invalid agent role (%s) should be %s" % (role, ", ".join(ROLES)))
@@ -191,7 +193,7 @@ class FileMethod(Method):
     __method_name__ = "file"
 
     @protocol(operation="PUT", id=True, data_type="blob")
-    def upload_file(self, id, content):
+    def upload_file(self, id: uuid.UUID, content: str):
         """
             Upload a new file
 
@@ -200,7 +202,7 @@ class FileMethod(Method):
         """
 
     @protocol(operation="HEAD", id=True)
-    def stat_file(self, id):
+    def stat_file(self, id: uuid.UUID):
         """
             Does the file exist
 
@@ -208,7 +210,7 @@ class FileMethod(Method):
         """
 
     @protocol(operation="GET", id=True, data_type="blob")
-    def get_file(self, id):
+    def get_file(self, id: uuid.UUID):
         """
             Retrieve a file
 
@@ -216,7 +218,7 @@ class FileMethod(Method):
         """
 
     @protocol()
-    def stat_files(self, files):
+    def stat_files(self, files: list):
         """
             Check which files exist in the given list
 
@@ -232,7 +234,7 @@ class ResourceMethod(Method):
     __method_name__ = "resource"
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_resource(self, tid, id, logs=False):
+    def get_resource(self, tid: uuid.UUID, id: uuid.UUID, logs: bool=None):
         """
             Return a resource with the given id.
 
@@ -242,7 +244,7 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="GET", mt=True, index=True)
-    def get_resources_for_agent(self, tid, agent, version=None):
+    def get_resources_for_agent(self, tid: uuid.UUID, agent: str, version: int=None):
         """
             Return the most recent state for the resources associated with agent, or the version requested
 
@@ -253,7 +255,7 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="HEAD", mt=True, id=True, destination="agent")
-    def get_resource_state(self, tid, id):
+    def get_resource_state(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Get the status of the resource
 
@@ -262,7 +264,7 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def resource_updated(self, tid, id, level, action, message, extra_data):
+    def resource_updated(self, tid: uuid.UUID, id: uuid.UUID, level: str, action: str, message: str, extra_data: dict):
         """
             Send a resource update to the server
 
@@ -287,7 +289,7 @@ class CMVersionMethod(Method):
     __method_name__ = "cmversion"
 
     @protocol(index=True, operation="GET", mt=True)
-    def list_versions(self, tid, start=None, limit=None):
+    def list_versions(self, tid: uuid.UUID, start: int=None, limit: int=None):
         """
             Returns a list of all available versions
 
@@ -297,7 +299,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
+    def get_version(self, tid: uuid.UUID, id: uuid.UUID, include_logs: bool=None, log_filter: str=None, limit: int=None):
         """
             Get a particular version and a list of all resources in this version
 
@@ -309,7 +311,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="DELETE", id=True, mt=True)
-    def delete_version(self, tid, id):
+    def delete_version(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Delete a particular version and resources
 
@@ -318,7 +320,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="PUT", mt=True)
-    def put_version(self, tid, version, resources, unknowns=None):
+    def put_version(self, tid: uuid.UUID, version: int, resources: list, unknowns: list=None):
         """
             Store a new version of the configuration model
 
@@ -329,7 +331,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def release_version(self, tid, id, push):
+    def release_version(self, tid: uuid.UUID, id: uuid.UUID, push: bool):
         """
             Release version of the configuration model for deployment.
 
@@ -346,7 +348,7 @@ class DryRunMethod(Method):
     __method_name__ = "dryrun"
 
     @protocol(operation="POST", mt=True, id=True)
-    def dryrun_request(self, tid, id):
+    def dryrun_request(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Do a dryrun
 
@@ -355,7 +357,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="GET", mt=True)
-    def dryrun_list(self, tid, version=None):
+    def dryrun_list(self, tid: uuid.UUID, version: int=None):
         """
             Create a list of dry runs
 
@@ -364,7 +366,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="GET", mt=True, id=True)
-    def dryrun_report(self, tid, id):
+    def dryrun_report(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Create a dryrun report
 
@@ -373,7 +375,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="PUT", mt=True, id=True)
-    def dryrun_update(self, tid, id, resource, changes, log_msg=None):
+    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
         """
             Store dryrun results at the server
 
@@ -392,7 +394,7 @@ class NotifyMethod(Method):
     __method_name__ = "notify"
 
     @protocol(operation="GET", id=True)
-    def notify_change(self, id):
+    def notify_change(self, id: uuid.UUID):
         """
             Notify the server that the repository of the environment with the given id, has changed.
 
@@ -400,7 +402,7 @@ class NotifyMethod(Method):
         """
 
     @protocol(operation="HEAD", id=True)
-    def is_compiling(self, id):
+    def is_compiling(self, id: uuid.UUID):
         """
            Is a compiler running for the given environment
         """
@@ -413,7 +415,7 @@ class ParameterMethod(Method):
     __method_name__ = "parameter"
 
     @protocol(operation="GET", mt=True, id=True)
-    def get_param(self, tid, id, resource_id=None):
+    def get_param(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str=None):
         """
             Get a parameter from the server.
 
@@ -428,7 +430,7 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def set_param(self, tid, id, source, value, resource_id=None):
+    def set_param(self, tid: uuid.UUID, id: uuid.UUID, source: str, value: str, resource_id: str=None):
         """
             Set a parameter on the server
 
@@ -440,7 +442,7 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="GET", index=True, mt=True)
-    def list_params(self, tid):
+    def list_params(self, tid: uuid.UUID):
         """
             List the parameter of this environment
 
@@ -455,7 +457,7 @@ class NodeMethod(Method):
     __method_name__ = "agent"
 
     @protocol(operation="GET", index=True)
-    def list_agents(self, environment=None):
+    def list_agents(self, environment: uuid.UUID=None):
         """
             Return a list of all nodes and the agents for these nodes
 
@@ -464,7 +466,7 @@ class NodeMethod(Method):
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_agent(self, tid, id):
+    def get_agent(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Return the node and the agents on this node for the given id
 
@@ -474,7 +476,7 @@ class NodeMethod(Method):
         """
 
     @protocol(operation="POST", id=True, mt=True)
-    def trigger_agent(self, tid, id):
+    def trigger_agent(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Request an agent to reload resources
 
@@ -491,18 +493,18 @@ class CodeMethod(Method):
     __method_name__ = "code"
 
     @protocol(operation="PUT", id=True, mt=True)
-    def upload_code(self, tid, id, sources, requires):
+    def upload_code(self, tid: uuid.UUID, id: uuid.UUID, sources: str, requires: list):
         """
             Upload the supporting code to the server
 
             :param tid The environment the code belongs to
             :param id The id (version) of the configuration model
             :param sources The source files that contain handlers and impera plug-ins
-            :param requires The requires (dependencies) for the source code (installed with pip
+            :param requires The requires (dependencies) for the source code (installed with pip)
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_code(self, tid, id):
+    def get_code(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Get the code for a given version of the configuration model
 
@@ -518,7 +520,7 @@ class FileDiff(Method):
     __method_name__ = "filediff"
 
     @protocol()
-    def diff(self, a, b):
+    def diff(self, a: str, b: str):
         """
             Returns the diff of the files with the two given ids
         """
@@ -531,7 +533,12 @@ class CompileReport(Method):
     __method_name__ = "compilereport"
 
     @protocol(operation="GET", index=True)
-    def get_reports(self, environment=None, start=None, end=None, limit=None):
+    def get_reports(self, environment: uuid.UUID=None, start: str=None, end: str=None, limit: int=None):
         """
             Return compile reports newer then start
+
+            :param environment The id of the environment to get a report from
+            :param start Reports after start
+            :param end Reports before end
+            :param limit Maximum number of results
         """
