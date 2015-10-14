@@ -367,12 +367,12 @@ class Code(Document):
         A code deployment
 
         :param environment The environment this code belongs to
-        :param version The version of configuration mode it belongs to
+        :param version The version of configuration model it belongs to
         :param sources The source code of plugins
         :param requires Python requires for the source code above
     """
     environment = ReferenceField(Environment)
-    version = StringField()
+    version = IntField()
     sources = DynamicField()
     requires = DynamicField()
 
