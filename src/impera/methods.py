@@ -234,7 +234,7 @@ class ResourceMethod(Method):
     __method_name__ = "resource"
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_resource(self, tid: uuid.UUID, id: uuid.UUID, logs: bool=None):
+    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None):
         """
             Return a resource with the given id.
 
@@ -255,7 +255,7 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="HEAD", mt=True, id=True, destination="agent")
-    def get_resource_state(self, tid: uuid.UUID, id: uuid.UUID):
+    def get_resource_state(self, tid: uuid.UUID, id: str):
         """
             Get the status of the resource
 
@@ -264,7 +264,7 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def resource_updated(self, tid: uuid.UUID, id: uuid.UUID, level: str, action: str, message: str, extra_data: dict):
+    def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, extra_data: dict):
         """
             Send a resource update to the server
 
