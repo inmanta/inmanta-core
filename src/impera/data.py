@@ -45,6 +45,10 @@ class Environment(Document):
         return {"id": str(self.id), "name": self.name, "project": str(self.project.id), "repo_url": self.repo_url,
                 "repo_branch": self.repo_branch}
 
+    def delete(self):
+        ConfigurationModel.objects(environment=self).delete()
+        super().delete()
+
 
 class Project(Document):
     """
