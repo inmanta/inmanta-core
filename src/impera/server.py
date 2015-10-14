@@ -427,7 +427,7 @@ class Server(protocol.ServerEndpoint):
                 response.append({"items": self._requests[environment][nh], "agent": nh})
                 del self._requests[environment][nh]
 
-        return 200, {"requests": response, "environment": str(environment)}
+        return 200, {"requests": response, "environment": environment}
 
     @protocol.handle(methods.NodeMethod.get_agent)
     def get_agent(self, id):
@@ -820,7 +820,7 @@ host = localhost
 
         dryruns = data.DryRun.objects(**query_args)  # @UndefinedVariable
 
-        return 200, {"dryruns": [{"id": str(x.id), "version": x.model.version,
+        return 200, {"dryruns": [{"id": x.id, "version": x.model.version,
                                   "date": x.date.isoformat(), "total": x.resource_total,
                                   "todo": x.resource_todo
                                   } for x in dryruns]}
@@ -867,11 +867,11 @@ host = localhost
         except errors.DoesNotExist:
             return 404, {"message": "The provided environment id does not match an existing environment."}
 
-        code = data.Code.objects(environment=env, version=str(id))  # @UndefinedVariable
+        code = data.Code.objects(environment=env, version=id)  # @UndefinedVariable
         if len(code) > 0:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env, version=str(id), sources=sources, requires=requires)
+        code = data.Code(environment=env, version=id, sources=sources, requires=requires)
         code.save()
 
         return 200
@@ -883,7 +883,7 @@ host = localhost
         except errors.DoesNotExist:
             return 404, {"message": "The provided environment id does not match an existing environment."}
 
-        code = data.Code.objects(environment=env, version=str(id))  # @UndefinedVariable
+        code = data.Code.objects(environment=env, version=id)  # @UndefinedVariable
         if len(code) == 0:
             return 404, {"message": "The version of the code does not exist."}
 
@@ -981,7 +981,7 @@ host = localhost
             environments = data.Environment.objects(project=project.id)  # @UndefinedVariable
 
             project_dict = project.to_dict()
-            project_dict["environments"] = [str(e.id) for e in environments]
+            project_dict["environments"] = [e.id for e in environments]
 
             return 200, {"project": project_dict}
         except (errors.DoesNotExist, ValueError):
