@@ -493,7 +493,7 @@ class CodeMethod(Method):
     __method_name__ = "code"
 
     @protocol(operation="PUT", id=True, mt=True)
-    def upload_code(self, tid: uuid.UUID, id: int, sources: str, requires: list):
+    def upload_code(self, tid: uuid.UUID, id: int, sources: dict, requires: list):
         """
             Upload the supporting code to the server
 
