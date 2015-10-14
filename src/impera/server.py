@@ -954,7 +954,7 @@ host = localhost
         except errors.DoesNotExist:
             return 404, {"message": "The project with given id does not exist."}
 
-        return 200
+        return 200, {}
 
     @protocol.handle(methods.Project.modify_project)
     def modify_project(self, id, name):
@@ -963,14 +963,13 @@ host = localhost
             project.name = name
             project.save()
 
-            return 200, project.to_dict()
+            return 200, {"project": project.to_dict()}
         except errors.DoesNotExist:
             return 404, {"message": "The project with given id does not exist."}
 
         except errors.NotUniqueError:
             return 500, {"message": "A project with name %s already exists." % name}
 
-        return 500
 
     @protocol.handle(methods.Project.list_projects)
     def list_projects(self):
