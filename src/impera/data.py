@@ -87,9 +87,12 @@ class Parameter(Document):
     resource_id = StringField(default="")
     updated = DateTimeField()
 
+    meta = {
+        'indexes': ['environment']
+    }
+
     def to_dict(self):
-        return {"environment": str(self.environment.id),
-                "name": self.name,
+        return {"name": self.name,
                 "value": self.value,
                 "source": self.source,
                 "resource_id": self.resource_id,
