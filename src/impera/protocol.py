@@ -310,10 +310,8 @@ class RESTHandler(tornado.web.RequestHandler):
             for i in range(len(args)):
                 arg = args[i]
                 if arg not in message:
-                    if (defaults_start >= 0 and (i - defaults_start) < len(argspec.defaults) and
-                            argspec.defaults[i - defaults_start] is None):
-                        # a default value of none is provided
-                        message[arg] = None
+                    if (defaults_start >= 0 and (i - defaults_start) < len(argspec.defaults)):
+                        message[arg] = argspec.defaults[i - defaults_start]
                     else:
                         self.return_error_msg(500, "Invalid request. Field '%s' is required." % arg)
                         return
