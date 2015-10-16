@@ -270,7 +270,7 @@ class Server(protocol.ServerEndpoint):
         # check if it was expired
         now = datetime.datetime.now()
         if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
-            return 200, params[0].to_dict()
+            return 200, {"parameter": params[0].to_dict()}
 
         return self._request_parameter(param)
 
@@ -306,7 +306,7 @@ class Server(protocol.ServerEndpoint):
 
             self._async_recompile(tid, False)
 
-        return 200, param.to_dict()
+        return 200, {"parameter": param.to_dict()}
 
     @protocol.handle(methods.ParameterMethod.list_params)
     def list_param(self, tid):
