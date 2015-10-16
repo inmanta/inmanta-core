@@ -394,11 +394,12 @@ class NotifyMethod(Method):
     __method_name__ = "notify"
 
     @protocol(operation="GET", id=True)
-    def notify_change(self, id: uuid.UUID):
+    def notify_change(self, id: uuid.UUID, update: int=1):
         """
             Notify the server that the repository of the environment with the given id, has changed.
 
             :param id The id of the environment
+            :param update Update the model code and modules. Default value is true (1)
         """
 
     @protocol(operation="HEAD", id=True)

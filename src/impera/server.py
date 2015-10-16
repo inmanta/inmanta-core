@@ -1063,9 +1063,9 @@ host = localhost
         return 204
 
     @protocol.handle(methods.NotifyMethod.notify_change)
-    def notify_change(self, id):
+    def notify_change(self, id, update):
         LOGGER.info("Received change notification for environment %s", id)
-        self._async_recompile(id, True)
+        self._async_recompile(id, update > 0)
 
         return 200
 
@@ -1113,59 +1113,60 @@ host = localhost
     def _recompile_environment(self, environment_id, update_repo=False):
         """
             Recompile an environment
-
-            TODO: store logs
         """
-        impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
-        project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
-        requested = datetime.datetime.now()
-        stages = []
-
         try:
-            env = data.Environment.objects().get(id=environment_id)  # @UndefinedVariable
-        except errors.DoesNotExist:
-            LOGGER.error("Environment %s does not exist.", environment_id)
-            return
+            impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
+            project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
+            requested = datetime.datetime.now()
+            stages = []
 
-        if not os.path.exists(project_dir):
-            LOGGER.info("Creating project directory for environment %s at %s", environment_id, project_dir)
-            os.mkdir(project_dir)
+            try:
+                env = data.Environment.objects().get(id=environment_id)  # @UndefinedVariable
+            except errors.DoesNotExist:
+                LOGGER.error("Environment %s does not exist.", environment_id)
+                return
 
-        # checkout repo
-        if not os.path.exists(os.path.join(project_dir, ".git")):
-            LOGGER.info("Cloning repository into environment directory %s", project_dir)
-            stages.append(self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."], project_dir))
+            if not os.path.exists(project_dir):
+                LOGGER.info("Creating project directory for environment %s at %s", environment_id, project_dir)
+                os.mkdir(project_dir)
 
-        elif update_repo:
-            LOGGER.info("Fetching changes from repo %s", env.repo_url)
-            stages.append(self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir))
+            # checkout repo
+            if not os.path.exists(os.path.join(project_dir, ".git")):
+                LOGGER.info("Cloning repository into environment directory %s", project_dir)
+                result = self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."], project_dir)
+                stages.append(result)
+                if result.returncode > 0:
+                    return
 
-        # verify if branch is correct
-        proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, _ = proc.communicate()
+            elif update_repo:
+                LOGGER.info("Fetching changes from repo %s", env.repo_url)
+                stages.append(self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir))
 
-        o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
-        branch_name = o.group(1)
+            # verify if branch is correct
+            proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out, _ = proc.communicate()
 
-        if env.repo_branch != branch_name:
-            LOGGER.info("Repository is at %s branch, switching to %s", branch_name, env.repo_branch)
-            stages.append(self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir))
+            o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
+            if o is not None and env.repo_branch != o.group(1):
+                LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
+                stages.append(self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir))
 
-        stages.append(self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir))
-        LOGGER.info("Installing and updating modules")
-        stages.append(self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir))
-        stages.append(self._run_compile_stage("Updating modules", impera_path + ["modules", "update"], project_dir,
-                                              env=os.environ.copy()))
+            if update_repo:
+                stages.append(self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir))
+                LOGGER.info("Installing and updating modules")
+                stages.append(self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir))
+                stages.append(self._run_compile_stage("Updating modules", impera_path + ["modules", "update"], project_dir,
+                                                      env=os.environ.copy()))
 
-        LOGGER.info("Recompiling configuration model")
-        stages.append(self._run_compile_stage("Recompiling configuration model",
-                                              impera_path + ["-vvv", "export", "-e", str(environment_id), "--server_address",
-                                                             "localhost", "--server_port", "8888"],
-                                              project_dir, env=os.environ.copy()))
-
-        end = datetime.datetime.now()
-        self._recompiles[environment_id] = end
-        data.Compile(environment=env, started=requested, completed=end, reports=stages).save()
+            LOGGER.info("Recompiling configuration model")
+            stages.append(self._run_compile_stage("Recompiling configuration model",
+                                                  impera_path + ["-vvv", "export", "-e", str(environment_id),
+                                                                 "--server_address", "localhost", "--server_port", "8888"],
+                                                  project_dir, env=os.environ.copy()))
+        finally:
+            end = datetime.datetime.now()
+            self._recompiles[environment_id] = end
+            data.Compile(environment=env, started=requested, completed=end, reports=stages).save()
 
     @protocol.handle(methods.CompileReport.get_reports)
     def get_reports(self, environment=None, start=None, end=None, limit=None):
