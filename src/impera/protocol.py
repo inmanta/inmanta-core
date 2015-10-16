@@ -225,7 +225,7 @@ def custom_json_encoder(o):
     if isinstance(o, uuid.UUID):
         return str(o)
 
-    if isinstance(o, datetime.datetime):
+    if isinstance(o, datetime):
         return o.isoformat()
 
     raise TypeError(repr(o) + " is not JSON serializable")
