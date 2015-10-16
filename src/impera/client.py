@@ -28,6 +28,7 @@ from cliff.show import ShowOne
 from cliff.command import Command
 from impera.config import Config
 from blessings import Terminal
+import uuid
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,150 +39,174 @@ def client_parser(parser):
     parser.add_argument("--port", dest="port", help="The server port to connect to (default: 8888)", default=8888, type=int)
 
 
-class ProjectShow(ShowOne):
+class ImperaCommand(Command):
+    """
+        An impera command
+    """
+    log = logging.getLogger(__name__)
+
+    def __init__(self, app, app_args):
+        super().__init__(app, app_args)
+        self._client = None
+
+    def get_parser(self, prog_name):
+        parser = super().get_parser(prog_name)
+        Config.load_config()
+
+        parser.add_argument("--host", dest="host", help="The server hostname to connect to (default: localhost)",
+                            default=Config.get("cmdline_rest_transport", "host", "localhost"))
+        parser.add_argument("--port", dest="port", help="The server port to connect to (default: 8888)",
+                            default=int(Config.get("cmdline_rest_transport", "port", 8888)), type=int)
+        parser = self.parser_config(parser)
+        return parser
+
+    def parser_config(self, parser):
+        """
+            Method for a subclass to override to add additional arguments to the command
+        """
+        return parser
+
+    def do_request(self, method_name, key_name=None, arguments={}):
+        """
+            Do a request and return the response
+        """
+        type(self).log.debug("Calling method %s on server %s:%s with arguments %s" %
+                             (method_name, Config.get("cmdline_rest_transport", "host"),
+                              Config.get("cmdline_rest_transport", "port"), arguments))
+
+        if not hasattr(self._client, method_name):
+            raise Exception("API call %s is not available." % method_name)
+
+        method = getattr(self._client, method_name)
+
+        result = method(**arguments)
+
+        if result is None:
+            raise Exception("Failed to call server.")
+
+        type(self).log.debug("Got response code %s and data: %s" % (result.code, result.result))
+
+        if result.code == 200:
+            if key_name is None:
+                return result.result
+
+            if key_name in result.result:
+                return result.result[key_name]
+
+            raise Exception("Expected %s in the response of %s." % (key_name, method_name))
+        elif result.code == 404:
+            raise Exception("Requested %s not found on server" % key_name)
+
+        else:
+            msg = ": "
+            if result.result is not None and "message" in result.result:
+                msg += result.result["message"]
+
+            raise Exception(("An error occurred while requesting %s" % key_name) + msg)
+
+    def to_project_id(self, ref):
+        """
+            Convert ref to a uuid
+        """
+        try:
+            project_id = uuid.UUID(ref)
+        except ValueError:
+            # try to resolve the id as project name
+            projects = self.do_request("list_projects", "projects")
+
+            id_list = []
+            for project in projects:
+                if ref == project["name"]:
+                    id_list.append(project["id"])
+
+            if len(id_list) == 0:
+                raise Exception("Unable to find a project with the given id or name")
+
+            elif len(id_list) > 1:
+                raise Exception("Found multiple projects with %s name, please use the ID." % ref)
+
+            else:
+                project_id = id_list[0]
+
+        return project_id
+
+    def take_action(self, parsed_args):
+        self._client = protocol.Client("cmdline", "client")
+        return self.run_action(parsed_args)
+
+    def run_action(self, parsed_args):
+        raise NotImplementedError()
+
+
+class ProjectShow(ImperaCommand, ShowOne):
     """
         Show project details
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("id", help="The the id of the project to show")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.get_project(id=parsed_args.id)
-
-        if result.code == 200:
-            return (('ID', 'Name'),
-                    ((result.result["id"], result.result["name"]))
-                    )
-        else:
-            print("Failed to get project: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+    def run_action(self, parsed_args):
+        project_id = self.to_project_id(parsed_args.id)
+        project = self.do_request("get_project", "project", dict(id=project_id))
+        return (('ID', 'Name'), ((project["id"], project["name"])))
 
 
-class ProjectCreate(ShowOne):
+class ProjectCreate(ImperaCommand, ShowOne):
     """
         Create a new project
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the new project")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.create_project(name=parsed_args.name)
-
-        if result.code == 200:
-            return (('ID', 'Name', 'Environments'),
-                    ((result.result["id"], result.result["name"], []))
-                    )
-        else:
-            print("Failed to create project: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+    def run_action(self, parsed_args):
+        project = self.do_request("create_project", "project", {"name": parsed_args.name})
+        return (('ID', 'Name'), ((project["id"], project["name"])))
 
 
-class ProjectModify(ShowOne):
+class ProjectModify(ImperaCommand, ShowOne):
     """
         Modify a project
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super(ProjectModify, self).get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the new project")
         parser.add_argument("id", help="The id of the project to modify")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
+    def run_action(self, parsed_args):
+        project_id = self.to_project_id(parsed_args.id)
+        project = self.do_request("modify_project", "project", dict(id=project_id, name=parsed_args.name))
 
-        result = client.modify_project(id=parsed_args.id, name=parsed_args.name)
-
-        if result.code == 200:
-            return (('ID', 'Name', 'Environments'),
-                    ((result.result["id"], result.result["name"], []))
-                    )
-        else:
-            print("Failed to modify project: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('ID', 'Name'), ((project["id"], project["name"])))
 
 
-class ProjectList(Lister):
+class ProjectList(ImperaCommand, Lister):
     """
         List all projects defined on the server
     """
-    log = logging.getLogger(__name__)
+    def run_action(self, parsed_args):
+        projects = self.do_request("list_projects", "projects")
 
-    def get_parser(self, prog_name):
-        parser = super(ProjectList, self).get_parser(prog_name)
-        client_parser(parser)
-        return parser
+        if len(projects) > 0:
+            return (('ID', 'Name'), ((n['id'], n['name']) for n in projects))
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.list_projects()
-
-        if result.code == 200:
-            if len(result.result) > 0:
-                return (('ID', 'Name'),
-                        ((n['id'], n['name']) for n in result.result)
-                        )
-
-            print("No projects defined.")
-            return ((), ())
-        else:
-            print("Failed to list project: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        print("No projects defined.")
+        return ((), ())
 
 
-class ProjectDelete(Command):
+class ProjectDelete(ImperaCommand, Command):
     """
         Delete a project
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super(ProjectDelete, self).get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("id", help="The id of the project to delete.")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.delete_project(id=parsed_args.id)
-
-        if result.code == 200:
-            print("Project successfully deleted", file=self.app.stdout)
-        else:
-            print("Failed to delete project: " + result.result["message"], file=self.app.stderr)
+    def run_action(self, parsed_args):
+        project_id = self.to_project_id(parsed_args.id)
+        self.do_request("delete_project", arguments={"id": project_id})
+        print("Project successfully deleted", file=self.app.stdout)
 
 
 class EnvironmentCreate(ShowOne):
@@ -228,34 +253,22 @@ class EnvironmentCreate(ShowOne):
             return ((), ())
 
 
-class EnvironmentList(Lister):
+class EnvironmentList(ImperaCommand, Lister):
     """
         List environment defined on the server
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        return parser
-
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.list_environments()
+    def run_action(self, parsed_args):
+        result = self._client.list_environments()
 
         if result.code == 200:
             data = []
-            for env in result.result:
-                prj = client.get_project(id=env["project"])
+            for env in result.result["environments"]:
+                prj = self._client.get_project(id=env["project"])
                 if prj.code != 200:
                     print("Unable to fetch project details")
                     prj_name = "?"
                 else:
-                    prj_name = prj.result['name']
+                    prj_name = prj.result["project"]['name']
 
                 data.append((prj_name, env['project'], env['name'], env['id']))
 
