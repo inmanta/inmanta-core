@@ -349,11 +349,6 @@ class Agent(threading.Thread):
             LOGGER.warning("Got an error while pulling resources for agent %s", agent)
 
         else:
-            release_status = result.result["release_status"]
-            if release_status != "DEPLOY":
-                # this should not happen
-                return
-
             self._ensure_code(self._env_id, result.result["version"])
 
             try:

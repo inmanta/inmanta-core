@@ -102,7 +102,7 @@ class Server(protocol.ServerEndpoint):
         for env_item in envs:
             # get available versions
             n_versions = int(Config.get("server", "available-versions-to-keep", 2))
-            versions = data.ConfigurationModel.objects(release_status=0, environment=env_item)  # @UndefinedVariable
+            versions = data.ConfigurationModel.objects(released=False, environment=env_item)  # @UndefinedVariable
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                 versions = versions.order_by("-date")[n_versions:]
@@ -182,7 +182,7 @@ class Server(protocol.ServerEndpoint):
         if resource_id is not None and resource_id != "":
             # get the latest version
             versions = (data.ConfigurationModel.
-                        objects(environment=env, release_status__gt=0).order_by("-version").limit(1))  # @UndefinedVariable
+                        objects(environment=env, released=True).order_by("-version").limit(1))  # @UndefinedVariable
 
             if len(versions) == 0:
                 return 404, {"message": "The environment associated with this parameter does not have any releases."}
@@ -237,7 +237,7 @@ class Server(protocol.ServerEndpoint):
             if resource_id is not None and resource_id != "":
                 # get the latest version
                 versions = (data.ConfigurationModel.
-                            objects(environment=env, release_status__gt=0).order_by("-version").limit(1))  # @UndefinedVariable
+                            objects(environment=env, released=True).order_by("-version").limit(1))  # @UndefinedVariable
 
                 if len(versions) == 0:
                     return 404, {"message": "The parameter does not exist."}
@@ -498,7 +498,7 @@ class Server(protocol.ServerEndpoint):
 
         if version is None:
             versions = (data.ConfigurationModel.
-                        objects(environment=env, release_status__gt=0).order_by("-version").limit(1))  # @UndefinedVariable
+                        objects(environment=env, released=True).order_by("-version").limit(1))  # @UndefinedVariable
 
             if len(versions) == 0:
                 return 404
@@ -520,8 +520,7 @@ class Server(protocol.ServerEndpoint):
                                          message="Resource version pulled by client for agent %s state" % agent)
                 ra.save()
 
-        return 200, {"environment": tid, "agent": agent, "version": cm.version, "resources": deploy_model,
-                     "release_status": data.RELEASE_STATUS[cm.release_status]}
+        return 200, {"environment": tid, "agent": agent, "version": cm.version, "resources": deploy_model}
 
     @protocol.handle(methods.CMVersionMethod.list_versions)
     def list_version(self, tid, start=None, limit=None):
@@ -581,11 +580,6 @@ class Server(protocol.ServerEndpoint):
 
                 d["resources"].append(res_dict)
 
-            if d["model"]["release_status"] in d["model"]["progress"]:
-                d["progress"] = d["model"]["progress"][d["model"]["release_status"]]
-            else:
-                d["progress"] = {}
-
             return 200, d
         except errors.DoesNotExist:
             return 404, {"message": "The given configuration model does not exist yet."}
@@ -619,7 +613,7 @@ class Server(protocol.ServerEndpoint):
             pass
 
         cm = data.ConfigurationModel(environment=env, version=version, date=datetime.datetime.now(),
-                                     release_status=0, progress={})
+                                     resources_total=len(resources))
         cm.save()
 
         for res_dict in resources:
@@ -742,19 +736,11 @@ host = localhost
             return 404, {"message": "The request version does not exist."}
 
         model = models[0]  # there can only be one per id/tid
-        n_resources = len(data.ResourceVersion.objects(model=model))  # @UndefinedVariable
-        progress = {"TOTAL": n_resources, "WAITING": n_resources, "ERROR": 0, "DONE": 0}
+        model.released = True
+        model.result = "deploying"
+        model.save()
 
-        changed = False
-        if model.release_status >= 2:
-            return 500, {"message": "A deploy was already requested for this version."}
-        else:
-            model.release_status = 2
-            model.progress[data.RELEASE_STATUS[2]] = progress
-            model.save()
-            changed = True
-
-        if push and changed:
+        if push:
             # fetch all resource in this cm and create a list of distinct agents
             rvs = data.ResourceVersion.objects(model=model, environment=env)  # @UndefinedVariable
             agents = set()
@@ -903,30 +889,31 @@ host = localhost
 
         resv = resv[0]
         extra_data = json.dumps(extra_data)
-        ra = data.ResourceAction(resource_version=resv, action=action, message=message, data=extra_data, level=level,
-                                 timestamp=datetime.datetime.now())
 
+        now = datetime.datetime.now()
+        ra = data.ResourceAction(resource_version=resv, action=action, message=message, data=extra_data, level=level,
+                                 timestamp=now)
         ra.save()
 
-        # update the state of the resource
-        if action == "deploy":
-            model = resv.model
-            model_status = data.RELEASE_STATUS[model.release_status]
-
-            resv.status = 2
-            model.progress[model_status]["WAITING"] -= 1
-            if level == "INFO":
-                resv.status_result = 2
-                model.progress[model_status]["DONE"] += 1
-            elif level == "ERROR":
-                resv.status_result = 3
-                model.progress[model_status]["ERROR"] += 1
-
-            resv.resource.version_deployed = model.version
-            resv.resource.save()
-
+        model = resv.model
+        if resv.rid not in model.status:
+            model.status[resv.rid] = now
+            model.resources_done += 1
             model.save()
-            resv.save()
+
+        if model.resources_done == model.resources_total:
+            # we are ready
+            if level != "ERROR":
+                model.result = "success"
+            else:
+                model.result = "failed"
+
+            model.deployed = True
+            model.save()
+
+        resv.resource.version_deployed = model.version
+        resv.resource.last_deploy = now
+        resv.resource.save()
 
         return 200
 

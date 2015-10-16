@@ -20,7 +20,7 @@ import json
 
 from mongoengine import Document
 from mongoengine.fields import (StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,
-                                EmbeddedDocumentListField)
+                                EmbeddedDocumentListField, BooleanField)
 from impera.resources import Id
 from mongoengine.document import EmbeddedDocument
 
@@ -227,6 +227,7 @@ class Resource(Document):
         :param agent The agent that manages this resource (not a reference but can be used to query for agents)
         :param attribute_name The name of the identifying attribute
         :param attribute_value The value of the identifying attribute
+        :param last_deploy When was the last deploy this resource
     """
     environment = ReferenceField(Environment)
     resource_id = StringField(required=True, unique_with="environment")
@@ -238,6 +239,7 @@ class Resource(Document):
 
     version_latest = IntField(default=0)
     version_deployed = IntField(default=0)
+    last_deploy = DateTimeField()
 
     def to_dict(self):
         return {"id": self.resource_id,
@@ -247,7 +249,8 @@ class Resource(Document):
                               "value": self.attribute_value,
                               },
                 "latest_version": self.version_latest,
-                "deployed_version": self.version_deployed
+                "deployed_version": self.version_deployed,
+                "last_deploy": self.last_deploy
                 }
 
 
@@ -286,10 +289,6 @@ class ResourceAction(Document):
                 }
 
 
-RELEASE_STATUS = {0: "AVAILABLE", 2: "DEPLOY"}
-STATUS_RESULT = {0: "WAITING", 1: "IN PROGRESS", 2: "SUCCESS", 3: "ERROR"}
-
-
 class ResourceVersion(Document):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
@@ -299,16 +298,12 @@ class ResourceVersion(Document):
         :param resource The resource for which this defines the state
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
-        :param status The deploy status of the resource
-        :param status_result The result of the deploy
     """
     environment = ReferenceField(Environment, required=True)
     rid = StringField(required=True, unique_with="environment")
     resource = ReferenceField(Resource, required=True)
     model = ReferenceField("ConfigurationModel", required=True)
     attributes = MapField(StringField())
-    status = IntField(choices=RELEASE_STATUS, default=0)
-    status_result = IntField(choices=STATUS_RESULT, default=0)
 
     def to_dict(self):
         data = {}
@@ -322,8 +317,6 @@ class ResourceVersion(Document):
 
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
-        data["state"] = RELEASE_STATUS[self.status] if self.status in RELEASE_STATUS else 0
-        data["result"] = STATUS_RESULT[self.status_result] if self.status_result in STATUS_RESULT else 0
 
         return data
 
@@ -338,25 +331,37 @@ class ConfigurationModel(Document):
 
         :param version The version of the configuration model, represented by a unix timestamp.
         :param environment The environment this configuration model is defined in
-        :param created The date this configuration model was created
+        :param date The date this configuration model was created
+        :param released Is this model released and available for deployment?
+        :param deployed Is this model deployed?
+        :param result The result of the deployment. Success or error.
     """
     version = IntField(required=True, unique_with="environment")
     environment = ReferenceField(Environment, required=True)
     date = DateTimeField()
-    release_status = IntField(choices=RELEASE_STATUS, default=0)
-    status_result = IntField(choices=STATUS_RESULT, default=0)
-    progress = MapField(DynamicField())
+
+    released = BooleanField(default=False)
+    deployed = BooleanField(default=False)
+    result = StringField(choices=["pending", "deploying", "success", "failed"], default="pending")
+    status = MapField(DynamicField(), default={})
+
+    resources_total = IntField(default=0)
+    resources_done = IntField(default=0)
 
     def to_dict(self):
         return {"version": self.version,
                 "environment": str(self.environment.id),
-                "date": self.date.isoformat(),
-                "release_status": RELEASE_STATUS[self.release_status] if self.release_status in RELEASE_STATUS else 0,
-                "status_result": STATUS_RESULT[self.status_result] if self.status_result in STATUS_RESULT else 0,
-                "progress": self.progress
+                "date": self.date,
+                "released": self.released,
+                "deployed": self.deployed,
+                "result": self.result,
+                "status": self.status,
+                "total": self.resources_total,
+                "done": self.resources_done,
                 }
 
     def delete(self):
+        UnknownParameter.objects(environment=self.environment, version=self.version).delete()
         ResourceVersion.objects(model=self).delete()
         DryRun.objects(model=self).delete()
         Document.delete(self)
