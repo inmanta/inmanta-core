@@ -431,7 +431,7 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None):
+    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={}):
         """
             Set a parameter on the server
 
@@ -440,6 +440,7 @@ class ParameterMethod(Method):
             :param resource_id Optionally, scope the parameter to resource (fact)
             :param source The source of the parameter, this can be the user, agent, plugin, compiler, ...
             :param value The value of the parameter
+            :param metadata metadata about the parameter
         """
 
     @protocol(operation="GET", index=True, mt=True)

@@ -42,8 +42,12 @@ class Environment(Document):
     repo_branch = StringField()
 
     def to_dict(self):
-        return {"id": str(self.id), "name": self.name, "project": str(self.project.id), "repo_url": self.repo_url,
-                "repo_branch": self.repo_branch}
+        return {"id": self.id,
+                "name": self.name,
+                "project": self.project.id,
+                "repo_url": self.repo_url,
+                "repo_branch": self.repo_branch
+                }
 
     def delete(self):
         ConfigurationModel.objects(environment=self).delete()
@@ -61,7 +65,9 @@ class Project(Document):
     name = StringField(required=True, unique=True)
 
     def to_dict(self):
-        return {"name": self.name, "id": str(self.id)}
+        return {"name": self.name,
+                "id": self.id
+                }
 
 
 SOURCE = ("fact", "plugin", "user")
@@ -86,6 +92,7 @@ class Parameter(Document):
     source = StringField(required=True, choices=SOURCE)
     resource_id = StringField(default="")
     updated = DateTimeField()
+    metadata = MapField(DynamicField())
 
     meta = {
         'indexes': ['environment']
@@ -96,7 +103,9 @@ class Parameter(Document):
                 "value": self.value,
                 "source": self.source,
                 "resource_id": self.resource_id,
-                "updated": self.updated.isoformat()}
+                "updated": self.updated,
+                "metadata": self.metadata,
+                }
 
 
 class UnknownParameter(Document):

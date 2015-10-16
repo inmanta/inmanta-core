@@ -275,7 +275,7 @@ class Server(protocol.ServerEndpoint):
         return self._request_parameter(param)
 
     @protocol.handle(methods.ParameterMethod.set_param)
-    def set_param(self, tid, id, source, value, resource_id=""):
+    def set_param(self, tid, id, source, value, resource_id, metadata):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -285,7 +285,7 @@ class Server(protocol.ServerEndpoint):
 
         if len(params) == 0:
             param = data.Parameter(environment=env, name=id, resource_id=resource_id, value=value, source=source,
-                                   updated=datetime.datetime.now())
+                                   updated=datetime.datetime.now(), metadata=metadata)
             param.save()
 
         else:
@@ -293,6 +293,7 @@ class Server(protocol.ServerEndpoint):
             param.source = source
             param.value = value
             param.updated = datetime.datetime.now()
+            param.metadate = metadata
             param.save()
 
         # check if the parameter is an unknown
@@ -751,7 +752,7 @@ host = localhost
                 self._ensure_agent(tid, agent)
                 self.queue_request(tid, agent, {"method": "version", "version": id, "environment": tid})
 
-        return 200, model.to_dict()
+        return 200, {"model": model.to_dict()}
 
     @protocol.handle(methods.DryRunMethod.dryrun_request)
     def dryrun_request(self, tid, id):
