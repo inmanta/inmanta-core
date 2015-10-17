@@ -19,8 +19,10 @@
     services connected to the Impera message bus.
 """
 
-from collections import defaultdict
 import logging
+import uuid
+import datetime
+from collections import defaultdict
 
 from impera import protocol
 from cliff.lister import Lister
@@ -28,7 +30,6 @@ from cliff.show import ShowOne
 from cliff.command import Command
 from impera.config import Config
 from blessings import Terminal
-import uuid
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ class ImperaCommand(Command):
         """
         return parser
 
-    def do_request(self, method_name, key_name=None, arguments={}):
+    def do_request(self, method_name, key_name=None, arguments={}, allow_none=False):
         """
             Do a request and return the response
         """
@@ -95,7 +96,9 @@ class ImperaCommand(Command):
 
             raise Exception("Expected %s in the response of %s." % (key_name, method_name))
         elif result.code == 404:
-            raise Exception("Requested %s not found on server" % key_name)
+            if not allow_none:
+                raise Exception("Requested %s not found on server" % key_name)
+            return None
 
         else:
             msg = ": "
@@ -130,6 +133,33 @@ class ImperaCommand(Command):
 
         return project_id
 
+    def to_environment_id(self, ref, project_id=None):
+        """
+            Convert ref to an env uuid, optionally scoped to a project
+        """
+        try:
+            env_id = uuid.UUID(ref)
+        except ValueError:
+            # try to resolve the id as project name
+            envs = self.do_request("list_environments", "environments")
+
+            id_list = []
+            for env in envs:
+                if ref == env["name"]:
+                    if project_id is None or project_id == env["project_id"]:
+                        id_list.append(env["id"])
+
+            if len(id_list) == 0:
+                raise Exception("Unable to find an environment with the given id or name")
+
+            elif len(id_list) > 1:
+                raise Exception("Found multiple environment with %s name, please use the ID." % ref)
+
+            else:
+                env_id = id_list[0]
+
+        return env_id
+
     def take_action(self, parsed_args):
         self._client = protocol.Client("cmdline", "client")
         return self.run_action(parsed_args)
@@ -157,7 +187,7 @@ class ProjectCreate(ImperaCommand, ShowOne):
         Create a new project
     """
     def parser_config(self, parser):
-        parser.add_argument("-n", "--name", dest="name", help="The name of the new project")
+        parser.add_argument("-n", "--name", dest="name", help="The name of the new project", required=True)
         return parser
 
     def run_action(self, parsed_args):
@@ -209,48 +239,29 @@ class ProjectDelete(ImperaCommand, Command):
         print("Project successfully deleted", file=self.app.stdout)
 
 
-class EnvironmentCreate(ShowOne):
+class EnvironmentCreate(ImperaCommand, ShowOne):
     """
         Create a new environment
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-n", "--name", dest="name", help="The name of the new environment")
-        parser.add_argument("-p", "--project", dest="project", help="The id of the project this environment belongs to")
-        parser.add_argument("-r", "--repo-url", dest="repo",
+    def parser_config(self, parser):
+        parser.add_argument("-n", "--name", dest="name", help="The name of the new environment", required=True)
+        parser.add_argument("-p", "--project", dest="project", help="The id of the project this environment belongs to",
+                            required=True)
+        parser.add_argument("-r", "--repo-url", dest="repo", required=True,
                             help="The url of the repository that contains the configuration model")
-        parser.add_argument("-b", "--branch", dest="branch",
+        parser.add_argument("-b", "--branch", dest="branch", required=True,
                             help="The branch in the repository that contains the configuration model")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
+    def run_action(self, parsed_args):
+        project_id = self.to_project_id(parsed_args.project)
+        env = self.do_request("create_environment", "environment", dict(project_id=project_id, name=parsed_args.name,
+                                                                        repository=parsed_args.repo, branch=parsed_args.branch))
+        project = self.do_request("get_project", "project", {"id": project_id})
 
-        result = client.create_environment(project_id=parsed_args.project, name=parsed_args.name, repository=parsed_args.repo,
-                                           branch=parsed_args.branch)
-
-        if result.code == 200:
-            project = client.get_project(id=parsed_args.project)
-
-            if result.code != 200:
-                print("Failed to fetch project details.")
-                project_name = "err..."
-
-            else:
-                project_name = project.result["name"]
-
-            return (('Environment ID', 'Environment name', 'Project ID', 'Project name'),
-                    ((result.result["id"], result.result["name"], parsed_args.project, project_name))
-                    )
-        else:
-            print("Failed to create environment: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('Environment ID', 'Environment name', 'Project ID', 'Project name'),
+                ((env["id"], env["name"], project["id"], project["name"]))
+                )
 
 
 class EnvironmentList(ImperaCommand, Lister):
@@ -258,71 +269,39 @@ class EnvironmentList(ImperaCommand, Lister):
         List environment defined on the server
     """
     def run_action(self, parsed_args):
-        result = self._client.list_environments()
+        environments = self.do_request("list_environments", "environments")
 
-        if result.code == 200:
-            data = []
-            for env in result.result["environments"]:
-                prj = self._client.get_project(id=env["project"])
-                if prj.code != 200:
-                    print("Unable to fetch project details")
-                    prj_name = "?"
-                else:
-                    prj_name = prj.result["project"]['name']
+        data = []
+        for env in environments:
+            prj = self.do_request("get_project", "project", dict(id=env["project"]))
+            prj_name = prj['name']
+            data.append((prj_name, env['project'], env['name'], env['id']))
 
-                data.append((prj_name, env['project'], env['name'], env['id']))
+        if len(data) > 0:
+            return (('Project name', 'Project ID', 'Environment', 'Environment ID'), data)
 
-            if len(data) > 0:
-                return (('Project name', 'Project ID', 'Environment', 'Environment ID'), data)
-
-            print("No environment defined.")
-            return ((), ())
-        else:
-            print("Failed to list environments: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        print("No environment defined.")
 
 
-class EnvironmentShow(ShowOne):
+class EnvironmentShow(ImperaCommand, ShowOne):
     """
         Show environment details
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("id", help="The the id of the evironment to show")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.get_environment(id=parsed_args.id)
-
-        if result.code == 200:
-            return (('ID', 'Name', 'Repository URL', 'Branch Name'),
-                    ((result.result["id"],
-                      result.result["name"],
-                      result.result["repo_url"] if "repo_url" in result.result else "",
-                      result.result["repo_branch"] if "repo_branch" in result.result else ""))
-                    )
-        else:
-            print("Failed to get environment: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+    def run_action(self, parsed_args):
+        env = self.do_request("get_environment", "environment", dict(id=self.to_environment_id(parsed_args.id)))
+        return (('ID', 'Name', 'Repository URL', 'Branch Name'),
+                ((env["id"], env["name"], env["repo_url"], env["repo_branch"])))
 
 
-class EnvironmentModify(ShowOne):
+class EnvironmentModify(ImperaCommand, ShowOne):
     """
         Modify an environment
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the environment")
         parser.add_argument("id", help="The id of the environment to modify")
         parser.add_argument("-r", "--repo-url", dest="repo",
@@ -331,376 +310,209 @@ class EnvironmentModify(ShowOne):
                             help="The branch in the repository that contains the configuration model")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
+    def run_action(self, parsed_args):
+        environment = self.do_request("modify_environment", "environment",
+                                      dict(id=parsed_args.id, name=parsed_args.name, repository=parsed_args.repo,
+                                           branch=parsed_args.branch))
 
-        result = client.modify_environment(id=parsed_args.id, name=parsed_args.name, repository=parsed_args.repo,
-                                           branch=parsed_args.branch)
-
-        if result.code == 200:
-            return (('ID', 'Name', 'Repository URL', 'Branch Name'),
-                    ((result.result["id"],
-                      result.result["name"],
-                      result.result["repo_url"] if "repo_url" in result.result else "",
-                      result.result["repo_branch"] if "repo_branch" in result.result else ""))
-                    )
-        else:
-            print("Failed to modify project: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('ID', 'Name', 'Repository URL', 'Branch Name'), ((environment["id"], environment["name"],
+                                                                   environment["repo_url"], environment["repo_branch"])))
 
 
-class EnvironmentDelete(Command):
+class EnvironmentDelete(ImperaCommand, Command):
     """
         Delete an environment
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
+    def parser_config(self, parser):
         parser.add_argument("id", help="The id of the environment to delete.")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.delete_environment(id=parsed_args.id)
-
-        if result.code == 200:
-            print("Environment successfully deleted", file=self.app.stdout)
-        else:
-            print("Failed to delete environment: " + result.result["message"], file=self.app.stderr)
+    def run_action(self, parsed_args):
+        env_id = self.to_environment_id(parsed_args.id)
+        self.do_request("delete_environment", arguments=dict(id=env_id))
+        print("Environment successfully deleted", file=self.app.stdout)
 
 
-class VersionList(Lister):
+class VersionList(ImperaCommand, Lister):
     """
         List the configuration model versions
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        if parsed_args.env is None:
-            print("The environment is a required argument.", file=self.app.stderr)
-            return ((), ())
-
-        result = client.list_versions(tid=parsed_args.env)
-
-        if result.code == 200:
-            return (('Created at', 'Version', 'Release status'),
-                    ((x['date'], x['version'], x['release_status']) for x in result.result["versions"])
-                    )
-        else:
-            print("Failed to list environments: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+    def run_action(self, parsed_args):
+        env_id = self.to_environment_id(parsed_args.env)
+        versions = self.do_request("list_versions", "versions", arguments=dict(tid=env_id))
+        return (('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
+                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']) for x in versions))
 
 
-class AgentList(Lister):
+class AgentList(ImperaCommand, Lister):
     """
         List all the agents connected to the server
     """
-    log = logging.getLogger(__name__)
+    def run_action(self, parsed_args):
+        nodes = self.do_request("list_agents", "nodes")
+        data = []
+        for node in nodes:
+            for agent in node["agents"]:
+                data.append((node["hostname"], agent["name"], agent["role"], agent["environment"], node["last_seen"]))
 
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        return parser
-
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        result = client.list_agents()
-
-        if result.code == 200:
-            data = []
-            for node in result.result["nodes"]:
-                for agent in node["agents"]:
-                    data.append((node["hostname"], agent["name"], agent["role"], agent["environment"], node["last_seen"]))
-
-            return (('Node', 'Agent', 'Role', 'Environment', 'Last seen'), data)
-        else:
-            print("Failed to list agents: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('Node', 'Agent', 'Role', 'Environment', 'Last seen'), data)
 
 
-class VersionRelease(ShowOne):
+class VersionRelease(ImperaCommand, ShowOne):
     """
         Release a version of the configuration model
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
-        parser.add_argument("-n", "--dry-run", dest="dryrun", action="store_true", help="Request a dry run deploy")
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-p", "--push", dest="push", action="store_true", help="Push the version to the deployment agents")
         parser.add_argument("version", help="The version to release for deploy")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
+    def run_action(self, parsed_args):
+        env_id = self.to_environment_id(parsed_args.env)
+        x = self.do_request("release_version", "model", dict(tid=env_id, id=parsed_args.version, push=parsed_args.push))
 
-        if parsed_args.env is None:
-            print("The environment is a required argument.", file=self.app.stderr)
-            return ((), ())
-
-        if parsed_args.version is None:
-            print("The version is a required argument.", file=self.app.stderr)
-            return ((), ())
-
-        result = client.release_version(tid=parsed_args.env, id=parsed_args.version, dryrun=parsed_args.dryrun,
-                                        push=parsed_args.push)
-
-        if result.code == 200:
-            x = result.result
-            return (('Created at', 'Version', 'Release status'),
-                    ((x['date'], x['version'], x['release_status']))
-                    )
-        else:
-            print("Failed to release configuration model version: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
+                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result'])))
 
 
-class ParamList(Lister):
+ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
+
+
+class ParamList(ImperaCommand, Lister):
     """
         List all parameters for the environment
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
+    def run_action(self, parsed_args):
+        result = self.do_request("list_params", arguments=dict(tid=self.to_environment_id(parsed_args.env)))
+        expire = result["expire"]
+        now = datetime.datetime.strptime(result["now"], ISOFMT)
+        when = now - datetime.timedelta(0, expire)
 
-        if parsed_args.env is None:
-            print("The environment is a required argument.", file=self.app.stderr)
-            return ((), ())
+        data = []
+        for p in result["parameters"]:
+            data.append((p["resource_id"], p['name'], p['source'], p['updated'],
+                         datetime.datetime.strptime(p["updated"], ISOFMT) < when))
 
-        result = client.list_params(parsed_args.env)
-
-        if result.code == 200:
-            data = []
-            for p in result.result:
-                data.append((p["resource_id"], p['name'], p['source'], p['updated']))
-
-            return (('Resource', 'Name', 'Source', 'Updated'), data)
-        else:
-            print("Failed to list parameters: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('Resource', 'Name', 'Source', 'Updated', 'Expired'), data)
 
 
-class ParamSet(ShowOne):
+class ParamSet(ImperaCommand, ShowOne):
     """
         Set a parameter in the environment
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
-        parser.add_argument("--name", dest="name", help="The name of the parameter")
-        parser.add_argument("--value", dest="value", help="The value of the parameter")
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("--name", dest="name", help="The name of the parameter", required=True)
+        parser.add_argument("--value", dest="value", help="The value of the parameter", required=True)
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        if parsed_args.env is None:
-            print("The environment is a required argument.", file=self.app.stderr)
-            return ((), ())
-
-        if parsed_args.name is None:
-            print("The parameter name is a required argument.", file=self.app.stderr)
-            return ((), ())
-
-        if parsed_args.value is None:
-            print("The parameter value is a required argument.", file=self.app.stderr)
-            return ((), ())
-
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
         # first fetch the parameter
-        result = client.get_param(tid=parsed_args.env, id=parsed_args.name, resource_id="")
-        if result.code == 200:
-            # check the source
-            if result.result["source"] != "user":
-                print("Only parameters set by users can be modified!", file=self.app.stderr)
+        param = self.do_request("get_param", "parameter", dict(tid=tid, id=parsed_args.name, resource_id=""), allow_none=True)
 
-                return ((), ())
+        # check the source
+        if param is not None and param["source"] != "user":
+            raise Exception("Only parameters set by users can be modified!")
 
-        result = client.set_param(tid=parsed_args.env, id=parsed_args.name, value=parsed_args.value, source="user",
-                                  resource_id="")
+        param = self.do_request("set_param", "parameter", dict(tid=tid, id=parsed_args.name,
+                                                               value=parsed_args.value, source="user", resource_id=""))
 
-        if result.code == 200:
-            return (('Name', 'Value', 'Source', 'Updated'),
-                    (result.result['name'], result.result['value'], result.result['source'], result.result['updated']))
-        else:
-            print("Failed to list parameters: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('Name', 'Value', 'Source', 'Updated'),
+                (param['name'], param['value'], param['source'], param['updated']))
 
 
-class ParamGet(ShowOne):
+class ParamGet(ImperaCommand, ShowOne):
     """
         Set a parameter in the environment
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
-        parser.add_argument("--name", dest="name", help="The name of the parameter")
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("--name", dest="name", help="The name of the parameter", required=True)
         parser.add_argument("--resource", dest="resource", help="The resource id of the parameter")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
-
-        if parsed_args.env is None:
-            print("The environment is a required argument.", file=self.app.stderr)
-            return ((), ())
-
-        if parsed_args.name is None:
-            print("The parameter name is a required argument.", file=self.app.stderr)
-            return ((), ())
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
 
         resource = parsed_args.resource
         if resource is None:
             resource = ""
 
         # first fetch the parameter
-        result = client.get_param(tid=parsed_args.env, id=parsed_args.name, resource_id=resource)
+        param = self.do_request("get_param", "parameter", dict(tid=tid, id=parsed_args.name, resource_id=resource))
 
-        if result.code == 200:
-            return (('Name', 'Value', 'Source', 'Updated'),
-                    (result.result['name'], result.result['value'], result.result['source'], result.result['updated']))
-
-        elif result.code == 503:
-            print("Parameter not available, facts about resource requested from managing agent.", file=self.app.stderr)
-            return ((), ())
-
-        else:
-            print("Failed to get parameter: " + result.result["message"], file=self.app.stderr)
-            return ((), ())
+        return (('Name', 'Value', 'Source', 'Updated'),
+                (param['name'], param['value'], param['source'], param['updated']))
 
 
-class VersionReport(Command):
+class VersionReport(ImperaCommand, Command):
     """
-        Create a dryrun or deploy report from a version
+        Generate a deploy report
     """
-    log = logging.getLogger(__name__)
-
-    def get_parser(self, prog_name):
-        parser = super(VersionReport, self).get_parser(prog_name)
-        client_parser(parser)
-        parser.add_argument("-e", "--environment", dest="env", help="The id of environment")
-        parser.add_argument("-i", "--version", dest="version", help="The version to create a report from")
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-i", "--version", dest="version", help="The version to create a report from", required=True)
         parser.add_argument("-l", dest="details", action="store_true", help="Show a detailed version of the report")
-        parser.add_argument("release", help="Create the report from a dryrun or deploy")
         return parser
 
-    def take_action(self, parsed_args):
-        Config.load_config()
-        Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
-        client = protocol.Client("cmdline", "client")
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
 
-        if parsed_args.env is None:
-            print("The environment is a required argument.", file=self.app.stderr)
-            return ((), ())
+        result = self.do_request("get_version", arguments=dict(tid=tid, id=parsed_args.version, include_logs=True))
 
-        if parsed_args.version is None:
-            print("The version is a required argument.", file=self.app.stderr)
-            return ((), ())
+        term = Terminal()
+        agents = defaultdict(lambda: defaultdict(lambda: []))
+        for res in result["resources"]:
+            if (len(res["actions"]) > 0 and len(res["actions"][0]["data"]) > 0) or parsed_args.details:
+                agents[res["id_fields"]["agent_name"]][res["id_fields"]["entity_type"]].append(res)
 
-        if parsed_args.release != "deploy" and parsed_args.release != "dryrun":
-            print("Only deploy or dryrun reports can be created.", file=self.app.stderr)
-            return
+        for agent in sorted(agents.keys()):
+            print(term.bold("Agent: %s" % agent))
+            print("=" * 72)
 
-        result = client.get_version(tid=parsed_args.env, id=parsed_args.version, include_logs=True,
-                                    log_filter=parsed_args.release)
+            for type in sorted(agents[agent].keys()):
+                print("{t.bold}Resource type:{t.normal} {type} ({attr})".
+                      format(type=type, attr=agents[agent][type][0]["id_fields"]["attribute"], t=term))
+                print("-" * 72)
 
-        if result.code == 200:
-            term = Terminal()
-            agents = defaultdict(lambda: defaultdict(lambda: []))
-            for res in result.result["resources"]:
-                if (len(res["actions"]) > 0 and len(res["actions"][0]["data"]) > 0) or parsed_args.details:
-                    agents[res["id_fields"]["agent_name"]][res["id_fields"]["entity_type"]].append(res)
+                for res in agents[agent][type]:
+                    print((term.bold + "%s" + term.normal + " (#actions=%d)") %
+                          (res["id_fields"]["attribute_value"], len(res["actions"])))
+                    # for dryrun show only the latest, for deploy all
+                    if parsed_args.release == "dryrun":
+                        if len(res["actions"]) > 0:
+                            action = res["actions"][0]
+                            print("* last check: %s" % action["timestamp"])
+                            print("* result: %s" % ("error" if action["level"] != "INFO" else "success"))
+                            if len(action["data"]) == 0:
+                                print("* no changes")
+                            else:
+                                print("* changes:")
+                                for field in sorted(action["data"].keys()):
+                                    values = action["data"][field]
+                                    if field == "hash":
+                                        print("  - content:")
+                                        diff_value = self.do_request("diff", arguments=dict(a=values[0], b=values[1]))
+                                        print("    " + "    ".join(diff_value["diff"]))
+                                    else:
+                                        print("  - %s:" % field)
+                                        print("    " + term.bold + "from:" + term.normal + " %s" % values[0])
+                                        print("    " + term.bold + "to:" + term.normal + " %s" % values[1])
 
-            for agent in sorted(agents.keys()):
-                print(term.bold("Agent: %s" % agent))
-                print("=" * 72)
+                                    print("")
 
-                for type in sorted(agents[agent].keys()):
-                    print("{t.bold}Resource type:{t.normal} {type} ({attr})".
-                          format(type=type, attr=agents[agent][type][0]["id_fields"]["attribute"], t=term))
-                    print("-" * 72)
+                            print("")
+                    else:
+                        pass
 
-                    for res in agents[agent][type]:
-                        print((term.bold + "%s" + term.normal + " (state=%s, last_result=%s, #actions=%d)") %
-                              (res["id_fields"]["attribute_value"], res["state"], res["result"], len(res["actions"])))
-                        # for dryrun show only the latest, for deploy all
-                        if parsed_args.release == "dryrun":
-                            if len(res["actions"]) > 0:
-                                action = res["actions"][0]
-                                print("* last check: %s" % action["timestamp"])
-                                print("* result: %s" % ("error" if action["level"] != "INFO" else "success"))
-                                if len(action["data"]) == 0:
-                                    print("* no changes")
-                                else:
-                                    print("* changes:")
-                                    for field in sorted(action["data"].keys()):
-                                        values = action["data"][field]
-                                        if field == "hash":
-                                            print("  - content:")
-                                            diff_value = client.diff(values[0], values[1]).result
-                                            print("    " + "    ".join(diff_value["diff"]))
-                                        else:
-                                            print("  - %s:" % field)
-                                            print("    " + term.bold + "from:" + term.normal + " %s" % values[0])
-                                            print("    " + term.bold + "to:" + term.normal + " %s" % values[1])
-
-                                        print("")
-
-                                print("")
-                        else:
-                            pass
-
-                    print("")
-        else:
-            print("Failed to get a report for configuration model version: " + result.result["message"], file=self.app.stderr)
+                print("")
