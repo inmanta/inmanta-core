@@ -297,12 +297,14 @@ class Server(protocol.ServerEndpoint):
             param.save()
 
         # check if the parameter is an unknown
-        params = data.UnknownParameter.objects(environment=env, name=id, resource_id=resource_id)  # @UndefinedVariable
+        params = data.UnknownParameter.objects(environment=env, name=id, resource_id=resource_id,  # @UndefinedVariable
+                                               resolved=False)
         if len(params) > 0:
             LOGGER.info("Received values for unknown parameters %s, triggering a recompile",
                         ", ".join([x.name for x in params]))
             for p in params:
-                p.delete()
+                p.resolved = True
+                p.save()
 
             self._async_recompile(tid, False)
 
@@ -580,6 +582,9 @@ class Server(protocol.ServerEndpoint):
                     res_dict["actions"] = [x.to_dict() for x in actions]
 
                 d["resources"].append(res_dict)
+
+            unp = data.UnknownParameter.objects(environment=env, version=version)  # @UndefinedVariable
+            d["unknowns"] = [x.to_dict() for x in unp]
 
             return 200, d
         except errors.DoesNotExist:

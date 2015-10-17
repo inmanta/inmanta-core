@@ -124,6 +124,15 @@ class UnknownParameter(Document):
     source = StringField(required=True, choices=SOURCE)
     resource_id = StringField(default="")
     version = IntField(required=True)
+    resolved = BooleanField(default=False)
+
+    def to_dict(self):
+        return {"name": self.name,
+                "source": self.source,
+                "resource_id": self.resource_id,
+                "version": self.version,
+                "resolved": self.resolved,
+                }
 
 
 class Node(Document):
