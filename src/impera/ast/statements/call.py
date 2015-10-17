@@ -114,6 +114,7 @@ class FunctionCall(CallStatement):
 
         return_type = function.to_type(function._return)
         if return_type is None:
+            lazy()
             return None
 
         return LazyVariable(lazy, return_type)
