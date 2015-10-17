@@ -27,7 +27,7 @@ from impera.stats import Stats
 LOGGER = logging.getLogger(__name__)
 
 
-def get_fact(res, fact_name: str, default_value=None) -> "any":
+def get_fact(res, fact_name: str, default_value=None, metadata={}) -> "any":
     """
         Get the fact with the given name from the database
     """
@@ -48,7 +48,7 @@ def get_fact(res, fact_name: str, default_value=None) -> "any":
             result = client.get_param(tid=env, id=fact_name, resource_id=resource_id)
 
             if result.code == 200:
-                fact_value = result.result["value"]
+                fact_value = result.result["parameter"]["value"]
             else:
                 LOGGER.debug("Param %s of resource %s is unknown", fact_name, resource_id)
                 fact_value = Unknown(source=res)
