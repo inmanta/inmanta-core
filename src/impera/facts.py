@@ -41,7 +41,11 @@ def get_fact(res, fact_name: str, default_value=None) -> "any":
         try:
             client = protocol.Client("compiler", "client")
 
-            result = client.get_param(tid=Config.get("config", "environment"), id=fact_name, resource_id=resource_id)
+            env = Config.get("config", "environment", None)
+            if env is None:
+                raise Exception("The environment of this model should be configured in config>environment")
+
+            result = client.get_param(tid=env, id=fact_name, resource_id=resource_id)
 
             if result.code == 200:
                 fact_value = result.result["value"]
