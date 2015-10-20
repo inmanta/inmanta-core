@@ -554,7 +554,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.CMVersionMethod.get_version)
     def get_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
         try:
-            data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
