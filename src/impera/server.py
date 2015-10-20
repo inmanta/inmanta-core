@@ -911,11 +911,10 @@ host = localhost
             model.save()
 
         if model.resources_done == model.resources_total:
-            # we are ready
-            if level != "ERROR":
-                model.result = "success"
-            else:
-                model.result = "failed"
+            model.result = "success"
+            for status in model.status:
+                if status != "deployed":
+                    model.result = "failed"
 
             model.deployed = True
             model.save()
