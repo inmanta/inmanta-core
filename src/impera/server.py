@@ -883,7 +883,7 @@ host = localhost
         return 200, {"version": id, "environment": tid, "sources": code[0].sources, "requires": code[0].requires}
 
     @protocol.handle(methods.ResourceMethod.resource_updated)
-    def resource_updated(self, tid, id, level, action, message, extra_data):
+    def resource_updated(self, tid, id, level, action, message, status, extra_data):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -894,16 +894,19 @@ host = localhost
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
         resv = resv[0]
+        resv.status = status
+        resv.save()
+
         extra_data = json.dumps(extra_data)
 
         now = datetime.datetime.now()
         ra = data.ResourceAction(resource_version=resv, action=action, message=message, data=extra_data, level=level,
-                                 timestamp=now)
+                                 timestamp=now, status=status)
         ra.save()
 
         model = resv.model
         if resv.rid not in model.status:
-            model.status[resv.rid] = "deployed" if level != "ERROR" else "failed"
+            model.status[resv.rid] = status
             model.resources_done += 1
             model.save()
 

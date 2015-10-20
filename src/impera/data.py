@@ -20,7 +20,7 @@ import json
 
 from mongoengine import Document
 from mongoengine.fields import (StringField, ReferenceField, DateTimeField, IntField, MapField, UUIDField, DynamicField,
-                                EmbeddedDocumentListField, BooleanField)
+                                EmbeddedDocumentListField, BooleanField, DictField)
 from impera.resources import Id
 from mongoengine.document import EmbeddedDocument
 
@@ -92,7 +92,7 @@ class Parameter(Document):
     source = StringField(required=True, choices=SOURCE)
     resource_id = StringField(default="")
     updated = DateTimeField()
-    metadata = MapField(DynamicField())
+    metadata = DictField()
 
     meta = {
         'indexes': ['environment']
@@ -124,6 +124,7 @@ class UnknownParameter(Document):
     source = StringField(required=True, choices=SOURCE)
     resource_id = StringField(default="")
     version = IntField(required=True)
+    metadata = DictField()
     resolved = BooleanField(default=False)
 
     def to_dict(self):
@@ -132,6 +133,7 @@ class UnknownParameter(Document):
                 "resource_id": self.resource_id,
                 "version": self.version,
                 "resolved": self.resolved,
+                "metadata": self.metadata,
                 }
 
 
@@ -293,6 +295,7 @@ class ResourceAction(Document):
     message = StringField()
     level = StringField(choices=LOGLEVEL, default="INFO")
     data = StringField()
+    status = StringField()
 
     meta = {
         'indexes': ['resource_version']
@@ -303,6 +306,7 @@ class ResourceAction(Document):
                 "timestamp": self.timestamp.isoformat(),
                 "message": self.message,
                 "level": self.level,
+                "status": self.status,
                 "data": json.loads(self.data) if self.data is not None else None,
                 }
 
@@ -322,6 +326,7 @@ class ResourceVersion(Document):
     resource = ReferenceField(Resource, required=True)
     model = ReferenceField("ConfigurationModel", required=True)
     attributes = MapField(StringField())
+    status = StringField(default="")
 
     def to_dict(self):
         data = {}
@@ -335,6 +340,7 @@ class ResourceVersion(Document):
 
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
+        data["status"] = self.status
 
         return data
 

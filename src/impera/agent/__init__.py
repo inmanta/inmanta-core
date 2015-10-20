@@ -614,5 +614,5 @@ class Agent(threading.Thread):
         else:
             level = "ERROR"
 
-        self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action,
+        self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action, status=status,
                                       message="%s: %s" % (status, log_msg), extra_data=changes)

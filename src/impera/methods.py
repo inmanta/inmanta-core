@@ -264,7 +264,7 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="POST", mt=True, id=True)
-    def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, extra_data: dict):
+    def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, status: str, extra_data: dict):
         """
             Send a resource update to the server
 
@@ -273,6 +273,7 @@ class ResourceMethod(Method):
             :param level The loglevel of the update
             :param action The action performed
             :param message The log message
+            :param status The current status of the resource (if known)
             :param extra_data A map with additional data
         """
         if level not in LOGLEVEL:
