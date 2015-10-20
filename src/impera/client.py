@@ -357,7 +357,7 @@ class AgentList(ImperaCommand, Lister):
         data = []
         for node in nodes:
             for agent in node["agents"]:
-                data.append((node["hostname"], agent["name"], agent["role"], agent["environment"], node["last_seen"]))
+                data.append((node["hostname"], agent["name"], agent["role"], agent["environment"], agent["last_seen"]))
 
         return (('Node', 'Agent', 'Role', 'Environment', 'Last seen'), data)
 

@@ -907,7 +907,8 @@ host = localhost
         if resv.rid not in model.status:
             model.resources_done += 1
 
-        model.status[resv.rid] = status
+        rid = resv.rid.replace(".", "\uff0e").replace("$", "\uff04")
+        model.status[rid] = status
         model.save()
 
         resv.resource.version_deployed = model.version

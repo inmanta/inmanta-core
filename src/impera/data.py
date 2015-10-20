@@ -379,7 +379,7 @@ class ConfigurationModel(Document):
                 "released": self.released,
                 "deployed": self.deployed,
                 "result": self.result,
-                "status": self.status,
+                "status": {k.replace("\uff0e", ".").replace("\uff04", "$"): v for k, v in self.status.items()},
                 "total": self.resources_total,
                 "done": self.resources_done,
                 }
