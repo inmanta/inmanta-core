@@ -903,7 +903,7 @@ host = localhost
 
         model = resv.model
         if resv.rid not in model.status:
-            model.status[resv.rid] = now
+            model.status[resv.rid] = "deployed" if level != "ERROR" else "failed"
             model.resources_done += 1
             model.save()
 
