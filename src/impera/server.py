@@ -905,10 +905,10 @@ host = localhost
         ra.save()
 
         model = resv.model
-        if resv.rid not in model.status:
+        rid = resv.rid.replace(".", "\uff0e").replace("$", "\uff04")
+        if rid not in model.status:
             model.resources_done += 1
 
-        rid = resv.rid.replace(".", "\uff0e").replace("$", "\uff04")
         model.status[rid] = status
         model.save()
 
