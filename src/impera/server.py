@@ -460,8 +460,7 @@ class Server(protocol.ServerEndpoint):
         for node in data.Node.objects():  # @UndefinedVariable
             agents = data.Agent.objects(node=node)  # @UndefinedVariable
             node_dict = node.to_dict()
-            node_dict["agents"] = [{"environment": str(a.environment.id), "name": a.name, "role": a.role,
-                                    "interval": a.interval} for a in agents
+            node_dict["agents"] = [a.to_dict() for a in agents
                                    if environment is None or str(a.environment.id) == environment]
 
             if len(node_dict["agents"]) > 0:
@@ -906,9 +905,15 @@ host = localhost
 
         model = resv.model
         if resv.rid not in model.status:
-            model.status[resv.rid] = status
             model.resources_done += 1
-            model.save()
+
+        model.status[resv.rid] = status
+        model.save()
+
+        resv.resource.version_deployed = model.version
+        resv.resource.last_deploy = now
+        resv.resource.status = status
+        resv.resource.save()
 
         if model.resources_done == model.resources_total:
             model.result = "success"
@@ -918,10 +923,6 @@ host = localhost
 
             model.deployed = True
             model.save()
-
-        resv.resource.version_deployed = model.version
-        resv.resource.last_deploy = now
-        resv.resource.save()
 
         return 200
 
