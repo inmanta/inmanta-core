@@ -583,7 +583,7 @@ class Server(protocol.ServerEndpoint):
 
                 d["resources"].append(res_dict)
 
-            unp = data.UnknownParameter.objects(environment=env, version=version)  # @UndefinedVariable
+            unp = data.UnknownParameter.objects(environment=env, version=version.version)  # @UndefinedVariable
             d["unknowns"] = [x.to_dict() for x in unp]
 
             return 200, d
