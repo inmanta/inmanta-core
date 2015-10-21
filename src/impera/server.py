@@ -417,7 +417,7 @@ class Server(protocol.ServerEndpoint):
 
         response = []
         for nh in endpoint_names:
-            LOGGER.debug("Seen agent %s on %s", nh, node)
+            LOGGER.debug("Seen agent %s on %s", nh, nodename)
             agent = data.Agent.objects(name=nh, node=node, environment=env)  # @UndefinedVariable
             if len(agent) == 0:
                 agent = data.Agent(name=nh, node=node, role=role, environment=env)
