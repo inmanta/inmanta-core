@@ -433,5 +433,5 @@ class DryRun(Document):
                 "date": self.date.isoformat(),
                 "total": self.resource_total,
                 "todo": self.resource_todo,
-                "resources": {k.replace(".", "\uff0e").replace("$", "\uff04"): json.loads(v) for k, v in self.resources.items()}
+                "resources": {k.replace("\uff0e", ".").replace("\uff04", "$"): json.loads(v) for k, v in self.resources.items()}
                 }
