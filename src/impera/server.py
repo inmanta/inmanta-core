@@ -623,7 +623,6 @@ class Server(protocol.ServerEndpoint):
 
         cm = data.ConfigurationModel(environment=env, version=version, date=datetime.datetime.now(),
                                      resources_total=len(resources))
-        cm.released = Config.getboolean("server", "auto-release", False)
         cm.save()
 
         for res_dict in resources:
@@ -666,6 +665,9 @@ class Server(protocol.ServerEndpoint):
             up.save()
 
         LOGGER.debug("Successfully stored version %d" % version)
+
+        if Config.getboolean("server", "auto-release", False):
+            self.release_version(tid, version, True)
 
         return 200
 
