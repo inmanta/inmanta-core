@@ -623,6 +623,7 @@ class Server(protocol.ServerEndpoint):
 
         cm = data.ConfigurationModel(environment=env, version=version, date=datetime.datetime.now(),
                                      resources_total=len(resources))
+        cm.released = Config.getboolean("server", "auto-release", False)
         cm.save()
 
         for res_dict in resources:
