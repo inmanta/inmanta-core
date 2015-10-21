@@ -406,6 +406,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         now = datetime.datetime.now()
+        LOGGER.debug("Seen node %s" % nodename)
         try:
             node = data.Node.objects().get(hostname=nodename)  # @UndefinedVariable
             node.last_seen = now
@@ -416,14 +417,17 @@ class Server(protocol.ServerEndpoint):
 
         response = []
         for nh in endpoint_names:
+            LOGGER.debug("Seen agent %s on %s", nh, node)
             agent = data.Agent.objects(name=nh, node=node, environment=env)  # @UndefinedVariable
             if len(agent) == 0:
-                agent = data.Agent(name=nh, node=node, role=role, interval=interval, last_seen=now, environment=env)
-                agent.save()
+                agent = data.Agent(name=nh, node=node, role=role, environment=env)
+
             else:
-                agent[0].interval = interval
-                agent[0].last_seen = now
-                agent[0].save()
+                agent = agent[0]
+
+            agent.interval = interval
+            agent.last_seen = now
+            agent.save()
 
             # check if there is something we need to push to the client
             environment = str(environment)
