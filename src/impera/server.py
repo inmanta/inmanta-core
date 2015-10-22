@@ -852,8 +852,12 @@ host = localhost
         if resource in dryrun.resources:
             return 500, {"message": "A dryrun was already stored for this resource."}
 
-        dryrun.resources[resource.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps({"changes": changes,
-                                                                                               "log": log_msg})
+        payload = {"changes": changes,
+                   "log": log_msg,
+                   "id_fields": Id.parse_id(self.resource).to_dict()
+                   }
+
+        dryrun.resources[resource.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(payload)
         dryrun.resource_todo -= 1
 
         dryrun.save()
