@@ -1,0 +1,8 @@
+server:
+    build: .
+    ports:
+        - "8888:8888"
+    links:
+        - mongo
+mongo:
+    image: mongo
