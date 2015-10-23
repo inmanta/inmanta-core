@@ -31,7 +31,7 @@ class RemoteIO(object):
     def __init__(self, host):
         try:
             self._gw = multi.makegateway("ssh=root@%s//python=python" % host)
-        except gateway_bootstrap.HostNotFound as e:
+        except (gateway_bootstrap.HostNotFound, BrokenPipeError) as e:
             raise resources.HostNotFoundException(hostname=host, user="root", error=e)
 
     def _execute(self, function_name, *args):
