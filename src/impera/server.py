@@ -37,9 +37,10 @@ from impera import env
 from impera import data
 from impera.config import Config
 from impera.loader import CodeLoader
-from impera.resources import Id
+from impera.resources import Id, HostNotFoundException
 import tornado
 import dateutil
+from impera.agent.io.remote import RemoteIO
 
 
 LOGGER = logging.getLogger(__name__)
@@ -377,17 +378,23 @@ class Server(protocol.ServerEndpoint):
         """
             Diff the two files identified with the two hashes
         """
-        if a == "" or a == 0:
+        if a == "" or a == "0":
             a_lines = []
         else:
             a_path = os.path.join(self._server_storage["files"], a)
+            if not os.path.exists(a_path):
+                return 404
+
             with open(a_path, "r") as fd:
                 a_lines = fd.readlines()
 
-        if b == "" or b == 0:
+        if b == "" or b == "0":
             b_lines = []
         else:
             b_path = os.path.join(self._server_storage["files"], b)
+            if not os.path.exists(b_path):
+                return 404
+
             with open(b_path, "r") as fd:
                 b_lines = fd.readlines()
 
@@ -666,9 +673,6 @@ class Server(protocol.ServerEndpoint):
 
         LOGGER.debug("Successfully stored version %d" % version)
 
-        if Config.getboolean("server", "auto-release", False):
-            self.release_version(tid, version, True)
-
         return 200
 
     def _agent_matches(self, agent_name):
@@ -701,6 +705,14 @@ class Server(protocol.ServerEndpoint):
 
             agent_names = ",".join(agent_data["agents"])
 
+            agent_map = {}
+            for agent in agent_data["agents"]:
+                try:
+                    gw = RemoteIO(agent)
+                    gw.close()
+                except HostNotFoundException:
+                    agent_map[agent] = "localhost"
+
             # generate config file
             config = """[config]
 heartbeat-interval = 60
@@ -714,7 +726,7 @@ agent-map=%(agent_map)s
 port = 8888
 host = localhost
 """ % {"agents": agent_names, "env_id": environment_id, "agent_map":
-                ",".join(["%s=localhost" % x for x in agent_data["agents"]])}
+                ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()])}
 
             config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
             if not os.path.exists(config_dir):
@@ -854,7 +866,7 @@ host = localhost
 
         payload = {"changes": changes,
                    "log": log_msg,
-                   "id_fields": Id.parse_id(self.resource).to_dict()
+                   "id_fields": Id.parse_id(resource).to_dict()
                    }
 
         dryrun.resources[resource.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(payload)
