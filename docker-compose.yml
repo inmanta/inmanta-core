@@ -1,3 +1,10 @@
+dashboard:
+    image: impera-dashboard
+    links:
+        - server
+    ports:
+        - "8000:8000"
+
 server:
     build: .
     ports:
