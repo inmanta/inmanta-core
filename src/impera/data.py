@@ -298,7 +298,7 @@ class ResourceAction(Document):
     status = StringField()
 
     meta = {
-        'indexes': ['resource_version']
+        'indexes': ['resource_version', 'action']
     }
 
     def to_dict(self):
