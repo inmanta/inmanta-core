@@ -27,6 +27,7 @@ from impera.execute import DuplicateVariableException, NotFoundException
 from impera.execute.scope import Scope
 from impera.execute.state import DynamicState
 from impera.stats import Stats
+from impera.execute.util import Unknown
 
 
 class Import(GeneratorStatement):
@@ -218,6 +219,9 @@ class For(GeneratorStatement):
             Evaluate this statement.
         """
         var = state.get_ref("variable").value
+
+        if isinstance(var, Unknown):
+            return
 
         for loop_var in var:
             # generate a subscope/namespace for each loop
