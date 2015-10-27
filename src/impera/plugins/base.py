@@ -156,10 +156,14 @@ class Plugin(object, metaclass=PluginMeta):
         """
         arg_list = []
         for arg in self.arguments:
-            if arg[3]:
-                arg_list.append("[%s %s]" % (arg[1], arg[2]))
+            if len(arg) == 3:
+                arg_list.append("%s: %s=%s" % (arg[0], arg[1], str(arg[2])))
+
+            elif len(arg) == 2:
+                arg_list.append("%s: %s" % (arg[0], arg[1]))
+
             else:
-                arg_list.append("%s %s" % (arg[1], arg[2]))
+                arg_list.append(arg[0])
 
         args = ", ".join(arg_list)
 
@@ -235,7 +239,7 @@ class Plugin(object, metaclass=PluginMeta):
             Check if the arguments of the call match the function signature
         """
         max_arg = len(self.arguments)
-        required = len([x for x in self.arguments if len(x) == 3])
+        required = len([x for x in self.arguments if len(x) == 2])
 
         if len(args) < required or len(args) > max_arg:
             raise Exception("Incorrect number of arguments for %s. Expected at least %d, got %d" %
