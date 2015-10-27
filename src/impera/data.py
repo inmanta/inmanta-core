@@ -95,7 +95,7 @@ class Parameter(Document):
     metadata = DictField()
 
     meta = {
-        'indexes': ['environment']
+        'indexes': ['environment', 'metadata']
     }
 
     def to_dict(self):
@@ -126,6 +126,10 @@ class UnknownParameter(Document):
     version = IntField(required=True)
     metadata = DictField()
     resolved = BooleanField(default=False)
+
+    meta = {
+        'indexes': ['environment', 'metadata']
+    }
 
     def to_dict(self):
         return {"name": self.name,

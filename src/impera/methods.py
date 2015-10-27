@@ -445,11 +445,12 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="GET", index=True, mt=True)
-    def list_params(self, tid: uuid.UUID):
+    def list_params(self, tid: uuid.UUID, query: dict={}):
         """
             List the parameter of this environment
 
             :param tid The id of the environment
+            :param query A query to match against metadata
         """
 
 

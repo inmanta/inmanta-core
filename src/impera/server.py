@@ -667,8 +667,14 @@ class Server(protocol.ServerEndpoint):
             ra.save()
 
         for uk in unknowns:
+            if "resource" not in uk:
+                uk["resource"] = ""
+
+            if "metadata" not in uk:
+                uk["metadata"] = {}
+
             up = data.UnknownParameter(resource_id=uk["resource"], name=uk["parameter"], source=uk["source"], environment=env,
-                                       version=version)
+                                       version=version, metadata=uk["metadata"])
             up.save()
 
         LOGGER.debug("Successfully stored version %d" % version)
