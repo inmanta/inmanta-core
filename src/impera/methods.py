@@ -431,7 +431,7 @@ class ParameterMethod(Method):
                     503: The parameter is not found but its value is requested from an agent
         """
 
-    @protocol(operation="POST", mt=True, id=True)
+    @protocol(operation="PUT", mt=True, id=True)
     def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={}):
         """
             Set a parameter on the server
@@ -444,7 +444,7 @@ class ParameterMethod(Method):
             :param metadata metadata about the parameter
         """
 
-    @protocol(operation="GET", index=True, mt=True)
+    @protocol(operation="POST", index=True, mt=True)
     def list_params(self, tid: uuid.UUID, query: dict={}):
         """
             List the parameter of this environment

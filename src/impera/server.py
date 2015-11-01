@@ -89,6 +89,22 @@ class Server(protocol.ServerEndpoint):
 
         self._requires_agents = {}
 
+        if Config.getboolean("server", "autostart-on-start", True):
+            agents = data.Agent.objects()  # @UndefinedVariable
+
+            for agent in agents:
+                env_id = str(agent.environment.id)
+                if env_id not in self._requires_agents:
+                    agent_data = {"agents": set(), "process": None}
+                    self._requires_agents[env_id] = agent_data
+
+                self._requires_agents[env_id]["agents"].add(agent.name)
+
+            for env_id in self._requires_agents.keys():
+                agent = list(self._requires_agents[env_id]["agents"])[0]
+                self._requires_agents[env_id]["agents"].remove(agent)
+                self._ensure_agent(env_id, agent)
+
     def check_keys(self):
         """
             Check if the ssh key(s) credentials of this server are configured properly
@@ -312,13 +328,17 @@ class Server(protocol.ServerEndpoint):
         return 200, {"parameter": param.to_dict()}
 
     @protocol.handle(methods.ParameterMethod.list_params)
-    def list_param(self, tid):
+    def list_param(self, tid, query):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
-        params = data.Parameter.objects(environment=env)  # @UndefinedVariable
+        m_query = {"environment": env}
+        for k, v in query.items():
+            m_query["metadata__" + k] = v
+
+        params = data.Parameter.objects(**m_query)  # @UndefinedVariable
 
         return_value = []
         for p in params:
