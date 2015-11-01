@@ -65,8 +65,11 @@ class CreateList(ReferenceStatement):
 
         for i in range(len(self.items)):
             value = self.items[i]
-            var = local_scope.resolve_reference(value)
-            qlist.append(var.value)
+            if isinstance(value, Reference):
+                var = local_scope.resolve_reference(value)
+                value = var.value
+
+            qlist.append(value)
 
         return qlist
 
