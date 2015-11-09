@@ -93,12 +93,13 @@ class Server(protocol.ServerEndpoint):
             agents = data.Agent.objects()  # @UndefinedVariable
 
             for agent in agents:
-                env_id = str(agent.environment.id)
-                if env_id not in self._requires_agents:
-                    agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[env_id] = agent_data
+                if self._agent_matches(agent.name):
+                    env_id = str(agent.environment.id)
+                    if env_id not in self._requires_agents:
+                        agent_data = {"agents": set(), "process": None}
+                        self._requires_agents[env_id] = agent_data
 
-                self._requires_agents[env_id]["agents"].add(agent.name)
+                    self._requires_agents[env_id]["agents"].add(agent.name)
 
             for env_id in self._requires_agents.keys():
                 agent = list(self._requires_agents[env_id]["agents"])[0]
