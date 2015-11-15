@@ -42,6 +42,13 @@ setup(
         'param-list = impera.client:ParamList',
         'param-set = impera.client:ParamSet',
         'param-get = impera.client:ParamGet',
+        
+        'form-list = impera.client:FormList',
+        'form-show = impera.client:FormShow',
+        
+        'record-list = impera.client:RecordList',
+        'record-show = impera.client:RecordShow',
+        'record-create = impera.client:RecordCreate',
     ],
 },
 )

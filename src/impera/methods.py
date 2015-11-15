@@ -454,6 +454,85 @@ class ParameterMethod(Method):
         """
 
 
+class FormMethod(Method):
+    """
+        Methods for creating and manipulating forms
+    """
+    __method_name__ = "form"
+
+    @protocol(operation="GET", mt=True, index=True)
+    def list_forms(self, tid: uuid.UUID):
+        """
+            List all available forms in an environment
+        """
+
+    @protocol(operation="GET", mt=True, id=True)
+    def get_form(self, tid: uuid.UUID, id: str):
+        """
+            Get a form
+        """
+
+    @protocol(operation="PUT", mt=True, id=True)
+    def put_form(self, tid: uuid.UUID, id: str, form: dict):
+        """
+            Upload a form
+        """
+
+
+class FormRecords(Method):
+    """
+        Methods for working with form records
+    """
+    __method_name__ = "records"
+
+    @protocol(operation="GET", mt=True, index=True)
+    def list_records(self, tid: uuid.UUID, form_type: str):
+        """
+            Get a list of all records of a specific form
+
+            :param tid The id of the environment
+            :param form_type The type of the form
+        """
+
+    @protocol(operation="GET", mt=True, id=True)
+    def get_record(self, tid: uuid.UUID, record_id: uuid.UUID):
+        """
+            Get a record from the server
+
+            :param tid The id of the environment
+            :param record_id The id of the record
+        """
+
+    @protocol(operation="PUT", mt=True, id=True)
+    def put_record(self, tid: uuid.UUID, id: uuid.UUID, form: dict):
+        """
+            Update a record
+
+            :param tid The id of the environment
+            :param id The id of the record
+            :param form The values of each field
+        """
+
+    @protocol(operation="POST", mt=True, index=True)
+    def post_record(self, tid: uuid.UUID, form_type: str, form: dict):
+        """
+            Get a list of all records of a specific form
+
+            :param tid The id of the environment
+            :param form_type The type of the form
+            :param form The values for each field
+        """
+
+    @protocol(operation="DELETE", mt=True, id=True)
+    def delete_record(self, tid: uuid.UUID, id: uuid.UUID):
+        """
+            Delete a record
+
+            :param tid The id of the environment
+            :param id The id of the record
+        """
+
+
 class NodeMethod(Method):
     """
         Get a list of all agents

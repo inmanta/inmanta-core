@@ -160,6 +160,32 @@ class ImperaCommand(Command):
 
         return env_id
 
+    def to_form_id(self, ref, environment):
+        """
+            Convert ref to a form uuid
+        """
+        try:
+            env_id = uuid.UUID(ref)
+        except ValueError:
+            # try to resolve the id as project name
+            forms = self.do_request("list_forms", "forms", arguments=dict(tid=environment))
+
+            id_list = []
+            for form in forms:
+                if ref == form["form_type"]:
+                    id_list.append(form["form_id"])
+
+            if len(id_list) == 0:
+                raise Exception("Unable to find a form with the given id or name")
+
+            elif len(id_list) > 1:
+                raise Exception("Found multiple forms with %s name, please use the ID." % ref)
+
+            else:
+                env_id = id_list[0]
+
+        return env_id
+
     def take_action(self, parsed_args):
         self._client = protocol.Client("cmdline", "client")
         return self.run_action(parsed_args)
@@ -516,3 +542,66 @@ class VersionReport(ImperaCommand, Command):
                         pass
 
                 print("")
+
+
+class FormList(ImperaCommand, Lister):
+    """
+        List all parameters for the environment
+    """
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        return parser
+
+    def run_action(self, parsed_args):
+        result = self.do_request("list_forms", "forms", arguments=dict(tid=self.to_environment_id(parsed_args.env)))
+
+        data = []
+        for p in result:
+            data.append((p["form_type"], p['form_id'])),
+
+        return (('Form Type', 'Form ID'), data)
+
+
+class FormShow(ImperaCommand, ShowOne):
+    """
+        List all parameters for the environment
+    """
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
+        return parser
+
+    def run_action(self, parsed_args):
+        result = self.do_request("get_form", "form", arguments=dict(tid=self.to_environment_id(parsed_args.env),
+                                                                    id=parsed_args.form))
+
+        headers = []
+        values = []
+        for k, v in result["fields"].items():
+            headers.append(k)
+            if k in result["defaults"]:
+                values.append("type: %s, default: %s" % (v, result["defaults"]))
+            else:
+                values.append("type: %s" % v)
+
+        return (headers, values)
+
+
+class RecordList(ImperaCommand, Lister):
+    """
+        List all parameters for the environment
+    """
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-t", "--form-type", dest="form", help="Show records from this form", required=True)
+        return parser
+
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
+        result = self.do_request("list_records", "records", arguments=dict(tid=tid, form_type=parsed_args.form))
+
+        data = []
+        for p in result:
+            data.append((p["record_id"], p['changed'])),
+
+        return (('Record ID', 'Changed'), data)

@@ -217,6 +217,47 @@ class Report(EmbeddedDocument):
                 }
 
 
+class Form(Document):
+    """
+        A form in the dashboard defined by the configuration model
+    """
+    form_id = UUIDField(required=True)
+    environment = ReferenceField(Environment, required=True)
+    form_type = StringField(required=True, unique_with=["environment"])
+    fields = MapField(StringField())
+    defaults = MapField(StringField())
+
+    meta = {
+        'indexes': ['environment', 'form_type']
+    }
+
+    def to_dict(self):
+        return {"form_id": self.form_id,
+                "form_type": self.form_type,
+                "fields": self.fields,
+                "defaults": self.defaults,
+                }
+
+
+class FormRecord(Document):
+    """
+        A form record
+    """
+    record_id = UUIDField(required=True, unique=True)
+    form_id = ReferenceField(Form, required=True)
+    environment = ReferenceField(Environment, required=True)
+    fields = MapField(StringField())
+    changed = DateTimeField()
+
+    def to_dict(self):
+        return {"record_id": self.record_id,
+                "form_id": self.form_id.form_id,
+                "form_type": self.form_id.form_type,
+                "changed": self.changed,
+                "fields": self.fields
+                }
+
+
 class Compile(Document):
     """
         A run of the compiler

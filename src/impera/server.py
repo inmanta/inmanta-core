@@ -242,6 +242,12 @@ class Server(protocol.ServerEndpoint):
                          param.environment.id)
             self._request_parameter(param)
 
+        unknown_parameters = data.UnknownParameter.objects()  # @UndefinedVariable
+        for u in unknown_parameters:
+            LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
+                         u.environment.id)
+            self._request_parameter(u)
+
     @protocol.handle(methods.ParameterMethod.get_param)
     def get_param(self, tid, id, resource_id=None):
         try:
@@ -348,6 +354,133 @@ class Server(protocol.ServerEndpoint):
             return_value.append(d)
 
         return 200, {"parameters": return_value, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
+
+    @protocol.handle(methods.FormMethod.put_form)
+    def put_form(self, tid: uuid.UUID, id: str, form: dict):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        forms = data.Form.objects(environment=env, form_type=id)  # @UndefinedVariable
+
+        fields = {k: v["type"] for k, v in form["attributes"].items()}
+        defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
+
+        if len(forms) == 0:
+            form = data.Form(form_id=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults)
+            form.save()
+
+        else:
+            form = forms[0]
+            # update the definition
+            form.fields = fields
+            form.defaults = defaults
+
+            form.save()
+
+        return 200, {"form": {"id": form.form_id}}
+
+    @protocol.handle(methods.FormMethod.get_form)
+    def get_form(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        forms = data.Form.objects(environment=env, form_type=id)  # @UndefinedVariable
+
+        if len(forms) == 0:
+            return 404
+
+        return 200, {"form": forms[0].to_dict()}
+
+    @protocol.handle(methods.FormMethod.list_forms)
+    def list_forms(self, tid):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        forms = data.Form.objects(environment=env)  # @UndefinedVariable
+
+        return 200, {"forms": [{"form_id": x.form_id, "form_type": x.form_type} for x in forms]}
+
+    @protocol.handle(methods.FormRecords.list_records)
+    def list_records(self, tid, form_type):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            form_type = data.Form.objects().get(form_type=form_type)  # @UndefinedVariable
+            records = data.FormRecord.objects(form_id=form_type)  # @UndefinedVariable
+
+            return 200, {"records": [r.record_id for r in records]}
+
+        except errors.DoesNotExist:
+            return 404, {"message": "No form is defined with id %s" % form_type}
+
+    @protocol.handle(methods.FormRecords.get_record)
+    def get_record(self, tid, record_id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            record = data.FormRecord.objects().get(record_id=record_id)  # @UndefinedVariable
+
+            return {"record": record.to_dict()}
+        except errors.DoesNotExist:
+            return 404, {"message": "The record with id %s does not exist" % record_id}
+
+    @protocol.handle(methods.FormRecords.put_record)
+    def put_record(self, tid, id, form):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        record = data.FormRecord.objects().get(record_id=record_id)  # @UndefinedVariable
+        record.changed = datetime.datetime.now()
+
+        form_fields = record.form_id.fields
+        for k, _v in form_fields.items():
+            if k in form:
+                record.fields[k] = form[k]
+
+        record.save()
+
+        return 200, {"record": record.to_dict()}
+
+    @protocol.handle(methods.FormRecords.post_record)
+    def post_record(self, tid, form_type, form):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        record_id = uuid.uuid4()
+        record = data.FormRecord(record_id=record_id, environment=env)
+        record.changed = datetime.datetime.now()
+
+        form_fields = record.form_id.fields
+        for k, _v in form_fields.items():
+            if k in form:
+                record.fields[k] = form[k]
+
+        record.save()
+
+        return 200, {"record": record.to_dict()}
+
+    @protocol.handle(methods.FormRecords.delete_record)
+    def delete_record(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
 
     @protocol.handle(methods.FileMethod.upload_file)
     def upload_file(self, id, content):
