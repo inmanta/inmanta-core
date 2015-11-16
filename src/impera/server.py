@@ -1268,9 +1268,6 @@ host = localhost
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        if wait > 0:
-            time.sleep(wait)
-
         last_recompile = self._recompiles[environment_id]
         wait_time = int(Config.get("server", "auto-recompile-wait", 600))
         if last_recompile is self:
@@ -1284,7 +1281,7 @@ host = localhost
                 LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
             self._recompiles[environment_id] = self
-            threading.Thread(target=self._recompile_environment, args=(environment_id, update_repo)).start()
+            threading.Thread(target=self._recompile_environment, args=(environment_id, update_repo, wait)).start()
 
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
@@ -1308,10 +1305,13 @@ host = localhost
         return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
                            errstream=log_err, outstream=log_out, returncode=returncode)
 
-    def _recompile_environment(self, environment_id, update_repo=False):
+    def _recompile_environment(self, environment_id, update_repo=False, wait=0):
         """
             Recompile an environment
         """
+        if wait > 0:
+            time.sleep(wait)
+
         try:
             impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
             project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
