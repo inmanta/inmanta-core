@@ -29,6 +29,7 @@ from collections import defaultdict
 import uuid
 import json
 import glob
+import time
 
 from mongoengine import connect, errors
 from impera import methods
@@ -330,7 +331,7 @@ class Server(protocol.ServerEndpoint):
                 p.resolved = True
                 p.save()
 
-            self._async_recompile(tid, False)
+            self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
 
         return 200, {"parameter": param.to_dict()}
 
@@ -1263,10 +1264,13 @@ host = localhost
 
         return 200
 
-    def _async_recompile(self, environment_id, update_repo):
+    def _async_recompile(self, environment_id, update_repo, wait=0):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
+        if wait > 0:
+            time.sleep(wait)
+
         last_recompile = self._recompiles[environment_id]
         wait_time = int(Config.get("server", "auto-recompile-wait", 600))
         if last_recompile is self:
