@@ -548,6 +548,7 @@ class RESTTransport(Transport):
             conn.request(operation, url, body, headers)
             res = conn.getresponse()
         except Exception as e:
+            print(body, headers)
             return Result(code=500, result=str(e))
 
         return Result(code=res.status, result=self._decode(res.read()))

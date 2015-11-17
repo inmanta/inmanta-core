@@ -416,29 +416,28 @@ class Server(protocol.ServerEndpoint):
 
         try:
             form_type = data.Form.objects().get(form_type=form_type)  # @UndefinedVariable
-            records = data.FormRecord.objects(form_id=form_type)  # @UndefinedVariable
+            records = data.FormRecord.objects(form=form_type)  # @UndefinedVariable
 
-            return 200, {"records": [r.record_id for r in records]}
+            return 200, {"records": [{"record_id": r.record_id, "changed": r.changed} for r in records]}
 
         except errors.DoesNotExist:
             return 404, {"message": "No form is defined with id %s" % form_type}
 
     @protocol.handle(methods.FormRecords.get_record)
-    def get_record(self, tid, record_id):
+    def get_record(self, tid, id):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
         try:
-            record = data.FormRecord.objects().get(record_id=record_id)  # @UndefinedVariable
-
-            return {"record": record.to_dict()}
+            record = data.FormRecord.objects().get(record_id=id)  # @UndefinedVariable
+            return 200, {"record": record.to_dict()}
         except errors.DoesNotExist:
-            return 404, {"message": "The record with id %s does not exist" % record_id}
+            return 404, {"message": "The record with id %s does not exist" % id}
 
-    @protocol.handle(methods.FormRecords.put_record)
-    def put_record(self, tid, id, form):
+    @protocol.handle(methods.FormRecords.update_record)
+    def update_record(self, tid, id, form):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -447,7 +446,7 @@ class Server(protocol.ServerEndpoint):
         record = data.FormRecord.objects().get(record_id=record_id)  # @UndefinedVariable
         record.changed = datetime.datetime.now()
 
-        form_fields = record.form_id.fields
+        form_fields = record.form.fields
         for k, _v in form_fields.items():
             if k in form:
                 record.fields[k] = form[k]
@@ -456,18 +455,19 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"record": record.to_dict()}
 
-    @protocol.handle(methods.FormRecords.post_record)
-    def post_record(self, tid, form_type, form):
+    @protocol.handle(methods.FormRecords.create_record)
+    def create_record(self, tid, form_type, form):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
+        form_obj = data.Form.objects().get(environment=env, form_type=form_type)  # @UndefinedVariable
         record_id = uuid.uuid4()
-        record = data.FormRecord(record_id=record_id, environment=env)
+        record = data.FormRecord(record_id=record_id, environment=env, form=form_obj)
         record.changed = datetime.datetime.now()
 
-        form_fields = record.form_id.fields
+        form_fields = record.form.fields
         for k, _v in form_fields.items():
             if k in form:
                 record.fields[k] = form[k]
@@ -482,6 +482,11 @@ class Server(protocol.ServerEndpoint):
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
+
+        record = data.FormRecord.objects().get(record_id=id, environment=env)  # @UndefinedVariable
+        record.delete()
+
+        return 200
 
     @protocol.handle(methods.FileMethod.upload_file)
     def upload_file(self, id, content):
@@ -816,7 +821,6 @@ class Server(protocol.ServerEndpoint):
                     attributes[field.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(value)
 
             rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=resource, model=cm, attributes=attributes)
-            rv.save()
 
             ra = data.ResourceAction(resource_version=rv, action="store", level="INFO", timestamp=datetime.datetime.now())
             ra.save()

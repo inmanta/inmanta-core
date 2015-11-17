@@ -605,3 +605,55 @@ class RecordList(ImperaCommand, Lister):
             data.append((p["record_id"], p['changed'])),
 
         return (('Record ID', 'Changed'), data)
+
+
+class RecordCreate(ImperaCommand, ShowOne):
+    """
+        Create a new record
+    """
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
+        parser.add_argument("-p", "--field", help="Field values", action="append")
+        return parser
+
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
+
+        fields = {}
+        for field in parsed_args.field:
+            parts = field.split("=")
+            if len(parts) != 2:
+                raise Exception("Argument %s should be in the key=value form." % field)
+
+            fields[parts[0].strip()] = parts[1].strip()
+
+        result = self.do_request("create_record", "record", arguments=dict(tid=tid, form_type=parsed_args.form, form=fields))
+
+        headers = []
+        values = []
+        for k in sorted(result["fields"].keys()):
+            headers.append(k)
+            values.append(result["fields"][k])
+
+        return (headers, values)
+
+
+class RecordDelete(ImperaCommand, ShowOne):
+    """
+        Delete a record
+    """
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("record_id", help="The the id of the record to delete")
+        return parser
+
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
+        try:
+            record_id = uuid.UUID(parsed_args.record_id)
+        except ValueError:
+            raise Exception("The record id should be a valid UUID")
+
+        self.do_request("delete_record", arguments=dict(tid=tid, id=record_id))
+        return ((), ())

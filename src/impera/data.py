@@ -244,15 +244,15 @@ class FormRecord(Document):
         A form record
     """
     record_id = UUIDField(required=True, unique=True)
-    form_id = ReferenceField(Form, required=True)
+    form = ReferenceField(Form, required=True)
     environment = ReferenceField(Environment, required=True)
     fields = MapField(StringField())
     changed = DateTimeField()
 
     def to_dict(self):
         return {"record_id": self.record_id,
-                "form_id": self.form_id.form_id,
-                "form_type": self.form_id.form_type,
+                "form_id": self.form.form_id,
+                "form_type": self.form.form_type,
                 "changed": self.changed,
                 "fields": self.fields
                 }

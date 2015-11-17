@@ -495,7 +495,7 @@ class FormRecords(Method):
         """
 
     @protocol(operation="GET", mt=True, id=True)
-    def get_record(self, tid: uuid.UUID, record_id: uuid.UUID):
+    def get_record(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Get a record from the server
 
@@ -504,7 +504,7 @@ class FormRecords(Method):
         """
 
     @protocol(operation="PUT", mt=True, id=True)
-    def put_record(self, tid: uuid.UUID, id: uuid.UUID, form: dict):
+    def update_record(self, tid: uuid.UUID, id: uuid.UUID, form: dict):
         """
             Update a record
 
@@ -514,7 +514,7 @@ class FormRecords(Method):
         """
 
     @protocol(operation="POST", mt=True, index=True)
-    def post_record(self, tid: uuid.UUID, form_type: str, form: dict):
+    def create_record(self, tid: uuid.UUID, form_type: str, form: dict):
         """
             Get a list of all records of a specific form
 
