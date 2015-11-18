@@ -367,9 +367,11 @@ class Server(protocol.ServerEndpoint):
 
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
+        field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
 
         if len(forms) == 0:
-            form = data.Form(form_id=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults)
+            form = data.Form(form_id=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults,
+                             options=form["options"], field_options=field_options)
             form.save()
 
         else:
@@ -377,6 +379,8 @@ class Server(protocol.ServerEndpoint):
             # update the definition
             form.fields = fields
             form.defaults = defaults
+            form.options = form["options"]
+            form.field_options = field_options
 
             form.save()
 
@@ -803,7 +807,7 @@ class Server(protocol.ServerEndpoint):
                     resource.version_latest = version
 
                 else:
-                    raise Exception("A resource id should be unique in an environment! (env=%s, resource=%s" %
+                    raise Exception("A resource id should be unique in an environment! (env=%s, resource=%s)" %
                                     (tid, resource_id))
 
             else:
@@ -821,6 +825,7 @@ class Server(protocol.ServerEndpoint):
                     attributes[field.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(value)
 
             rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=resource, model=cm, attributes=attributes)
+            rv.save()
 
             ra = data.ResourceAction(resource_version=rv, action="store", level="INFO", timestamp=datetime.datetime.now())
             ra.save()

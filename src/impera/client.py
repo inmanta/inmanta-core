@@ -574,7 +574,6 @@ class FormShow(ImperaCommand, ShowOne):
     def run_action(self, parsed_args):
         result = self.do_request("get_form", "form", arguments=dict(tid=self.to_environment_id(parsed_args.env),
                                                                     id=parsed_args.form))
-
         headers = []
         values = []
         for k, v in result["fields"].items():

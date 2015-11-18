@@ -70,7 +70,7 @@ class Project(Document):
                 }
 
 
-SOURCE = ("fact", "plugin", "user")
+SOURCE = ("fact", "plugin", "user", "form")
 
 
 class Parameter(Document):
@@ -224,8 +224,10 @@ class Form(Document):
     form_id = UUIDField(required=True)
     environment = ReferenceField(Environment, required=True)
     form_type = StringField(required=True, unique_with=["environment"])
+    options = MapField(DynamicField())
     fields = MapField(StringField())
     defaults = MapField(StringField())
+    field_options = MapField(DynamicField())
 
     meta = {
         'indexes': ['environment', 'form_type']
@@ -236,6 +238,8 @@ class Form(Document):
                 "form_type": self.form_type,
                 "fields": self.fields,
                 "defaults": self.defaults,
+                "options": self.options,
+                "field_options": self.field_options,
                 }
 
 
