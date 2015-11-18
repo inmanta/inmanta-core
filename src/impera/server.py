@@ -447,7 +447,7 @@ class Server(protocol.ServerEndpoint):
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
-        record = data.FormRecord.objects().get(record_id=record_id)  # @UndefinedVariable
+        record = data.FormRecord.objects().get(record_id=id)  # @UndefinedVariable
         record.changed = datetime.datetime.now()
 
         form_fields = record.form.fields
@@ -829,6 +829,34 @@ class Server(protocol.ServerEndpoint):
 
             ra = data.ResourceAction(resource_version=rv, action="store", level="INFO", timestamp=datetime.datetime.now())
             ra.save()
+
+        # search for deleted resources
+        env_resources = data.Resource.objects(environment=tid)  # @UndefinedVariable
+        for res in env_resources:
+            if res.version_latest < version:
+                rv = data.ResourceVersion.objects(environment=env, resource=res).order_by("-rid").limit(1)  # @UndefinedVariable
+                LOGGER.error("--> %s -- %d", res.resource_id, len(rv))
+                if len(rv) > 0:
+                    rv = rv[0]
+                    LOGGER.error(rv.attributes)
+                    if "purge_on_delete" in rv.attributes and rv.attributes["purge_on_delete"]:
+                        LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, rv.rid))
+
+                        res.version_latest = version
+                        res.save()
+
+                        attributes = rv.attributes.copy()
+                        attributes["purged"] = "true"
+                        rv = data.ResourceVersion(environment=env, rid="%s,v=%s" % (res.resource_id, version),
+                                                  resource=res, model=cm, attributes=attributes)
+                        rv.save()
+
+                        ra = data.ResourceAction(resource_version=rv, action="store", level="INFO",
+                                                 timestamp=datetime.datetime.now())
+                        ra.save()
+
+                        cm.resources_total += 1
+                        cm.save()
 
         for uk in unknowns:
             if "resource" not in uk:

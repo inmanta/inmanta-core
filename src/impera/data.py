@@ -310,6 +310,10 @@ class Resource(Document):
     version_deployed = IntField(default=0)
     last_deploy = DateTimeField()
 
+    meta = {
+        'indexes': ['environment', 'resource_id']
+    }
+
     def to_dict(self):
         return {"id": self.resource_id,
                 "id_fields": {"type": self.resource_type,
@@ -376,6 +380,10 @@ class ResourceVersion(Document):
     model = ReferenceField("ConfigurationModel", required=True)
     attributes = MapField(StringField())
     status = StringField(default="")
+
+    meta = {
+        'indexes': ['resource', 'environment', 'rid']
+    }
 
     def to_dict(self):
         data = {}

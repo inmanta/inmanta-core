@@ -638,6 +638,38 @@ class RecordCreate(ImperaCommand, ShowOne):
         return (headers, values)
 
 
+class RecordUpdate(ImperaCommand, ShowOne):
+    """
+        Create a new record
+    """
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-r", "--record", dest="record", help="The id of the record to edit", required=True)
+        parser.add_argument("-p", "--field", help="Field values", action="append")
+        return parser
+
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
+
+        fields = {}
+        for field in parsed_args.field:
+            parts = field.split("=")
+            if len(parts) != 2:
+                raise Exception("Argument %s should be in the key=value form." % field)
+
+            fields[parts[0].strip()] = parts[1].strip()
+
+        result = self.do_request("update_record", "record", arguments=dict(tid=tid, id=parsed_args.record, form=fields))
+
+        headers = []
+        values = []
+        for k in sorted(result["fields"].keys()):
+            headers.append(k)
+            values.append(result["fields"][k])
+
+        return (headers, values)
+
+
 class RecordDelete(ImperaCommand, ShowOne):
     """
         Delete a record

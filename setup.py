@@ -50,6 +50,7 @@ setup(
         'record-show = impera.client:RecordShow',
         'record-create = impera.client:RecordCreate',
         'record-delete = impera.client:RecordDelete',
+        'record-update = impera.client:RecordUpdate',
     ],
 },
 )
