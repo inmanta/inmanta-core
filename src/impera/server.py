@@ -370,21 +370,21 @@ class Server(protocol.ServerEndpoint):
         field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
 
         if len(forms) == 0:
-            form = data.Form(form_id=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults,
-                             options=form["options"], field_options=field_options)
-            form.save()
+            f = data.Form(form_id=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults,
+                          options=form["options"], field_options=field_options)
+            f.save()
 
         else:
-            form = forms[0]
+            f = forms[0]
             # update the definition
-            form.fields = fields
-            form.defaults = defaults
-            form.options = form["options"]
-            form.field_options = field_options
+            f.fields = fields
+            f.defaults = defaults
+            f.options = form["options"]
+            f.field_options = field_options
 
-            form.save()
+            f.save()
 
-        return 200, {"form": {"id": form.form_id}}
+        return 200, {"form": {"id": f.form_id}}
 
     @protocol.handle(methods.FormMethod.get_form)
     def get_form(self, tid, id):
