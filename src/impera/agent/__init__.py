@@ -492,37 +492,44 @@ class Agent(threading.Thread):
                 resource_obj = Resource.deserialize(data)
                 provider = Commander.get_provider(self, resource_obj)
 
-                if not hasattr(resource_obj, "allow_snapshot") or resource_obj.allow_snapshot:
-                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
-                                                 start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
+                if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.id.resource_str(),
+                                                 snapshot_data="", start=start, stop=datetime.datetime.now(), size=0,
+                                                 success=False, error=False,
                                                  msg="Resource %s does not allow snapshots" % resource["id"])
                     continue
 
                 try:
                     result = provider.snapshot(resource_obj)
-                    sha1sum = hashlib.sha1()
-                    sha1sum.update(result)
-                    content_id = sha1sum.hexdigest()
-                    self._client.upload_file(id=content_id, content=result)
+                    if result is not None:
+                        sha1sum = hashlib.sha1()
+                        sha1sum.update(result)
+                        content_id = sha1sum.hexdigest()
+                        self._client.upload_file(id=content_id, content=result)
 
-                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(),
-                                                 snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
-                                                 size=len(result), success=True, error=False,
-                                                 msg="")
+                        self._client.update_snapshot(self, environment, snapshot_id, resource_obj.id.resource_str(),
+                                                     snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
+                                                     size=len(result), success=True, error=False,
+                                                     msg="")
+                    else:
+                        raise Exception("Snapshot returned no data")
 
                 except NotImplementedError:
-                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.id.resource_str(),
+                                                 snapshot_data="",
                                                  start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
                                                  msg="The handler for resource %s does not support snapshots" % resource["id"])
                 except Exception:
                     LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
-                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.id.resource_str(),
+                                                 snapshot_data="",
                                                  start=start, stop=datetime.datetime.now(), size=0, success=False, error=True,
                                                  msg="The handler for resource %s does not support snapshots" % resource["id"])
 
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                self._client.update_snapshot(self, environment, snapshot_id, resource_obj.id.resource_str(),
+                                             snapshot_data="",
                                              start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
                                              msg="Unable to find a handler for %s" % resource["id"])
 
