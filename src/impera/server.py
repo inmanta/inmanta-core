@@ -1542,10 +1542,10 @@ host = localhost
 
         res.save()
 
-        snapshot.resource_todo -= 1
+        snapshot.resources_todo -= 1
         snapshot.total_size += size
 
-        if snapshot.resource_todo == 0:
+        if snapshot.resources_todo == 0:
             snapshot.finished = datetime.datetime.now()
 
         snapshot.save()
