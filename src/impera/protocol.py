@@ -323,8 +323,8 @@ class RESTHandler(tornado.web.RequestHandler):
                     arg_type = argspec.annotations[arg]
                     if message[arg] is not None and not isinstance(message[arg], arg_type):
                         try:
-                            if arg_type == datetime.datetime:
-                                message[arg] = datetime.datetime.strptime(message[arg], "%Y-%m-%dT%H:%M:%S.%f")
+                            if arg_type == datetime:
+                                message[arg] = datetime.strptime(message[arg], "%Y-%m-%dT%H:%M:%S.%f")
                             else:
                                 message[arg] = arg_type(message[arg])
                         except (ValueError, TypeError):
