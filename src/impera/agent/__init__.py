@@ -509,7 +509,7 @@ class Agent(threading.Thread):
                         self._client.upload_file(id=content_id, content=result)
 
                         self._client.update_snapshot(self, tid=environment, id=snapshot_id,
-                                                     resource_id=resource_obj.id.resource_str(), resource_obj.id.resource_str(),
+                                                     resource_id=resource_obj.id.resource_str(),
                                                      snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
                                                      size=len(result), success=True, error=False,
                                                      msg="")
