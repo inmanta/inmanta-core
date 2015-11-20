@@ -1462,7 +1462,7 @@ host = localhost
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
-        snapshot = data.Snapshot.objects(environment=env, id=id)  # @UndefinedVariable
+        snapshot = data.Snapshot.objects().get(environment=env, id=id)  # @UndefinedVariable
         return 200, {"snapshot": snapshot.to_dict()}
 
     @protocol.handle(methods.Snapshot.create_snapshot)
@@ -1493,7 +1493,7 @@ host = localhost
         resource_list = []
         resource_states = data.ResourceVersion.objects(environment=env, model=version)  # @UndefinedVariable
         for rs in resource_states:
-            if rs.resource.holds_state:
+            if rs.resource.holds_state and "state_id" in rs.attributes:
                 agent = rs.resource.agent
                 resources_to_snapshot[agent].append(rs.to_dict())
                 resource_list.append(rs.resource.resource_id)
