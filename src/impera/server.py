@@ -1479,7 +1479,7 @@ host = localhost
         if len(versions) == 0:
             return 500, {"message": "There is no deployed configuration model to create a snapshot."}
 
-        version = versions[1]
+        version = versions[0]
 
         LOGGER.info("Creating a snapshot from version %s in environment %s", version.version, tid)
 
