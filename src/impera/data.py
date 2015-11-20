@@ -514,7 +514,7 @@ class Snapshot(Document):
     model = ReferenceField(ConfigurationModel)
     started = DateTimeField()
     finished = DateTimeField()
-    total_size = IntField()
+    total_size = IntField(default=0)
     resources_todo = IntField(default=0)
 
     def to_dict(self):
