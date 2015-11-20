@@ -780,7 +780,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given configuration model does not exist yet."}
 
     @protocol.handle(methods.CMVersionMethod.put_version)
-    def put_version(self, tid, version, resources, unknowns):
+    def put_version(self, tid, version, resources, unknowns, version_info):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
@@ -793,7 +793,7 @@ class Server(protocol.ServerEndpoint):
             pass
 
         cm = data.ConfigurationModel(environment=env, version=version, date=datetime.datetime.now(),
-                                     resources_total=len(resources))
+                                     resources_total=len(resources), version_info=version_info)
         cm.save()
 
         for res_dict in resources:
@@ -817,12 +817,17 @@ class Server(protocol.ServerEndpoint):
                                          attribute_name=resource_obj.get_attribute(),
                                          attribute_value=resource_obj.get_attribute_value(), version_latest=version)
 
-            resource.save()
-
             attributes = {}
             for field, value in res_dict.items():
                 if field != "id":
                     attributes[field.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(value)
+
+            if "state_id" in attributes:
+                resource.holds_state = True
+                if attributes["state_id"] == "":
+                    attributes["state_id"] = resource_id
+
+            resource.save()
 
             rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=resource, model=cm, attributes=attributes)
             rv.save()
@@ -835,10 +840,8 @@ class Server(protocol.ServerEndpoint):
         for res in env_resources:
             if res.version_latest < version:
                 rv = data.ResourceVersion.objects(environment=env, resource=res).order_by("-rid").limit(1)  # @UndefinedVariable
-                LOGGER.error("--> %s -- %d", res.resource_id, len(rv))
                 if len(rv) > 0:
                     rv = rv[0]
-                    LOGGER.error(rv.attributes)
                     if "purge_on_delete" in rv.attributes and rv.attributes["purge_on_delete"]:
                         LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, rv.rid))
 
@@ -1437,3 +1440,112 @@ host = localhost
         d = {"reports": [m.to_dict() for m in models]}
 
         return 200, d
+
+    @protocol.handle(methods.Snapshot.list_snapshots)
+    def list_snapshots(self, tid):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        snapshots = data.Snapshot.objects(environment=env)  # @UndefinedVariable
+        resources = data.Resource.objects(environment=env, holds_state=True)  # @UndefinedVariable
+
+        return 200, {"snapshots": [{"id": s.id} for s in snapshots],
+                     "resources": [r.resource_id for r in resources],
+                     }
+
+    @protocol.handle(methods.Snapshot.get_snapshot)
+    def get_snapshot(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        snapshot = data.Snapshot.objects(environment=env, id=id)  # @UndefinedVariable
+        return 200, {"snapshot": snapshot.to_dict()}
+
+    @protocol.handle(methods.Snapshot.create_snapshot)
+    def create_snapshot(self, tid, name):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        # get the latest deployed configuration model
+        versions = (data.ConfigurationModel
+                    .objects(environment=env, deployed=True).order_by("-version").limit(1))  # @UndefinedVariable
+
+        if len(versions) == 0:
+            return 500, {"message": "There is no deployed configuration model to create a snapshot."}
+
+        version = versions[1]
+
+        LOGGER.info("Creating a snapshot from version %s in environment %s", version.version, tid)
+
+        # create the snapshot
+        snapshot_id = uuid.uuid4()
+        snapshot = data.Snapshot(id=snapshot_id, environment=env, model=version, started=datetime.datetime.now())
+        snapshot.save()
+
+        # find resources with state
+        resources_to_snapshot = defaultdict(list)
+        resource_list = []
+        resource_states = data.ResourceVersion.objects(environment=env, model=version)  # @UndefinedVariable
+        for rs in resource_states:
+            if rs.resource.holds_state:
+                agent = rs.resource.agent
+                resources_to_snapshot[agent].append(rs.to_dict())
+                resource_list.append(rs.resource.resource_id)
+                r = data.ResourceSnapshot(environment=env, snapshot=snapshot, resource_id=rs.resource.resource_id,
+                                          state_id=rs.attributes["state_id"])
+                r.save()
+
+        for agent, resources in resources_to_snapshot.items():
+            self.queue_request(tid, agent, {"method": "snapshot", "environment": tid, "snapshot_id": snapshot_id,
+                               "resources": resources})
+
+        if len(resource_list) == 0:
+            snapshot.finished = datetime.datetime.now()
+            snapshot.total_size = 0
+            snapshot.save()
+
+        value = snapshot.to_dict()
+        value["resources"] = resource_list
+        return 200, {"snapshot": value}
+
+    @protocol.handle(methods.Snapshot.update_snapshot)
+    def update_snapshot(self, tid, id, resource_id, snapshot_data, start, stop, size, success, error, msg):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            snapshot = data.Snapshot.objects().get(id=id)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "Snapshot with id %s does not exist!" % id}
+
+        res = data.ResourceSnapshot.objects().get(environment=env,  # @UndefinedVariable
+                                                  snapshot=snapshot, resource_id=resource_id)
+
+        res.content_hash = snapshot_data
+        res.start = start
+        res.stop = stop
+        res.size = size
+        res.success = success
+        res.error = error
+        res.msg = msg
+
+        res.save()
+
+        return 200
+
+    @protocol.handle(methods.Snapshot.delete_snapshot)
+    def delete_snapshot(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        return 200

@@ -17,8 +17,10 @@
 """
 
 from functools import wraps
-from impera.data import ROLES, ACTIONS, LOGLEVEL
 import uuid
+import datetime
+
+from impera.data import ROLES, ACTIONS, LOGLEVEL
 
 
 def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
@@ -321,7 +323,7 @@ class CMVersionMethod(Method):
         """
 
     @protocol(operation="PUT", mt=True)
-    def put_version(self, tid: uuid.UUID, version: int, resources: list, unknowns: list=None):
+    def put_version(self, tid: uuid.UUID, version: int, resources: list, unknowns: list=None, version_info: dict=None):
         """
             Store a new version of the configuration model
 
@@ -329,6 +331,7 @@ class CMVersionMethod(Method):
             :param version The version of the configuration model
             :param resources A list of all resources in the configuration model (deployable)
             :param unknowns A list of unknown parameters that caused the model to be incomplete
+            :param version_info Module version information
         """
 
     @protocol(operation="POST", mt=True, id=True)
@@ -624,4 +627,82 @@ class CompileReport(Method):
             :param start Reports after start
             :param end Reports before end
             :param limit Maximum number of results
+        """
+
+
+class Snapshot(Method):
+    """
+        Methods to create and restore snapshots
+    """
+    __method_name__ = "snapshot"
+
+    @protocol(operation="GET", index=True, mt=True)
+    def list_snapshots(self, tid: uuid.UUID):
+        """
+            Create a list of all snapshots
+        """
+
+    @protocol(operation="GET", id=True, mt=True)
+    def get_snapshot(self, tid: uuid.UUID, id: uuid.UUID):
+        """
+            Get details about a snapshot and a list of resources that can be snapshotted
+        """
+
+    @protocol(operation="POST", mt=True, index=True)
+    def create_snapshot(self, tid: uuid.UUID, name: str=None):
+        """
+            Request a new snapshot
+        """
+
+    @protocol(operation="PUT", mt=True, id=True)
+    def update_snapshot(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, snapshot_data: str, error: bool, success: bool,
+                        start: datetime.datetime, stop: datetime.datetime, size: int, msg: str=None):
+        """
+            Update a snapshot with the details of a specific resource
+
+            :param tid The environment the snapshot is created in
+            :param id The id of the snapshot to update
+            :param resource_id The id of the resource of which a snapshot was created
+            :param snapshot_data The hash of the snapshot data that was uploaded to the fileserver
+            :param start The time when the snapshot was started
+            :param stop The time the snapshot ended
+            :param size The size of the snapshot in bytes
+            :param msg An optional message about the snapshot
+        """
+
+    @protocol(operation="DELETE", mt=True, id=True)
+    def delete_snapshot(self, tid: uuid.UUID, id: uuid.UUID):
+        """
+            Delete a snapshot
+        """
+
+
+class RestoreSnapshot(Method):
+    """
+        Restore a snapshot
+    """
+    __method_name__ = "restore"
+
+    @protocol(operation="POST", mt=True)
+    def restore_snapshot(self):
+        """
+            Restore a snapshot
+        """
+
+    @protocol(operation="GET", mt=True, index=True)
+    def list_restores(self, tid: uuid.UUID):
+        """
+            List finished and ongoing restores
+        """
+
+    @protocol(operation="GET", mt=True, id=True)
+    def get_restore_status(self, tid: uuid.UUID, id: uuid.UUID):
+        """
+            Get the status of a restore
+        """
+
+    @protocol(operation="DELETE", mt=True, id=True)
+    def cancel_restore(self, tid: uuid.UUID, id: uuid.UUID):
+        """
+            Cancel a restore
         """

@@ -30,7 +30,7 @@ from impera.execute import NotFoundException
 from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
-from impera.module import Project
+from impera.module import Project, ModuleTool
 
 LOGGER = logging.getLogger(__name__)
 
@@ -397,12 +397,22 @@ class Exporter(object):
                 else:
                     LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
+        # Collecting version information
+        project = Project.get()
+        version_info = {"modules": ModuleTool().freeze(create_file=False),
+                        "project": {"repo": project.get_scm_url(),
+                                    "branch": project.get_scm_branch(),
+                                    "hash": project.get_scm_version()
+                                    }
+                        }
+
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters)
+        res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
+                               version_info=version_info)
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates")
 

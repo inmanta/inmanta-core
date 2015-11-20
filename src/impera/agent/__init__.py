@@ -22,6 +22,7 @@ import os
 from threading import enumerate
 import time
 import threading
+import datetime
 
 from impera import env
 from impera import protocol
@@ -30,6 +31,7 @@ from impera.config import Config
 from impera.loader import CodeLoader
 from impera.protocol import Scheduler
 from impera.resources import Resource, Id
+import hashlib
 
 
 LOGGER = logging.getLogger(__name__)
@@ -468,9 +470,61 @@ class Agent(threading.Thread):
                         elif item["method"] == "dryrun":
                             self.run_dryrun(agent, int(item["version"]), item["dryrun"])
 
+                        elif item["method"] == "snapshot":
+                            threading.Thread(target=self.do_snapshot,
+                                             args=(item["environment"], agent, item["snapshot_id"], item["resources"])).start()
+
             for key, resource in fact_requests.items():
                 LOGGER.info("Requesting facts for resource %s in environment %s", key[0], key[1])
                 self.get_facts(key[0], key[1], resource)
+
+    def do_snapshot(self, environment, agent, snapshot_id, resources):
+        """
+            Create a snapshot of stateful resources managed by this agent
+        """
+        LOGGER.debug("Start snapshot %s", snapshot_id)
+
+        for resource in resources:
+            start = datetime.datetime.now()
+            try:
+                data = resource["fields"]
+                data["id"] = resource["id"]
+                resource_obj = Resource.deserialize(data)
+                provider = Commander.get_provider(self, resource_obj)
+
+                if not hasattr(resource_obj, "allow_snapshot") or resource_obj.allow_snapshot:
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                                                 start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
+                                                 msg="Resource %s does not allow snapshots" % resource["id"])
+                    continue
+
+                try:
+                    result = provider.snapshot(resource_obj)
+                    sha1sum = hashlib.sha1()
+                    sha1sum.update(result)
+                    content_id = sha1sum.hexdigest()
+                    self._client.upload_file(id=content_id, content=result)
+
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(),
+                                                 snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
+                                                 size=len(result), success=True, error=False,
+                                                 msg="")
+
+                except NotImplementedError:
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                                                 start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
+                                                 msg="The handler for resource %s does not support snapshots" % resource["id"])
+                except Exception:
+                    LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
+                    self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                                                 start=start, stop=datetime.datetime.now(), size=0, success=False, error=True,
+                                                 msg="The handler for resource %s does not support snapshots" % resource["id"])
+
+            except Exception:
+                LOGGER.exception("Unable to find a handler for %s", resource["id"])
+                self._client.update_snapshot(self, environment, snapshot_id, resource_obj.resource_str(), snapshot_data="",
+                                             start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
+                                             msg="Unable to find a handler for %s" % resource["id"])
 
     def status(self, operation, body):
         if "id" not in body:

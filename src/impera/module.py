@@ -143,6 +143,26 @@ class Project(object):
     def reloadModules(self):
         self.modules = self.discover(self.modulepath)
 
+    def get_scm_url(self):
+        try:
+            return subprocess.check_output(["git", "config", "--get", "remote.origin.url"],
+                                           cwd=self.project_path).decode("utf-8") .strip()
+        except Exception:
+            return None
+
+    def get_scm_version(self):
+        try:
+            return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.project_path).decode("utf-8") .strip()
+        except Exception:
+            return None
+
+    def get_scm_branch(self):
+        try:
+            return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                                           cwd=self.project_path).decode("utf-8") .strip()
+        except Exception:
+            return None
+
     def load_plugins(self) -> None:
         """
             Load all plug-ins
@@ -855,14 +875,13 @@ class ModuleTool(object):
         for mod in Project.get().sorted_modules():
             mod.push()
 
-    def freeze(self):
+    def freeze(self, create_file=True):
         """
             Freeze the version of all modules
         """
         project = Project.get()
-        if os.path.exists(project.freeze_file):
-            print(
-                "A module.version file already exists, overwrite this file? y/n")
+        if os.path.exists(project.freeze_file) and create_file:
+            print("A module.version file already exists, overwrite this file? y/n")
             while True:
                 value = sys.stdin.readline().strip()
                 if value != "y" and value != "n":
@@ -893,8 +912,11 @@ class ModuleTool(object):
 
             file_content[mod._meta["name"]] = modc
 
-        with open(project.freeze_file, "w+") as fd:
-            fd.write(yaml.dump(file_content))
+        if create_file:
+            with open(project.freeze_file, "w+") as fd:
+                fd.write(yaml.dump(file_content))
+
+        return file_content
 
     def verify(self):
         """

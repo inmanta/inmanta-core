@@ -184,6 +184,21 @@ class ResourceHandler(object):
         """
         return True
 
+    def snapshot(self, resource):
+        """
+            Create a new snapshot and upload it to the server
+
+            :param resource The state of the resource for which a snapshot is created
+            :return The data that needs to be uploaded to the server
+        """
+        raise NotImplementedError()
+
+    def restore(self, resource, snapshot_id):
+        """
+            Restore a resource from a snapshot
+        """
+        raise NotImplementedError()
+
 
 class Commander(object):
     """

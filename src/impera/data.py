@@ -306,6 +306,8 @@ class Resource(Document):
     attribute_name = StringField(required=True)
     attribute_value = StringField(required=True)
 
+    holds_state = BooleanField(default=False)
+
     version_latest = IntField(default=0)
     version_deployed = IntField(default=0)
     last_deploy = DateTimeField()
@@ -323,7 +325,8 @@ class Resource(Document):
                               },
                 "latest_version": self.version_latest,
                 "deployed_version": self.version_deployed,
-                "last_deploy": self.last_deploy
+                "last_deploy": self.last_deploy,
+                "holds_state": self.holds_state,
                 }
 
 
@@ -425,6 +428,7 @@ class ConfigurationModel(Document):
     deployed = BooleanField(default=False)
     result = StringField(choices=["pending", "deploying", "success", "failed"], default="pending")
     status = MapField(DynamicField(), default={})
+    version_info = DynamicField()
 
     resources_total = IntField(default=0)
     resources_done = IntField(default=0)
@@ -439,6 +443,7 @@ class ConfigurationModel(Document):
                 "status": {k.replace("\uff0e", ".").replace("\uff04", "$"): v for k, v in self.status.items()},
                 "total": self.resources_total,
                 "done": self.resources_done,
+                "version_info": self.version_info,
                 }
 
     def delete(self):
@@ -484,7 +489,7 @@ class DryRun(Document):
     resources = MapField(StringField())
 
     def to_dict(self):
-        return {"id": str(self.id),
+        return {"id": self.id,
                 "environment": str(self.environment.id),
                 "model": str(self.model.version),
                 "date": self.date.isoformat(),
@@ -492,3 +497,48 @@ class DryRun(Document):
                 "todo": self.resource_todo,
                 "resources": {k.replace("\uff0e", ".").replace("\uff04", "$"): json.loads(v) for k, v in self.resources.items()}
                 }
+
+
+class Snapshot(Document):
+    """
+        A snapshot of an environment
+
+        :param id The id of the snapshot
+        :param environment A reference to the environment
+        :param started When was this snapshot started
+        :param finished When was this snapshot finished
+        :param total_size The total size of this snapshot
+    """
+    id = UUIDField(primary_key=True)
+    environment = ReferenceField(Environment)
+    model = ReferenceField(ConfigurationModel)
+    started = DateTimeField()
+    finished = DateTimeField()
+    total_size = IntField()
+
+    def to_dict(self):
+        return {"id": self.id,
+                "model": self.model.version,
+                "started": self.started,
+                "finished": self.finished,
+                "total_size": self.total_size,
+                }
+
+
+class ResourceSnapshot(Document):
+    """
+        Snapshot of a resource
+
+        :param error Indicates if an error made the snapshot fail
+    """
+    environment = ReferenceField(Environment)
+    snapshot = ReferenceField(Snapshot)
+    resource_id = StringField(unique_with=["snapshot", "environment"])
+    state_id = StringField()
+    started = DateTimeField()
+    finished = DateTimeField()
+    content_hash = StringField()
+    success = BooleanField()
+    error = BooleanField()
+    msg = StringField()
+    size = IntField()
