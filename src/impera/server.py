@@ -1501,14 +1501,17 @@ host = localhost
                                           state_id=rs.attributes["state_id"])
                 r.save()
 
-        for agent, resources in resources_to_snapshot.items():
-            self.queue_request(tid, agent, {"method": "snapshot", "environment": tid, "snapshot_id": snapshot_id,
-                               "resources": resources})
-
         if len(resource_list) == 0:
             snapshot.finished = datetime.datetime.now()
             snapshot.total_size = 0
-            snapshot.save()
+        else:
+            snapshot.resources_todo = len(resource_list)
+
+        snapshot.save()
+
+        for agent, resources in resources_to_snapshot.items():
+            self.queue_request(tid, agent, {"method": "snapshot", "environment": tid, "snapshot_id": snapshot_id,
+                               "resources": resources})
 
         value = snapshot.to_dict()
         value["resources"] = resource_list
@@ -1538,6 +1541,14 @@ host = localhost
         res.msg = msg
 
         res.save()
+
+        snapshot.resource_todo -= 1
+        snapshot.total_size += size
+
+        if snapshot.resource_todo == 0:
+            snapshot.finished = datetime.datetime.now()
+
+        snapshot.save()
 
         return 200
 

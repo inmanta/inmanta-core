@@ -515,6 +515,7 @@ class Snapshot(Document):
     started = DateTimeField()
     finished = DateTimeField()
     total_size = IntField()
+    resources_todo = IntField(default=0)
 
     def to_dict(self):
         return {"id": self.id,
@@ -522,6 +523,7 @@ class Snapshot(Document):
                 "started": self.started,
                 "finished": self.finished,
                 "total_size": self.total_size,
+                "resources_todo": self.resources_todo,
                 }
 
 
