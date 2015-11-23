@@ -27,6 +27,9 @@ import threading
 import time
 import inspect
 import urllib
+import base64
+import uuid
+import json
 from collections import defaultdict
 
 import tornado.ioloop
@@ -34,9 +37,7 @@ import tornado.web
 import tornado.gen
 from impera import methods
 from impera.config import Config
-import uuid
 from datetime import datetime
-import json
 
 
 LOGGER = logging.getLogger(__name__)

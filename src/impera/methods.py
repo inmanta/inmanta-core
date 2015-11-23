@@ -200,7 +200,7 @@ class FileMethod(Method):
             Upload a new file
 
             :param id The id of the file
-            :param content The content of the file
+            :param content The base64 encoded content of the file
         """
 
     @protocol(operation="HEAD", id=True)

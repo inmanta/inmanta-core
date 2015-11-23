@@ -32,6 +32,7 @@ from impera.loader import CodeLoader
 from impera.protocol import Scheduler
 from impera.resources import Resource, Id
 import hashlib
+import base64
 
 
 LOGGER = logging.getLogger(__name__)
@@ -504,9 +505,11 @@ class Agent(threading.Thread):
                     result = provider.snapshot(resource_obj)
                     if result is not None:
                         sha1sum = hashlib.sha1()
+                        if not isinstance(result, bytes):
+                            result = result.encode()
                         sha1sum.update(result)
                         content_id = sha1sum.hexdigest()
-                        self._client.upload_file(id=content_id, content=result)
+                        self._client.upload_file(id=content_id, content=base64.b64encode(result))
 
                         self._client.update_snapshot(tid=environment, id=snapshot_id,
                                                      resource_id=resource_obj.id.resource_str(),
@@ -653,7 +656,7 @@ class Agent(threading.Thread):
         if result.code == 404:
             return None
         else:
-            return result.result["content"]
+            return base64.b64decode(result.result["content"])
 
     def resource_updated(self, resource, reload_requires=False, changes={}, status="", log_msg=""):
         """

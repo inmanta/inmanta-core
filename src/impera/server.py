@@ -30,6 +30,7 @@ import uuid
 import json
 import glob
 import time
+import base64
 
 from mongoengine import connect, errors
 from impera import methods
@@ -500,7 +501,7 @@ class Server(protocol.ServerEndpoint):
             return 500, {"message": "A file with this id already exists."}
 
         with open(file_name, "wb+") as fd:
-            fd.write(tornado.escape.utf8(content))
+            fd.write(base64.b64decode(content))
 
         return 200
 
@@ -522,7 +523,7 @@ class Server(protocol.ServerEndpoint):
 
         else:
             with open(file_name, "rb") as fd:
-                return 200, {"content": fd.read().decode()}
+                return 200, {"content": base64.b64encode(fd.read())}
 
     @protocol.handle(methods.FileMethod.stat_files)
     def stat_files(self, files):
