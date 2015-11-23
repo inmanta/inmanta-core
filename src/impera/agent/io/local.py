@@ -193,7 +193,7 @@ class BashIO(object):
         """
         result = subprocess.Popen(self._run_as_args("dd", "of=" + path), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                   stdin=subprocess.PIPE)
-        result.communicate(input=content.encode())
+        result.communicate(input=content)
 
         if result.returncode > 0:
             raise FileNotFoundError()
@@ -358,7 +358,7 @@ class LocalIO(object):
             Put the given content at the given path
         """
         with open(path, "wb+") as fd:
-            fd.write(content.encode())
+            fd.write(content)
 
     def _get_gid(self, name):
         """Returns a gid, given a group name."""

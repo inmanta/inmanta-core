@@ -505,8 +505,6 @@ class Agent(threading.Thread):
                     result = provider.snapshot(resource_obj)
                     if result is not None:
                         sha1sum = hashlib.sha1()
-                        if not isinstance(result, bytes):
-                            result = result.encode()
                         sha1sum.update(result)
                         content_id = sha1sum.hexdigest()
                         self._client.upload_file(id=content_id, content=base64.b64encode(result))
