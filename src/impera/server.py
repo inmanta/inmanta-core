@@ -523,7 +523,7 @@ class Server(protocol.ServerEndpoint):
 
         else:
             with open(file_name, "rb") as fd:
-                return 200, {"content": base64.b64encode(fd.read())}
+                return 200, {"content": base64.b64encode(fd.read()).decode("ascii")}
 
     @protocol.handle(methods.FileMethod.stat_files)
     def stat_files(self, files):

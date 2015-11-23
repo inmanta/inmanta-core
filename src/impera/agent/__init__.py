@@ -507,7 +507,7 @@ class Agent(threading.Thread):
                         sha1sum = hashlib.sha1()
                         sha1sum.update(result)
                         content_id = sha1sum.hexdigest()
-                        self._client.upload_file(id=content_id, content=base64.b64encode(result))
+                        self._client.upload_file(id=content_id, content=base64.b64encode(result).decode("ascii"))
 
                         self._client.update_snapshot(tid=environment, id=snapshot_id,
                                                      resource_id=resource_obj.id.resource_str(),
