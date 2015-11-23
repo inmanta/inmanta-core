@@ -1560,4 +1560,11 @@ host = localhost
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
+        try:
+            snapshot = data.Snapshot.objects().get(id=id)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "Snapshot with id %s does not exist!" % id}
+
+        snapshot.delete()
+
         return 200

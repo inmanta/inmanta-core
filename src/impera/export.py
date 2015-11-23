@@ -31,6 +31,7 @@ from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
+import base64
 
 LOGGER = logging.getLogger(__name__)
 
@@ -390,7 +391,7 @@ class Exporter(object):
             LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
             for hash_id in to_upload:
                 content = self._file_store[hash_id]
-                res = conn.upload_file(id=hash_id, content=content)
+                res = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
                 if res.code != 200:
                     LOGGER.error("Unable to upload file with hash %s" % hash_id)
@@ -440,15 +441,11 @@ class Exporter(object):
             Upload a file to the configuration server. This operation is not
             executed in the transaction.
         """
-        content_str = content
-        if isinstance(content, bytes):
-            content_str = content.decode('utf-8')
-        else:
+        if not isinstance(content, bytes):
             content = content.encode('utf-8')
 
         hash_id = self._hash_file(content)
-
-        self._file_store[hash_id] = content_str
+        self._file_store[hash_id] = content
 
         return hash_id
 

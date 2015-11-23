@@ -499,6 +499,25 @@ class DryRun(Document):
                 }
 
 
+class ResourceSnapshot(Document):
+    """
+        Snapshot of a resource
+
+        :param error Indicates if an error made the snapshot fail
+    """
+    environment = ReferenceField(Environment)
+    snapshot = ReferenceField("Snapshot")
+    resource_id = StringField(unique_with=["snapshot", "environment"])
+    state_id = StringField()
+    started = DateTimeField()
+    finished = DateTimeField()
+    content_hash = StringField()
+    success = BooleanField()
+    error = BooleanField()
+    msg = StringField()
+    size = IntField()
+
+
 class Snapshot(Document):
     """
         A snapshot of an environment
@@ -526,21 +545,6 @@ class Snapshot(Document):
                 "resources_todo": self.resources_todo,
                 }
 
-
-class ResourceSnapshot(Document):
-    """
-        Snapshot of a resource
-
-        :param error Indicates if an error made the snapshot fail
-    """
-    environment = ReferenceField(Environment)
-    snapshot = ReferenceField(Snapshot)
-    resource_id = StringField(unique_with=["snapshot", "environment"])
-    state_id = StringField()
-    started = DateTimeField()
-    finished = DateTimeField()
-    content_hash = StringField()
-    success = BooleanField()
-    error = BooleanField()
-    msg = StringField()
-    size = IntField()
+    def delete(self):
+        ResourceSnapshot.objects(snapshot=self).delete()
+        Document.delete(self)
