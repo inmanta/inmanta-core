@@ -543,6 +543,7 @@ class Snapshot(Document):
     id = UUIDField(primary_key=True)
     environment = ReferenceField(Environment)
     model = ReferenceField(ConfigurationModel)
+    name = StringField()
     started = DateTimeField()
     finished = DateTimeField()
     total_size = IntField(default=0)
@@ -551,6 +552,7 @@ class Snapshot(Document):
     def to_dict(self):
         return {"id": self.id,
                 "model": self.model.version,
+                "name": self.name,
                 "started": self.started,
                 "finished": self.finished,
                 "total_size": self.total_size,
@@ -595,3 +597,14 @@ class ResourceRestore(Document):
     success = BooleanField()
     error = BooleanField()
     msg = StringField()
+
+    def to_dict(self):
+        return {"restore_id": self.restore.id,
+                "state_id": self.state_id,
+                "resource_id": self.resource_id,
+                "started": self.started,
+                "finished": self.finished,
+                "success": self.success,
+                "error": self.error,
+                "msg": self.msg
+                }

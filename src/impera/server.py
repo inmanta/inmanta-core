@@ -1487,7 +1487,7 @@ host = localhost
 
         # create the snapshot
         snapshot_id = uuid.uuid4()
-        snapshot = data.Snapshot(id=snapshot_id, environment=env, model=version, started=datetime.datetime.now())
+        snapshot = data.Snapshot(id=snapshot_id, environment=env, model=version, started=datetime.datetime.now(), name=name)
         snapshot.save()
 
         # find resources with state
@@ -1625,3 +1625,26 @@ host = localhost
                                "resources": resources})
 
         return 200, restore.to_dict()
+
+    @protocol.handle(methods.RestoreSnapshot.list_restores)
+    def list_restores(self, tid):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        restores = data.SnapshotRestore.objects(environment=env)  # @UndefinedVariable
+        return 200, [x.to_dict() for x in restores]
+
+    @protocol.handle(methods.RestoreSnapshot.get_restore_status)
+    def get_restore_status(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        restore = data.SnapshotRestore.objects().get(id=id)  # @UndefinedVariable
+        restore_dict = restore.to_dict()
+        resources = data.ResourceRestore.objects(restore=restore)  # @UndefinedVariable
+        restore_dict["resources"] = [x.to_dict() for x in resources]
+        return 200, {"restore": restore_dict}
