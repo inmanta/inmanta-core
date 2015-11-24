@@ -1449,11 +1449,8 @@ host = localhost
             return 404, {"message": "The given environment id does not exist!"}
 
         snapshots = data.Snapshot.objects(environment=env)  # @UndefinedVariable
-        resources = data.Resource.objects(environment=env, holds_state=True)  # @UndefinedVariable
 
-        return 200, {"snapshots": [{"id": s.id, "started": s.started} for s in snapshots],
-                     "resources": [r.resource_id for r in resources],
-                     }
+        return 200, {"snapshots": [s.to_dict() for s in snapshots]}
 
     @protocol.handle(methods.Snapshot.get_snapshot)
     def get_snapshot(self, tid, id):
@@ -1614,7 +1611,7 @@ host = localhost
             if r.state_id in env_states:
                 env_res = env_states[r.state_id]
                 LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res))
-                restore_list[r.resource.agent].append(r.to_dict())
+                restore_list[env_res.resource.agent].append(r.to_dict())
 
                 rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id,
                                           started=datetime.datetime.now())
