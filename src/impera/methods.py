@@ -684,9 +684,22 @@ class RestoreSnapshot(Method):
     __method_name__ = "restore"
 
     @protocol(operation="POST", mt=True)
-    def restore_snapshot(self):
+    def restore_snapshot(self, tid: uuid.UUID, snapshot: uuid.UUID):
         """
             Restore a snapshot
+
+            :param tid The environment the snapshot is created in
+            :param snapshot The id of the snapshot to restore
+        """
+
+    @protocol(operation="POST", mt=True, )
+    def update_restore(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, success: bool, error: bool, msg: str):
+        """
+            Update the status of a restore
+
+            :param tid The environment to restore the snapshot in
+            :param id The id of the restore
+            :param resource_id The state id of the resource that was restored.
         """
 
     @protocol(operation="GET", mt=True, index=True)

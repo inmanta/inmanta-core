@@ -27,7 +27,6 @@ import threading
 import time
 import inspect
 import urllib
-import base64
 import uuid
 import json
 from collections import defaultdict

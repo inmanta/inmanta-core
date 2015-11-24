@@ -40,7 +40,6 @@ from impera import data
 from impera.config import Config
 from impera.loader import CodeLoader
 from impera.resources import Id, HostNotFoundException
-import tornado
 import dateutil
 from impera.agent.io.remote import RemoteIO
 
@@ -818,15 +817,15 @@ class Server(protocol.ServerEndpoint):
                                          attribute_name=resource_obj.get_attribute(),
                                          attribute_value=resource_obj.get_attribute_value(), version_latest=version)
 
+            if "state_id" in res_dict:
+                resource.holds_state = True
+                if res_dict["state_id"] == "":
+                    res_dict["state_id"] = resource_id
+
             attributes = {}
             for field, value in res_dict.items():
                 if field != "id":
                     attributes[field.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(value)
-
-            if "state_id" in attributes:
-                resource.holds_state = True
-                if attributes["state_id"] == "":
-                    attributes["state_id"] = resource_id
 
             resource.save()
 
@@ -1452,7 +1451,7 @@ host = localhost
         snapshots = data.Snapshot.objects(environment=env)  # @UndefinedVariable
         resources = data.Resource.objects(environment=env, holds_state=True)  # @UndefinedVariable
 
-        return 200, {"snapshots": [{"id": s.id} for s in snapshots],
+        return 200, {"snapshots": [{"id": s.id, "started": s.started} for s in snapshots],
                      "resources": [r.resource_id for r in resources],
                      }
 
@@ -1464,7 +1463,12 @@ host = localhost
             return 404, {"message": "The given environment id does not exist!"}
 
         snapshot = data.Snapshot.objects().get(environment=env, id=id)  # @UndefinedVariable
-        return 200, {"snapshot": snapshot.to_dict()}
+        snap_dict = snapshot.to_dict()
+
+        resources = data.ResourceSnapshot.objects(snapshot=snapshot)  # @UndefinedVariable
+        snap_dict["resources"] = [x.to_dict() for x in resources]
+
+        return 200, {"snapshot": snap_dict}
 
     @protocol.handle(methods.Snapshot.create_snapshot)
     def create_snapshot(self, tid, name):
@@ -1534,8 +1538,8 @@ host = localhost
                                                   snapshot=snapshot, resource_id=resource_id)
 
         res.content_hash = snapshot_data
-        res.start = start
-        res.stop = stop
+        res.started = start
+        res.finished = stop
         res.size = size
         res.success = success
         res.error = error
@@ -1568,3 +1572,59 @@ host = localhost
         snapshot.delete()
 
         return 200
+
+    @protocol.handle(methods.RestoreSnapshot.restore_snapshot)
+    def restore_snapshot(self, tid, snapshot):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            snapshot = data.Snapshot.objects().get(id=snapshot)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "Snapshot with id %s does not exist!" % snapshot}
+
+        # get all resources in the snapshot
+        snap_resources = data.ResourceSnapshot.objects(snapshot=snapshot)  # @UndefinedVariable
+
+        # get all resource that support state in the current environment
+        env_versions = (data.ConfigurationModel
+                        .objects(environment=env, deployed=True).order_by("-version").limit(1))  # @UndefinedVariable
+
+        if len(env_versions) == 0:
+            return 500, {"message": "There is no deployed configuration model in this environment."}
+        else:
+            env_version = env_versions[0]
+
+        env_resources = data.ResourceVersion.objects(model=env_version)  # @UndefinedVariable
+        env_states = {}
+        for r in env_resources:
+            if "state_id" in r.attributes:
+                env_states[r.attributes["state_id"]] = r
+
+        # create a restore object
+        restore_id = uuid.uuid4()
+        restore = data.SnapshotRestore(id=restore_id, snapshot=snapshot, environment=env, started=datetime.datetime.now())
+        restore.save()
+
+        # find matching resources
+        restore_list = defaultdict(list)
+        for r in snap_resources:
+            if r.state_id in env_states:
+                env_res = env_states[r.state_id]
+                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res))
+                restore_list[r.resource.agent].append(r.to_dict())
+
+                rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id,
+                                          started=datetime.datetime.now())
+                rr.save()
+                restore.resources_todo += 1
+
+        restore.save()
+
+        for agent, resources in restore_list.items():
+            self.queue_request(tid, agent, {"method": "restore", "environment": tid, "restore_id": restore_id,
+                               "resources": resources})
+
+        return 200, restore.to_dict()

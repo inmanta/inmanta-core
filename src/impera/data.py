@@ -517,6 +517,18 @@ class ResourceSnapshot(Document):
     msg = StringField()
     size = IntField()
 
+    def to_dict(self):
+        return {"snapshot_id": self.snapshot.id,
+                "state_id": self.state_id,
+                "started": self.started,
+                "finished": self.finished,
+                "content_hash": self.content_hash,
+                "success": self.success,
+                "error": self.error,
+                "msg": self.msg,
+                "size": self.size,
+                }
+
 
 class Snapshot(Document):
     """
@@ -548,3 +560,38 @@ class Snapshot(Document):
     def delete(self):
         ResourceSnapshot.objects(snapshot=self).delete()
         Document.delete(self)
+
+
+class SnapshotRestore(Document):
+    """
+        Information about a snapshot restore
+    """
+    id = UUIDField(primary_key=True)
+    environment = ReferenceField(Environment)
+    snapshot = ReferenceField("Snapshot")
+    started = DateTimeField()
+    finished = DateTimeField()
+    resources_todo = IntField(default=0)
+
+    def to_dict(self):
+        return {"id": self.id,
+                "snapshot": self.snapshot.id,
+                "started": self.started,
+                "finished": self.finished,
+                "resources_todo": self.resources_todo,
+                }
+
+
+class ResourceRestore(Document):
+    """
+        A restore of a resource from a snapshot
+    """
+    environment = ReferenceField(Environment)
+    restore = ReferenceField("SnapshotRestore")
+    state_id = StringField()
+    resource_id = StringField()
+    started = DateTimeField()
+    finished = DateTimeField()
+    success = BooleanField()
+    error = BooleanField()
+    msg = StringField()
