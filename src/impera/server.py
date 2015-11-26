@@ -1613,7 +1613,7 @@ host = localhost
                 LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res.id))
                 restore_list[env_res.resource.agent].append((r.to_dict(), env_res.to_dict()))
 
-                rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id, resource_id=env_res.id,
+                rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id, resource_id=env_res.rid,
                                           started=datetime.datetime.now(), )
                 rr.save()
                 restore.resources_todo += 1
