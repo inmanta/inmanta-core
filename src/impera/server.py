@@ -1610,11 +1610,11 @@ host = localhost
         for r in snap_resources:
             if r.state_id in env_states:
                 env_res = env_states[r.state_id]
-                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res))
+                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res.id))
                 restore_list[env_res.resource.agent].append((r.to_dict(), env_res.to_dict()))
 
-                rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id,
-                                          started=datetime.datetime.now())
+                rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id, resource_id=env_res.id,
+                                          started=datetime.datetime.now(), )
                 rr.save()
                 restore.resources_todo += 1
 
@@ -1654,12 +1654,18 @@ host = localhost
         return 200, {"restore": restore_dict}
 
     @protocol.handle(methods.RestoreSnapshot.update_restore)
-    def update_restore(self, tid, id, resource_id, success, error, msg):
+    def update_restore(self, tid, id, resource_id, success, error, msg, start, stop):
         try:
             env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
-        
-    
-    
+        try:
+            rr = data.ResourceRestore.objects().get(environment=env, restore=id, resource_id=resource_id)  # @UndefinedVariable
+            rr.error = error
+            rr.success = success
+            rr.started = start
+            rr.finished = stop
+            rr.save()
+        except errors.DoesNotExist:
+            return 404, {"message": "Resource restore not found."}

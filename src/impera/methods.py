@@ -693,7 +693,8 @@ class RestoreSnapshot(Method):
         """
 
     @protocol(operation="POST", mt=True, )
-    def update_restore(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, success: bool, error: bool, msg: str):
+    def update_restore(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, success: bool, error: bool, msg: str,
+                       start: datetime.datetime, stop: datetime.datetime):
         """
             Update the status of a restore
 
