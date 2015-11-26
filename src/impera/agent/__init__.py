@@ -498,18 +498,18 @@ class Agent(threading.Thread):
                 provider = Commander.get_provider(self, resource_obj)
 
                 if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
-                    self._client.update_snapshot(tid=environment, id=restore_id, resource_id=resource_obj.id.resource_str(),
-                                                 start=start, stop=datetime.datetime.now(), success=False, error=False,
-                                                 msg="Resource %s does not allow restore" % resource["id"])
+                    self._client.update_restore(tid=environment, id=restore_id, resource_id=resource_obj.id.resource_str(),
+                                                start=start, stop=datetime.datetime.now(), success=False, error=False,
+                                                msg="Resource %s does not allow restore" % resource["id"])
                     continue
 
                 try:
                     provider.restore(resource_obj, restore["content_hash"])
                 except NotImplementedError:
-                    self._client.update_snapshot(tid=environment, id=restore_id,
-                                                 resource_id=resource_obj.id.resource_str(), success=False, error=False,
-                                                 start=start, stop=datetime.datetime.now(),
-                                                 msg="The handler for resource %s does not support restores" % resource["id"])
+                    self._client.update_restore(tid=environment, id=restore_id,
+                                                resource_id=resource_obj.id.resource_str(), success=False, error=False,
+                                                start=start, stop=datetime.datetime.now(),
+                                                msg="The handler for resource %s does not support restores" % resource["id"])
 
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s", resource["id"])
