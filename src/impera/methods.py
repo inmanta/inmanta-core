@@ -683,7 +683,7 @@ class RestoreSnapshot(Method):
     """
     __method_name__ = "restore"
 
-    @protocol(operation="POST", mt=True)
+    @protocol(operation="POST", mt=True, index=True)
     def restore_snapshot(self, tid: uuid.UUID, snapshot: uuid.UUID):
         """
             Restore a snapshot
@@ -692,7 +692,7 @@ class RestoreSnapshot(Method):
             :param snapshot The id of the snapshot to restore
         """
 
-    @protocol(operation="POST", mt=True, index=True)
+    @protocol(operation="POST", mt=True, id=True)
     def update_restore(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, success: bool, error: bool, msg: str,
                        start: datetime.datetime, stop: datetime.datetime):
         """
