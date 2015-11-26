@@ -212,7 +212,7 @@ class FileMethod(Method):
         """
 
     @protocol(operation="GET", id=True, data_type="blob")
-    def get_file(self, id: str):
+    def get_file(self, id: str, download):
         """
             Retrieve a file
 

@@ -475,15 +475,54 @@ class Agent(threading.Thread):
                             threading.Thread(target=self.do_snapshot,
                                              args=(item["environment"], agent, item["snapshot_id"], item["resources"])).start()
 
+                        elif item["method"] == "restore":
+                            threading.Thread(target=self.do_restore, args=(item["environment"], item["restore_id"],
+                                                                           item["snapshot_id"], item["resources"])).start()
+
             for key, resource in fact_requests.items():
                 LOGGER.info("Requesting facts for resource %s in environment %s", key[0], key[1])
                 self.get_facts(key[0], key[1], resource)
+
+    def do_restore(self, environment, restore_id, snapshot_id, resources):
+        """
+            Restore a snapshot
+        """
+        LOGGER.info("Start a restore %s", restore_id)
+
+        for restore, resource in resources:
+            start = datetime.datetime.now()
+            try:
+                data = resource["fields"]
+                data["id"] = resource["id"]
+                resource_obj = Resource.deserialize(data)
+                provider = Commander.get_provider(self, resource_obj)
+
+                if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
+                    self._client.update_snapshot(tid=environment, id=restore_id, resource_id=resource_obj.id.resource_str(),
+                                                 start=start, stop=datetime.datetime.now(), success=False, error=False,
+                                                 msg="Resource %s does not allow restore" % resource["id"])
+                    continue
+
+                try:
+                    provider.restore(resource_obj, restore["content_hash"])
+                except NotImplementedError:
+                    self._client.update_snapshot(tid=environment, id=restore_id,
+                                                 resource_id=resource_obj.id.resource_str(), success=False, error=False,
+                                                 start=start, stop=datetime.datetime.now(),
+                                                 msg="The handler for resource %s does not support restores" % resource["id"])
+
+            except Exception:
+                LOGGER.exception("Unable to find a handler for %s", resource["id"])
+                self._client.update_restore(tid=environment, id=restore_id, resource_id=resource_obj.id.resource_str(),
+                                            success=False, error=False, start=start, stop=datetime.datetime.now(),
+                                            msg="Unable to find a handler to restore a snapshot of resource %s" %
+                                            resource["id"])
 
     def do_snapshot(self, environment, agent, snapshot_id, resources):
         """
             Create a snapshot of stateful resources managed by this agent
         """
-        LOGGER.debug("Start snapshot %s", snapshot_id)
+        LOGGER.info("Start snapshot %s", snapshot_id)
 
         for resource in resources:
             start = datetime.datetime.now()

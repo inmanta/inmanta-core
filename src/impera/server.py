@@ -1611,7 +1611,7 @@ host = localhost
             if r.state_id in env_states:
                 env_res = env_states[r.state_id]
                 LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res))
-                restore_list[env_res.resource.agent].append(r.to_dict())
+                restore_list[env_res.resource.agent].append((r.to_dict(), env_res.to_dict()))
 
                 rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id,
                                           started=datetime.datetime.now())
@@ -1622,7 +1622,7 @@ host = localhost
 
         for agent, resources in restore_list.items():
             self.queue_request(tid, agent, {"method": "restore", "environment": tid, "restore_id": restore_id,
-                               "resources": resources})
+                                            "snapshot_id": snapshot.id, "resources": resources})
 
         return 200, restore.to_dict()
 
@@ -1643,8 +1643,23 @@ host = localhost
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
-        restore = data.SnapshotRestore.objects().get(id=id)  # @UndefinedVariable
+        try:
+            restore = data.SnapshotRestore.objects().get(id=id)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given restore id does not exist!"}
+
         restore_dict = restore.to_dict()
         resources = data.ResourceRestore.objects(restore=restore)  # @UndefinedVariable
         restore_dict["resources"] = [x.to_dict() for x in resources]
         return 200, {"restore": restore_dict}
+
+    @protocol.handle(methods.RestoreSnapshot.update_restore)
+    def update_restore(self, tid, id, resource_id, success, error, msg):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        
+    
+    
