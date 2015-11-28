@@ -450,6 +450,7 @@ class ConfigurationModel(Document):
         UnknownParameter.objects(environment=self.environment, version=self.version).delete()
         ResourceVersion.objects(model=self).delete()
         DryRun.objects(model=self).delete()
+        Snapshot.objects(model=self).delete()
         Document.delete(self)
 
 
