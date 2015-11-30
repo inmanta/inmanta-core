@@ -1671,7 +1671,7 @@ host = localhost
             rr.restore.resource_todo -= 1
             if rr.restore.resource_todo == 0:
                 rr.restore.finished = datetime.datetime.now()
-                rr.save()
+                rr.restore.save()
 
         except errors.DoesNotExist:
             return 404, {"message": "Resource restore not found."}
