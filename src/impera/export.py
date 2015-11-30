@@ -252,11 +252,12 @@ class Exporter(object):
         # first run other export plugins
         self._run_export_plugins()
 
-        # then process the configuration model to submit it to the mgmt server
-        self._load_resources(scope)
+        if scope is not None:
+            # then process the configuration model to submit it to the mgmt server
+            self._load_resources(scope)
 
-        # call dependency managers
-        self._call_dep_manager(scope)
+            # call dependency managers
+            self._call_dep_manager(scope)
 
         # filter out any resource that belong to hosts that have unknown values
         self._filter_unknowns()
@@ -273,7 +274,7 @@ class Exporter(object):
             with open(self.options.json, "wb+") as fd:
                 fd.write(json.dumps(resources).encode("utf-8"))
 
-        elif len(self._resources) > 0 and not offline:
+        elif (len(self._resources) > 0 or len(unknown_parameters) > 0) and not offline:
             self.commit_resources(self._version, resources)
 
         LOGGER.info("Committed resources with version %d" % self._version)

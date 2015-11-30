@@ -99,9 +99,6 @@ def export(options):
 
     from impera.export import Exporter
     result = do_compile()
-    if result is None:
-        return
-
     export = Exporter(options)
     export.run(result)
 

@@ -155,7 +155,7 @@ class Scheduler(object):
         sys.stderr.write("%s\n" % message)
         sys.stderr.write("  at %s:%d\n" % (statement.statement.filename, statement.statement.line))
 
-        sys.exit(1)
+        raise Exception()
 
     def define_types(self, compiler, statements):
         """

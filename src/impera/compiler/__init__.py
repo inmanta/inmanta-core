@@ -17,10 +17,13 @@
 """
 
 import sys
+import logging
 
 from impera.execute import scheduler
 from impera import module
 from . import main
+
+LOGGER = logging.getLogger(__name__)
 
 
 def do_compile():
@@ -32,15 +35,18 @@ def do_compile():
 
     success = False
     try:
+        LOGGER.debug("Starting compile")
         graph = compiler.graph
         statements = compiler.compile()
         sched = scheduler.Scheduler(graph)
         success = sched.run(compiler, statements)
+
+        LOGGER.debug("Compile done")
 
         if not success:
             sys.stderr.write("Unable to execute all statements.\n")
         else:
             return graph.root_scope
 
-    finally:
-        pass
+    except Exception:
+        return None
