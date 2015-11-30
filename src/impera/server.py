@@ -1680,3 +1680,16 @@ host = localhost
             return 404, {"message": "Resource restore not found."}
 
         return 200
+
+    @protocol.handle(methods.RestoreSnapshot.delete_restore)
+    def delete_restore(self, tid, id):
+        try:
+            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        try:
+            restore = data.SnapshotRestore.objects().get(environment=env, id=id)  # @UndefinedVariable
+            restore.delete()
+        except errors.DoesNotExist:
+            return 404, {"message": "The given restore id does not exist!"}

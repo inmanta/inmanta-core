@@ -716,7 +716,7 @@ class RestoreSnapshot(Method):
         """
 
     @protocol(operation="DELETE", mt=True, id=True)
-    def cancel_restore(self, tid: uuid.UUID, id: uuid.UUID):
+    def delete_restore(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Cancel a restore
         """
