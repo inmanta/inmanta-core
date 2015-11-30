@@ -419,7 +419,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         try:
-            form_type = data.Form.objects().get(form_type=form_type)  # @UndefinedVariable
+            form_type = data.Form.objects().get(environment=env, form_type=form_type)  # @UndefinedVariable
             records = data.FormRecord.objects(form=form_type)  # @UndefinedVariable
 
             return 200, {"records": [{"record_id": r.record_id, "changed": r.changed} for r in records]}
