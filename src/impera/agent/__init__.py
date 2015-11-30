@@ -505,6 +505,9 @@ class Agent(threading.Thread):
 
                 try:
                     provider.restore(resource_obj, restore["content_hash"])
+                    self._client.update_restore(tid=environment, id=restore_id,
+                                                resource_id=resource_obj.id.resource_str(), success=True, error=False,
+                                                start=start, stop=datetime.datetime.now(), msg="")
                 except NotImplementedError:
                     self._client.update_restore(tid=environment, id=restore_id,
                                                 resource_id=resource_obj.id.resource_str(), success=False, error=False,
