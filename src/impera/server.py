@@ -1691,5 +1691,7 @@ host = localhost
         try:
             restore = data.SnapshotRestore.objects().get(environment=env, id=id)  # @UndefinedVariable
             restore.delete()
+            
+            return 200
         except errors.DoesNotExist:
             return 404, {"message": "The given restore id does not exist!"}
