@@ -914,9 +914,7 @@ class Server(protocol.ServerEndpoint):
                 except HostNotFoundException:
                     agent_map[agent] = "localhost"
 
-            port = 8888
-            if self.id in Config.get() and "port" in Config.get()[self.id]:
-                port = Config.get()[self.id]["port"]
+            port = Config.get("server_rest_transport", "port", "8888")
 
             # generate config file
             config = """[config]
@@ -928,7 +926,7 @@ environment=%(env_id)s
 agent-map=%(agent_map)s
 
 [agent_rest_transport]
-port = %(port)d
+port = %(port)s
 host = localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port, "agent_map":
                 ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()])}
@@ -1403,7 +1401,8 @@ host = localhost
             LOGGER.info("Recompiling configuration model")
             stages.append(self._run_compile_stage("Recompiling configuration model",
                                                   impera_path + ["-vvv", "export", "-e", str(environment_id),
-                                                                 "--server_address", "localhost", "--server_port", "8888"],
+                                                                 "--server_address", "localhost", "--server_port",
+                                                                 Config.get("server_rest_transport", "port", "8888")],
                                                   project_dir, env=os.environ.copy()))
         finally:
             end = datetime.datetime.now()
