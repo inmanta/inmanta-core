@@ -914,6 +914,10 @@ class Server(protocol.ServerEndpoint):
                 except HostNotFoundException:
                     agent_map[agent] = "localhost"
 
+            port = 8888
+            if self.id in Config.get() and "port" in Config.get()[self.id]:
+                port = Config.get()[self.id]["port"]
+
             # generate config file
             config = """[config]
 heartbeat-interval = 60
@@ -924,9 +928,9 @@ environment=%(env_id)s
 agent-map=%(agent_map)s
 
 [agent_rest_transport]
-port = 8888
+port = %(port)d
 host = localhost
-""" % {"agents": agent_names, "env_id": environment_id, "agent_map":
+""" % {"agents": agent_names, "env_id": environment_id, "port": port, "agent_map":
                 ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()])}
 
             config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
