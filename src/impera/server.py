@@ -1400,9 +1400,10 @@ host = localhost
                                                       env=os.environ.copy()))
 
             LOGGER.info("Recompiling configuration model")
+            server_address = Config.get("server", "server_address", "localhost")
             stages.append(self._run_compile_stage("Recompiling configuration model",
                                                   impera_path + ["-vvv", "export", "-e", str(environment_id),
-                                                                 "--server_address", "localhost", "--server_port",
+                                                                 "--server_address", server_address, "--server_port",
                                                                  Config.get("server_rest_transport", "port", "8888")],
                                                   project_dir, env=os.environ.copy()))
         finally:
