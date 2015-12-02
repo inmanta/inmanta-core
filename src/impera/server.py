@@ -306,6 +306,8 @@ class Server(protocol.ServerEndpoint):
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
+        if resource_id is None:
+            resource_id = ""
         params = data.Parameter.objects(environment=env, name=id, resource_id=resource_id)  # @UndefinedVariable
 
         if len(params) == 0:
@@ -351,7 +353,6 @@ class Server(protocol.ServerEndpoint):
         return_value = []
         for p in params:
             d = p.to_dict()
-            del d["value"]
             return_value.append(d)
 
         return 200, {"parameters": return_value, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
