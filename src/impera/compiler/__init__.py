@@ -49,4 +49,5 @@ def do_compile():
             return graph.root_scope
 
     except Exception:
+        LOGGER.exception("An exception occurred during compile")
         return None

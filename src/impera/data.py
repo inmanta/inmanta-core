@@ -70,7 +70,7 @@ class Project(Document):
                 }
 
 
-SOURCE = ("fact", "plugin", "user", "form")
+SOURCE = ("fact", "plugin", "user", "form", "report")
 
 
 class Parameter(Document):
