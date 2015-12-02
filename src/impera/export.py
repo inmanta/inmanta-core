@@ -316,7 +316,7 @@ class Exporter(object):
         for unknown in resource.unknowns:
             value = getattr(resource, unknown)
             self._unknown_hosts.add(resource.id.agent_name)
-            if value.source is not None:
+            if value.source is not None and hasattr(value.source, "type"):
                 self._unknown_objects.add(Exporter.get_id(value.source))
 
             self._unknown_per_host[resource.id.agent_name].add(str(resource.id))
