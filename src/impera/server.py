@@ -457,7 +457,7 @@ class Server(protocol.ServerEndpoint):
                 record.fields[k] = form[k]
 
         record.save()
-
+        self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
         return 200, {"record": record.to_dict()}
 
     @protocol.handle(methods.FormRecords.create_record)
@@ -478,7 +478,7 @@ class Server(protocol.ServerEndpoint):
                 record.fields[k] = form[k]
 
         record.save()
-
+        self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
         return 200, {"record": record.to_dict()}
 
     @protocol.handle(methods.FormRecords.delete_record)
