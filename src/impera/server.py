@@ -1696,7 +1696,17 @@ host = localhost
         try:
             restore = data.SnapshotRestore.objects().get(environment=env, id=id)  # @UndefinedVariable
             restore.delete()
-            
+
             return 200
         except errors.DoesNotExist:
             return 404, {"message": "The given restore id does not exist!"}
+
+    @protocol.handle(methods.Decommision.decomission_environment)
+    def decomission_environment(self, id):
+        try:
+            env = data.Environment.objects().get(id=id)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        version = int(time.time())
+        return self.put_version(id, version, [], [], {})

@@ -167,6 +167,20 @@ class Environment(Method):
         """
 
 
+class Decommision(Method):
+    """
+        Decomission an environment
+    """
+    __method_name__ = "decommission"
+
+    @protocol(operation="POST", id=True)
+    def decomission_environment(self, id: uuid.UUID):
+        """
+            Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
+            removal.
+        """
+
+
 class HeartBeatMethod(Method):
     """
         Send a heartbeat to indicate that an agent is alive
