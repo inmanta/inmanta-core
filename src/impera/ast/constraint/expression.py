@@ -222,7 +222,10 @@ class Operator(CallStatement, metaclass=OpMetaClass):
                             arg = variables[arg.name]
 
                 if hasattr(arg, "value"):
-                    arg_list.append((arg.value, arg.type))
+                    if hasattr(arg.type, "cast"):
+                        arg_list.append((arg.type.cast(arg.value), arg.type))
+                    else:
+                        arg_list.append((arg.value, arg.type))
 
                 elif isinstance(arg, FunctionCall):
                     if state is None:

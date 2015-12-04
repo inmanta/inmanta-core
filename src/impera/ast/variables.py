@@ -412,7 +412,6 @@ class LazyVariable(Variable):
             Get the value and if it does not exist yet, execute the generator.
         """
         if not self.has_value():
-            LOGGER.debug("Lazy evaluation of value.")
             self.set_value(self._value_generator())
 
         return Variable.get_value(self)
