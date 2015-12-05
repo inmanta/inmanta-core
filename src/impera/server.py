@@ -1731,5 +1731,4 @@ host = localhost
         data.FormRecord.objects(environment=env).delete()  # @UndefinedVariable
         data.Compile.objects(environment=env).delete()  # @UndefinedVariable
         data.Code.objects(environment=env).delete()  # @UndefinedVariable
-        data.Report.objects(environment=env).delete()  # @UndefinedVariable
         return 200
