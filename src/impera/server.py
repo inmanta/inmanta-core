@@ -1710,3 +1710,26 @@ host = localhost
 
         version = int(time.time())
         return self.put_version(id, version, [], [], {})
+
+    @protocol.handle(methods.Decommision.clear_environment)
+    def clear_environment(self, id):
+        """
+            Clear the environment
+        """
+        try:
+            env = data.Environment.objects().get(id=id)  # @UndefinedVariable
+        except errors.DoesNotExist:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        data.ConfigurationModel.objects(environment=env).delete()  # @UndefinedVariable
+        data.Snapshot.objects(environment=env).delete()  # @UndefinedVariable
+        data.SnapshotRestore.objects(environment=env).delete()  # @UndefinedVariable
+        data.ResourceRestore.objects(environment=env).delete()  # @UndefinedVariable
+        data.Parameter.objects(environment=env).delete()  # @UndefinedVariable
+        data.Agent.objects(environment=env).delete()  # @UndefinedVariable
+        data.Form.objects(environment=env).delete()  # @UndefinedVariable
+        data.FormRecord.objects(environment=env).delete()  # @UndefinedVariable
+        data.Compile.objects(environment=env).delete()  # @UndefinedVariable
+        data.Code.objects(environment=env).delete()  # @UndefinedVariable
+        data.Report.objects(environment=env).delete()  # @UndefinedVariable
+        return 200

@@ -180,6 +180,12 @@ class Decommision(Method):
             removal.
         """
 
+    @protocol(operation="DELETE", id=True)
+    def clear_environment(self, id: uuid.UUID):
+        """
+            Clear all data from this environment
+        """
+
 
 class HeartBeatMethod(Method):
     """
