@@ -1722,6 +1722,7 @@ host = localhost
             return 404, {"message": "The given environment id does not exist!"}
 
         data.ConfigurationModel.objects(environment=env).delete()  # @UndefinedVariable
+        data.Resource.objects(environment=env).delete()  # @UndefinedVariable
         data.Snapshot.objects(environment=env).delete()  # @UndefinedVariable
         data.SnapshotRestore.objects(environment=env).delete()  # @UndefinedVariable
         data.ResourceRestore.objects(environment=env).delete()  # @UndefinedVariable
