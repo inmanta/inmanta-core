@@ -1460,12 +1460,7 @@ host = localhost
     @protocol.handle(methods.Snapshot.get_snapshot)
     def get_snapshot(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
-        except errors.DoesNotExist:
-            return 404, {"message": "The given environment id does not exist!"}
-
-        try:
-            snapshot = data.Snapshot.objects().get(environment=env, id=id)  # @UndefinedVariable
+            snapshot = data.Snapshot.objects().get(id=id)  # @UndefinedVariable
             snap_dict = snapshot.to_dict()
 
             resources = data.ResourceSnapshot.objects(snapshot=snapshot)  # @UndefinedVariable
