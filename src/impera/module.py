@@ -541,10 +541,8 @@ class Module(object):
                     # load the python file
                     imp.load_source(sub_mod, py_file)
 
-        except ImportError as e:
-            print("Unable to load all plug-ins for module %s" %
-                  self._meta["name"])
-            print("\t" + e.msg)
+        except ImportError:
+            LOGGER.exception("Unable to load all plug-ins for module %s" % self._meta["name"])
 
     def update(self):
         """
