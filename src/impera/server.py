@@ -367,7 +367,7 @@ class Server(protocol.ServerEndpoint):
         forms = data.Form.objects(environment=env, form_type=id)  # @UndefinedVariable
 
         fields = {k: v["type"] for k, v in form["attributes"].items()}
-        defaults = {k: str(v["default"]) for k, v in form["attributes"].items() if "default" in v}
+        defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
         field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
 
         if len(forms) == 0:

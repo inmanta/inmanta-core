@@ -226,7 +226,7 @@ class Form(Document):
     form_type = StringField(required=True, unique_with=["environment"])
     options = MapField(DynamicField())
     fields = MapField(StringField())
-    defaults = MapField(StringField())
+    defaults = MapField(DynamicField())
     field_options = MapField(DynamicField())
 
     meta = {
@@ -250,7 +250,7 @@ class FormRecord(Document):
     record_id = UUIDField(required=True, unique=True)
     form = ReferenceField(Form, required=True)
     environment = ReferenceField(Environment, required=True)
-    fields = MapField(StringField())
+    fields = MapField(DynamicField())
     changed = DateTimeField()
 
     def to_dict(self):
