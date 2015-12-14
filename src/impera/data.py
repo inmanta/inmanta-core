@@ -119,7 +119,7 @@ class UnknownParameter(Document):
         :param environment
         :param version The version id of the configuration model on which this parameter was reported
     """
-    name = StringField(required=True, unique_with=["environment", "resource_id", "version"])
+    name = StringField(required=True)
     environment = ReferenceField(Environment, required=True)
     source = StringField(required=True, choices=SOURCE)
     resource_id = StringField(default="")
