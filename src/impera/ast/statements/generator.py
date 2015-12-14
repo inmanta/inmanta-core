@@ -144,8 +144,11 @@ class Implement(GeneratorStatement):
                     ref = state.get_ref(var.name)
                     parameters[var.name] = ref
 
-                if expr.eval(variables=parameters, state=state):
-                    select_list.append(implementation)
+                try:
+                    if expr.eval(variables=parameters, state=state):
+                        select_list.append(implementation)
+                except Exception:
+                    pass
 
         implementations = []
         implementations.extend(select_list)
