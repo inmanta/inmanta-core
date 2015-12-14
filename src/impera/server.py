@@ -42,6 +42,7 @@ from impera.loader import CodeLoader
 from impera.resources import Id, HostNotFoundException
 import dateutil
 from impera.agent.io.remote import RemoteIO
+from impera.ast import type
 
 
 LOGGER = logging.getLogger(__name__)
@@ -475,7 +476,13 @@ class Server(protocol.ServerEndpoint):
         form_fields = record.form.fields
         for k, _v in form_fields.items():
             if k in form:
-                record.fields[k] = form[k]
+                value = form[k]
+                field_type = form_obj.fields[k]
+                if field_type in type.TYPES:
+                    type_obj = type.TYPES[field_type]
+                    record.fields[k] = type_obj.cast(value)
+                else:
+                    LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
         record.save()
         self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
