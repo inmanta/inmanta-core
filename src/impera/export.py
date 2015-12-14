@@ -416,7 +416,7 @@ class Exporter(object):
         res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
                                version_info=version_info)
         if res.code != 200:
-            LOGGER.error("Failed to commit resource updates")
+            LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
 
     def get_unknown_resources(self, hostname):
         """
