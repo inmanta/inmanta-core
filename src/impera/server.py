@@ -1179,7 +1179,7 @@ host = localhost
             # delete all environments first
             envs = data.Environment.objects(project=id)  # @UndefinedVariable
             for env_item in envs:
-                self.delete_environment(env_item)
+                env_item.delete()
 
             # now delete the project itself
             project = data.Project.objects().get(id=id)  # @UndefinedVariable
