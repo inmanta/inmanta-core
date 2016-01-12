@@ -80,8 +80,10 @@ class PluginMeta(type):
         name = plugin_class.__function_name__
         ns_parts = str(plugin_class.__module__).split(".")
         ns_parts.append(name)
-        name = "::".join(ns_parts)
+        if ns_parts[0] != "impera_plugins":
+            raise Exception("All plugin modules should be loaded in the impera_plugins package")
 
+        name = "::".join(ns_parts[1:])
         mcs.__functions[name] = plugin_class
 
     @classmethod
