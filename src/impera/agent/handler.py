@@ -123,9 +123,11 @@ class ResourceHandler(object):
         """
             Update the given resource
         """
-        self.pre(resource)
         results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
+
         try:
+            self.pre(resource)
+
             if resource.require_failed:
                 LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
                 results["status"] = "skipped"
@@ -149,6 +151,7 @@ class ResourceHandler(object):
                 results["changes"] = changes
                 results["status"] = "dry"
 
+            self.post(resource)
         except SkipResource as e:
             results["log_msg"] = e.args
             results["status"] = "skipped"
@@ -159,7 +162,6 @@ class ResourceHandler(object):
             results["log_msg"] = e.args
             results["status"] = "failed"
 
-        self.post(resource)
         return results
 
     def facts(self, resource):
