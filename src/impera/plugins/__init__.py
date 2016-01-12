@@ -62,6 +62,11 @@ class PluginCompileUnit(CompileUnit):
             ns_root = self._namespace.get_root()
 
             mod_ns = cls.__module__.split(".")
+            if mod_ns[0] != "impera_plugins":
+                raise Exception("All plugin modules should be loaded in the impera_plugins package")
+
+            mod_ns = mod_ns[1:]
+
             ns = ns_root
             for part in mod_ns:
                 if ns is None:
