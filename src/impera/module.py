@@ -274,6 +274,8 @@ class Project(GitVersioned):
         for name, path in module_dirs.items():
             mod = Module(self, path)
             modules[name] = mod
+            if not mod.get_name() == name:
+                raise InvalidModuleException("Directory %s expected to contain module %s but contains %s" % (path,name,mod.get_name()))
 
         return modules
 
@@ -820,6 +822,9 @@ class ModuleTool(object):
             module = Module(project, mod_path, load=False, source=spec[
                             "source"], version=spec["version"], name=name)
             new_mod = module.install(module_path)
+            
+            if not new_mod.get_name() == name:
+                raise InvalidModuleException("Module with name %s was requested, but a module with name %s was installed from %s"%(name,new_mod.get_name(),spec["source"]))
 
             new_mod.python_install()
 

@@ -37,3 +37,4 @@ tests/.coverage
 junit*.xml
 
 build-result
+/env/
