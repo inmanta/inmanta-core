@@ -58,17 +58,18 @@ class ProjectNotFoundExcpetion(Exception):
         This exception is raised when Impera is unable to find a valid project
     """
 
+
 class GitVersioned:
     """
         Commons superclass for projects and modules, which are both versioned by git
     """
 
-    def __init__(self,path):
+    def __init__(self, path):
         """
             @param path: root git directory
         """
         self._path = path
-        
+
     def get_scm_url(self):
         try:
             return subprocess.check_output(["git", "config", "--get", "remote.origin.url"],
@@ -88,22 +89,22 @@ class GitVersioned:
                                            cwd=self._path).decode("utf-8") .strip()
         except Exception:
             return None
-        
-    def get_scm_resolve(self,refspec):
+
+    def get_scm_resolve(self, refspec):
         try:
             return subprocess.check_output(["git", "rev-parse", refspec],
-                                           cwd=self._path,stderr=subprocess.DEVNULL).decode("utf-8") .strip()
+                                           cwd=self._path, stderr=subprocess.DEVNULL).decode("utf-8") .strip()
         except Exception:
             return None
-        
-    def get_scm_is_ancestor(self,refspec):
+
+    def get_scm_is_ancestor(self, refspec):
         try:
-            return subprocess.call(["git", "merge-base", "--is-ancestor", refspec,  "HEAD"],
-                                           cwd=self._path) == 0
+            return subprocess.call(["git", "merge-base", "--is-ancestor", refspec, "HEAD"],
+                                   cwd=self._path) == 0
         except Exception as e:
             print(e)
             return None
-        
+
     def verify_requires(self, module_map: dict) -> bool:
         """
             Check if all the required modules for this module have been loaded
@@ -116,7 +117,7 @@ class GitVersioned:
                 return False
 
             source = defs["source"]
-            version= defs["version"]
+            version = defs["version"]
 
             module = module_map[require]
             if not module.verify_require(source, version):
@@ -132,27 +133,27 @@ class GitVersioned:
         """
         # TODO: verify source
         version_spec = version_spec.strip("\"")
-        
+
         gte = version_spec.startswith(">=")
-        
+
         if gte:
             version_spec = version_spec[2:]
-        
-        return self.compare_version(version_spec.strip(),gte)
-    
-    def compare_version(self, version_spec:str, gte:bool) -> bool:
+
+        return self.compare_version(version_spec.strip(), gte)
+
+    def compare_version(self, version_spec: str, gte: bool) -> bool:
         version = self.get_scm_resolve(version_spec)
-        
+
         if version is None:
             LOGGER.warning("Module %s does not have version %s"
-                           % (self._path,version_spec))
+                           % (self._path, version_spec))
             return False
         if gte:
             return self.get_scm_is_ancestor(version)
         else:
             return self.get_scm_version() == version
 
-          
+
 class Project(GitVersioned):
     """
         An Impera project
@@ -168,9 +169,9 @@ class Project(GitVersioned):
              * Loading all modules in the module path (into self.modules)
             It does not include
              * verify if project.yml corresponds to the modules in self.modules
-            
+
             @param path: The directory where the project is located
-            
+
         """
         super().__init__(path)
         self.project_path = path
@@ -246,8 +247,6 @@ class Project(GitVersioned):
     def reloadModules(self):
         self.modules = self.discover(self.modulepath)
 
-    
-
     def load_plugins(self) -> None:
         """
             Load all plug-ins
@@ -275,7 +274,8 @@ class Project(GitVersioned):
             mod = Module(self, path)
             modules[name] = mod
             if not mod.get_name() == name:
-                raise InvalidModuleException("Directory %s expected to contain module %s but contains %s" % (path,name,mod.get_name()))
+                raise InvalidModuleException(
+                    "Directory %s expected to contain module %s but contains %s" % (path, name, mod.get_name()))
 
         return modules
 
@@ -446,10 +446,10 @@ class Module(GitVersioned):
         req = {}
         for require, defs in self._meta["requires"].items():
             source, version = defs.split(",")
-            req[require] = {"source": source.strip(), "version": version.strip()}
+            req[require] = {
+                "source": source.strip(), "version": version.strip()}
 
         return req
-
 
     def is_versioned(self):
         """
@@ -574,7 +574,8 @@ class Module(GitVersioned):
                     imp.load_source(sub_mod, py_file)
 
         except ImportError:
-            LOGGER.exception("Unable to load all plug-ins for module %s" % self._meta["name"])
+            LOGGER.exception(
+                "Unable to load all plug-ins for module %s" % self._meta["name"])
 
     def update(self):
         """
@@ -629,7 +630,6 @@ class Module(GitVersioned):
         module = Module(self._project, self._path)
 
         return module
-
 
     def checkout_version(self, version: Version):
         """
@@ -822,9 +822,11 @@ class ModuleTool(object):
             module = Module(project, mod_path, load=False, source=spec[
                             "source"], version=spec["version"], name=name)
             new_mod = module.install(module_path)
-            
+
             if not new_mod.get_name() == name:
-                raise InvalidModuleException("Module with name %s was requested, but a module with name %s was installed from %s"%(name,new_mod.get_name(),spec["source"]))
+                raise InvalidModuleException(
+                    "Module with name %s was requested, but a module with name %s was installed from %s" % (
+                        name, new_mod.get_name(), spec["source"]))
 
             new_mod.python_install()
 
@@ -896,7 +898,8 @@ class ModuleTool(object):
         """
         project = Project.get()
         if os.path.exists(project.freeze_file) and create_file:
-            print("A module.version file already exists, overwrite this file? y/n")
+            print(
+                "A module.version file already exists, overwrite this file? y/n")
             while True:
                 value = sys.stdin.readline().strip()
                 if value != "y" and value != "n":
