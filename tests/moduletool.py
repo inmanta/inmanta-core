@@ -13,14 +13,14 @@ from nose.tools import raises
 import tempfile
 import shutil
 import subprocess
-from impera.module import ModuleTool
+from impera.module import ModuleTool, InvalidModuleException, Project
 from impera.config import Config
 import yaml
 
 tempdir = tempfile.mkdtemp()
-shutil.rmtree("/tmp/unittest")
-os.mkdir("/tmp/unittest")
-tempdir = "/tmp/unittest"
+# shutil.rmtree("/tmp/unittest")
+# os.mkdir("/tmp/unittest")
+# tempdir = "/tmp/unittest"
 
 
 goodIds={}
@@ -54,9 +54,18 @@ def createRepos():
     goodIds["mod4"]=m4tag
     addFile(mod4, "badsignal","present","third commit")
     
+    mod5 = makemodule(reporoot,"mod5",[])
+    commitmodule(mod5,"first commit")
+    m5tag = addFile(mod5, "signal","present","second commit")
+    goodIds["mod5"]=m5tag
+    addTag(mod5,"0.1")
+    addFile(mod5, "badsignal","present","third commit")
     
-    proj = makemodule(reporoot,"testproject", [("mod1",""),("mod2","rc1"),("mod3","0.1"),("mod4",m4tag)],True)
+    proj = makemodule(reporoot,"testproject", [("mod1",""),("mod2","rc1"),("mod3","0.1"),("mod4",m4tag),("mod5",">= 0.1")],True)
     commitmodule(proj,"first commit")
+    
+    badproject = makemodule(reporoot,"badproject", [("mod1","","mod2")],True)
+    commitmodule(badproject,"first commit")
     
     
 def makemodule(reporoot,name,deps,project=False):
@@ -76,7 +85,10 @@ downloadpath: libs""")
         if len(deps)!=0:
             projectfile.write("\nrequires:")
             for req in deps:
-                mypath = os.path.join(reporoot,req[0])
+                if len(req) == 2:
+                    mypath = os.path.join(reporoot,req[0])
+                else:
+                    mypath = os.path.join(reporoot,req[2])
                 projectfile.write("\n    {}: {}, {}".format(req[0],mypath,req[1]))
     
     model = os.path.join(path,"model")
@@ -127,7 +139,32 @@ class testModuleTool(unittest.TestCase):
 
         self.log.addHandler(self.handler)
         
+        Project._project=None
+    
+    @raises(InvalidModuleException)    
+    def test_BadCheckout(self):
+        coroot = os.path.join(tempdir,"badproject")
+        subprocess.check_call(["git" ,"clone",os.path.join(tempdir,"repos","badproject")], cwd=tempdir)
+        os.chdir(coroot)
+        os.curdir=coroot
+        Config.load_config()
         
+        ModuleTool().execute("install",[])
+    
+    @raises(InvalidModuleException)    
+    def test_BadSetup(self):
+        coroot = os.path.join(tempdir,"badprojectx")
+        subprocess.check_call(["git" ,"clone",os.path.join(tempdir,"repos","badproject"),coroot], cwd=tempdir)
+        os.chdir(coroot)
+        os.curdir=coroot
+        Config.load_config()
+        
+        mod1 = os.path.join(coroot,"libs","mod1")
+        os.makedirs(mod1)
+        subprocess.check_call(["git" ,"clone",os.path.join(tempdir,"repos","mod2"),mod1], cwd=tempdir)
+        
+        ModuleTool().execute("verify",[])
+
 
     def test_complexCheckoutAndFreeze(self):
         coroot = os.path.join(tempdir,"testproject")
