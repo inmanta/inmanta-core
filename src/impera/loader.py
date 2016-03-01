@@ -56,7 +56,10 @@ class CodeLoader(object):
             fd.close()
 
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
-            mod_name = py[:-3]
+            if mod_dir in py:
+                mod_name = py[len(mod_dir) + 1:-3]
+            else:
+                mod_name = py[:-3]
 
             source_code = ""
             with open(py, "r") as fd:
