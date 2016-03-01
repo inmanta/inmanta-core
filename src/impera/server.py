@@ -56,17 +56,22 @@ class Server(protocol.ServerEndpoint):
         :param code_loader Load code deployed from configuration modules
         :param usedb Use a database to store data. If not, only facts are persisted in a yaml file.
     """
-    def __init__(self, code_loader=True, usedb=True):
+    def __init__(self, code_loader=True, database_host=None, database_port=None):
         super().__init__("server", role="server")
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
         self.check_keys()
 
         self._db = None
-        if usedb:
-            self._db = connect(Config.get("database", "name", "impera"), host=Config.get("database", "host", "localhost"))
-            LOGGER.info("Connected to mongodb database %s on %s", Config.get("database", "name", "impera"),
-                        Config.get("database", "host", "localhost"))
+        if database_host is None:
+            database_host = Config.get("database", "host", "localhost")
+
+        if database_port is None:
+            database_port = Config.get("database", "port", 27017)
+
+        self._db = connect(Config.get("database", "name", "impera"), host=database_host, port=database_port)
+        LOGGER.info("Connected to mongodb database %s on %s:%d", Config.get("database", "name", "impera"),
+                    database_host, database_port)
 
         if code_loader:
             self._env = env.VirtualEnv(self._server_storage["env"])
