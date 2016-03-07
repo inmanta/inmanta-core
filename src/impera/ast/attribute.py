@@ -81,8 +81,8 @@ class Attribute(object):
         """
         if (self.name in instance._attributes and instance._attributes[self.name] is not None
                 and instance._attributes[self.name] != value):
-            raise Exception("Attribute %s.%s can only be set once." %
-                            (instance, self.name))
+            raise Exception("Attribute %s.%s can only be set once. Current value is %s, new value %s." %
+                            (instance, self.name, instance._attributes[self.name], value))
 
         try:
             value.validate(self.validate)
