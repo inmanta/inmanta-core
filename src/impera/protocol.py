@@ -30,13 +30,13 @@ import urllib
 import uuid
 import json
 from collections import defaultdict
+from datetime import datetime
 
 import tornado.ioloop
 import tornado.web
 import tornado.gen
 from impera import methods
 from impera.config import Config
-from datetime import datetime
 
 
 LOGGER = logging.getLogger(__name__)

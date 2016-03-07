@@ -432,7 +432,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.FormRecords.get_record)
     def get_record(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -445,7 +445,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.FormRecords.update_record)
     def update_record(self, tid, id, form):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -1050,7 +1050,7 @@ host = localhost
     @protocol.handle(methods.DryRunMethod.dryrun_report)
     def dryrun_report(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -1063,7 +1063,7 @@ host = localhost
     @protocol.handle(methods.DryRunMethod.dryrun_update)
     def dryrun_update(self, tid, id, resource, changes, log_msg=None):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -1567,7 +1567,7 @@ host = localhost
     @protocol.handle(methods.Snapshot.delete_snapshot)
     def delete_snapshot(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -1649,7 +1649,7 @@ host = localhost
     @protocol.handle(methods.RestoreSnapshot.get_restore_status)
     def get_restore_status(self, tid, id):
         try:
-            env = data.Environment.objects().get(id=tid)  # @UndefinedVariable
+            data.Environment.objects().get(id=tid)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -1706,7 +1706,7 @@ host = localhost
     @protocol.handle(methods.Decommision.decomission_environment)
     def decomission_environment(self, id):
         try:
-            env = data.Environment.objects().get(id=id)  # @UndefinedVariable
+            data.Environment.objects().get(id=id)  # @UndefinedVariable
         except errors.DoesNotExist:
             return 404, {"message": "The given environment id does not exist!"}
 
