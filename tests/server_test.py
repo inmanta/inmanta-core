@@ -39,8 +39,11 @@ class ServerTest(MongoTestCase):
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
 
-        mongo_port = int(os.getenv('MONGOBOX_PORT'))
-        self.server = Server(database_host="localhost", database_port=mongo_port)
+        mongo_port = os.getenv('MONGOBOX_PORT')
+        if mongo_port is None:
+            raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
+
+        self.server = Server(database_host="localhost", database_port=int(mongo_port))
 
         executor = futures.ThreadPoolExecutor(max_workers=2)
         self.server_future = executor.submit(self.server.start)
