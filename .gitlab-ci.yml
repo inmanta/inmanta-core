@@ -1,7 +1,7 @@
 image: fedora:23
 
 before_script:
-    - yum install -y python3 pyhon3-pip python-tox
+    - yum install -y python3 python3-pip python-tox
 
 pep8:
     stage: test
