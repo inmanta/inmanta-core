@@ -153,6 +153,13 @@ class GitVersioned:
         else:
             return self.get_scm_version() == version
 
+    def parse_version(self, spec: str) -> {}:
+        if ',' in spec:
+            source, version = spec.split(",")
+            return {"source": source.strip(), "version": version.strip()}
+        else:
+            return {"source": spec, "version": "master"}
+
 
 class Project(GitVersioned):
     """
@@ -318,9 +325,7 @@ class Project(GitVersioned):
         req = {}
         if "requires" in self._project_data and self._project_data["requires"] is not None:
             for name, spec in self._project_data["requires"].items():
-                source, version = spec.split(",")
-                req[name] = {
-                    "source": source.strip(), "version": version.strip()}
+                req[name] = self.parse_version(spec)
 
         return req
 
@@ -445,10 +450,7 @@ class Module(GitVersioned):
 
         req = {}
         for require, defs in self._meta["requires"].items():
-            source, version = defs.split(",")
-            req[require] = {
-                "source": source.strip(), "version": version.strip()}
-
+            req[require] = self.parse_version(defs)
         return req
 
     def is_versioned(self):
@@ -567,7 +569,8 @@ class Module(GitVersioned):
             for py_file in glob.glob(os.path.join(plugin_dir, "*.py")):
                 if not py_file.endswith("__init__.py"):
                     # name of the python module
-                    sub_mod = "impera_plugins." + mod_name + "." + os.path.basename(py_file).split(".")[0]
+                    sub_mod = "impera_plugins." + mod_name + "." + \
+                        os.path.basename(py_file).split(".")[0]
                     self._plugin_namespaces.append(sub_mod)
 
                     # load the python file
