@@ -122,7 +122,7 @@ class GitVersioned:
             module = module_map[require]
             if not module.verify_require(source, version):
                 print("Module %s requires module %s with version %s which is not loaded" %
-                      (self._path, require, version.strip()))
+                      (self.name, require, version.strip()))
                 return False
 
         return True
@@ -156,8 +156,9 @@ class GitVersioned:
     def parse_version(self, spec: str) -> {}:
         if ',' in spec:
             source, version = spec.split(",")
-            return {"source": source.strip(), "version": version.strip()}
-        else:
+            version = version.strip()
+            if len(version) != 0:
+                return {"source": source.strip(), "version": version.strip()}
             return {"source": spec, "version": "master"}
 
 
@@ -352,6 +353,11 @@ class Project(GitVersioned):
             all_reqs.update(mod.get_requirements())
 
         return all_reqs
+
+    def get_name(self):
+        return "project.yml"
+
+    name = property(get_name)
 
 
 class Module(GitVersioned):
@@ -569,8 +575,7 @@ class Module(GitVersioned):
             for py_file in glob.glob(os.path.join(plugin_dir, "*.py")):
                 if not py_file.endswith("__init__.py"):
                     # name of the python module
-                    sub_mod = "impera_plugins." + mod_name + "." + \
-                        os.path.basename(py_file).split(".")[0]
+                    sub_mod = "impera_plugins." + mod_name + "." + os.path.basename(py_file).split(".")[0]
                     self._plugin_namespaces.append(sub_mod)
 
                     # load the python file
