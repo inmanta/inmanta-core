@@ -70,6 +70,11 @@ class GitVersioned:
         """
         self._path = path
 
+    def get_name(self):
+        raise NotImplemented()
+
+    name = property(get_name)
+
     def get_scm_url(self):
         try:
             return subprocess.check_output(["git", "config", "--get", "remote.origin.url"],
