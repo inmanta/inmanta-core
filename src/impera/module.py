@@ -856,18 +856,19 @@ class ModuleTool(object):
             Install all modules the project requires
         """
         project = Project.get()
+        projectfile = os.path.join(project._path, "project.yml")
 
-        if not os.path.exists("project.yml"):
+        if not os.path.exists(projectfile):
             raise Exception("Project file (project.yml) not found")
 
-        with open("project.yml", "r") as fd:
+        with open(projectfile, "r") as fd:
             project_data = yaml.load(fd)
 
         if "downloadpath" not in project_data:
             raise Exception(
                 "downloadpath is required in the project file to install modules.")
 
-        module_path = project_data["downloadpath"]
+        module_path = os.path.join(project._path,project_data["downloadpath"])
 
         worklist = []
         worklist.extend(project.requires().items())
@@ -1009,14 +1010,14 @@ description: Project to validate module %(name)s
 modulepath: libs
 downloadpath: libs
 requires:
-    %(name)s: %(source)s, "==%(version)s"
+    %(name)s: %(source)s, "master"
 """ % {"name": module.name, "version": module.version, "source": module._path})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
             test_project.use_virtual_env()
-            self._install(test_project, os.path.join(
-                project_dir, "libs"), test_project.requires())
+            Project._project = test_project
+            self.install()
 
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
