@@ -70,6 +70,11 @@ class GitVersioned:
         """
         self._path = path
 
+    def get_name(self):
+        raise NotImplemented()
+
+    name = property(get_name)
+
     def get_scm_url(self):
         try:
             return subprocess.check_output(["git", "config", "--get", "remote.origin.url"],
@@ -122,7 +127,7 @@ class GitVersioned:
             module = module_map[require]
             if not module.verify_require(source, version):
                 print("Module %s requires module %s with version %s which is not loaded" %
-                      (self._path, require, version.strip()))
+                      (self.name, require, version.strip()))
                 return False
 
         return True
@@ -152,6 +157,14 @@ class GitVersioned:
             return self.get_scm_is_ancestor(version)
         else:
             return self.get_scm_version() == version
+
+    def parse_version(self, spec: str) -> {}:
+        if ',' in spec:
+            source, version = spec.split(",")
+            version = version.strip()
+            if len(version) != 0:
+                return {"source": source.strip(), "version": version.strip()}
+            return {"source": spec, "version": "master"}
 
 
 class Project(GitVersioned):
@@ -318,9 +331,7 @@ class Project(GitVersioned):
         req = {}
         if "requires" in self._project_data and self._project_data["requires"] is not None:
             for name, spec in self._project_data["requires"].items():
-                source, version = spec.split(",")
-                req[name] = {
-                    "source": source.strip(), "version": version.strip()}
+                req[name] = self.parse_version(spec)
 
         return req
 
@@ -347,6 +358,11 @@ class Project(GitVersioned):
             all_reqs.update(mod.get_requirements())
 
         return all_reqs
+
+    def get_name(self):
+        return "project.yml"
+
+    name = property(get_name)
 
 
 class Module(GitVersioned):
@@ -445,10 +461,7 @@ class Module(GitVersioned):
 
         req = {}
         for require, defs in self._meta["requires"].items():
-            source, version = defs.split(",")
-            req[require] = {
-                "source": source.strip(), "version": version.strip()}
-
+            req[require] = self.parse_version(defs)
         return req
 
     def is_versioned(self):

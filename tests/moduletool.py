@@ -61,7 +61,7 @@ def createRepos():
     addTag(mod5,"0.1")
     addFile(mod5, "badsignal","present","third commit")
     
-    proj = makemodule(reporoot,"testproject", [("mod1",""),("mod2","rc1"),("mod3","0.1"),("mod4",m4tag),("mod5",">= 0.1")],True)
+    proj = makemodule(reporoot,"testproject", [("mod1",None),("mod2","rc1"),("mod3","0.1"),("mod4",m4tag),("mod5",">= 0.1")],True)
     commitmodule(proj,"first commit")
     
     badproject = makemodule(reporoot,"badproject", [("mod1","","mod2")],True)
@@ -89,7 +89,10 @@ downloadpath: libs""")
                     mypath = os.path.join(reporoot,req[0])
                 else:
                     mypath = os.path.join(reporoot,req[2])
-                projectfile.write("\n    {}: {}, {}".format(req[0],mypath,req[1]))
+                if req[1] != None:
+                    projectfile.write("\n    {}: {}, {}".format(req[0],mypath,req[1]))
+                else:
+                    projectfile.write("\n    {}: {}".format(req[0],mypath,req[1]))
     
     model = os.path.join(path,"model")
     os.makedirs(model)
