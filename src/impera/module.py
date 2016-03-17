@@ -36,6 +36,7 @@ from impera.config import Config
 from impera import parser
 from impera.execute import scheduler
 from impera.ast import Namespace
+from impera.plugins.base import PluginMeta
 
 
 LOGGER = logging.getLogger(__name__)
@@ -247,6 +248,14 @@ class Project(GitVersioned):
 
         return cls._project
 
+    @classmethod
+    def set(cls, project):
+        """
+            Get the instance of the project
+        """
+        cls._project = project
+        PluginMeta.clear()
+        
     def _load_freeze(self, freeze_file: str) -> {}:
         """
             Load the versions defined in the freeze file
@@ -580,7 +589,8 @@ class Module(GitVersioned):
             for py_file in glob.glob(os.path.join(plugin_dir, "*.py")):
                 if not py_file.endswith("__init__.py"):
                     # name of the python module
-                    sub_mod = "impera_plugins." + mod_name + "." + os.path.basename(py_file).split(".")[0]
+                    sub_mod = "impera_plugins." + mod_name + "." + \
+                        os.path.basename(py_file).split(".")[0]
                     self._plugin_namespaces.append(sub_mod)
 
                     # load the python file
@@ -833,7 +843,7 @@ class ModuleTool(object):
         mod_path = os.path.join(module_path, name)
         if mod_path not in self._mod_handled_list:
             module = Module(project, mod_path, load=False, source=spec[
-                            "source"], version=spec["version"], name=name)
+                            "source"], version=spec["version"].strip("\""), name=name)
             new_mod = module.install(module_path)
 
             if not new_mod.get_name() == name:
@@ -868,7 +878,7 @@ class ModuleTool(object):
             raise Exception(
                 "downloadpath is required in the project file to install modules.")
 
-        module_path = os.path.join(project._path,project_data["downloadpath"])
+        module_path = os.path.join(project._path, project_data["downloadpath"])
 
         worklist = []
         worklist.extend(project.requires().items())
@@ -1010,13 +1020,13 @@ description: Project to validate module %(name)s
 modulepath: libs
 downloadpath: libs
 requires:
-    %(name)s: %(source)s, "master"
-""" % {"name": module.name, "version": module.version, "source": module._path})
+    %(name)s: %(source)s, "%(version)s"
+""" % {"name": module.name, "version": module.get_scm_version(), "source": module._path})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
             test_project.use_virtual_env()
-            Project._project = test_project
+            Project.set(test_project)
             self.install()
 
             LOGGER.info("Compiling empty initial model")
