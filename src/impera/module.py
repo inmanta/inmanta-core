@@ -255,7 +255,7 @@ class Project(GitVersioned):
         """
         cls._project = project
         PluginMeta.clear()
-        
+
     def _load_freeze(self, freeze_file: str) -> {}:
         """
             Load the versions defined in the freeze file
@@ -589,8 +589,7 @@ class Module(GitVersioned):
             for py_file in glob.glob(os.path.join(plugin_dir, "*.py")):
                 if not py_file.endswith("__init__.py"):
                     # name of the python module
-                    sub_mod = "impera_plugins." + mod_name + "." + \
-                        os.path.basename(py_file).split(".")[0]
+                    sub_mod = "impera_plugins." + mod_name + "." + os.path.basename(py_file).split(".")[0]
                     self._plugin_namespaces.append(sub_mod)
 
                     # load the python file
