@@ -30,6 +30,7 @@ class Context(object):
     """
         An instance of this class is used to pass context to the plugin
     """
+
     def __init__(self, graph, scope, compiler, function):
         self.graph = graph
         self.scope = scope
@@ -81,7 +82,8 @@ class PluginMeta(type):
         ns_parts = str(plugin_class.__module__).split(".")
         ns_parts.append(name)
         if ns_parts[0] != "impera_plugins":
-            raise Exception("All plugin modules should be loaded in the impera_plugins package")
+            raise Exception(
+                "All plugin modules should be loaded in the impera_plugins package")
 
         name = "::".join(ns_parts[1:])
         mcs.__functions[name] = plugin_class
@@ -93,11 +95,16 @@ class PluginMeta(type):
         """
         return cls.__functions
 
+    @classmethod
+    def clear(cls):
+        cls.__functions = {}
+
 
 class Plugin(object, metaclass=PluginMeta):
     """
         This class models a plugin that can be called from the language.
     """
+
     def __init__(self, compiler, graph, scope):
         self._graph = graph
         self._scope = scope
@@ -128,7 +135,8 @@ class Plugin(object, metaclass=PluginMeta):
             arg = arg_spec.args[i]
 
             if arg not in arg_spec.annotations:
-                raise Exception("All arguments of plugin '%s' should be annotated" % function.__name__)
+                raise Exception(
+                    "All arguments of plugin '%s' should be annotated" % function.__name__)
 
             spec_type = arg_spec.annotations[arg]
             if spec_type == Context:
@@ -253,8 +261,8 @@ class Plugin(object, metaclass=PluginMeta):
 
             if self.arguments[i][0] is not None and not self._is_instance(args[i], self.arguments[i][1]):
                 raise Exception(("Invalid type for argument %d of '%s', it should be " +
-                                "%s and %s given.") % (i + 1, self.__class__.__function_name__,
-                                self.arguments[i][1], args[i].__class__.__name__))
+                                 "%s and %s given.") % (i + 1, self.__class__.__function_name__,
+                                                        self.arguments[i][1], args[i].__class__.__name__))
 
     def emit_statement(self):
         """
@@ -275,11 +283,13 @@ class Plugin(object, metaclass=PluginMeta):
         """
         if "bin" in self.opts and self.opts["bin"] is not None:
             for _bin in self.opts["bin"]:
-                p = subprocess.Popen(["bash", "-c", "type -p %s" % _bin], stdout=subprocess.PIPE)
+                p = subprocess.Popen(
+                    ["bash", "-c", "type -p %s" % _bin], stdout=subprocess.PIPE)
                 result = p.communicate()
 
                 if len(result[0]) == 0:
-                    print("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
+                    print("%s requires %s to be available in $PATH" %
+                          (self.__function_name__, _bin))
 
     def __call__(self, *args):
         """
@@ -292,7 +302,8 @@ class Plugin(object, metaclass=PluginMeta):
                 new_args.append(DynamicProxy.return_value(arg))
 
             if self._context >= 0:
-                context = Context(self._graph, self._scope, self._compiler, self)
+                context = Context(
+                    self._graph, self._scope, self._compiler, self)
                 new_args.insert(self._context, context)
 
             value = self.call(*new_args)
@@ -302,7 +313,8 @@ class Plugin(object, metaclass=PluginMeta):
                 exception = None
 
                 try:
-                    valid = (value is None or self._is_instance(value, self._return))
+                    valid = (
+                        value is None or self._is_instance(value, self._return))
                 except Exception as exp:
                     exception = exp
 
@@ -332,6 +344,7 @@ def plugin(function=None, commands=None, emits_statements=False):
             """
                 Create class to register the function and return the function itself
             """
+
             def wrapper(self, *args):
                 """
                     Python will bind the function as method into the class
@@ -346,7 +359,8 @@ def plugin(function=None, commands=None, emits_statements=False):
             dictionary = {}
             dictionary["__module__"] = fnc.__module__
             dictionary["__function_name__"] = name
-            dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements}
+            dictionary["opts"] = {
+                "bin": commands, "emits_statements": emits_statements}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
 

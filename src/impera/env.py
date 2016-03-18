@@ -47,7 +47,7 @@ class VirtualEnv(object):
             if not os.path.exists(virtualenv_path):
                 raise Exception("Unable to find virtualenv script (%s does not exist)" % virtualenv_path)
 
-            subprocess.call(["/usr/bin/virtualenv", "-p", python_exec, self.env_path])
+            subprocess.call(["/usr/bin/virtualenv", "-p", python_exec, self.env_path], env={})
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin

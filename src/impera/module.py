@@ -36,6 +36,7 @@ from impera.config import Config
 from impera import parser
 from impera.execute import scheduler
 from impera.ast import Namespace
+from impera.plugins.base import PluginMeta
 
 
 LOGGER = logging.getLogger(__name__)
@@ -246,6 +247,14 @@ class Project(GitVersioned):
             cls._project = Project(cls.get_project_dir(os.curdir))
 
         return cls._project
+
+    @classmethod
+    def set(cls, project):
+        """
+            Get the instance of the project
+        """
+        cls._project = project
+        PluginMeta.clear()
 
     def _load_freeze(self, freeze_file: str) -> {}:
         """
@@ -833,7 +842,7 @@ class ModuleTool(object):
         mod_path = os.path.join(module_path, name)
         if mod_path not in self._mod_handled_list:
             module = Module(project, mod_path, load=False, source=spec[
-                            "source"], version=spec["version"], name=name)
+                            "source"], version=spec["version"].strip("\""), name=name)
             new_mod = module.install(module_path)
 
             if not new_mod.get_name() == name:
@@ -856,18 +865,19 @@ class ModuleTool(object):
             Install all modules the project requires
         """
         project = Project.get()
+        projectfile = os.path.join(project._path, "project.yml")
 
-        if not os.path.exists("project.yml"):
+        if not os.path.exists(projectfile):
             raise Exception("Project file (project.yml) not found")
 
-        with open("project.yml", "r") as fd:
+        with open(projectfile, "r") as fd:
             project_data = yaml.load(fd)
 
         if "downloadpath" not in project_data:
             raise Exception(
                 "downloadpath is required in the project file to install modules.")
 
-        module_path = project_data["downloadpath"]
+        module_path = os.path.join(project._path, project_data["downloadpath"])
 
         worklist = []
         worklist.extend(project.requires().items())
@@ -1009,14 +1019,14 @@ description: Project to validate module %(name)s
 modulepath: libs
 downloadpath: libs
 requires:
-    %(name)s: %(source)s, "==%(version)s"
-""" % {"name": module.name, "version": module.version, "source": module._path})
+    %(name)s: %(source)s, "%(version)s"
+""" % {"name": module.name, "version": module.get_scm_version(), "source": module._path})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
             test_project.use_virtual_env()
-            self._install(test_project, os.path.join(
-                project_dir, "libs"), test_project.requires())
+            Project.set(test_project)
+            self.install()
 
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
