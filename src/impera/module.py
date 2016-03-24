@@ -37,6 +37,8 @@ from impera import parser
 from impera.execute import scheduler
 from impera.ast import Namespace
 from impera.plugins.base import PluginMeta
+from argparse import ArgumentParser
+import inspect
 
 
 LOGGER = logging.getLogger(__name__)
@@ -776,13 +778,36 @@ class ModuleTool(object):
     def __init__(self):
         self._mod_handled_list = set()
 
+    @classmethod
+    def modules_parser_config(cls, parser: ArgumentParser):
+        subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+        subparser.add_parser("list", help="List all modules in a table")
+        subparser.add_parser("update", help="Update all modules from their source")
+        subparser.add_parser("install", help="List all modules in a table")
+        subparser.add_parser("status", help="Run a git status on all modules and report")
+        subparser.add_parser("push", help="Run a git push on all modules and report")
+        subparser.add_parser("freeze", help="Freeze the version of all modules")
+        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+        subparser.add_parser("commit", help="Commit all current changes.")
+        subparser.add_parser("validate", help="Validate the module we are currently in")
+        create = subparser.add_parser("create", help="Create a new module in the current project")
+        create.add_argument("-n", "--name", required=True)
+        create.add_argument("-g", "--gitlab", help="gitlab group id to create the module in, requires gitlab command, (pip install python-gitlab)")
+        create.add_argument("-a", "--author", help="author name")        
+        create.add_argument("-l", "--license", help="License to be applied", required=True)        
+
+
     def execute(self, cmd, args):
         """
             Execute the given command
         """
+        # Perhaps use decorators?
         if hasattr(self, cmd):
             method = getattr(self, cmd)
-            method(*args)
+            margs = inspect.getfullargspec(method).args
+            margs.remove("self")
+            outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
+            method(**outargs)
 
         else:
             raise Exception("%s not implemented" % cmd)
@@ -860,7 +885,7 @@ class ModuleTool(object):
 
         return []
 
-    def install(self, branch=None):
+    def install(self):
         """
             Install all modules the project requires
         """
@@ -1062,3 +1087,47 @@ requires:
 
         if not valid:
             sys.exit(1)
+
+    def create(self, name, gitlab=None, author=None, license=None):
+        modpath = os.path.abspath(Project.get().modulepath[0])
+        path = os.path.join(modpath, name)
+        if(os.path.exists(path)):
+            raise Exception(
+                "directory %s already exists" % path)
+        os.mkdir(path)
+        subprocess.check_call(["git", "init"], cwd=path)
+        cfg = {"name": name,
+               "versions": "0.1"}
+        if author:
+            cfg["author"] = author
+        if license:
+            cfg["license"] = license
+        with open(os.path.join(path, "module.yml"), "w+") as f:
+            yaml.dump(cfg, f, default_flow_style=False)
+        with open(os.path.join(path, ".gitignore"), "w+") as f:
+            f.write("""*~
+*.pyc
+*/__pycache__
+*.swp
+""")
+        os.mkdir(os.path.join(path, "model"))
+        open(os.path.join(path, "model", "_init.cf"), 'a').close()
+#        os.mkdir(os.path.join(path, "plugins"))
+#        open(os.path.join(path, "plugins", ".gitkeep"), 'a').close()
+        os.mkdir(os.path.join(path, "files"))
+        open(os.path.join(path, "files", ".gitkeep"), 'a').close()
+        os.mkdir(os.path.join(path, "templates"))
+        open(os.path.join(path, "templates", ".gitkeep"), 'a').close()
+        subprocess.check_call(["git", "add", "*"], cwd=path)
+        subprocess.check_call(["git", "commit", "-a", "-m", "Initial commit"], cwd=path)
+        subprocess.check_call(["git", "tag", "0.1"], cwd=path) 
+        if gitlab:
+            self.add_module_to_gitlab(path, name, gitlab)
+
+    def add_module_to_gitlab(self, path, name, groupid):
+        createOutput = subprocess.check_output(["gitlab", "-v", "project", "create", "--namespace-id", groupid, "--name", name], cwd=path)
+        info = yaml.load(createOutput)
+        url = info["ssh-url-to-repo"]
+        subprocess.check_call(["git", "remote", "add", "origin", url], cwd=path)
+        subprocess.check_call(["git", "push", "-u", "origin", "master","--tags"], cwd=path)
+        
