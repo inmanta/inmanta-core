@@ -4,6 +4,17 @@
 
 This repository contains the Impera configuration management tool.
 
+## Download the latest version
+
+Download a tarball of Impera or checkout the latest version from the git repository:
+
+    wget https://github.com/bartv/impera/archive/master.zip
+    unzip master.zip
+
+or
+
+    git clone git@github.com:bartv/impera.git
+
 ## Requirements
 
 Impera uses Python3 and therefore requires Python3 to be installed. Most recent
@@ -15,15 +26,6 @@ in the requirements.txt file. This file can be used by pip to install all depend
 The installation also requires python3-setuptools.
 
 ## Installation
-
-Download a tarball of Impera or checkout the latest version from the git repository:
-
-    wget https://github.com/bartv/impera/archive/master.zip
-    unzip master.zip
-
-or
-
-    git clone git@github.com:bartv/impera.git
 
 Install Impera:
 
