@@ -3,16 +3,12 @@
 %define release 0
 %define version 0.7
 
-%if 0%{?release}
 %define sourceversion %{version}
-%else
-%define sourceversion %{version}a1
-%endif
 
 Name:           python3-impera
 Version:        %{version}
 
-Release:        %{release}%{?tag}%{?dist}
+Release:        %{release}%{?buildid}%{?tag}%{?dist}
 Summary:        Impera configuration management tool
 
 Group:          Development/Languages

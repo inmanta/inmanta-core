@@ -4,7 +4,7 @@ setup(
     name="impera",
     package_dir={"" : "src" },
     packages=find_packages("src"),
-    version="0.7a1",
+    version="0.7",
     description="Impera management tool",
     author="Bart Vanbrabant",
     author_email="bart@impera.io",
@@ -42,10 +42,10 @@ setup(
         'param-list = impera.client:ParamList',
         'param-set = impera.client:ParamSet',
         'param-get = impera.client:ParamGet',
-        
+
         'form-list = impera.client:FormList',
         'form-show = impera.client:FormShow',
-        
+
         'record-list = impera.client:RecordList',
         'record-show = impera.client:RecordShow',
         'record-create = impera.client:RecordCreate',
