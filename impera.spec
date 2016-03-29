@@ -83,6 +83,7 @@ rm -rf %{buildroot}
 %{python3_sitelib}/impera-%{sourceversion}-py*.egg-info
 %{python3_sitelib}/impera
 %{_bindir}/impera
+%{_bindir}/impera-cli
 %attr(-, impera, impera) %{_localstatedir}/lib/impera
 %config %attr(-, root, root) /etc/impera.cfg
 %attr(-, root, root)/etc/impera
