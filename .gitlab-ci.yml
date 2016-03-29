@@ -19,7 +19,7 @@ rpm:
     image: fedora-python3
     script:
         - python3 setup.py sdist
-        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid $(date +%Y%m%d%H%M)" -bb impera.spec
+        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid .$(date +%Y%m%d%H%M)" -bb impera.spec
     artifacts:
         paths:
             - dist/
