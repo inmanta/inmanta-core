@@ -1,3 +1,9 @@
+stages:
+    - build
+    - test
+    - package
+    - deploy
+
 pep8:
     stage: test
     image: fedora-python3
