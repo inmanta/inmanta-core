@@ -28,7 +28,6 @@ Requires:       python3-tornado
 Requires:       python3-dateutil
 Requires:       python3-execnet
 Requires:       python3-colorlog
-Requires:       python3-blitzdb
 Requires:       python3-antlr3
 Requires:       python3-PyYAML
 Requires:       python-virtualenv
