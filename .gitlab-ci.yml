@@ -32,6 +32,4 @@ publish-rpm:
     dependencies:
         - fedora-rpm
     script:
-        - find
-        - pwd
-        - id
+        - for f in rpms/noarch/*; do RPM=$(basename $f); ssh reposhell@packages.inmanta.com "put rpms/inmanta/$CI_BUILD_REF_NAME/fedora/$RPM" < rpms/noarch/$RPM; done
