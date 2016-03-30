@@ -12,7 +12,7 @@ pep8:
     script:
         - tox -e pep8
 
-rpm:
+fedora-rpm:
     stage: package
     tags:
         - docker
@@ -24,3 +24,14 @@ rpm:
         paths:
             - dist/
             - rpms/
+
+publish-rpm:
+    stage: deploy
+    tags:
+        - docker
+    dependencies:
+        - fedora-rpm
+    script:
+        - find
+        - pwd
+        - id
