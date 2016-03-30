@@ -28,7 +28,7 @@ fedora-rpm:
 publish-rpm:
     stage: deploy
     tags:
-        - docker
+        - shell
     dependencies:
         - fedora-rpm
     script:
