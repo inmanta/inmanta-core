@@ -977,10 +977,10 @@ class ModuleTool(object):
         """
         valid = True
         module = Module(None, os.path.realpath(os.curdir))
-        LOGGER.info("Successfully loaded module %s with version %s" %
-                    (module.name, module.version))
+        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
 
         if not module.is_versioned():
+            LOGGER.error("Module is not versioned correctly, validation will fail")
             valid = False
 
         # compile the source files in the module
@@ -998,7 +998,7 @@ class ModuleTool(object):
                 LOGGER.info("Successfully parsed %s" % model_file)
             except Exception:
                 valid = False
-                LOGGER.exception("Unable to parse %s" % model_file)
+                LOGGER.exception("Unable to parse %s, validation will fail" % model_file)
 
         # create a test project
         LOGGER.info("Creating a new project to test the module")
@@ -1046,11 +1046,9 @@ requires:
             success = sched.run(compiler, statements)
 
             if success:
-                LOGGER.info(
-                    "Successfully compiled module and its dependencies.")
+                LOGGER.info("Successfully compiled module and its dependencies.")
             else:
-                LOGGER.warning(
-                    "Unable to compile module and its dependencies.")
+                LOGGER.error("Unable to compile module and its dependencies, validation will fail")
                 valid = False
 
         finally:
@@ -1062,3 +1060,5 @@ requires:
 
         if not valid:
             sys.exit(1)
+
+        sys.exit(0)
