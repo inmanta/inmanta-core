@@ -1120,14 +1120,18 @@ requires:
         open(os.path.join(path, "templates", ".gitkeep"), 'a').close()
         subprocess.check_call(["git", "add", "*"], cwd=path)
         subprocess.check_call(["git", "commit", "-a", "-m", "Initial commit"], cwd=path)
-        subprocess.check_call(["git", "tag", "0.1"], cwd=path) 
+        subprocess.check_call(["git", "tag", "0.1"], cwd=path)
         if gitlab:
-            self.add_module_to_gitlab(path, name, gitlab)
+            self.add_module_to_gitlab(path, name, gitlab, cfg)
 
-    def add_module_to_gitlab(self, path, name, groupid):
+    def add_module_to_gitlab(self, path, name, groupid, cfg):
         createOutput = subprocess.check_output(["gitlab", "-v", "project", "create", "--namespace-id", groupid, "--name", name], cwd=path)
         info = yaml.load(createOutput)
         url = info["ssh-url-to-repo"]
+        cfg["source"] = url
+        with open(os.path.join(path, "module.yml"), "w+") as f:
+            yaml.dump(cfg, f, default_flow_style=False)
+        subprocess.check_call(["git", "commit", "-a", "-m", "Set Source on module"], cwd=path)
         subprocess.check_call(["git", "remote", "add", "origin", url], cwd=path)
-        subprocess.check_call(["git", "push", "-u", "origin", "master","--tags"], cwd=path)
+        subprocess.check_call(["git", "push", "-u", "origin", "master", "--tags"], cwd=path)  
         
