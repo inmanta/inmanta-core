@@ -21,6 +21,7 @@ import logging
 
 from impera.execute import NotFoundException
 from impera.execute.util import Unset, EntityType
+from setuptools.ssl_support import is_available
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class Reference(object):
     """
         This class represents a reference to a value
     """
+
     def __init__(self, name, namespace=None):
         self.line = 0
         self.filename = ""
@@ -42,6 +44,19 @@ class Reference(object):
                 raise Exception()
             self.namespace = namespace
 
+        fullName = ""
+        if len(self.namespace) > 0:
+            fullName = "::".join(self.namespace)
+            fullName = fullName + "::"
+
+        self.full_name = fullName + name
+
+    def normalize(self, resolver):
+        pass
+
+    def requires(self):
+        return [self.full_name]
+    
     def is_available(self, scope):
         """
             Is the value this reference points to available in the given scope
@@ -66,6 +81,7 @@ class Variable(object):
         A variable in the configuration. It represents a value. Comparison and
         mathematical operations are forwarded to the value
     """
+
     def __init__(self, value):
         self.line = 0
         self.filename = ""
@@ -180,6 +196,7 @@ class AttributeVariable(Variable):
         This variable refers to an attribute. This is mostly used to refer to
         attributes of a class or class instance.
     """
+
     def __init__(self, instance, attribute):
         Variable.__init__(self, None)
         self.attribute = attribute
@@ -312,6 +329,7 @@ class ResultVariable(Variable):
 
         @param statement: The statement to which this variable refers
     """
+
     def __init__(self, statement):
         Variable.__init__(self, None)
         self.statement = statement
@@ -353,6 +371,8 @@ class ResultVariable(Variable):
         """
             Get the value of the attribute that this variable refers to
         """
+        # if self._version == 0:
+        #    raise RuntimeWarning("Illegal state: value request but not set")
         if self.__value_cache is None and self._version > 0:
             result = self.statement.get_result()
             if result is not None:
@@ -401,6 +421,7 @@ class LazyVariable(Variable):
         purpose of this type of variable is waiting as long as possible to evaluate the statement which
         is encapsulated in the Python function.
     """
+
     def __init__(self, value_generator, value_type):
         Variable.__init__(self, None)
 

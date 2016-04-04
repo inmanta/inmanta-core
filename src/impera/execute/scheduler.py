@@ -21,7 +21,7 @@ import sys
 import traceback
 import inspect
 
-from impera.ast.statements import DefinitionStatement, CallStatement, DynamicStatement
+from impera.ast.statements import DefinitionStatement, CallStatement, DynamicStatement, TypeDefinitionStatement
 from .state import State, DynamicState
 from impera.execute.scope import Scope
 from impera.execute.util import EntityType, Unset
@@ -29,6 +29,12 @@ from impera.execute.proxy import UnsetException
 from impera.ast.variables import AttributeVariable, Variable
 from impera.plugins.base import Context
 from impera.stats import Stats
+from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
+
+from impera.ast.statements.define import DefineEntity, DefineTypeConstraint, DefineImplement
+from impera.ast.statements.builtin import DummyStatement
+from impera.compiler.main import Compiler
+from impera.ast.statements.generator import Implement
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -82,10 +88,9 @@ class Scheduler(object):
     """
         This class schedules statements for execution
     """
-    def __init__(self, graph):
+
+    def __init__(self):
         self._statement_count = 0
-        self._graph = graph
-        self._graph.root_scope = Scope(self._graph, "__root__")
 
         self._statements = {}
 
@@ -157,41 +162,54 @@ class Scheduler(object):
 
         raise Exception()
 
-    def define_types(self, compiler, statements):
+    def define_types(self, compiler: Compiler, statements, blocks):
         """
-            This is the first compiler stage that defines all types
+            This is the first compiler stage that defines all types_and_impl
         """
-        definition_count = 0
-        for stmt in statements:
-            if isinstance(stmt, DefinitionStatement):
-                state = State(compiler, stmt.namespace, stmt)
-                state.add_to_graph(self._graph)
-                definition_count += 1
+        # get all relevant stmts
+        definitions = [d for d in statements if isinstance(d, DefinitionStatement)]
 
-                self._evaluation_queue.add(state)
+        # collect all  types and impls
+        types_and_impl = {}
 
-        LOGGER.debug("Added %d definition statements." % definition_count)
+        # primitive types
+        for name, type_symbol in TYPES.items():
+            types_and_impl[name] = type_symbol
 
-        # TODO(err reporting) add error reporting here
-        if not self._evaluate_statement_list():
-            for state in self._evaluation_queue:
-                if not state.evaluated:
-                    print(state)
+        # all stmts contributing types and impls
+        newtypes = [t.get_type() for t in definitions if isinstance(t, TypeDefinitionStatement)]
 
-            raise Exception("Unable to define all types")
+        for (name, type_symbol) in newtypes:
+            types_and_impl[name] = type_symbol
 
-        # now query the graph again for statements that cannot resolve
-        for state in self._graph.get_statements():
-            if isinstance(stmt, DefinitionStatement) and not state.evaluated:
-                local_scope = state.get_local_scope()
+        resolver = BasicResolver(types_and_impl)
 
-                for _name, type_ref in state._required_types.items():
-                    if not type_ref.is_available(local_scope):
-                        self.show_exception(state, "Unable to resolve %s" % type_ref)
+        # now that we have objects for all types, popuate them
+        implements = [t for t in definitions if isinstance(t, DefineImplement)]
+        others = [t for t in definitions if not isinstance(t, DefineImplement)]
+        entities = [t for t in others if isinstance(t, DefineEntity)]
+        others = [t for t in others if not isinstance(t, DefineEntity)]
 
-        # call scheduled callbacks for 'after_types'
-        ctx = Context(self._graph, self._graph.root_scope, None, None)
-        CallbackHandler.run_callbacks("after_types", ctx)
+        # first entities, so we have inheritance
+        for d in entities:
+            d.evaluate(resolver)
+
+        for d in others:
+            d.evaluate(resolver)
+
+        # lastly the implements, as they require implementations
+        for d in implements:
+            d.evaluate(resolver)
+
+        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+
+        resolver = NameSpacedResolver(types, None)
+
+        for (n, t) in types.items():
+            t.normalize(resolver)
+
+        for block in blocks:
+            block.normalize(resolver)
 
     def show_error(self, msg: str, scope: Scope):
         """
@@ -308,12 +326,12 @@ class Scheduler(object):
             except Exception as exception:
                 self.show_exception(state, exception)
 
-    def run(self, compiler, statements):
+    def run(self, compiler, statements, blocks):
         """
             Evaluate the current graph
         """
         # first evaluate all definitions, this should be done in one iteration
-        self.define_types(compiler, statements)
+        self.define_types(compiler, statements, blocks)
 
         # add all other statements to the graph (create the initial model)
         for stmt in statements:

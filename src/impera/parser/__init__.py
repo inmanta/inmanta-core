@@ -22,14 +22,16 @@ import antlr3
 from impera.ast.constraint.expression import Operator
 from impera.ast.constraint.expression import Regex as RegexOp
 from impera.ast.statements.assign import SetAttribute, Assign, CreateList, IndexLookup, StringFormat
-from impera.ast.statements.call import FunctionCall, Expression
+from impera.ast.statements.call import FunctionCall, BooleanExpression
 from impera.ast.statements.define import DefineEntity, DefineTypeDefault, DefineImplementation, DefineTypeConstraint
 from impera.ast.statements.define import DefineImplement, DefineRelation, DefineIndex
 from impera.ast.statements.generator import Constructor, Import, For
+from impera.ast.statements import Literal
 from impera.ast.type import TYPES, Bool, Number
 from impera.ast.variables import Reference, AttributeVariable
 from . import imperaLexer
 from . import imperaParser
+from impera.ast.blocks import BasicBlock
 
 
 class action(object):
@@ -63,6 +65,7 @@ class Parser(object):
     """
         This class parses the a file and generates the statements
     """
+
     def __init__(self):
         self._stack = []
         self._current_namespace = None
@@ -87,9 +90,6 @@ class Parser(object):
         """
         to_list = [str(x.text) for x in node.children]
         ref = Reference(to_list[-1], to_list[:-1])
-
-        if (ref.name in TYPES) and len(ref.namespace) == 0:
-            ref.namespace = ["__types__"]
 
         return ref
 
@@ -163,7 +163,7 @@ class Parser(object):
         """
         name = str(node.children[0].text)
         base = self._handle_node(node.children[1])
-        define = DefineTypeConstraint(name, base)
+        define = DefineTypeConstraint(self._current_namespace, name, base)
         define.expression = self._handle_node(node.children[2])
 
         return define
@@ -176,7 +176,7 @@ class Parser(object):
         name = str(node.children[0].text)
         ctor = self._handle_node(node.children[1])
 
-        return DefineTypeDefault(name, ctor)
+        return DefineTypeDefault(self._current_namespace, name, ctor)
 
     @action(imperaParser.DEF_ENTITY)
     def create_entity(self, node):
@@ -187,10 +187,10 @@ class Parser(object):
         if len(node.children) == 4:
             comment = self._handle_node(node.children[3])
 
-        interf = DefineEntity(str(node.children[0].text), comment)
-
         parents = node.children[1].children
-        interf.parents = [self._handle_node(x) for x in parents]
+        parents = [self._handle_node(x) for x in parents]
+
+        interf = DefineEntity(self._current_namespace, str(node.children[0].text), comment, parents)
 
         attributes = node.children[2].children
         for attribute in attributes:
@@ -232,7 +232,7 @@ class Parser(object):
         """
             Create an implementation
         """
-        impl = DefineImplementation(str(node.children[0].text))
+        impl = DefineImplementation(self._current_namespace, str(node.children[0].text))
 
         for stmt in node.children[1].children:
             impl.add_statement(self._handle_node(stmt))
@@ -344,7 +344,7 @@ class Parser(object):
             Return true
         """
         Bool.validate(str(node.text))
-        return True
+        return Literal(True)
 
     @action(imperaParser.FALSE)
     def create_false(self, node):
@@ -352,7 +352,7 @@ class Parser(object):
             Return false
         """
         Bool.validate(str(node.text))
-        return False
+        return Literal(False)
 
     @action(imperaParser.FLOAT)
     def create_float(self, node):
@@ -361,7 +361,7 @@ class Parser(object):
         """
         value = str(node.text)
         Number.validate(value)
-        return Number.cast(value)
+        return Literal(Number.cast(value))
 
     @action(imperaParser.ANON)
     def create_anonymous_implementation(self, node):
@@ -453,7 +453,7 @@ class Parser(object):
             return None
 
         expr = self._handle_node(node.children[0])
-        return Expression(expr, None)
+        return BooleanExpression(expr, None)
 
     def create_string_format(self, format_string, variables):
         """
@@ -491,7 +491,7 @@ class Parser(object):
         if len(match_obj) > 0:
             return self.create_string_format(value, match_obj)
 
-        return value
+        return Literal(value)
 
     @action(imperaParser.INT)
     def create_integer(self, node):
@@ -502,7 +502,7 @@ class Parser(object):
         if not Number.validate(value):
             raise Exception("Value does is not a valid integer")
 
-        return Number.cast(value)
+        return Literal(Number.cast(value))
 
     @action(imperaParser.STATEMENT)
     def handle_statement(self, node):
@@ -531,7 +531,7 @@ class Parser(object):
         else:
             expr = self._handle_node(node.children[1])
 
-        return Expression(expr, [arg])
+        return BooleanExpression(expr, [arg])
 
     @action(imperaParser.ML_STRING)
     def create_mlstring(self, node):
@@ -540,7 +540,7 @@ class Parser(object):
         """
         # strip quotes
         value = str(node.text)
-        return value[3:-3]
+        return Literal(value[3:-3])
 
     @action(imperaParser.FOR)
     def create_for(self, node):
@@ -553,15 +553,11 @@ class Parser(object):
 
         for_stmt = For(var, loop_var, Reference(module_name, self._current_namespace.to_path()))
 
-        module_def = DefineImplementation(module_name)
+        module_def = BasicBlock()
         module_def.line = node.line
         module_def.filename = self._filename
-        module_def.entity = Reference("Entity", ["std"])
-        module_def.namespace = self._current_namespace
         for stmt in node.children[2].children:
-            module_def.add_statement(self._handle_node(stmt))
-
-        self._stack.append(module_def)
+            module_def.add(self._handle_node(stmt))
 
         return for_stmt
 

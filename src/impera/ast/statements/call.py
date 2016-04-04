@@ -194,7 +194,7 @@ class ExpressionState(object):
         return "exp state: %s " % repr(self.expression)
 
 
-class Expression(CallStatement):
+class BooleanExpression(CallStatement):
     """
         Define a new expression
 
@@ -215,7 +215,7 @@ class Expression(CallStatement):
         """
             The representation of this expression
         """
-        return "Expression(%s)" % ", ".join([str(x) for x in self.arguments])
+        return "BooleanExpression(%s)" % ", ".join([str(x) for x in self.arguments])
 
     def types(self, recursive=False):
         """

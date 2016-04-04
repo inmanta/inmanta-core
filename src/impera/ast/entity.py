@@ -19,8 +19,10 @@
 # pylint: disable-msg=R0902,R0904
 
 from impera.execute.util import EntityTypeMeta
-from impera.ast.type import Type
+from impera.ast.type import Type, NameSpacedResolver
 from impera import stats
+from lxml.etree import Resolver
+from impera.ast.blocks import BasicBlock
 
 
 class Entity(Type):
@@ -33,6 +35,7 @@ class Entity(Type):
         :param name: The name of this entity. This name can not be changed
             after this object has been created
     """
+
     def __init__(self, name, namespace="__root__"):
         Type.__init__(self)
 
@@ -45,6 +48,7 @@ class Entity(Type):
 
         self.__cls_type = None
         self.implementations = []
+        self.implements = []
 
         # default values
         self.__default_value = {}
@@ -58,6 +62,10 @@ class Entity(Type):
         self._instance_list = []
 
         self.comment = ""
+
+    def normalize(self, resolver: NameSpacedResolver):
+        for d in self.implementations:
+            d.normalize(resolver)
 
     """
         A list of all instances that exist in the configuration model
@@ -272,6 +280,12 @@ class Entity(Type):
         """
         self.implementations.append(implement)
 
+    def add_implement(self, implement):
+        """
+            Register an implementation for this entity
+        """
+        self.implements.append(implement)
+
     def __repr__(self):
         """
             The representation of this type
@@ -305,6 +319,9 @@ class Entity(Type):
             Add an index over the given attributes.
         """
         self._index_def.append(attributes)
+
+    def get_indices(self):
+        return self._index_def
 
     def validate_indexes(self):
         """
@@ -370,6 +387,12 @@ class Entity(Type):
 
         return None
 
+    def get_entity(self):
+        """
+            Get the entity (follow through defaults if needed)
+        """
+        return self
+
 
 class Implementation(object):
     """
@@ -377,32 +400,47 @@ class Implementation(object):
         high level roles that do not have any arguments, or they can be used
         to create mixin like aspects.
     """
-    def __init__(self, name, entity=None):
-        self.statements = []
+
+    def __init__(self, name, stmts: BasicBlock):
         self.name = name
+        self.statements = stmts
+
+    def set_type(self, entity):
         self.entity = entity
+        entity.add_implementation(self)
 
     def __repr__(self):
         return "Implementation(name = %s)" % self.name
+
+    def normalize(self, resolver: NameSpacedResolver):
+        self.statements.normalize(resolver)
 
 
 class Implement(object):
     """
         Define an implementation of an entity in functions of implementations
     """
+
     def __init__(self):
         self.constraint = None
         self.implementations = []
 
+    def check(self):
+        print("OK")
 
-class Default(object):
+
+class Default(Type):
     """
         This class models default values for a constructor.
     """
-    def __init__(self, name, entity):
+
+    def __init__(self, name):
         self.name = name
-        self._entity = entity
+        self.entity = None
         self._defaults = {}
+
+    def set_entity(self, entity: Entity):
+        self.entity = entity
 
     def add_default(self, name, value):
         """
@@ -426,10 +464,7 @@ class Default(object):
         """
             Get the entity (follow through defaults if needed)
         """
-        if isinstance(self._entity, Default):
-            return self._entity.get_entity()
-
-        return self._entity
+        return self.entity.get_entity()
 
     def __repr__(self):
         return "Default(%s)" % self.name

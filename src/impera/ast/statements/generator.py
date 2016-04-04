@@ -36,6 +36,7 @@ class Import(GeneratorStatement):
 
         @param name: The name of the statement to include
     """
+
     def __init__(self, name):
         GeneratorStatement.__init__(self)
         self.name = name
@@ -79,6 +80,7 @@ class Implement(GeneratorStatement):
         This statement selects an implementation for a given object and
         imports the statements
     """
+
     def __init__(self, instance_type, instance):
         GeneratorStatement.__init__(self)
         self.instance_type = instance_type
@@ -184,6 +186,7 @@ class Implement(GeneratorStatement):
                 state._child_statements[stmt] = child_state
 
         Stats.get("refine").increment(len(implementations))
+        return "X-I"
 
     def __repr__(self):
         return "EntityImplement(%s)" % self.instance
@@ -193,6 +196,7 @@ class For(GeneratorStatement):
     """
         A for loop
     """
+
     def __init__(self, variable, loop_var, module_name):
         GeneratorStatement.__init__(self)
         self.variable = variable
@@ -257,12 +261,29 @@ class Constructor(GeneratorStatement):
         @param class_type: The type of the object that is created by this
             constructor call.
     """
+
     def __init__(self, class_type):
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}
         self.implemented = False
         self.register = False
+
+    def normalize(self, resolver):
+        self.type = resolver.get_type(self.class_type.full_name)
+        for (k, v) in self.__attributes.items():
+            v.normalize(resolver)
+
+        # now check that all variables that have indexes on them, are already
+        # defined and add the instance to the index
+        for index in self.type.get_entity().get_indices():
+            for attr in index:
+                if attr not in self.attributes:
+                    raise Exception("%s is part of an index and should be set in the constructor." % attr)
+
+    def requires(self):
+        out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
+        return out
 
     def add_attribute(self, name, value):
         """
@@ -384,13 +405,6 @@ class Constructor(GeneratorStatement):
 
         # set the self variable
         scope.add_variable("self", object_ref)
-
-        # now check that all variables that have indexes on them, are already
-        # defined and add the instance to the index
-        for index in type_class._index_def:
-            for attr in index:
-                if attr not in attributes:
-                    raise Exception("%s is part of an index and should be set in the constructor." % attr)
 
     def evaluate(self, state, local_scope):
         """

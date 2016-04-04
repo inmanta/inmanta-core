@@ -36,10 +36,10 @@ def do_compile():
     success = False
     try:
         LOGGER.debug("Starting compile")
-        graph = compiler.graph
-        statements = compiler.compile()
-        sched = scheduler.Scheduler(graph)
-        success = sched.run(compiler, statements)
+
+        (statements, blocks) = compiler.compile()
+        sched = scheduler.Scheduler()
+        success = sched.run(compiler, statements, blocks)
 
         LOGGER.debug("Compile done")
 

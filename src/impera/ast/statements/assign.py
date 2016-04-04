@@ -23,12 +23,14 @@ from impera.ast.variables import Variable, AttributeVariable, Reference
 from impera.execute.proxy import DynamicProxy
 from impera.execute.util import Optional
 from impera.ast.type import List
+from impera.ast.statements import Statement, AssignStatement
 
 
 class CreateList(ReferenceStatement):
     """
         Create list of values
     """
+
     def __init__(self, items):
         ReferenceStatement.__init__(self)
         self.items = items
@@ -81,6 +83,7 @@ class GetAttribute(ReferenceStatement):
     """
         Get the value of an attribute
     """
+
     def __init__(self, instance_name, attribute_name):
         ReferenceStatement.__init__(self)
         self.instance_name = instance_name
@@ -112,7 +115,7 @@ class GetAttribute(ReferenceStatement):
         return "Get(%s.%s)" % (self.instance_name, self.attribute_name)
 
 
-class SetAttribute(GetAttribute):
+class SetAttribute(AssignStatement):
     """
         Set an attribute of a given instance to a given value
 
@@ -120,8 +123,11 @@ class SetAttribute(GetAttribute):
         provides:      object.attribute, other end
         contributes:   object.attribute, other end
     """
+
     def __init__(self, instance_name, attribute_name, value):
-        GetAttribute.__init__(self, instance_name, attribute_name)
+        AssignStatement.__init__(self, instance_name, value)
+        self.instance_name = instance_name
+        self.attribute_name = attribute_name
         self.value = value
 
     def references(self):
@@ -254,7 +260,7 @@ class SetAttribute(GetAttribute):
         return "%s.%s = %s" % (self.instance_name, self.attribute_name, self.value)
 
 
-class Assign(ReferenceStatement):
+class Assign(AssignStatement):
     """
         This class represents the assignment of a value to a variable -> alias
 
@@ -264,10 +270,14 @@ class Assign(ReferenceStatement):
         uses:          value
         provides:      variable
     """
+
     def __init__(self, name, value):
-        ReferenceStatement.__init__(self)
+        AssignStatement.__init__(self, name, value)
         self.name = name
         self.value = value
+
+    def requires(self):
+        return self.value.requires()
 
     def types(self, recursive=False):
         """
@@ -298,6 +308,7 @@ class Assign(ReferenceStatement):
         """
         ref = state.get_ref("ref")
         local_scope.add_variable(self.name.name, ref)
+        return ref
 
     def references(self):
         """
@@ -313,6 +324,7 @@ class IndexLookup(ReferenceStatement):
     """
         Lookup a value in a dictionary
     """
+
     def __init__(self, index_type, query):
         ReferenceStatement.__init__(self)
         self.index_type = index_type
@@ -387,6 +399,7 @@ class StringFormat(ReferenceStatement):
     """
         Create a new string by doing a string interpolation
     """
+
     def __init__(self, format_string, variables):
         ReferenceStatement.__init__(self)
         self._format_string = format_string

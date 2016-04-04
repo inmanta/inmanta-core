@@ -19,7 +19,7 @@
 import copy
 
 from impera.ast import Namespace
-from impera.ast.statements.call import Expression
+from impera.ast.statements.call import BooleanExpression
 from impera.ast.variables import ResultVariable
 from impera.ast.variables import Reference
 from impera.ast.variables import Variable
@@ -39,10 +39,10 @@ def get_ref(state, value):
     if hasattr(value, "to_function"):
         # let expression generate an evaluator for the operator/expression in
         # value
-        expr = Expression(value, None)
+        expr = BooleanExpression(value, None)
         return get_ref(state, expr)
 
-    elif isinstance(value, Expression):
+    elif isinstance(value, BooleanExpression):
         child_state = state.add_statement(value, child_ns=True)
         return child_state.get_result_reference()
 
@@ -78,6 +78,7 @@ class State(object):
         @param statement: The statement this state is linked with. This
             statement contains the logic of this state.
     """
+
     def __init__(self, compiler, namespace, statement):
         self.compiler = compiler
         self.graph = None
@@ -174,6 +175,7 @@ class DynamicState(State):
     """
         Represents a dynamic state
     """
+
     def __init__(self, compiler, namespace, statement):
         State.__init__(self, compiler, namespace, statement)
         self._result = None
@@ -311,6 +313,10 @@ class DynamicState(State):
 
         if self._result is not None:
             self._result_ref.value_available()
+
+       #     if self._result_ref.value is None:
+       #         self._result_ref.value
+       #         raise Exception("odd")
 
         self.set_evaluated()
 

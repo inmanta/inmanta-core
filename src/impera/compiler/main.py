@@ -30,7 +30,8 @@ from impera.compiler.unit import FileCompileUnit
 from impera.module import Project, Module
 from impera.parser import Parser
 from impera.plugins import PluginCompileUnit
-from . import graph
+from impera.ast.blocks import BasicBlock
+from impera.ast.statements import DefinitionStatement
 
 
 class Compiler(object):
@@ -48,10 +49,9 @@ class Compiler(object):
 
         self.__root_ns = None
 
-        self.graph = graph.Graph()
-
         self.loaded_modules = {}  # a map of the paths of all loaded modules
         self._units = []
+        self.types = {}
 
     def get_parser(self):
         """
@@ -67,11 +67,8 @@ class Compiler(object):
         main_ns = Namespace("__config__")
         main_ns.parent = root_ns
 
-        # add namespaces to the graph
-        self.graph.add_namespace(root_ns)
         self._units.append(root_ns)
 
-        self.graph.add_namespace(main_ns, root_ns)
         self._units.append(main_ns)
 
         self._add_other_ns(root_ns)
@@ -120,13 +117,8 @@ class Compiler(object):
         type_ns.parent = root_ns
         plugin_ns.parent = root_ns
 
-        type_ns.unit = BuiltinCompileUnit(self, type_ns)
         plugin_ns.unit = PluginCompileUnit(self, plugin_ns)
 
-        self.graph.add_namespace(type_ns, root_ns)
-        self._units.append(type_ns)
-
-        self.graph.add_namespace(plugin_ns, root_ns)
         self._units.append(plugin_ns)
 
     def _load_dir(self, cf_dir, namespace):
@@ -181,7 +173,7 @@ class Compiler(object):
                 # load the python file
                 imp.load_source(sub_mod, py_file)
 
-    def load_module(self, module: Module, root_ns):
+    def load_module(self, module: Module, root_ns:Namespace):
         """
             Load all libraries located in a directory.
 
@@ -192,7 +184,6 @@ class Compiler(object):
         namespace = Namespace(name)
         namespace.parent = root_ns
 
-        self.graph.add_namespace(namespace, root_ns)
         self._units.append(namespace)
 
         self._load_dir(module._path, namespace)
@@ -212,13 +203,20 @@ class Compiler(object):
         """
         self.load()
         statements = []
+        blocks = []
         for unit in self._units:
             if unit.unit is not None:
-                statements.extend(unit.unit.compile())
+                block = BasicBlock(unit)
+                stmts = unit.unit.compile()
+                for s in stmts:
+                    if isinstance(s, DefinitionStatement):
+                        statements.append(s)
+                    else:
+                        block.add(s)
+                blocks.append(block)
 
         # add the entity type (hack?)
-        entity = DefineEntity("Entity", "The entity all other entities inherit from.")
-        entity.namespace = Namespace("std", self.__root_ns)
+        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.",[])
 
         requires_rel = DefineRelation([Reference("Entity", ["std"]), "requires", [0, None], False],
                                       [Reference("Entity", ["std"]), "provides", [0, None], False])
@@ -228,4 +226,4 @@ class Compiler(object):
         statements.append(entity)
         statements.append(requires_rel)
 
-        return statements
+        return (statements, blocks)

@@ -17,7 +17,56 @@
 """
 
 from impera.ast.constraint.expression import create_function
-from impera.ast.variables import Variable
+from impera.ast.variables import Variable, Reference
+from impera.ast import Namespace
+
+
+class BasicResolver(object):
+
+    def __init__(self, types):
+        self.types = types
+
+    def get_type(self, namespace, name):
+        if isinstance(name, Reference):
+            name = name.full_name
+        if "::" in name:
+            if name in self.types:
+                return self.types[name]
+            else:
+                raise Exception("type not found " + name)
+        elif name in TYPES:
+            return self.types[name]
+        else:
+            full_name = "%s::%s" % (namespace.name, name)
+            if full_name in self.types:
+                return self.types[full_name]
+            else:
+                raise Exception("type not found" + name)
+
+
+class NameSpacedResolver(object):
+
+    def __init__(self, types, ns):
+        self.types = types
+        self.ns = ns
+
+    def get_type(self, name):
+        if "::" in name:
+            if name in self.types:
+                return self.types[name]
+            else:
+                raise Exception("type not found " + name)
+        elif name in TYPES:
+            return self.types[name]
+        else:
+            full_name = "%s::%s" % (self.ns.name, name)
+            if full_name in self.types:
+                return self.types[full_name]
+            else:
+                raise Exception("type not found" + name)
+
+    def get_resolver_for(self, namespace: Namespace):
+        return NameSpacedResolver(self.types, namespace)
 
 
 class CastException(Exception):
@@ -32,6 +81,7 @@ class Type(object):
         This class is the base class for all types that represent basic data.
         These are types that are not relations.
     """
+
     def __init__(self):
         pass
 
@@ -56,6 +106,9 @@ class Type(object):
     def __str__(self):
         return str(self.__class__)
 
+    def normalize(self, resolver):
+        pass
+
 
 class Number(Type):
     """
@@ -64,6 +117,7 @@ class Number(Type):
 
         +, -, /, *
     """
+
     def __init__(self):
         Type.__init__(self)
 
@@ -115,6 +169,7 @@ class Bool(Type):
     """
         This class represents a simple boolean that can hold true or false.
     """
+
     def __init__(self):
         Type.__init__(self)
 
@@ -149,6 +204,7 @@ class NoneType(Type):
     """
         This class represents an undefined value in the configuration model.
     """
+
     def __init__(self):
         Type.__init__(self)
 
@@ -181,6 +237,7 @@ class String(Type, str):
     """
         This class represents a string type in the configuration model.
     """
+
     def __init__(self):
         Type.__init__(self)
         str.__init__(self)
@@ -216,6 +273,7 @@ class List(Type, list):
     """
         This class represents a string type in the configuration model.
     """
+
     def __init__(self):
         Type.__init__(self)
         list.__init__(self)
@@ -255,22 +313,14 @@ class ConstraintType(Type):
 
         The constraint on this type is defined by a regular expression.
     """
-    def __init__(self, base_type, namespace, name):
+
+    def __init__(self, name):
         Type.__init__(self)
 
-        self.__base_type = base_type  # : ConstrainableType
+        self.base_type = None  # : ConstrainableType
         self._constraint = None
         self.name = name
-        self.namespace = namespace
-
-    def get_base_type(self):
-        """
-            Returns the base that which is constraint by the constraint in this
-            type.
-        """
-        return self.__base_type
-
-    base_type = property(get_base_type)
+        self.namespace = None
 
     def set_constraint(self, expression):
         """
@@ -278,6 +328,7 @@ class ConstraintType(Type):
             types requires the constraint to be set as a regex that can be
             compiled.
         """
+        self.expression = expression
         self._constraint = create_function(expression)
 
     def get_constaint(self):

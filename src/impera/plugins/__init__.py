@@ -18,18 +18,19 @@
 
 from . import base
 from impera.compiler.unit import CompileUnit
-from impera.ast.statements import DefinitionStatement
+from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.ast.variables import Variable
 
 
-class PluginStatement(DefinitionStatement):
+class PluginStatement(TypeDefinitionStatement):
     """
         This statement defines a plugin function
     """
-    def __init__(self, name, function_class):
-        DefinitionStatement.__init__(self)
+    def __init__(self, namespace, name, function_class):
+        TypeDefinitionStatement.__init__(self, namespace, name)
         self._name = name
         self._function_class = function_class
+        self.type = self._function_class(namespace)
 
     def __repr__(self):
         """
@@ -37,13 +38,12 @@ class PluginStatement(DefinitionStatement):
         """
         return "Function(%s)" % self._name
 
-    def evaluate(self, state, local_scope):
+    def evaluate(self, resolver):
         """
             Evaluate this plugin
         """
-        function = self._function_class(state.compiler,
-                                        state.graph, local_scope)
-        local_scope.add_variable(self._name, Variable(function))
+        self.type.set_resolver(resolver)
+        
 
 
 class PluginCompileUnit(CompileUnit):
@@ -77,8 +77,7 @@ class PluginCompileUnit(CompileUnit):
                 raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
 
             name = name.split("::")[-1]
-            statement = PluginStatement(name, cls)
-            statement.namespace = ns
+            statement = PluginStatement(ns, name, cls)
             statements.append(statement)
 
         return statements

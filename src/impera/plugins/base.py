@@ -24,6 +24,8 @@ from impera.execute.proxy import DynamicProxy, UnknownException
 from impera.ast.statements.call import ExpressionState
 from impera.execute.util import Unknown
 from impera.execute import NotFoundException
+from impera.ast import Namespace
+from impera.ast.type import BasicResolver
 
 
 class Context(object):
@@ -105,10 +107,8 @@ class Plugin(object, metaclass=PluginMeta):
         This class models a plugin that can be called from the language.
     """
 
-    def __init__(self, compiler, graph, scope):
-        self._graph = graph
-        self._scope = scope
-        self._compiler = compiler
+    def __init__(self, namespace: Namespace):
+        self.ns = namespace
 
         self._context = -1
         self._return = None
@@ -120,6 +120,9 @@ class Plugin(object, metaclass=PluginMeta):
 
         self.new_statement = None
 
+    def set_resolver(self, resolver):
+        self.resolver = resolver
+        
     def _load_signature(self, function):
         """
             Load the signature from the given python function

@@ -34,7 +34,6 @@ import impera
 from impera import env
 from impera.config import Config
 from impera import parser
-from impera.execute import scheduler
 from impera.ast import Namespace
 from impera.plugins.base import PluginMeta
 

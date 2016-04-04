@@ -21,25 +21,16 @@ class Statement(object):
     """
         An abstract baseclass representing a statement in the configuration policy.
     """
+
     def __init__(self):
-        self.filename = "<>"
-        self.line = -1
+        self.location = None
         self.namespace = None
 
     def copy_location(self, statement):
         """
             Copy the location of this statement in the given statement
         """
-        statement.filename = self.filename
-        statement.line = self.line
-
-    def new_statements(self, _state):
-        """
-            Scheduled call to add new statements to the graph. This can be used
-            to included statements that can only be determined after some
-            requires have been resolved.
-        """
-        return 0
+        statement.location = self.location
 
     def evaluate(self, state, scope):
         """
@@ -71,6 +62,7 @@ class DynamicStatement(Statement):
         This class represents all statements that have dynamic properties.
         These are all statements that do not define typing.
     """
+
     def __init__(self):
         Statement.__init__(self)
 
@@ -92,33 +84,88 @@ class DynamicStatement(Statement):
         return []
 
 
-class ReferenceStatement(DynamicStatement):
+class AssignStatement(DynamicStatement):
     """
-        This class models statements that refere to somethings
+    This class models binary sts
     """
+
+    def __init__(self, lhs, rhs):
+        DynamicStatement.__init__(self)
+        self.lhs = lhs
+        self.rhs = rhs
+
+    def normalize(self, resolver):
+        self.rhs.normalize(resolver)
+
+
+class BooleanExpression(DynamicStatement):
+    """
+    This class models expressions
+    """
+
     def __init__(self):
         DynamicStatement.__init__(self)
+
+
+class ReferenceStatement(BooleanExpression):
+    """
+        This class models statements that refer to somethings
+    """
+
+    def __init__(self):
+        BooleanExpression.__init__(self)
 
 
 class DefinitionStatement(Statement):
     """
         This statement defines a new entity in the configuration.
     """
+
     def __init__(self):
         Statement.__init__(self)
 
 
-class CallStatement(DynamicStatement):
+class TypeDefinitionStatement(DefinitionStatement):
+
+    def __init__(self, namespace, name):
+        DefinitionStatement.__init__(self)
+        self.name = name
+        self.namespace = namespace
+        self.fullName = namespace.name + "::" + name
+
+    def get_type(self):
+        return (self.fullName, self.type)
+
+
+class CallStatement(BooleanExpression):
     """
         Base class for statements that call python code
     """
+
     def __init__(self):
-        DynamicStatement.__init__(self)
+        BooleanExpression.__init__(self)
 
 
 class GeneratorStatement(DynamicStatement):
     """
         This statement models a statement that generates new statements
     """
+
     def __init__(self):
         DynamicStatement.__init__(self)
+
+
+class Literal(Statement):
+
+    def __init__(self, value):
+        Statement.__init__(self)
+        self.value = value
+
+    def normalize(self, resolver):
+        pass
+
+    def __repr__(self):
+        return repr(self.value)
+
+    def requires(self):
+        return []
