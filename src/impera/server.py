@@ -39,7 +39,6 @@ from impera import protocol
 from impera import env
 from impera import data
 from impera.config import Config
-from impera.loader import CodeLoader
 from impera.resources import Id, HostNotFoundException
 import dateutil
 from impera.agent.io.remote import RemoteIO
@@ -54,10 +53,9 @@ class Server(protocol.ServerEndpoint):
         The central Impera server that communicates with clients and agents and persists configuration
         information
 
-        :param code_loader Load code deployed from configuration modules
         :param usedb Use a database to store data. If not, only facts are persisted in a yaml file.
     """
-    def __init__(self, code_loader=True, database_host=None, database_port=None):
+    def __init__(self, database_host=None, database_port=None):
         super().__init__("server", role="server")
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
@@ -73,13 +71,6 @@ class Server(protocol.ServerEndpoint):
         self._db = connect(Config.get("database", "name", "impera"), host=database_host, port=database_port)
         LOGGER.info("Connected to mongodb database %s on %s:%d", Config.get("database", "name", "impera"),
                     database_host, database_port)
-
-        if code_loader:
-            self._env = env.VirtualEnv(self._server_storage["env"])
-            self._env.use_virtual_env()
-            self._loader = CodeLoader(self._server_storage["code"])
-        else:
-            self._loader = None
 
         self._fact_expire = int(Config.get("server", "fact-expire", 3600))
         self._fact_renew = int(Config.get("server", "fact-renew", self._fact_expire / 3))
@@ -167,16 +158,6 @@ class Server(protocol.ServerEndpoint):
         dir_map["db"] = db_dir
         if not os.path.exists(db_dir):
             os.mkdir(db_dir)
-
-        code_dir = os.path.join(server_state_dir, "code")
-        dir_map["code"] = code_dir
-        if not os.path.exists(code_dir):
-            os.mkdir(code_dir)
-
-        env_dir = os.path.join(server_state_dir, "env")
-        dir_map["env"] = env_dir
-        if not os.path.exists(env_dir):
-            os.mkdir(env_dir)
 
         environments_dir = os.path.join(server_state_dir, "environments")
         dir_map["environments"] = environments_dir
