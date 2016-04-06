@@ -18,7 +18,7 @@
 
 from impera import protocol
 from server_test import ServerTest
-from nose.tools import assert_equal, assert_true, assert_in
+from nose.tools import assert_equal, assert_in
 
 
 class testRestServer(ServerTest):
