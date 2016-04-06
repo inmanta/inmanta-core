@@ -16,5 +16,32 @@
     Contact: bart@impera.io
 """
 
+import os
+
+from mongobox.unittest import MongoTestCase
+from mongoengine.connection import connect, disconnect
 from impera import data
 
+
+class testDataObjects(MongoTestCase):
+    def __init__(self, methodName='runTest'):
+        super().__init__(methodName)
+
+    @classmethod
+    def setUpClass(cls):
+        mongo_port = os.getenv('MONGOBOX_PORT')
+        if mongo_port is None:
+            raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
+
+        connect(host="localhost", port=int(mongo_port))
+
+    @classmethod
+    def tearDownClass(cls):
+        disconnect()
+
+    def tearDown(self):
+        MongoTestCase.tearDown(self)
+        self.purge_database()
+
+    def testEnvironment(self):
+        pass
