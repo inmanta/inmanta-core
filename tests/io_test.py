@@ -153,12 +153,10 @@ def check_chown(io, testdir):
 
 def check_put(io, testdir):
     path = os.path.join(testdir, "put" + str(io))
-    io.put(path, "hello")
+    io.put(path, b"hello")
 
-    with open(path, "r") as fd:
-        assert("hello" == fd.read())
-
-#     io.put(path, b'\0\1\2\3\4\5')
+    with open(path, "rb") as fd:
+        assert(b"hello" == fd.read())
 
 
 def check_chmod(io, testdir):
