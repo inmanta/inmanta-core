@@ -41,7 +41,7 @@ def check_read(io, testdir):
     with open(filename, "wb+") as fd:
         fd.write(test_str.encode())
 
-    assert(io.read(filename) == test_str)
+    assert_equal(io.read(filename), test_str)
 
 
 def check_read_binary(io, testdir):
