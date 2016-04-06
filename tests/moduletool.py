@@ -16,18 +16,18 @@
     Contact: wouter@inmanta.com
 """
 
-from impera import app
-from impera import module
-from _io import StringIO
 
+from _io import StringIO
 import os
 import logging
 import unittest
 import shutil
-
-from nose.tools import raises, assert_equal, assert_true
 import tempfile
 import subprocess
+
+from impera import app  # NOQA
+from impera import module
+from nose.tools import raises, assert_equal, assert_true
 from impera.module import ModuleTool, InvalidModuleException, Project
 from impera.config import Config
 import yaml
@@ -58,7 +58,7 @@ downloadpath: libs""")
                     mypath = os.path.join(reporoot, req[0])
                 else:
                     mypath = os.path.join(reporoot, req[2])
-                if req[1] != None:
+                if req[1] is not None:
                     projectfile.write("\n    {}: {}, {}".format(req[0], mypath, req[1]))
                 else:
                     projectfile.write("\n    {}: {}".format(req[0], mypath, req[1]))

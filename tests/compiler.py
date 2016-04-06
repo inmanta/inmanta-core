@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,15 +13,14 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: bart@inmanta.com
 """
-from impera import app
+from impera import app  # NOQA
 from impera import parser
 from impera.ast import Namespace
-
-from nose import tools
 from impera.ast.statements import define
 from impera.ast.variables import Reference
+from nose import tools
 
 
 def parse_code(model_code: str):
@@ -33,7 +32,8 @@ def parse_code(model_code: str):
 
 
 def test_define_entity():
-    """ Test the definition of entities
+    """
+        Test the definition of entities
     """
     statements = parse_code("""
 entity Test:
@@ -50,7 +50,8 @@ end
 
 
 def test_extend_entity():
-    """ Test extending entities
+    """
+        Test extending entities
     """
     statements = parse_code("""
 entity Test extends Foo:
@@ -65,7 +66,8 @@ end
 
 
 def test_complex_entity():
-    """ Test definition of a complex entity
+    """
+        Test definition of a complex entity
     """
     documentation = "This entity has documentation"
     statements = parse_code("""
@@ -86,7 +88,7 @@ end
     tools.assert_equals(stmt.comment.strip(), documentation)
     tools.assert_equals(len(stmt.attributes), 3)
 
-    for attr_type, name, default in stmt.attributes:
+    for attr_type, name, _default in stmt.attributes:
         tools.assert_is_instance(attr_type, Reference)
         tools.assert_is_instance(name, str)
 
@@ -100,7 +102,8 @@ end
 
 
 def test_relation():
-    """ Test definition of relations
+    """
+        Test definition of relations
     """
     statements = parse_code("""
 Test tests [0:] -- [5:10] Foo bars
@@ -126,7 +129,8 @@ Test tests [0:] -- [5:10] Foo bars
 
 
 def test_directional_relation():
-    """ Test definition of relations
+    """
+        Test definition of relations
     """
     statements = parse_code("""
 Test tests [0:] -> [5:10] Foo bars
@@ -144,7 +148,8 @@ Test tests [0:] <- [5:10] Foo bars
 
 
 def test_implementation():
-    """ Test the definition of implementations
+    """
+        Test the definition of implementations
     """
     statements = parse_code("""
 implementation test for Test:
@@ -169,7 +174,8 @@ end
 
 
 def test_implementation_with_for():
-    """ Test the propagation of type requires when using a for
+    """
+        Test the propagation of type requires when using a for
     """
     statements = parse_code("""
 implementation test for Test:

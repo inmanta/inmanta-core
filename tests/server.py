@@ -20,7 +20,6 @@ import time
 
 from impera import protocol
 from server_test import ServerTest
-
 from nose.tools import assert_equal
 
 
