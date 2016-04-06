@@ -53,12 +53,12 @@ class VirtualEnv(object):
 
             proc = subprocess.Popen(["/usr/bin/virtualenv", "-p", python_exec, self.env_path], env={}, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
-            ret = proc.wait()
+            out, err = proc.communicate()
 
-            if ret == 0:
+            if proc.returncode == 0:
                 LOGGER.debug("Created a new virtualenv at %s", self.env_path)
             else:
-                LOGGER.error("Unable to create new virtualenv at %s", self.env_path)
+                LOGGER.error("Unable to create new virtualenv at %s (%s, %s)", self.env_path, out.decode(), err.decode())
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
@@ -76,7 +76,7 @@ class VirtualEnv(object):
                 code = compile(f.read(), activate_file, 'exec')
                 exec(code, {"__file__": activate_file})
         else:
-            print("Unable to activate virtual environment because %s does not exist." % activate_file)
+            raise Exception("Unable to activate virtual environment because %s does not exist." % activate_file)
 
     def install(self, requirements):
         """
