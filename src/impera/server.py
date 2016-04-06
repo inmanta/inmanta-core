@@ -36,7 +36,6 @@ from mongoengine import connect, errors
 from mongoengine.connection import disconnect
 from impera import methods
 from impera import protocol
-from impera import env
 from impera import data
 from impera.config import Config
 from impera.resources import Id, HostNotFoundException
