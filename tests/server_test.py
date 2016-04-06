@@ -36,6 +36,7 @@ class ServerTest(MongoTestCase):
     state_dir = None
     server_future = None
     server = None
+    executor = None
 
     def __init__(self, methodName='runTest'):
         super().__init__(methodName)
@@ -56,8 +57,8 @@ class ServerTest(MongoTestCase):
             raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
 
         cls.server = Server(database_host="localhost", database_port=int(mongo_port))
-        executor = futures.ThreadPoolExecutor(max_workers=1)
-        cls.server_future = executor.submit(cls.server.start)
+        cls.executor = futures.ThreadPoolExecutor(max_workers=1)
+        cls.server_future = cls.executor.submit(cls.server.start)
 
         attempts = 10
         while attempts > 0:
@@ -81,6 +82,8 @@ class ServerTest(MongoTestCase):
     def tearDownClass(cls):
         cls.server.stop()
         cls.server_future.result()
+        cls.executor.shutdown()
         shutil.rmtree(cls.state_dir)
         cls.server = None
         cls.server_future = None
+        cls.executor = None
