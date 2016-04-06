@@ -23,6 +23,7 @@ import logging
 import os
 import time
 import glob
+import uuid
 
 from impera import protocol
 from impera.agent.handler import Commander
@@ -370,6 +371,11 @@ class Exporter(object):
         tid = Config.get("config", "environment", None)
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
+            return
+        try:
+            uuid.UUID(tid)
+        except ValueError:
+            LOGGER.exception("Invalid uuid configured for this environment.")
             return
 
         self.deploy_code(tid, version)
