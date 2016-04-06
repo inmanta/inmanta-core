@@ -72,6 +72,8 @@ downloadpath: libs""")
         pass
 
     subprocess.check_output(["git", "init"], cwd=path)
+    subprocess.check_output(["git", "config", "user.email", '"test@test.example"'], cwd=path)
+    subprocess.check_output(["git", "config", "user.name", 'Tester test'], cwd=path)
 
     return path
 
@@ -84,7 +86,7 @@ def addFile(modpath, file, content, msg):
 
 def commitmodule(modpath, mesg):
     subprocess.check_output(["git", "add", "*"], cwd=modpath)
-    subprocess.check_output(["git", "commit", "--author=Tester <tester@inmanta.com>","-a", "-m", mesg], cwd=modpath)
+    subprocess.check_output(["git", "commit", "-a", "-m", mesg], cwd=modpath)
     rev = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=modpath).decode("utf-8") .strip()
     return rev
 
