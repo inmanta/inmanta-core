@@ -1,6 +1,7 @@
 from impera.ast.statements import Statement
 from impera.ast.statements.assign import Assign
 from impera.ast.type import NameSpacedResolver
+from impera.execute.runtime import ExecutionContext
 
 
 class BasicBlock(object):
@@ -30,3 +31,10 @@ class BasicBlock(object):
         self.external = self.requires - set(self.variables)
 
         self.external_not_global = [x for x in self.external if "::" not in x]
+
+    def get_requires(self):
+        return self.external
+
+    def emit(self, resolver, queue):
+        for s in self.stmts:
+            s.emit(resolver, queue)

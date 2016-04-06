@@ -109,7 +109,7 @@ class ObjectActions(object):
 
         return False
 
-    def is_list(self):
+    def is_delayed(self):
         """
             Returns true if the "object" is a list. For now an object is a
             list if an add operations exists.
@@ -311,7 +311,7 @@ class Graph(object):
         oa_list = self._statements[statement]
 
         for oa in oa_list:
-            if oa.is_list() and oa.does_read(statement):
+            if oa.is_delayed() and oa.does_read(statement):
                 return True
 
         return False

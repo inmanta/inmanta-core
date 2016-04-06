@@ -16,12 +16,15 @@
     Contact: bart@impera.io
 """
 
-from . import CallStatement
 from impera.ast.variables import Variable, LazyVariable
 from impera.stats import Stats
+from impera.ast.statements import ReferenceStatement, CallStatement
+from impera.execute.runtime import ResultVariable, Waiter
+from impera.execute.proxy import UnsetException
+from impera.plugins.base import Context
 
 
-class FunctionCall(CallStatement):
+class FunctionCall(ReferenceStatement):
     """
         This class models a call to a function
 
@@ -32,97 +35,78 @@ class FunctionCall(CallStatement):
         provides:      return value
         contributes:
     """
+
     def __init__(self, name, arguments):
-        CallStatement.__init__(self)
+        ReferenceStatement.__init__(self, arguments)
         self.name = name
         self.arguments = arguments
 
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        refs = []
-        for i in range(len(self.arguments)):
-            arg = self.arguments[i]
-            refs.append(("arg %d" % i, arg))
+    def normalize(self, resolver):
+        ReferenceStatement.normalize(self, resolver)
+        self.function = resolver.get_type(self.name.full_name)
 
-        return refs
+    def requires_emit(self, resolver, queue):
+        sub = ReferenceStatement.requires_emit(self, resolver, queue)
+        # add lazy vars
+        temp = ResultVariable()
+        temp.set_provider(self)
+        FunctionUnit(queue, resolver, temp, sub, self)
+        return {self: temp}
 
-    def actions(self, state):
-        """
-            @see DynamicStatement#actions
-        """
-        result = state.get_result_reference()
-        actions = [("set", result)]
+    def execute(self, requires, resolver, queue):
+        return requires[self]
 
-        for i in range(len(self.arguments)):
-            ref = state.get_ref("arg %d" % i)
-            actions.append(("get", ref))
-
-        return actions
-
-    def types(self, recursive=False):
-        """
-            @see State#types
-        """
-        return [('function_%d' % id(self), self.name)]
-
-    def __repr__(self):
-        """
-            The representation of this function call
-        """
-        return "Function(%s: %s)" % (self.name, ", ".join([repr(x) for x in self.arguments]))
-
-    def get_argumentlist(self, state):
-        """
-            Return a list of arguments that can be passed to a function/method
-            in python code
-        """
-        arguments = []
-        for i in range(len(self.arguments)):
-            variable = state.get_ref("arg %d" % i)
-            value = variable.value
-
-            if hasattr(value, "has_parameters") and not value.has_parameters():
-                value = value()
-
-            arguments.append(value)
-
-        return arguments
-
-    def evaluate(self, state, _local_scope):
+    def resume(self, requires, resolver, queue, result):
         """
             Evaluate this statement.
         """
         # get the object to call the function on
-        function = state.get_type("function_%d" % id(self))
-        arguments = self.get_argumentlist(state)
+        function = self.function
+        arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
         function.check_args(arguments)
 
+        if function._context is not -1:
+            arguments.insert(function._context,  Context(resolver, queue, self, result))
+
         if function.opts["emits_statements"]:
+
             function(*arguments)
             Stats.get("function call").increment()
-            new_statement = function.emit_statement()
-            self.copy_location(new_statement)
-            child_state = state.add_statement(new_statement)
-            return child_state.get_result_reference()
-
-        def lazy():
-            result = function(*arguments)
+        else:
+            value = function(*arguments)
             Stats.get("function call").increment()
-            return result
-
-        return_type = function.to_type(function._return)
-        if return_type is None:
-            lazy()
-            return None
-
-        return LazyVariable(lazy, return_type)
+            result.set_value(value)
 
 
 class Dummy(object):
+
     def __getattr__(self, name):
         return self
+
+
+class FunctionUnit(Waiter):
+
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
+        Waiter.__init__(self, queue_scheduler)
+        self.result = result
+        result.set_provider(self)
+        self.requires = requires
+        self.function = function
+        self.resolver = resolver
+        self.queue_scheduler = queue_scheduler
+        for (s, r) in requires.items():
+            self.await(r)
+        self.ready(self)
+
+    def execute(self):
+        requires = {k: v.get_value() for (k, v) in self.requires.items()}
+        try:
+            self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
+        except UnsetException as e:
+            self.await(e.get_result_variable())
+
+    def __repr__(self):
+        return repr(self.function)
 
 
 class ExpressionState(object):
@@ -130,6 +114,7 @@ class ExpressionState(object):
         Class emulates a state object to allow a statement to be used as a
         function with positional arguments
     """
+
     def __init__(self, state, expression, arguments, argument_map):
         self.state = state
         self.expression = expression
@@ -201,6 +186,7 @@ class BooleanExpression(CallStatement):
         @param expression: The expression
         @param arguments: A list of unbound arguments for this expression
     """
+
     def __init__(self, expression, arguments):
         CallStatement.__init__(self)
         self.expression = expression

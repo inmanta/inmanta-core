@@ -177,6 +177,7 @@ class DynamicState(State):
     """
 
     def __init__(self, compiler, namespace, statement):
+        raise Exception("depr")
         State.__init__(self, compiler, namespace, statement)
         self._result = None
         self._child_statements = {}
@@ -186,6 +187,7 @@ class DynamicState(State):
         self._resolved = False
 
         self._result_ref = ResultVariable(self)
+        
 
     def add_to_graph(self, graph):
         """

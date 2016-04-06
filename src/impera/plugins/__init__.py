@@ -41,9 +41,7 @@ class PluginStatement(TypeDefinitionStatement):
     def evaluate(self, resolver):
         """
             Evaluate this plugin
-        """
-        self.type.set_resolver(resolver)
-        
+        """        
 
 
 class PluginCompileUnit(CompileUnit):
@@ -75,6 +73,8 @@ class PluginCompileUnit(CompileUnit):
 
             if ns is None:
                 raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
+            
+            cls.namespace = ns
 
             name = name.split("::")[-1]
             statement = PluginStatement(ns, name, cls)

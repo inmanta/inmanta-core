@@ -19,6 +19,7 @@
 from impera.ast.variables import Variable
 from impera.execute.util import Unset, Unknown
 from impera.stats import Stats
+from impera.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
 
 
 class Attribute(object):
@@ -27,6 +28,7 @@ class Attribute(object):
 
         @param entity: The entity this attribute belongs to
     """
+
     def __init__(self, entity, value_type, name):
         self.__name = name  # : String
 
@@ -92,11 +94,18 @@ class Attribute(object):
         instance._attributes[self.name] = value
         Stats.get("set attribute").increment()
 
+    def get_new_Result_Variable(self, instance, queue):
+        out = ResultVariable()
+        out.set_type(self.__type)
+        out.set_provider(instance)
+        return out
+
 
 class RelationAttribute(Attribute):
     """
         An attribute that is a relation
     """
+
     def __init__(self, entity, value_type, name, default):
         Attribute.__init__(self, entity, value_type, name)
         self.end = None
@@ -153,3 +162,14 @@ class RelationAttribute(Attribute):
         if double:
             Stats.get("set relation").increment()
             self.end.set_attribute(value.value, Variable(instance), False)
+
+    def get_new_Result_Variable(self, instance, queue):
+        if self.low == 1 and self.high == 1:
+            out = AttributeVariable(self, instance)
+        elif self.low == 0 and self.high == 1:
+            out = OptionVariable(self, instance, queue)
+        else:
+            out = ListVariable(self,  instance, queue)
+        out.set_type(self.get_type())
+        out.set_provider(self)
+        return out

@@ -21,11 +21,12 @@ import subprocess
 import os
 
 from impera.execute.proxy import DynamicProxy, UnknownException
-from impera.ast.statements.call import ExpressionState
 from impera.execute.util import Unknown
 from impera.execute import NotFoundException
 from impera.ast import Namespace
-from impera.ast.type import BasicResolver
+from impera.ast.type import BasicResolver, Type
+from impera.execute.runtime import Instance, ExecutionUnit
+import impera.ast.statements.call
 
 
 class Context(object):
@@ -33,29 +34,36 @@ class Context(object):
         An instance of this class is used to pass context to the plugin
     """
 
-    def __init__(self, graph, scope, compiler, function):
-        self.graph = graph
-        self.scope = scope
-        self.compiler = compiler
-        self.function = function
+    def __init__(self, resolver, queue, owner, result):
+        self.resolver = resolver
+        self.queue = queue
+        self.owner = owner
+        self.result = result
+        self.compiler = queue.compiler
 
-    def emit_statement(self, stmt):
+    def emit_expression(self, stmt):
         """
             Add a new statement
         """
-        self.function.new_statement = stmt
+        self.owner.copy_location(stmt)
+        stmt.normalize(self.resolver)
+        reqs = stmt.requires_emit(self.resolver, self.queue)
+        ExecutionUnit(self.queue, self.resolver, self.result, reqs, stmt)
 
-    def get_variable(self, name, scope):
-        """
-            Get the given variable
-        """
-        return DynamicProxy.return_value(self.scope.get_variable(name, scope).value)
+    def get_resolver(self):
+        return self.resolver
+
+    def get_queue_scheduler(self):
+        return self.queue
+    
+    def get_compiler(self):
+        return self.queue.get_compiler()
 
     def get_data_dir(self):
         """
             Get the path to the data dir (and create if it does not exist yet
         """
-        data_dir = os.path.join("data", self.scope.name)
+        data_dir = os.path.join("data", self.owner.function.namespace.get_full_name())
 
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, exist_ok=True)
@@ -120,9 +128,13 @@ class Plugin(object, metaclass=PluginMeta):
 
         self.new_statement = None
 
-    def set_resolver(self, resolver):
+    def normalize(self, resolver):
         self.resolver = resolver
-        
+        self.argtypes = [self.to_type(x[1], resolver) for x in self.arguments]
+        self.returntype = self.to_type(self._return, resolver)
+
+        # pass
+
     def _load_signature(self, function):
         """
             Load the signature from the given python function
@@ -182,7 +194,7 @@ class Plugin(object, metaclass=PluginMeta):
 
         return "%s(%s)" % (self.__class__.__function_name__, args)
 
-    def to_type(self, arg_type):
+    def to_type(self, arg_type, resolver):
         """
             Convert a string representation of a type to a type
         """
@@ -190,26 +202,15 @@ class Plugin(object, metaclass=PluginMeta):
             return None
 
         if arg_type == "any":
-            return object
+            return None
 
-        elif arg_type == "expression":
-            return ExpressionState
+        if arg_type == "list":
+            return list
 
-        else:
-            parts = arg_type.split("::")
+        if arg_type == "expression":
+            return impera.ast.statements.call.ExpressionState
 
-            module = parts[0:-1]
-            cls_name = parts[-1]
-
-            if len(module) == 0 and cls_name in ("string", "bool", "number", "list"):
-                module = ["__types__"]
-
-            try:
-                var = self._scope.get_variable(cls_name, module)
-            except NotFoundException:
-                raise NotFoundException("Unable to find type %s" % arg_type)
-
-            return var.value
+        return resolver.get_type(arg_type)
 
         raise Exception("Unable to find type for '%s'" % arg_type)
 
@@ -217,35 +218,10 @@ class Plugin(object, metaclass=PluginMeta):
         """
             Check if value is of arg_type
         """
-        if arg_type == "any":
-            return True
+        if hasattr(arg_type, "validate"):
+            return arg_type.validate(value)
 
-        elif arg_type == "list":
-            return isinstance(value, list)
-
-        elif arg_type == "expression":
-            return isinstance(value, ExpressionState)
-
-        else:
-            parts = arg_type.split("::")
-
-            module = parts[0:-1]
-            cls_name = parts[-1]
-
-            if len(module) == 0 and cls_name in ("string", "bool", "number"):
-                module = ["__types__"]
-
-            try:
-                var = self._scope.get_variable(cls_name, module)
-            except NotFoundException:
-                raise NotFoundException("Unable to find type %s" % arg_type)
-
-            if hasattr(value, "_get_instance"):
-                value = value._get_instance()
-
-            return var.value.validate(value)
-
-        return False
+        return isinstance(value, arg_type)
 
     def check_args(self, args):
         """
@@ -262,7 +238,7 @@ class Plugin(object, metaclass=PluginMeta):
             if isinstance(args[i], Unknown):
                 continue
 
-            if self.arguments[i][0] is not None and not self._is_instance(args[i], self.arguments[i][1]):
+            if self.arguments[i][0] is not None and not self._is_instance(args[i], self.argtypes[i]):
                 raise Exception(("Invalid type for argument %d of '%s', it should be " +
                                  "%s and %s given.") % (i + 1, self.__class__.__function_name__,
                                                         self.arguments[i][1], args[i].__class__.__name__))
@@ -302,22 +278,21 @@ class Plugin(object, metaclass=PluginMeta):
             self.check_requirements()
             new_args = []
             for arg in args:
-                new_args.append(DynamicProxy.return_value(arg))
+                if isinstance(arg, Instance):
+                    new_args.append(DynamicProxy.return_value(arg))
+                else:
+                    new_args.append(arg)
 
-            if self._context >= 0:
-                context = Context(
-                    self._graph, self._scope, self._compiler, self)
-                new_args.insert(self._context, context)
-
+            
             value = self.call(*new_args)
 
-            if self._return is not None and not isinstance(value, Unknown):
+            if self.returntype is not None and not isinstance(value, Unknown):
                 valid = False
                 exception = None
 
                 try:
                     valid = (
-                        value is None or self._is_instance(value, self._return))
+                        value is None or self._is_instance(value, self.returntype))
                 except Exception as exp:
                     exception = exp
 
@@ -327,9 +302,10 @@ class Plugin(object, metaclass=PluginMeta):
                         msg = "\n\tException details: " + str(exception)
 
                     raise Exception("Plugin %s should return value of type %s ('%s' was returned) %s" %
-                                    (self.__class__.__function_name__, self._return, value, msg))
+                                    (self.__class__.__function_name__, self.returntype, value, msg))
 
-            return DynamicProxy.return_value(value)
+            #print(value)
+            return value
         except UnknownException as e:
             # just pass it along
             return e.unknown

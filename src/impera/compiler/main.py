@@ -59,6 +59,9 @@ class Compiler(object):
         """
         return self.__parser
 
+    def get_plugins(self):
+        return self.plugins
+
     def load(self):
         """
             Compile the configuration model
@@ -146,7 +149,6 @@ class Compiler(object):
                     new_ns = Namespace(file_name[:-3])
                     new_ns.parent = namespace
 
-                    self.graph.add_namespace(new_ns, namespace)
                     self._units.append(new_ns)
                     new_ns.unit = FileCompileUnit(self, cf_file, new_ns)
 

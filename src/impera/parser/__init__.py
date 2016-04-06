@@ -89,7 +89,10 @@ class Parser(object):
             Create a reference
         """
         to_list = [str(x.text) for x in node.children]
+        # FIX: cleanup namespaces in refs
+
         ref = Reference(to_list[-1], to_list[:-1])
+        ref.onamespace = self._current_namespace
 
         return ref
 
@@ -114,6 +117,7 @@ class Parser(object):
         to_list = [str(x.text) for x in node.children[0].children]
         ref = Reference(str(node.children[1].text), to_list)
         ref.line = node.children[1].line
+        ref.onamespace = self._current_namespace
 
         if len(node.children[2].children) > 0:
             var = ref
@@ -134,7 +138,7 @@ class Parser(object):
             if node.children[0].text == "CALL":
                 left = self._handle_node(node.children[0])
                 operator = Operator.get_operator_class("==")
-                return operator(left, True)
+                return operator(left, Literal(True))
             else:
                 # lift it
                 node = node.children[0]
@@ -153,6 +157,7 @@ class Parser(object):
             Return a regular expression
         """
         value = Reference("self")  # anonymous value
+        value.onamespace = self._current_namespace
         expr = RegexOp(value, str(node.text)[1:-1])
         return expr
 
@@ -214,10 +219,12 @@ class Parser(object):
 
         implementations = [self._handle_node(x) for x in node.children[1].children]
 
+        expression = BasicBlock(self._current_namespace)
+
         if len(node.children) == 3:
-            expression = self._handle_node(node.children[2])
+            expression.add(self._handle_node(node.children[2]))
         else:
-            expression = None
+            expression.add(Literal(True))
 
         impl_definition = DefineImplement(name, implementations, expression)
 
@@ -248,7 +255,7 @@ class Parser(object):
             Create a function call
         """
         func_name = self._handle_node(node.children[0])
-        if len(func_name.namespace) == 0:
+        if func_name.namespace is None and len(func_name.namespace) == 0:
             func_name.namespace = ["__plugins__"]
 
         if len(node.children) > 1:
@@ -463,6 +470,7 @@ class Parser(object):
         for var_str in variables:
             var_parts = var_str[1].split(".")
             ref = Reference(var_parts[0], [])
+            ref.onamespace = self._current_namespace
 
             if len(var_parts) > 1:
                 var = ref
@@ -551,7 +559,9 @@ class Parser(object):
         var = self._handle_node(node.children[1])
         module_name = "for_%s" % (id(node))
 
-        for_stmt = For(var, loop_var, Reference(module_name, self._current_namespace.to_path()))
+        ref = Reference(module_name, self._current_namespace.to_path())
+        ref.onamespace = self._current_namespace
+        for_stmt = For(var, loop_var, ref)
 
         module_def = BasicBlock()
         module_def.line = node.line

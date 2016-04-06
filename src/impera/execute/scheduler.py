@@ -21,25 +21,26 @@ import sys
 import traceback
 import inspect
 
-from impera.ast.statements import DefinitionStatement, CallStatement, DynamicStatement, TypeDefinitionStatement
-from .state import State, DynamicState
+from impera.ast.statements import DefinitionStatement, CallStatement, TypeDefinitionStatement
+from .state import State
 from impera.execute.scope import Scope
 from impera.execute.util import EntityType, Unset
 from impera.execute.proxy import UnsetException
 from impera.ast.variables import AttributeVariable, Variable
-from impera.plugins.base import Context
+from impera.plugins.base import Context, Plugin
 from impera.stats import Stats
 from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
 
-from impera.ast.statements.define import DefineEntity, DefineTypeConstraint, DefineImplement
-from impera.ast.statements.builtin import DummyStatement
+from impera.ast.statements.define import DefineEntity, DefineImplement
 from impera.compiler.main import Compiler
-from impera.ast.statements.generator import Implement
+from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler, dumpHangs
+from impera.ast.entity import Entity
+from impera.plugins import PluginStatement
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 50
+MAX_ITERATIONS = 500
 
 
 class CallbackHandler(object):
@@ -101,51 +102,25 @@ class Scheduler(object):
         # need to stay in the queue as long as possible
         self._problem_list = {}
 
-    def _evaluate_statement_list(self):
-        """
-            Evaluate the given list of statements. This method will return
-            if a new statement is generated during evaluation or when there
-            is no progress during the evaluation.
+    def dump(self):
+        instances = self.types["std::Entity"].get_all_instances()
 
-            Returns false when not all statements have been evaluated
-        """
-        previous = -1
-        current = 0
+        for i in instances:
+            i.dump()
 
-        while previous < current:
-            previous = current
+    def verify_done(self):
+        instances = self.types["std::Entity"].get_all_instances()
+        notdone = []
+        for i in instances:
+            if not i.verify_done():
+                notdone.append(i)
 
-            for state in list(self._evaluation_queue):
-                if state.can_evaluate() and self.evaluate_statement(state):
-                    self._evaluation_queue.remove(state)
-                    current += 1
+        return notdone
 
-            self._sort_statements()
+    def dump_not_done(self):
 
-        if len(self._evaluation_queue) > 0:
-            return False
-
-        return True
-
-    def evaluate_statement(self, statement):
-        """
-            Evaluate the given statement
-        """
-        try:
-            statement.evaluate()
-
-            return True
-        except UnsetException as exception:
-            # This statement tried to access an attribute that was not set. Add
-            # a "get" action for this variable.
-            attr_var = AttributeVariable.create(Variable(exception.instance),
-                                                exception.attribute)
-            self._graph.add_actions(statement, [("get", attr_var)])
-            Stats.get("backtrack").increment()
-        except Exception as exception:
-            self.show_exception(statement, exception)
-
-        return False
+        for i in self.verify_done():
+            i.dump()
 
     def show_exception(self, statement, message):
         """
@@ -168,6 +143,10 @@ class Scheduler(object):
         """
         # get all relevant stmts
         definitions = [d for d in statements if isinstance(d, DefinitionStatement)]
+        others = [d for d in statements if not isinstance(d, DefinitionStatement)]
+
+        if not len(others) == 0:
+            raise Exception("others not empty %s" % repr(others))
 
         # collect all  types and impls
         types_and_impl = {}
@@ -201,7 +180,8 @@ class Scheduler(object):
         for d in implements:
             d.evaluate(resolver)
 
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, Plugin)}
+        compiler.plugins = {k: v for k, v in types.items() if isinstance(v, Plugin)}
 
         resolver = NameSpacedResolver(types, None)
 
@@ -210,6 +190,8 @@ class Scheduler(object):
 
         for block in blocks:
             block.normalize(resolver)
+
+        self.types = types
 
     def show_error(self, msg: str, scope: Scope):
         """
@@ -333,19 +315,29 @@ class Scheduler(object):
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
 
+        self.scopes = {}
+        rootresolver = Resolver(self.scopes)
+
         # add all other statements to the graph (create the initial model)
-        for stmt in statements:
-            if isinstance(stmt, DynamicStatement):
-                state = DynamicState(compiler, stmt.namespace, stmt)
-                state.add_to_graph(self._graph)
+        for block in blocks:
+            xc = ExecutionContext(block, rootresolver)
+            self.scopes[block.namespace.get_full_name()] = xc
+            block.context = xc
+
+        # setup queues
+        basequeue = []
+        waitqueue = []
+        zerowaiters = []
+        queue = QueueScheduler(compiler, basequeue, waitqueue)
+
+        for block in blocks:
+            block.context.emit(queue)
 
         # start an evaluation loop
         i = 0
         while i < MAX_ITERATIONS:
-            self._sort_statements()
-
             # check if we can stop the execution
-            if len(self._evaluation_queue) == 0 and len(self._wait_queue) == 0:
+            if len(basequeue) == 0 and len(waitqueue) == 0 and len(zerowaiters) == 0:
                 break
             else:
                 i += 1
@@ -355,65 +347,40 @@ class Scheduler(object):
 
             # determine which of those can be evaluated, prefer generator and
             # reference statements over call statements
-            result = False
-            if len(self._evaluation_queue) > 0:
-                LOGGER.debug("  Evaluating normal queue")
-                result = self._evaluate_statement_list()
+            while len(basequeue) > 0:
+                next = basequeue.pop()
+                try:
+                    next.execute()
+                except UnsetException as e:
+                    next.await(e.get_result_variable())
 
-            # not everything was evaluated -> try all statements now
-            if not result:
-                LOGGER.debug("  Evaluating waiting queue")
+            progress = False
 
-                # move statements from the waiting queue. Only move statements
-                # that use a list when all of them use a list.
-                current_len = len(self._evaluation_queue)
+            while len(waitqueue) > 0 and not progress:
+                next = waitqueue.pop(0)
+                if len(next.waiters) == 0:
+                    zerowaiters.append(next)
+                else:
+                    next.freeze()
+                    progress = True
 
-                for statement in self._wait_queue.copy():
-                    if statement not in self._problem_list:
-                        self._evaluation_queue.add(statement)
-                        self._wait_queue.remove(statement)
+            if not progress:
+                waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
+                zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
+                if(len(waitqueue) > 0):
+                    waitqueue.pop(0).freeze()
+                    progress = True
 
-                    else:
-                        if self._problem_list[statement] < 0:
-                            self._problem_list[statement] = i
+            if not progress:
+                print("last resort:")
+                while len(zerowaiters) > 0:
+                    next = zerowaiters.pop()
+                    next.freeze()
 
-                if len(self._evaluation_queue) == current_len and len(self._problem_list) > 0:
-                    # add the oldest statements from the waiting queue to
-                    # the evaluation queue. All statements in this queue are
-                    # now statements that we want to postpone as long as
-                    # possible.
-                    values = sorted(list(self._problem_list.values()))
-                    evaluate_value = values[0]
-
-                    LOGGER.debug("  Using problem statements of generation %d", evaluate_value)
-
-                    for stmt in list(self._problem_list.keys()):
-                        if self._problem_list[stmt] == evaluate_value:
-                            self._evaluation_queue.add(stmt)
-                            self._wait_queue.remove(stmt)
-                            del self._problem_list[stmt]
-
-                self._evaluate_statement_list()
-
-            self._graph.process_un_compared()
         # end evaluation loop
-
-        # call post hook
-        ctx = Context(self._graph, self._graph.root_scope, None, None)
-        CallbackHandler.run_callbacks("post", ctx)
-
-        result = True
-        for state in self._graph.get_statements():
-            if not state.evaluated:
-                sys.stderr.write("Unable to evaluate %s at %s:%d\n" %
-                                 (state, state.statement.filename, state.statement.line))
-                self.print_unresolved(state)
-                result = False
-
-        # check if all values are set
-        if result:
-            self.check_unset()
-            ctx = Context(self._graph, self._graph.root_scope, None, None)
-            CallbackHandler.run_callbacks("verify", ctx)
-
-        return result
+        self.dump_not_done()
+        #print(basequeue, waitqueue)
+        #dumpHangs()
+        print(len(self.types["std::Entity"].get_all_instances()))
+        return True
+        

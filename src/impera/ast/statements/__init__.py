@@ -15,7 +15,7 @@
 
     Contact: bart@impera.io
 """
-
+from impera.execute.runtime import ResultVariable, ExecutionUnit
 
 class Statement(object):
     """
@@ -31,6 +31,9 @@ class Statement(object):
             Copy the location of this statement in the given statement
         """
         statement.location = self.location
+        if hasattr(self, "filename"):
+            statement.filename = self.filename
+            statement.line = self.line
 
     def evaluate(self, state, scope):
         """
@@ -56,6 +59,9 @@ class Statement(object):
         """
         return []
 
+    def get_containing_namespace(self,):
+        return self.namespace
+
 
 class DynamicStatement(Statement):
     """
@@ -65,6 +71,15 @@ class DynamicStatement(Statement):
 
     def __init__(self):
         Statement.__init__(self)
+
+    def normalize(self, resolver):
+        raise Exception("Not Implemented" + str(type(self)))
+
+    def requires(self):
+        raise Exception("Not Implemented" + str(type(self)))
+
+    def execute(self, requires, resolver, queue):
+        raise Exception("Not Implemented" + str(type(self)))
 
     def references(self):
         """
@@ -82,6 +97,25 @@ class DynamicStatement(Statement):
             (action, object, attribute)
         """
         return []
+
+
+class ExpressionStatement(DynamicStatement):
+
+    def __init__(self):
+        DynamicStatement.__init__(self)
+
+    def emit(self, resolver, queue):
+        target = ResultVariable()
+        target.set_provider(self)
+        reqs = self.requires_emit(resolver, queue)
+        ExecutionUnit(queue, resolver, target, reqs, self)
+
+    def requires_emit(self, resolver, queue):
+        """
+            returns a dict of the result variables required, names are an opaque identifier
+            may emit statements to break execution is smaller segements
+        """
+        raise "Not Implemented"
 
 
 class AssignStatement(DynamicStatement):
@@ -107,13 +141,24 @@ class BooleanExpression(DynamicStatement):
         DynamicStatement.__init__(self)
 
 
-class ReferenceStatement(BooleanExpression):
+class ReferenceStatement(ExpressionStatement):
     """
         This class models statements that refer to somethings
     """
 
-    def __init__(self):
-        BooleanExpression.__init__(self)
+    def __init__(self, children):
+        ExpressionStatement.__init__(self)
+        self.children = children
+
+    def normalize(self, resolver):
+        for c in self.children:
+            c.normalize(resolver)
+
+    def requires(self):
+        return [req for v in self.children for req in v.requires()]
+
+    def requires_emit(self, resolver, queue):
+        return {rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()}
 
 
 class DefinitionStatement(Statement):
@@ -131,7 +176,7 @@ class TypeDefinitionStatement(DefinitionStatement):
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
-        self.fullName = namespace.name + "::" + name
+        self.fullName = namespace.get_full_name() + "::" + name
 
     def get_type(self):
         return (self.fullName, self.type)
@@ -146,16 +191,16 @@ class CallStatement(BooleanExpression):
         BooleanExpression.__init__(self)
 
 
-class GeneratorStatement(DynamicStatement):
+class GeneratorStatement(ExpressionStatement):
     """
         This statement models a statement that generates new statements
     """
 
     def __init__(self):
-        DynamicStatement.__init__(self)
+        ExpressionStatement.__init__(self)
 
 
-class Literal(Statement):
+class Literal(ExpressionStatement):
 
     def __init__(self, value):
         Statement.__init__(self)
@@ -169,3 +214,9 @@ class Literal(Statement):
 
     def requires(self):
         return []
+
+    def requires_emit(self, resolver, queue):
+        return {}
+
+    def execute(self, requires, resolver, queue):
+        return self.value

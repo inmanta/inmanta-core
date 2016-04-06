@@ -37,11 +37,13 @@ class BasicResolver(object):
         elif name in TYPES:
             return self.types[name]
         else:
-            full_name = "%s::%s" % (namespace.name, name)
-            if full_name in self.types:
-                return self.types[full_name]
-            else:
-                raise Exception("type not found" + name)
+            cns = namespace
+            while cns is not None:
+                full_name = "%s::%s" % (cns.get_full_name(), name)
+                if full_name in self.types:
+                    return self.types[full_name]
+                cns = cns.get_parent()
+                raise Exception("type not found " + name + " " + namespace.get_full_name())
 
 
 class NameSpacedResolver(object):
@@ -57,13 +59,15 @@ class NameSpacedResolver(object):
             else:
                 raise Exception("type not found " + name)
         elif name in TYPES:
-            return self.types[name]
+            return TYPES[name]
         else:
-            full_name = "%s::%s" % (self.ns.name, name)
-            if full_name in self.types:
-                return self.types[full_name]
-            else:
-                raise Exception("type not found" + name)
+            cns = self.ns
+            while cns is not None:
+                full_name = "%s::%s" % (cns.get_full_name(), name)
+                if full_name in self.types:
+                    return self.types[full_name]
+                cns = cns.get_parent()
+            raise Exception("type not found " + name)
 
     def get_resolver_for(self, namespace: Namespace):
         return NameSpacedResolver(self.types, namespace)
@@ -129,7 +133,8 @@ class Number(Type):
         """
         try:
             float(value)
-        except TypeError:
+        except TypeError as t:
+            print(t)
             raise ValueError("Invalid value '%s'" % value)
         except ValueError:
             raise ValueError("Invalid value '%s'" % value)
@@ -317,7 +322,7 @@ class ConstraintType(Type):
     def __init__(self, name):
         Type.__init__(self)
 
-        self.base_type = None  # : ConstrainableType
+        self.basetype = None  # : ConstrainableType
         self._constraint = None
         self.name = name
         self.namespace = None
@@ -350,10 +355,10 @@ class ConstraintType(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        # throws an exception
-        self.__base_type.validate(value)
 
-        if not self._constraint(Variable(value)):
+        self.basetype.validate(value)
+
+        if not self._constraint(value):
             raise ValueError("Invalid value '%s'" % value)
 
         return True

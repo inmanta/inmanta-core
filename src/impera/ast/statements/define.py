@@ -42,7 +42,6 @@ class DefineEntity(TypeDefinitionStatement):
     def __init__(self, namespace: Namespace, name, comment, parents):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
-        self.fullName = namespace.name + "::" + name
         self.attributes = []
         self.comment = comment
         
@@ -52,8 +51,7 @@ class DefineEntity(TypeDefinitionStatement):
             self.parents.append(Reference("Entity", ["std"]))
 
         self.type = Entity(self.name, namespace)
-
-        
+ 
     def get_type(self):
         return (self.fullName, self.type)
 
@@ -200,7 +198,6 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.basetype = basetype
         self.__expression = None
-        self.__expression_requires = None
         self.type = ConstraintType(name)
 
     def get_expression(self):
@@ -216,17 +213,14 @@ class DefineTypeConstraint(TypeDefinitionStatement):
             type. This variable has the same name as the type.
         """
         contains_var = False
-        self.__expression_requires = []
 
         if hasattr(expression, "arguments"):
             # some sort of function call
             expression = Equals(expression, True)
 
-        for var in expression.get_variables():
-            if var.name == self.name or var.name == "self":
+        for var in expression.requires():
+            if var == self.name or var == "self":
                 contains_var = True
-            else:
-                self.__expression_requires.append(var)
 
         if not contains_var:
             raise Exception("typedef expressions should reference the self variable")
@@ -279,7 +273,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
 
         default = self.type
         default.set_entity(type_class)
-        
+
         for name, value in self.ctor.get_attributes().items():
             default.add_default(name, value)
 

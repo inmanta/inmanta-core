@@ -22,6 +22,8 @@ import logging
 from impera.execute import NotFoundException
 from impera.execute.util import Unset, EntityType
 from setuptools.ssl_support import is_available
+from impera.execute.runtime import ResultVariable, WaitUnit, ExecutionContext, ExecutionUnit
+from fileinput import filename
 
 LOGGER = logging.getLogger(__name__)
 
@@ -56,7 +58,15 @@ class Reference(object):
 
     def requires(self):
         return [self.full_name]
-    
+
+    def requires_emit(self, resolver, queue):
+        # FIXME: may be done more efficient?
+        out = {self.full_name: resolver.lookup(self.full_name)}
+        return out
+
+    def execute(self, requires, resolver, queue):
+        return requires[self.full_name]
+
     def is_available(self, scope):
         """
             Is the value this reference points to available in the given scope
@@ -75,6 +85,9 @@ class Reference(object):
 
         return name + self.name
 
+    def get_containing_namespace(self,):
+        return self.onamespace
+
 
 class Variable(object):
     """
@@ -88,6 +101,13 @@ class Variable(object):
 
         self.__value = value
         self._version = 1
+
+    def copy_location(self, statement):
+        """
+            Copy the location of this statement in the given statement
+        """
+        statement.filename = self.filename
+        statement.line = self.line
 
     def can_compare(self):
         """
@@ -191,6 +211,34 @@ class Variable(object):
     type = property(get_value_type)
 
 
+class AttributeRef(object):
+
+    def __init__(self, target, instance, attribute):
+        self.attribute = attribute
+        self.target = target
+        self.instance = instance
+
+    def resume(self, requires, resolver, queue_scheduler):
+        obj = self.instance.execute(requires, resolver, queue_scheduler).get_value()
+        if isinstance(obj, list):
+            print("KAK")
+        attr = obj.get_attribute(self.attribute)
+        self.attr = attr
+
+        if attr.is_ready():
+            # go ahead
+            self.target.set_value(attr.get_value())
+        elif attr.is_delayed():
+            # wait on delay queue
+            ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
+        else:
+            # wait on execute queue
+            ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
+
+    def execute(self, requires, resolver, queue):
+        return self.attr.get_value()
+
+
 class AttributeVariable(Variable):
     """
         This variable refers to an attribute. This is mostly used to refer to
@@ -206,6 +254,25 @@ class AttributeVariable(Variable):
 
         # if the reference resolves, this attribute contains the instance
         self._instance_value = None
+
+    def normalize(self, resolver):
+        self.instance.normalize(resolver)
+
+    def requires(self):
+        return self.instance.requires()
+
+    def requires_emit(self, resolver, queue):
+        # The tricky one!
+        # make wait chain on right queue
+        temp = ResultVariable()
+        temp.set_provider(self)
+        resumer = AttributeRef(temp, self.instance, self.attribute)
+        self.copy_location(resumer)
+        WaitUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)
+        return {self: temp}
+
+    def execute(self, requires, resolver, queue):
+        return requires[self]
 
     def get_value_type(self):
         """
@@ -321,98 +388,6 @@ class AttributeVariable(Variable):
         cls.__instance_cache[key] = obj
 
         return obj
-
-
-class ResultVariable(Variable):
-    """
-        This variable refers to the result produced by a statement.
-
-        @param statement: The statement to which this variable refers
-    """
-
-    def __init__(self, statement):
-        Variable.__init__(self, None)
-        self.statement = statement
-
-        self.__value_cache = None
-        self._version = 0
-
-    def can_compare(self):
-        """
-            A result variable can be compared when the result of the variable
-            is available.
-        """
-        return self.get_version() > 0
-
-    def get_version(self):
-        """
-            Returns a value > 0 when the result of a statement is available.
-            The version is updated when the statement is evaluated by the
-            DynamicState instance of that statement.
-        """
-        return self._version
-
-    def value_available(self):
-        """
-            This method is called by the statement to indicate a value is
-            available.
-        """
-        self._version += 1
-
-    def get_full_name(self):
-        """
-            Get the full name of the variable
-        """
-        if self.is_available(None):
-            return "(%s)" % self.value
-        return "(?)"
-
-    def get_value(self):
-        """
-            Get the value of the attribute that this variable refers to
-        """
-        # if self._version == 0:
-        #    raise RuntimeWarning("Illegal state: value request but not set")
-        if self.__value_cache is None and self._version > 0:
-            result = self.statement.get_result()
-            if result is not None:
-                self.__value_cache = result.value
-
-        return self.__value_cache
-
-    value = property(get_value, None)
-
-    def __repr__(self):
-        return self.get_full_name()
-
-    def is_available(self, scope):
-        """
-            Is the value of this variable available?
-        """
-        if self.statement.evaluated:
-            # a variable is available
-            return self.statement.get_result().is_available(scope)
-
-        return False
-
-    def __eq__(self, other):
-        if other.__class__ != ResultVariable:  # isinstance is much slower
-            return False
-
-        # check if the first level of statements is evaluated
-        if self.statement.evaluated and other.statement.evaluated:
-            return self.value == other.value
-
-        # compare the statements as backup
-        return self.statement == other.statement
-
-    def compare_key(self):
-        """
-            @see Variable#compare_key
-        """
-        return self.statement
-
-    __hash__ = Variable.__hash__
 
 
 class LazyVariable(Variable):

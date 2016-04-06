@@ -21,8 +21,9 @@
 from impera.execute.util import EntityTypeMeta
 from impera.ast.type import Type, NameSpacedResolver
 from impera import stats
-from lxml.etree import Resolver
 from impera.ast.blocks import BasicBlock
+from impera.execute.runtime import Instance, ResultVariable
+from impera.ast.statements.generator import SubConstructor
 
 
 class Entity(Type):
@@ -58,6 +59,7 @@ class Entity(Type):
         self._index_def = []
         self._index = {}
         self._instance_attributes = {}
+        self.index_queue = {}
 
         self._instance_list = []
 
@@ -66,6 +68,18 @@ class Entity(Type):
     def normalize(self, resolver: NameSpacedResolver):
         for d in self.implementations:
             d.normalize(resolver)
+
+        for i in self.implements:
+            i.normalize(resolver)
+
+        self.subc = SubConstructor(self)
+        self.subc.normalize(resolver)
+
+    def get_sub_constructor(self):
+        return self.subc
+
+    def get_implements(self):
+        return self.implements + [i for p in self.parent_entities for i in p.get_implements()]
 
     """
         A list of all instances that exist in the configuration model
@@ -76,7 +90,12 @@ class Entity(Type):
         """
             Add a default value for an attribute
         """
+        if value is None:
+            return
         self.__default_value[name] = value
+
+    def get_defaults(self):
+        return {}
 
     def get_default_values(self):
         """
@@ -208,28 +227,28 @@ class Entity(Type):
         """
         return self._instance_list
 
-    def add_instance(self, constructor_id, obj):
+    def add_instance(self, obj):
         """
             Register a new instance
         """
         self._instance_list.append(obj)
-        self.ids[obj] = constructor_id
+        self.add_to_index(obj)
 
         for parent in self.parent_entities:
-            parent.add_instance(constructor_id, obj)
+            parent.add_instance(obj)
 
-    def get_instance(self, constructor_id, local_scope):
+    def get_instance(self, attributes, resolver, queue):
         """
             Return an instance of the class defined in this entity
         """
-        cls_type = self.get_class_type()
-        instance = cls_type()
-        instance.__scope__ = local_scope
+        out = Instance(self, resolver, queue)
+        for (k, v) in attributes.items():
+            out.set_attribute(k, v)
 
-        self.add_instance(constructor_id, instance)
+        self.add_instance(out)
 
         stats.Stats.get("construct").increment()
-        return instance
+        return out
 
     def get_class_type(self):
         """
@@ -265,10 +284,10 @@ class Entity(Type):
         """
             Validate the given value
         """
-        if not hasattr(value.__class__, "__definition__"):
-            raise ValueError("Invalid class type %s, should be %s" % (value.__class__.__name__, self))
+        if not isinstance(value, Instance):
+            raise ValueError("Invalid class type for %s, should be %s" % (value, self))
 
-        value_definition = value.__class__.__definition__
+        value_definition = value.type
         if not (value_definition is self or self.is_subclass(value_definition)):
             raise ValueError("Invalid class type for %s, should be %s" % (value, self))
 
@@ -290,7 +309,7 @@ class Entity(Type):
         """
             The representation of this type
         """
-        return "Entity(%s)" % self.name
+        return "Entity(%s::%s)" % (self.namespace, self.name)
 
     def __str__(self):
         """
@@ -323,31 +342,14 @@ class Entity(Type):
     def get_indices(self):
         return self._index_def
 
-    def validate_indexes(self):
-        """
-            Check if all index that have been defined are valid. Each attribute
-            in each index should exist.
-        """
-        attributes = set(self.get_all_attribute_names())
-        for index_attributes in self._index_def:
-            for attribute in index_attributes:
-                if attribute not in attributes:
-                    raise Exception(("Index with attributes %s defined on entity %s is invalid. Attribute %s " +
-                                     "does not exist in this entity.")
-                                    % (", ".join(index_attributes), self.__name, attribute))
-
-    def update_index(self, instance, attribute, value):
+    def add_to_index(self, instance):
         """
             Update indexes based on the instance and the attribute that has
             been set
         """
-        if instance not in self._instance_attributes:
-            self._instance_attributes[instance] = {}
 
-        self._instance_attributes[instance][attribute] = value
-
+        attributes = {k: v.get_value() for (k, v) in instance.slots.items() if v.is_ready()}
         # check if an index entry can be added
-        attributes = self._instance_attributes[instance].keys()
         for index_attributes in self._index_def:
             index_ok = True
             key = []
@@ -355,8 +357,7 @@ class Entity(Type):
                 if attribute not in attributes:
                     index_ok = False
                 else:
-                    attr_value = self._instance_attributes[instance][attribute].value
-                    key.append("%s=%s" % (attribute, attr_value))
+                    key.append("%s=%s" % (attribute, attributes[attribute]))
 
             if index_ok:
                 key = ", ".join(key)
@@ -366,7 +367,12 @@ class Entity(Type):
 
                 self._index[key] = instance
 
-    def lookup_index(self, params):
+                if key in self.index_queue:
+                    for x in self.index_queue[key]:
+                        x.set_value(instance)
+                    self.index_queue.pop(key)
+
+    def lookup_index(self, params, target: ResultVariable = None):
         """
             Search an instance in the index.
         """
@@ -382,10 +388,18 @@ class Entity(Type):
 
         key = ", ".join(["%s=%s" % x for x in params])
 
-        if key in self._index:
-            return self._index[key]
-
-        return None
+        if target is None:
+            if key in self._index:
+                return self._index[key]
+            else:
+                return None
+        elif key in self._index:
+            target.set_value(self._index[key])
+        else:
+            if key in self.index_queue:
+                self.index_queue[key].append(target)
+            else:
+                self.index_queue[key] = [target]
 
     def get_entity(self):
         """
@@ -425,8 +439,8 @@ class Implement(object):
         self.constraint = None
         self.implementations = []
 
-    def check(self):
-        print("OK")
+    def normalize(self, resolver: NameSpacedResolver):
+        self.constraint.normalize(resolver)
 
 
 class Default(Type):
@@ -438,6 +452,9 @@ class Default(Type):
         self.name = name
         self.entity = None
         self._defaults = {}
+
+    def get_defaults(self):
+        return self._defaults
 
     def set_entity(self, entity: Entity):
         self.entity = entity
