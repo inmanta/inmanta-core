@@ -29,6 +29,7 @@ heartbeat-interval = 60
 fact-expire = 60
 state-dir=/var/lib/impera
 
+node-name=vm1.dev.inmanta.com
 environment=1cc5c6ad-7b90-4547-b45f-2ccee1dac50b
 agent-names=\$node-name
 
