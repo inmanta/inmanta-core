@@ -33,6 +33,7 @@ import time
 import base64
 
 from mongoengine import connect, errors
+from mongoengine.connection import disconnect
 from impera import methods
 from impera import protocol
 from impera import env
@@ -112,6 +113,10 @@ class Server(protocol.ServerEndpoint):
                 agent = list(self._requires_agents[env_id]["agents"])[0]
                 self._requires_agents[env_id]["agents"].remove(agent)
                 self._ensure_agent(env_id, agent)
+
+    def stop(self):
+        disconnect()
+        super().stop()
 
     def check_keys(self):
         """

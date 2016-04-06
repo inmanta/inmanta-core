@@ -37,6 +37,8 @@ import tornado.web
 import tornado.gen
 from impera import methods
 from impera.config import Config
+from tornado.httpserver import HTTPServer
+from tornado.ioloop import IOLoop
 
 
 LOGGER = logging.getLogger(__name__)
@@ -475,16 +477,20 @@ class RESTTransport(Transport):
             port = Config.get()[self.id]["port"]
 
         application = tornado.web.Application(handlers)
-        application.listen(port)
+        self.http_server = HTTPServer(application)
+        self.http_server.listen(port)
+
+        LOGGER.debug("Start REST transport")
         super().start()
 
     def run(self):
         LOGGER.debug("Starting tornado IOLoop")
-        tornado.ioloop.IOLoop.instance().start()
+        IOLoop.current().start()
 
     def stop_endpoint(self):
         super().stop()
-        tornado.ioloop.IOLoop.instance().stop()
+        self.http_server.stop()
+        IOLoop.current().stop()
 
     def start_client(self):
         pass
