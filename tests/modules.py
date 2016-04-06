@@ -16,15 +16,14 @@
     Contact: bart@impera.io
 """
 
-from impera import app
-from impera import module
 from _io import StringIO
-
 import os
 import logging
 import unittest
 from unittest import mock
 
+from impera import app  # NOQA
+from impera import module
 from nose.tools import raises
 
 
@@ -36,7 +35,7 @@ def test_module():
 @raises(module.InvalidModuleException)
 def test_bad_module():
     bad_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod2")
-    _mod2 = module.Module(project=mock.Mock(), path=bad_mod_dir)
+    module.Module(project=mock.Mock(), path=bad_mod_dir)
 
 
 class testModuleName(unittest.TestCase):
@@ -59,7 +58,7 @@ class testModuleName(unittest.TestCase):
 
     def test_wrong_name(self):
         mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod3")
-        _mod1 = module.Module(project=mock.Mock(), path=mod_dir)
+        module.Module(project=mock.Mock(), path=mod_dir)
 
         self.handler.flush()
         assert("The name in the module file (mod1) does not match the directory name (mod3)" in self.stream.getvalue().strip())
