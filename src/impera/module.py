@@ -432,6 +432,8 @@ class Module(GitVersioned):
         new_source = source_string
         try:
             result = util.parse_url(source_string)
+            if result.scheme is None:
+                return new_source
             if result.scheme != "http" and result.scheme != "https":
                 # try to convert it to an anonymous https url
                 new_source = source_string.replace(result.scheme, "http")
@@ -443,8 +445,7 @@ class Module(GitVersioned):
                 new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
 
         if new_source != source_string:
-            LOGGER.info("Reformated source from %s to %s" %
-                        (source_string, new_source))
+            LOGGER.info("Reformated source from %s to %s" % (source_string, new_source))
 
         return new_source
 
