@@ -17,6 +17,9 @@ class BasicBlock(object):
     def get_variables(self):
         return self.variables
 
+    def add_var(self, name):
+        self.variables.append(name)
+
     def normalize(self, resolver: NameSpacedResolver):
         resolver = resolver.get_resolver_for(self.namespace)
 

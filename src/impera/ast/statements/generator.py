@@ -144,61 +144,44 @@ class For(GeneratorStatement):
         A for loop
     """
 
-    def __init__(self, variable, loop_var, module_name):
+    def __init__(self, variable, loop_var, module):
         GeneratorStatement.__init__(self)
         self.variable = variable
         self.loop_var = loop_var
-        self.module_name = module_name
+        self.module = module
 
     def __repr__(self):
         return "For(%s)" % self.variable
 
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        return [("variable", self.variable)]
+    def normalize(self, resolver):
+        self.variable.normalize(resolver)
+        # self.loop_var.normalize(resolver)
+        self.module.normalize(resolver)
 
-    def actions(self, state):
-        """
-            @see DynamicStatement#actions
-        """
-        actions = []
-        instance = state.get_ref("variable")
-        actions.append(("get", instance))
-        return actions
+    def requires(self):
+        base = self.variable.requires()
+        var = self.loop_var
+        ext = self.module.requires()
+        ext.add_var(var)
+        return [set(base + ext) - set(var)]
 
-    def evaluate(self, state, local_scope):
+    def requires_emit(self, resolver, queue):
+        return self.base.requires_emit(resolver, queue)
+
+    def execute(self, requires, resolver, queue):
         """
             Evaluate this statement.
         """
-        var = state.get_ref("variable").value
+        var = self.base.execute(requires, resolver, queue)
 
         if isinstance(var, Unknown):
             return
 
         for loop_var in var:
             # generate a subscope/namespace for each loop
-            object_id = Scope.object_to_name(loop_var)
-            namespace = Namespace(object_id, state.namespace)
-
-            sub_scope = Scope.get_or_create_scope(state.graph,
-                                                  namespace.to_path())
-
-            # add the loop variable to the scope
-            if not isinstance(loop_var, Variable):
-                loop_var = Variable(loop_var)
-
-            sub_scope.add_variable(self.loop_var, loop_var)
-
-            # generate the import statement
-            import_stmt = Import(self.module_name)
-            import_stmt.namespace = namespace
-            import_stmt.child_namespace = False
-
-            child_state = DynamicState(state.compiler, namespace, import_stmt)
-            child_state.add_to_graph(state.graph)
-            state._child_statements[import_stmt] = child_state
+            xc = ExecutionContext(self.module, resolver)
+            xc.lookup(self.loop_var, loop_var)
+            xc.emit(queue)
 
 
 class Constructor(GeneratorStatement):

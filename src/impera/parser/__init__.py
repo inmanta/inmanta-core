@@ -557,18 +557,15 @@ class Parser(object):
         """
         loop_var = str(node.children[0])
         var = self._handle_node(node.children[1])
-        module_name = "for_%s" % (id(node))
-
-        ref = Reference(module_name, self._current_namespace.to_path())
-        ref.onamespace = self._current_namespace
-        for_stmt = For(var, loop_var, ref)
-
-        module_def = BasicBlock()
+       
+        module_def = BasicBlock(self._current_namespace)
         module_def.line = node.line
         module_def.filename = self._filename
         for stmt in node.children[2].children:
             module_def.add(self._handle_node(stmt))
 
+        for_stmt = For(var, loop_var, module_def)
+        
         return for_stmt
 
     def _handle_node(self, node):
