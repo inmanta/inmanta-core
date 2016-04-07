@@ -58,9 +58,9 @@ class Scheduler(object):
         # need to stay in the queue as long as possible
         self._problem_list = {}
 
-    def dump(self):
-        instances = self.types["std::Entity"].get_all_instances()
-
+    def dump(self, type="std::Entity"):
+        instances = self.types[type].get_all_instances()
+        
         for i in instances:
             i.dump()
 
@@ -249,8 +249,9 @@ class Scheduler(object):
                     next.freeze()
 
         # end evaluation loop
-        self.dump_not_done()
+        #self.dump_not_done()
         #print(basequeue, waitqueue)
-        # dumpHangs()
+        #dumpHangs()
+        self.dump()
         print(len(self.types["std::Entity"].get_all_instances()))
         return True

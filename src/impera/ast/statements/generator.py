@@ -161,9 +161,9 @@ class For(GeneratorStatement):
     def requires(self):
         base = self.variable.requires()
         var = self.loop_var
-        ext = self.module.requires()
-        ext.add_var(var)
-        return [set(base + ext) - set(var)]
+        ext = self.module.requires
+        self.module.add_var(var)
+        return list(set(base).union(ext) - set(var))
 
     def requires_emit(self, resolver, queue):
         return self.base.requires_emit(resolver, queue)

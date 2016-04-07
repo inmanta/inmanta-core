@@ -30,7 +30,7 @@ def do_compile():
     """
         Run run run
     """
-    module.Project.get().verify()
+    #module.Project.get().verify()
     compiler = main.Compiler()
 
     success = False
@@ -45,8 +45,7 @@ def do_compile():
 
         if not success:
             sys.stderr.write("Unable to execute all statements.\n")
-        else:
-            return graph.root_scope
+        return sched
 
     except Exception:
         LOGGER.exception("An exception occurred during compile")

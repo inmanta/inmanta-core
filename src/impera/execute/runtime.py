@@ -177,8 +177,8 @@ waitersdone = []
 def dumpHangs():
     for i in waiters:
         print ("Waiting", i, [(r, r.provider) for r in i.Xdepends if not r.can_get()])
-    for i in waitersdone:
-        print ("Done", i)
+    # for i in waitersdone:
+    #    print ("Done", i)
 
 
 class Waiter(object):
@@ -377,6 +377,7 @@ class Instance(ExecutionContext):
         self.slots = {n: type.get_attribute(n).get_new_Result_Variable(self, queue) for n in type.get_all_attribute_names()}
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self)
+        self.sid = id(self)
 
     def get_type(self):
         return self.type
@@ -390,15 +391,16 @@ class Instance(ExecutionContext):
         return self.slots[name]
 
     def __repr__(self):
-        return str(self.type)
+        return "%s %02x" % (self.type, self.sid)
 
     def dump(self):
         print("------------ ")
-        print(self.type.get_namespace().get_full_name() + "::" + self.type.name)
+        print(str(self))
         print("------------ ")
         for (n, v) in self.slots.items():
             if(v.can_get()):
-                print("%s\t\t%s" % (n, v.get_value()))
+                value = v.get_value()
+                print("%s\t\t%s" % (n, value))
             else:
                 print("BAD: %s\t\t%s" % (n, v.provider))
 
