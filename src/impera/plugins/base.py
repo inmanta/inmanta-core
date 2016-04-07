@@ -24,7 +24,6 @@ from impera.execute.proxy import DynamicProxy, UnknownException
 from impera.execute.util import Unknown
 from impera.execute import NotFoundException
 from impera.ast import Namespace
-from impera.ast.type import BasicResolver, Type
 from impera.execute.runtime import Instance, ExecutionUnit
 import impera.ast.statements.call
 

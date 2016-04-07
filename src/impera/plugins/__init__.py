@@ -16,7 +16,6 @@
     Contact: bart@impera.io
 """
 
-from . import base
 from impera.compiler.unit import CompileUnit
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.ast.variables import Variable

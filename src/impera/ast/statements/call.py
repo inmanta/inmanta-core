@@ -21,7 +21,7 @@ from impera.stats import Stats
 from impera.ast.statements import ReferenceStatement, CallStatement
 from impera.execute.runtime import ResultVariable, Waiter
 from impera.execute.proxy import UnsetException
-from impera.plugins.base import Context
+import impera.plugins.base
 
 
 class FunctionCall(ReferenceStatement):
@@ -66,7 +66,7 @@ class FunctionCall(ReferenceStatement):
         function.check_args(arguments)
 
         if function._context is not -1:
-            arguments.insert(function._context,  Context(resolver, queue, self, result))
+            arguments.insert(function._context,  impera.plugins.base.Context(resolver, queue, self, result))
 
         if function.opts["emits_statements"]:
 

@@ -22,12 +22,10 @@ import traceback
 import inspect
 
 from impera.ast.statements import DefinitionStatement, CallStatement, TypeDefinitionStatement
-from .state import State
-from impera.execute.scope import Scope
-from impera.execute.util import EntityType, Unset
+from impera.execute.util import Unset
 from impera.execute.proxy import UnsetException
 from impera.ast.variables import AttributeVariable, Variable
-from impera.plugins.base import Context, Plugin
+import impera.plugins.base
 from impera.stats import Stats
 from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
 
@@ -41,48 +39,6 @@ DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 500
-
-
-class CallbackHandler(object):
-    """
-        This class registers and handles callbacks
-    """
-    _callbacks = {}
-
-    @classmethod
-    def schedule_callback(cls, when, callback):
-        """
-            Schedule a callback
-        """
-        if when not in cls._callbacks:
-            cls._callbacks[when] = []
-
-        cls._callbacks[when].append(callback)
-
-    @classmethod
-    def _call(cls, func, context):
-        """
-            Call the given function
-        """
-        arg_spec = inspect.getfullargspec(func)
-
-        arg_len = len(arg_spec.args)
-        if arg_len > 1:
-            raise Exception("Callback function can only have a context parameter")
-
-        if arg_len == 0 or arg_spec.args[0] == "self":
-            func()
-        else:
-            func(context)
-
-    @classmethod
-    def run_callbacks(cls, when, context):
-        """
-            Run callbacks for when
-        """
-        if when in cls._callbacks:
-            for callback in cls._callbacks[when]:
-                cls._call(callback, context)
 
 
 class Scheduler(object):
@@ -180,8 +136,8 @@ class Scheduler(object):
         for d in implements:
             d.evaluate(resolver)
 
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, Plugin)}
-        compiler.plugins = {k: v for k, v in types.items() if isinstance(v, Plugin)}
+        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, impera.plugins.base.Plugin)}
+        compiler.plugins = {k: v for k, v in types.items() if isinstance(v, impera.plugins.base.Plugin)}
 
         resolver = NameSpacedResolver(types, None)
 
@@ -192,52 +148,6 @@ class Scheduler(object):
             block.normalize(resolver)
 
         self.types = types
-
-    def show_error(self, msg: str, scope: Scope):
-        """
-            Print out an error and the filename and line where it occurs
-        """
-        sys.stderr.write(msg + " (%s:%d) [%s]\n" %
-                         (scope.filename, scope.line, " > ".join(scope.path())))
-
-    def print_unresolved(self, stmt: State):
-        """
-            If the given stmt is not resolved it will return a list of
-            unresolved references.
-        """
-        if stmt.resolved():
-            return []
-
-        scope = stmt.get_local_scope()
-        for ref in stmt._refs.values():
-            if not ref.is_available(scope):
-                if isinstance(ref, AttributeVariable):
-                    if self._check_required(ref, scope):
-                        continue
-
-                self.show_error("\t%s not available in scope %s" % (ref, scope), scope)
-
-    def _check_required(self, attr_var: AttributeVariable, scope: Scope):
-        """
-            Check if the given attribute of the instance in attr_var is required and not set, and therefore causing
-            this error.
-        """
-        try:  # catch exceptions, because we are navigating parts of the model that might not have been resolved yet!
-            instance = attr_var.instance.value
-            entity = instance.__class__.__entity__
-            attributes = entity.attributes
-            attribute = attr_var.attribute
-
-            if attribute not in attributes:
-                self.show_error("\tEntity %s should have attributes %s" % (entity.get_full_name(), attribute), scope)
-                return
-
-            attr_obj = attributes[attribute]
-            if attr_obj.low > 0:
-                self.show_error("\tAttribute %s of entity %s should have a value." % (attribute, entity.get_full_name()), scope)
-                return
-        except Exception:
-            pass
 
     def check_unset_attributes(self, obj):
         """
@@ -252,17 +162,6 @@ class Scheduler(object):
             if isinstance(value, Unset):
                 self.show_exception(obj.__statement__, "Attribute '%s' of object %s is not set." % (attr, obj))
 
-    def check_unset(self):
-        """
-            Check if attributes are left un-set
-        """
-        for sub_scope in self._graph.root_scope.get_child_scopes():
-            for var in sub_scope.variables():
-                if var.is_available(sub_scope):
-                    value = var.value
-
-                    if isinstance(value, EntityType):
-                        self.check_unset_attributes(value)
 
     def format_exception_info(self, max_tb_level=100):
         """
@@ -279,34 +178,6 @@ class Scheduler(object):
         exec_tb = traceback.format_tb(trbk, max_tb_level)
 
         return (exec_name, exec_args, exec_tb)
-
-    def _sort_statements(self):
-        """
-            This method sorts all statements in the graph into an evaluation
-            queue and a wait queue
-        """
-        self._evaluation_queue = set()
-
-        for state in self._graph.get_statements():
-            try:
-                if state.evaluated or state in self._evaluation_queue or state in self._wait_queue:
-                    pass
-
-                elif state.resolved():
-                    # lists are hard to schedule correctly, so make them a
-                    # special waiting case
-                    if self._graph.uses_list(state):
-                        self._problem_list[state] = -1
-                        self._wait_queue.add(state)
-
-                    elif isinstance(state.statement, CallStatement):
-                        self._wait_queue.add(state)
-
-                    else:
-                        self._evaluation_queue.add(state)
-
-            except Exception as exception:
-                self.show_exception(state, exception)
 
     def run(self, compiler, statements, blocks):
         """
@@ -380,7 +251,6 @@ class Scheduler(object):
         # end evaluation loop
         self.dump_not_done()
         #print(basequeue, waitqueue)
-        #dumpHangs()
+        # dumpHangs()
         print(len(self.types["std::Entity"].get_all_instances()))
         return True
-        

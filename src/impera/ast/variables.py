@@ -20,7 +20,7 @@ import logging
 
 
 from impera.execute import NotFoundException
-from impera.execute.util import Unset, EntityType
+from impera.execute.util import Unset
 from setuptools.ssl_support import is_available
 from impera.execute.runtime import ResultVariable, WaitUnit, ExecutionContext, ExecutionUnit
 from fileinput import filename

@@ -26,6 +26,7 @@ from impera.compiler import do_compile
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
 from impera.stats import Stats
+import time
 
 LOGGER = logging.getLogger()
 
@@ -52,7 +53,10 @@ def compile_project(options):
         p = pstats.Stats('run.profile')
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
+        t0 = time.time()
         result = do_compile()
+        t1 = time.time()
+        print(t1-t0)
 
     return result
 

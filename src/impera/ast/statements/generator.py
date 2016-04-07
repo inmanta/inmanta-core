@@ -23,8 +23,6 @@ from impera.ast import Namespace
 from impera.ast.statements.assign import SetAttribute
 from impera.ast.variables import AttributeVariable, Reference, Variable
 from impera.execute import DuplicateVariableException, NotFoundException
-from impera.execute.scope import Scope
-from impera.execute.state import DynamicState
 from impera.stats import Stats
 from impera.execute.util import Unknown
 from impera.execute.runtime import ExecutionContext, ResultVariable

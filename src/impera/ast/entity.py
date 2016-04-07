@@ -18,7 +18,6 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from impera.execute.util import EntityTypeMeta
 from impera.ast.type import Type, NameSpacedResolver
 from impera import stats
 from impera.ast.blocks import BasicBlock
