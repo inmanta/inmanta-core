@@ -23,7 +23,6 @@ import os
 import imp
 
 from impera.ast import Namespace
-from impera.ast.statements.builtin import BuiltinCompileUnit
 from impera.ast.statements.define import DefineEntity, DefineRelation
 from impera.ast.variables import Reference
 from impera.compiler.unit import FileCompileUnit

@@ -18,7 +18,7 @@
 
 from impera.ast.variables import Variable, LazyVariable
 from impera.stats import Stats
-from impera.ast.statements import ReferenceStatement, CallStatement
+from impera.ast.statements import ReferenceStatement
 from impera.execute.runtime import ResultVariable, Waiter
 from impera.execute.proxy import UnsetException
 import impera.plugins.base
@@ -103,6 +103,7 @@ class FunctionUnit(Waiter):
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
         except UnsetException as e:
+            e.get_result_variable().mark="2"
             self.await(e.get_result_variable())
 
     def __repr__(self):
@@ -177,92 +178,3 @@ class ExpressionState(object):
 
     def __repr__(self):
         return "exp state: %s " % repr(self.expression)
-
-
-class BooleanExpression(CallStatement):
-    """
-        Define a new expression
-
-        @param expression: The expression
-        @param arguments: A list of unbound arguments for this expression
-    """
-
-    def __init__(self, expression, arguments):
-        CallStatement.__init__(self)
-        self.expression = expression
-        self.arguments = arguments
-
-        if arguments is None:
-            self.arguments = []
-
-        self._argument_map = {}
-
-    def __repr__(self):
-        """
-            The representation of this expression
-        """
-        return "BooleanExpression(%s)" % ", ".join([str(x) for x in self.arguments])
-
-    def types(self, recursive=False):
-        """
-            @see State#types
-        """
-        if hasattr(self.expression, "types"):
-            return self.expression.types()
-        return []
-
-    def _process_references(self, refs):
-        """
-            Process the given list of references
-        """
-        requires = []
-        for name, ref in refs:
-            if hasattr(ref, "name"):
-                if ref.name in self.arguments and len(ref.namespace) == 0:
-                    # keep the ref for us
-                    self._argument_map[name] = (self.arguments.index(ref.name), ref)
-
-                elif ref.name == "self":
-                    # self is always an argument!
-                    self._argument_map[name] = (len(self.arguments), ref)
-                    self.arguments.append("self")
-
-                else:
-                    requires.append((name, ref))
-            else:
-                requires.append((name, ref))
-
-        return requires
-
-    def references(self):
-        """
-            @see DynamicStatement#references
-
-            This expression needs references to all non-argument references
-            of expression
-        """
-        refs = self.expression.references()
-        req = self._process_references(refs)
-        return req
-
-    def new_statements(self, state):
-        """
-            Hack to register the expression variables -> we need the state  for this
-        """
-        exp_state = ExpressionState(state, self.expression, self.arguments, self._argument_map)
-        state.set_attribute("exp", exp_state)
-
-    def actions(self, state):
-        """
-            @see DynamicStatement#actions
-        """
-        return [("set", state.get_result_reference())]
-
-    def evaluate(self, state, _local_scope):
-        """
-            Evaluate this statement.
-
-            This actually defines a function
-        """
-        exp_state = state.get_attribute("exp")
-        return exp_state

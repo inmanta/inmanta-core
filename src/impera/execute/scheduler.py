@@ -21,7 +21,7 @@ import sys
 import traceback
 import inspect
 
-from impera.ast.statements import DefinitionStatement, CallStatement, TypeDefinitionStatement
+from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.execute.util import Unset
 from impera.execute.proxy import UnsetException
 from impera.ast.variables import AttributeVariable, Variable
@@ -223,6 +223,7 @@ class Scheduler(object):
                 try:
                     next.execute()
                 except UnsetException as e:
+                    e.get_result_variable().mark = True
                     next.await(e.get_result_variable())
 
             progress = False

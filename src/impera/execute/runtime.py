@@ -399,7 +399,8 @@ class Instance(ExecutionContext):
         print("------------ ")
         for (n, v) in self.slots.items():
             if(v.can_get()):
-                value = v.get_value()
+              
+                value = v.value
                 print("%s\t\t%s" % (n, value))
             else:
                 print("BAD: %s\t\t%s" % (n, v.provider))

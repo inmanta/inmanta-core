@@ -81,23 +81,6 @@ class DynamicStatement(Statement):
     def execute(self, requires, resolver, queue):
         raise Exception("Not Implemented" + str(type(self)))
 
-    def references(self):
-        """
-            Return a list of tupples with as first element the name of make
-            the reference result available and the second element the reference
-            for which the value is required
-        """
-        return []
-
-    def actions(self, state):
-        """
-            Returns which attributes it uses and which attributes it modifies.
-            This method is called after resolved() == True
-
-            (action, object, attribute)
-        """
-        return []
-
 
 class ExpressionStatement(DynamicStatement):
 
@@ -130,15 +113,6 @@ class AssignStatement(DynamicStatement):
 
     def normalize(self, resolver):
         self.rhs.normalize(resolver)
-
-
-class BooleanExpression(DynamicStatement):
-    """
-    This class models expressions
-    """
-
-    def __init__(self):
-        DynamicStatement.__init__(self)
 
 
 class ReferenceStatement(ExpressionStatement):
@@ -180,15 +154,6 @@ class TypeDefinitionStatement(DefinitionStatement):
 
     def get_type(self):
         return (self.fullName, self.type)
-
-
-class CallStatement(BooleanExpression):
-    """
-        Base class for statements that call python code
-    """
-
-    def __init__(self):
-        BooleanExpression.__init__(self)
 
 
 class GeneratorStatement(ExpressionStatement):

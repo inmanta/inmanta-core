@@ -22,10 +22,10 @@ import antlr3
 from impera.ast.constraint.expression import Operator
 from impera.ast.constraint.expression import Regex as RegexOp
 from impera.ast.statements.assign import SetAttribute, Assign, CreateList, IndexLookup, StringFormat
-from impera.ast.statements.call import FunctionCall, BooleanExpression
+from impera.ast.statements.call import FunctionCall
 from impera.ast.statements.define import DefineEntity, DefineTypeDefault, DefineImplementation, DefineTypeConstraint
 from impera.ast.statements.define import DefineImplement, DefineRelation, DefineIndex
-from impera.ast.statements.generator import Constructor, Import, For
+from impera.ast.statements.generator import Constructor, For
 from impera.ast.statements import Literal
 from impera.ast.type import TYPES, Bool, Number
 from impera.ast.variables import Reference, AttributeVariable

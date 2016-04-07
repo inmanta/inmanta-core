@@ -66,43 +66,6 @@ class CreateList(ExpressionStatement):
     def __repr__(self):
         return "List()"
 
-
-class GetAttribute(ReferenceStatement):
-    """
-        Get the value of an attribute
-    """
-
-    def __init__(self, instance_name, attribute_name):
-        ReferenceStatement.__init__(self)
-        self.instance_name = instance_name
-        self.attribute_name = attribute_name
-
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        return [("instance", self.instance_name)]
-
-    def actions(self, state):
-        """
-            @see DynamicStatement#actions
-        """
-        instance_ref = state.get_ref("instance")
-        return [("get", AttributeVariable.create(instance_ref, self.attribute_name))]
-
-    def evaluate(self, state, local_scope):
-        """
-            Retrieve the attribute value
-        """
-        instance_ref = state.get_ref("instance")
-        value = getattr(instance_ref.value, self.attribute_name)
-        state.graph.add_alias(AttributeVariable.create(instance_ref, self.attribute_name), value)
-        return value
-
-    def __repr__(self):
-        return "Get(%s.%s)" % (self.instance_name, self.attribute_name)
-
-
 class SetAttribute(AssignStatement):
     """
         Set an attribute of a given instance to a given value
