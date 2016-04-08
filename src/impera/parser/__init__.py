@@ -270,25 +270,6 @@ class Parser(object):
         fnc = FunctionCall(func_name, arguments)
         return fnc
 
-    @action(imperaParser.METHOD)
-    def create_method_call(self, node):
-        """
-            This is a chained call that has a root and one or more function.
-        """
-        var = self._handle_node(node.children[0])
-
-        return_call = self._handle_node(node.children[1])
-        return_call.arguments.insert(0, var)
-
-        if len(node.children) > 2:
-            calls = node.children[2:]
-            for call in calls:
-                fn_call = self._handle_node(call)
-                fn_call.arguments.insert(0, return_call)
-                return_call = fn_call
-
-        return return_call
-
     @action(imperaParser.LIST)
     def create_list(self, node):
         """
@@ -370,26 +351,6 @@ class Parser(object):
         Number.validate(value)
         return Literal(Number.cast(value))
 
-    @action(imperaParser.ANON)
-    def create_anonymous_implementation(self, node):
-        """
-            Add an "anonymous" class definition to the specific instance of an entity.
-        """
-        ctor = self._handle_node(node.children[0])
-
-        if len(node.children) == 1:
-            return ctor
-
-        # create a module for this constructor
-        module_def = DefineImplementation(hex(id(ctor)))
-        module_def.namespace = self._current_namespace
-        for stmt in node.children[1].children:
-            module_def.add_statement(self._handle_node(stmt))
-
-        ctor.implemented = True
-        self._stack.append(module_def)
-
-        return ctor
 
     @action(imperaParser.HASH)
     def create_hash_lookup(self, node):
@@ -451,17 +412,6 @@ class Parser(object):
 
         return ret
 
-    @action(imperaParser.EXPRESSION)
-    def create_expression(self, node):
-        """
-            Create an expression that can be evaluated
-        """
-        if len(node.children) == 0:
-            return None
-
-        expr = self._handle_node(node.children[0])
-        return BooleanExpression(expr, None)
-
     def create_string_format(self, format_string, variables):
         """
             Create a string interpolation statement
@@ -519,28 +469,6 @@ class Parser(object):
         """
         return self._handle_node(node.children[0])
 
-    @action(imperaParser.INCLUDE)
-    def create_import(self, node):
-        """
-            Create an import statement
-        """
-        imp = Import(self._handle_node(node.children[0]))
-        return imp
-
-    @action(imperaParser.LAMBDA)
-    def create_lambda(self, node):
-        """
-            Create a lambda expression
-        """
-        arg = str(node.children[0])
-        if node.children[1].type == imperaParser.ORPHAN:
-            expr = self._handle_node(node.children[1].children[0])
-            expr.register = True
-        else:
-            expr = self._handle_node(node.children[1])
-
-        return BooleanExpression(expr, [arg])
-
     @action(imperaParser.ML_STRING)
     def create_mlstring(self, node):
         """
@@ -574,7 +502,7 @@ class Parser(object):
         """
         create_func = action.get(node)
         if create_func is None:
-            raise Exception("Unable to handle statement %s (%d)" % (node, node.type))
+            raise Exception("Unable to handle statement %s (%d) %s" % (node, node.type, self._filename))
 
         ast_node = create_func(self, node)
         if hasattr(ast_node, "namespace") and ast_node.namespace is None:

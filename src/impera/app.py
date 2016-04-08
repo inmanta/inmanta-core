@@ -53,8 +53,9 @@ def compile_project(options):
         p = pstats.Stats('run.profile')
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
+        t1 = time.time()
         result = do_compile()
-
+        print(time.time()-t1)
     return result
 
 

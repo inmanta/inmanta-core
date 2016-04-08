@@ -23,25 +23,16 @@ tokens {
 	VAR_REF;
 	ATTR;
 	NS;
-	EXPRESSION;
 	CALL;
 	MULT;
 	HASH;
-	METHOD;
 	OP;
 	INCLUDE;
-	ANON;
 	LAMBDA;
 	ORPHAN;
 	FOR;
 	ENUM;
 	INDEX;
-}
-
-
-@rulecatch {
-except RecognitionException as re:
-	raise re
 }
 
 main
@@ -51,47 +42,65 @@ main
 def_statement
 	: typedef | entity_def | implementation_def | relation | index | implement_def
 	;
-	
-index
-	: 'index' class_ref '(' ID (',' ID)* ')' -> ^(INDEX class_ref ^(LIST ID+))
-	;
-	
-rhs	
-	: (class_ref '(') => anon_ctor
-	| operand
-	;
 
-top_statement
-	// plugin function, method call, assignemnt or construction -> start with var
-	: 'include' ns_ref -> ^(INCLUDE ns_ref) 
-	| ('for') => 'for' ID 'in' (variable | class_ref)  implementation -> ^(FOR ID variable? class_ref? implementation)
-	| variable '=' rhs -> ^(ASSIGN variable rhs)
-	| (class_ref '(') => anon_ctor -> ^(ORPHAN anon_ctor)
-	| function_call
-	| method_call
+typedef
+	: 'typedef' ID 'as' ns_ref 'matching' (REGEX | expression) -> ^(DEF_TYPE ID ns_ref expression? REGEX?)
+	| 'typedef' CLASS_ID 'as' constructor -> ^(DEF_DEFAULT CLASS_ID constructor)
 	;
-	
-anon_ctor
-	: constructor implementation? -> ^(ANON constructor implementation?)
-	;
-	
-lambda_ctor
-	: constructor -> ^(ORPHAN constructor)
-	;
-	
-lambda_func
-	: ID '|' (function_call | method_call | lambda_ctor) -> ^(LAMBDA ID function_call? method_call? lambda_ctor?)
-	;
+        
+entity_def
+	: ('entity' CLASS_ID ('extends' class_ref (',' class_ref)*)?) ':' ML_STRING? (entity_body)* 'end' 
+		-> ^(DEF_ENTITY CLASS_ID ^(LIST class_ref*) ^(LIST entity_body*) ML_STRING?)
+    ; 
 
 implementation_def
 	: 'implementation' ID ('for' class_ref)? implementation -> ^(DEF_IMPLEMENTATION ID implementation class_ref?)
+	;
+        
+index
+	: 'index' class_ref '(' ID (',' ID)* ')' -> ^(INDEX class_ref ^(LIST ID+))
 	;
 
 // implement File using PosixFile, LinuxFile when os is "redhat"
 implement_def
 	: 'implement' class_ref 'using' ns_ref (',' ns_ref)* ('when' expression)? -> ^(DEF_IMPLEMENT class_ref ^(LIST ns_ref+) expression?)
 	;
+
+
+// relation	
+relation_end
+	: class_ref ID -> class_ref ID
+	;
 	
+relation_link
+	: '<-' | '->' | '--'
+	;
+	
+multiplicity_body
+	: (INT) => INT -> ^(MULT INT)
+	| (INT ':') => INT ':' -> ^(MULT INT NONE)
+	| (INT ':' INT) => INT ':' INT -> ^(MULT INT INT)
+	| (':' INT) => ':' INT -> ^(MULT NONE INT)
+	;
+
+multiplicity
+	: '[' multiplicity_body ']' -> multiplicity_body
+	;
+        
+relation
+	: (left_end=relation_end left_m=multiplicity) relation_link (right_m=multiplicity right_end=relation_end) ->
+		^(DEF_RELATION relation_link ^(LIST $left_end $left_m) ^(LIST $right_end $right_m))
+	;
+
+        
+        
+top_statement
+	// plugin function, method call, assignemnt or construction -> start with var
+	: ('for') => 'for' ID 'in' variable implementation -> ^(FOR ID variable? implementation)
+	| variable '=' operand -> ^(ASSIGN variable operand)
+	| call
+	;
+
 implementation
 	: ':' ML_STRING? statement* 'end' -> ^(LIST statement*)
 	;
@@ -112,45 +121,13 @@ param_list
 	:	parameter (',' parameter)* ','? -> ^(LIST parameter+)
 	;
 
-typedef
-	: 'typedef' ID 'as' ns_ref 'matching' (REGEX | expression) -> ^(DEF_TYPE ID ns_ref expression? REGEX?)
-	| 'typedef' CLASS_ID 'as' constructor -> ^(DEF_DEFAULT CLASS_ID constructor)
-	;
-	
-multiplicity_body
-	: (INT) => INT -> ^(MULT INT)
-	| (INT ':') => INT ':' -> ^(MULT INT NONE)
-	| (INT ':' INT) => INT ':' INT -> ^(MULT INT INT)
-	| (':' INT) => ':' INT -> ^(MULT NONE INT)
-	;
-
-// relation
-multiplicity
-	: '[' multiplicity_body ']' -> multiplicity_body
-	;
-
-relation_end
-	: class_ref ID -> class_ref ID
-	;
-	
-relation_link
-	: '<-' | '->' | '--'
-	; 
-
-relation
-	: (left_end=relation_end left_m=multiplicity) relation_link (right_m=multiplicity right_end=relation_end) ->
-		^(DEF_RELATION relation_link ^(LIST $left_end $left_m) ^(LIST $right_end $right_m))
-	;
 
 operand	
 	: constant
 	| list_def
 	| index_lookup
-	| (ns_ref '(') => function_call
-	| class_ref
+	| call
 	| variable
-	| method_call
-	| ('{') => '{' expression '}' -> ^(EXPRESSION expression)
     // builtin_func method_Call list_def
     ;
 
@@ -171,17 +148,8 @@ index_lookup
 	: class_ref '[' index_arg ']' -> ^(HASH class_ref index_arg)
 	;
 
-entity_def
-	: ('entity' CLASS_ID ('extends' class_ref (',' class_ref)*)?) ':' ML_STRING? (entity_body)* 'end' 
-		-> ^(DEF_ENTITY CLASS_ID ^(LIST class_ref*) ^(LIST entity_body*) ML_STRING?)
-    ;
-
-type
-	: ns_ref | class_ref
-	;
-
 entity_body
-	: type ID ('=' constant)? -> ^(STATEMENT type ID constant?) 
+	: ns_ref ID ('=' constant)? -> ^(STATEMENT ns_ref ID constant?) 
 	;
 
 ns_ref
@@ -199,25 +167,15 @@ variable
 arg_list
 	: operand (',' operand)* ','? -> ^(LIST operand+)
 	;
+
+call
+        : (ns_ref '(') => function_call
+        | (class_ref '(') =>  constructor
+        ;
 	
 function_call
-	: ns_ref '(' call_arg? ')' -> ^(CALL ns_ref call_arg?)
+	: ns_ref '(' arg_list? ')' -> ^(CALL ns_ref arg_list?)
 	;
-
-call_arg
-	:	//(ID '|') => lambda_func 
-		//| arg_list
-		arg_list
-	;
-
-method_pipe
-	: '|' ns_ref ('(' call_arg? ')')? ->  ^(CALL ns_ref call_arg?)
-	;
-	
-method_call
-	: (cl=class_ref | var=variable) (method_pipe)+ -> ^(METHOD $cl? $var? method_pipe+)
-	;
-
 un_op
 	: 'not'
 	;
@@ -226,13 +184,9 @@ cmp_op
 	: '==' | '!=' | '<=' | '>=' | '<' | '>'
 	;
 	
-cmp_oper
-	: variable | function_call | method_call | index_lookup | constant | class_ref
-	;
-	
 cmp	
-	: (cmp_oper 'in') => cmp_oper 'in' in_oper -> ^(OP 'in' cmp_oper in_oper)
-	| (cmp_oper cmp_op) => cmp_oper cmp_op cmp_oper -> ^(OP cmp_op cmp_oper+)
+	: (operand 'in') => operand 'in' in_oper -> ^(OP 'in' operand in_oper)
+	| (operand cmp_op) => operand cmp_op operand -> ^(OP cmp_op operand+)
 	| function_call -> ^(OP function_call)
 	;
 	
