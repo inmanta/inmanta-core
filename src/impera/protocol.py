@@ -32,9 +32,8 @@ import json
 from collections import defaultdict
 from datetime import datetime
 
-import tornado.ioloop
 import tornado.web
-import tornado.gen
+from tornado import gen
 from impera import methods
 from impera.config import Config
 from tornado.httpserver import HTTPServer
@@ -112,7 +111,7 @@ class Result(object):
         self._callback = fnc
 
 
-class Transport(threading.Thread):
+class Transport(object):
     """
         This class implements a transport for the Impera protocol.
 
@@ -139,7 +138,6 @@ class Transport(threading.Thread):
 
     def __init__(self, endpoint=None):
         self.__end_point = endpoint
-        super().__init__(name=self.id)
         self.daemon = True
         self._connected = False
 
@@ -181,7 +179,6 @@ class Transport(threading.Thread):
         """
             Start the transport as a new thread
         """
-        super().start()
 
     def stop(self):
         """
@@ -251,6 +248,7 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_header("Content-Type", "application/json")
         self.set_status(status, msg)
 
+    @gen.coroutine
     def _call(self, args, kwargs, operation):
         """
             An rpc like call
@@ -342,7 +340,7 @@ class RESTHandler(tornado.web.RequestHandler):
             LOGGER.debug("Calling method %s on %s" % self._config[operation][1])
             method_call = getattr(self._config[operation][1][0], self._config[operation][1][1])
 
-            result = method_call(**message)
+            result = yield method_call(**message)
             if result is None:
                 raise Exception("Handlers for method calls should at least return a status code.")
 
@@ -370,33 +368,31 @@ class RESTHandler(tornado.web.RequestHandler):
             LOGGER.exception("An exception occured")
             self.return_error_msg(500, "An exception occured: " + str(e.args))
 
-        self.finish()
-
-    @tornado.gen.coroutine
+    @gen.coroutine
     def head(self, *args, **kwargs):
-        self._call(operation="HEAD", args=args, kwargs=kwargs)
+        yield self._call(operation="HEAD", args=args, kwargs=kwargs)
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def get(self, *args, **kwargs):
-        self._call(operation="GET", args=args, kwargs=kwargs)
+        yield self._call(operation="GET", args=args, kwargs=kwargs)
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def post(self, *args, **kwargs):
-        self._call(operation="POST", args=args, kwargs=kwargs)
+        yield self._call(operation="POST", args=args, kwargs=kwargs)
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def delete(self, *args, **kwargs):
-        self._call(operation="DELETE", args=args, kwargs=kwargs)
+        yield self._call(operation="DELETE", args=args, kwargs=kwargs)
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def patch(self, *args, **kwargs):
-        self._call(operation="PATCH", args=args, kwargs=kwargs)
+        yield self._call(operation="PATCH", args=args, kwargs=kwargs)
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def put(self, *args, **kwargs):
-        self._call(operation="PUT", args=args, kwargs=kwargs)
+        yield self._call(operation="PUT", args=args, kwargs=kwargs)
 
-    @tornado.gen.coroutine
+    @gen.coroutine
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
@@ -404,7 +400,6 @@ class RESTHandler(tornado.web.RequestHandler):
                         IMPERA_MT_HEADER)
 
         self.set_status(200)
-        self.finish()
 
 
 class RESTTransport(Transport):
@@ -453,16 +448,6 @@ class RESTTransport(Transport):
 
             url_map[url].append((properties, call, method.__wrapped__))
 
-            # ##
-#             argspec = inspect.getfullargspec(method_handlers[1])
-#             args = argspec.args
-#             if "id" in args:
-#                 args.remove("id")
-#             if "self" in args:
-#                 args.remove("self")
-#             print(properties["operation"], url, args, method_handlers[1])
-            # ##
-
         handlers = []
         for url, configs in url_map.items():
             handler_config = {}
@@ -485,12 +470,10 @@ class RESTTransport(Transport):
 
     def run(self):
         LOGGER.debug("Starting tornado IOLoop")
-        IOLoop.current().start()
 
     def stop_endpoint(self):
         super().stop()
         self.http_server.stop()
-        IOLoop.current().stop()
 
     def start_client(self):
         pass
@@ -840,11 +823,10 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         LOGGER.debug("Starting scheduler")
         self._sched.start()
 
-        while self.running:
-            try:
-                time.sleep(0.1)
-            except KeyboardInterrupt:
-                self.stop()
+        try:
+            IOLoop.current().start()
+        except KeyboardInterrupt:
+            self.stop()
 
     def stop(self):
         """
@@ -856,6 +838,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             LOGGER.debug("Stopped %s", self._transport_instance)
 
         self._sched.stop()
+        IOLoop.current().stop()
 
 
 class ClientMeta(type):

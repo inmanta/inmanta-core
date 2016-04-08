@@ -33,6 +33,7 @@ LOGGER = logging.getLogger()
 @command("server", help_msg="Start the impera server")
 def start_server(options):
     from impera import server
+
     s = server.Server()
     s.start()
 

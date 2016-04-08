@@ -13,3 +13,4 @@ mongoengine
 blessings
 python-dateutil
 motorengine
+cliff

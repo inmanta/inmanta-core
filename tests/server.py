@@ -16,7 +16,7 @@
     Contact: bart@impera.io
 """
 
-import time
+import time, threading,sys
 
 from impera import protocol
 from server_test import ServerTest
@@ -40,6 +40,7 @@ class testRestServer(ServerTest):
         """
             Test auto removal of older deploy model versions
         """
+        print("Test started in thread " + threading.currentThread().getName(), file=sys.stderr)
         result = self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
 

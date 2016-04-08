@@ -57,7 +57,7 @@ class ServerTest(MongoTestCase):
             raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
 
         cls.server = Server(database_host="localhost", database_port=int(mongo_port))
-        cls.executor = futures.ThreadPoolExecutor(max_workers=1)
+        cls.executor = futures.ThreadPoolExecutor(max_workers=2)
         cls.server_future = cls.executor.submit(cls.server.start)
 
         attempts = 10
