@@ -26,6 +26,7 @@ from impera.compiler import do_compile
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
 from impera.stats import Stats
+from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger()
 
@@ -33,9 +34,16 @@ LOGGER = logging.getLogger()
 @command("server", help_msg="Start the impera server")
 def start_server(options):
     from impera import server
+    io_loop = IOLoop.current()
 
-    s = server.Server()
+    s = server.Server(io_loop)
     s.start()
+
+    try:
+        io_loop.start()
+    except KeyboardInterrupt:
+        IOLoop.current().stop()
+        s.stop()
 
 
 @command("agent", help_msg="Start the impera agent")

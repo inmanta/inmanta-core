@@ -42,7 +42,6 @@ import dateutil
 from impera.agent.io.remote import RemoteIO
 from impera.ast import type
 from tornado import gen
-from tornado.ioloop import IOLoop
 
 
 LOGGER = logging.getLogger(__name__)
@@ -55,8 +54,8 @@ class Server(protocol.ServerEndpoint):
 
         :param usedb Use a database to store data. If not, only facts are persisted in a yaml file.
     """
-    def __init__(self, database_host=None, database_port=None):
-        super().__init__("server", role="server")
+    def __init__(self, io_loop, database_host=None, database_port=None):
+        super().__init__("server", role="server", io_loop=io_loop)
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
         self.check_keys()
@@ -80,7 +79,7 @@ class Server(protocol.ServerEndpoint):
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, int(Config.get("server", "purge-versions-interval", 3600)))
 
-        IOLoop.current().add_callback(self._purge_versions)
+        self._io_loop.add_callback(self._purge_versions)
 
         self._requests = defaultdict(dict)
         self._recompiles = defaultdict(lambda: None)

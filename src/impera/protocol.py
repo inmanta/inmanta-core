@@ -21,9 +21,7 @@
 
 from http import client
 import logging
-import sched
 import socket
-import threading
 import time
 import inspect
 import urllib
@@ -37,7 +35,6 @@ from tornado import gen
 from impera import methods
 from impera.config import Config
 from tornado.httpserver import HTTPServer
-from tornado.ioloop import IOLoop
 
 
 LOGGER = logging.getLogger(__name__)
@@ -789,11 +786,12 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
     __methods__ = {}
 
-    def __init__(self, name, role, transport=RESTTransport):
+    def __init__(self, name, role, io_loop, transport=RESTTransport):
         super().__init__(name, role)
         self._transport = transport
         self._transport_instance = None
-        self._sched = Scheduler(IOLoop.current())
+        self._io_loop = io_loop
+        self._sched = Scheduler(self._io_loop)
 
         self.running = True
 
@@ -810,11 +808,6 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         if self._transport_instance is not None:
             self._transport_instance.start_endpoint()
 
-        try:
-            IOLoop.current().start()
-        except KeyboardInterrupt:
-            self.stop()
-
     def stop(self):
         """
             Stop the end-point and all of its transports
@@ -823,9 +816,6 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         if self._transport_instance is not None:
             self._transport_instance.stop_endpoint()
             LOGGER.debug("Stopped %s", self._transport_instance)
-
-        self._sched.stop()
-        IOLoop.current().stop()
 
 
 class ClientMeta(type):
