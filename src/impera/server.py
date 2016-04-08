@@ -105,8 +105,6 @@ class Server(protocol.ServerEndpoint):
 
             data.Agent.objects.find_all(callback=start_agents)  # @UndefinedVariable
 
-        print("Server started in thread " + threading.currentThread().getName())
-
     def stop(self):
         disconnect()
         super().stop()

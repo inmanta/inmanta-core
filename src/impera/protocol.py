@@ -688,15 +688,13 @@ class EndpointMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-class Scheduler(threading.Thread):
+class Scheduler(object):
     """
         An event scheduler class
     """
-    def __init__(self, daemon=True):
-        super().__init__(name="Scheduler", daemon=daemon)
-        self._sched = sched.scheduler()
+    def __init__(self, io_loop):
         self._scheduled = set()
-        self._running = True
+        self._io_loop = io_loop
 
     def add_action(self, action, interval, now=False):
         """
@@ -717,13 +715,13 @@ class Scheduler(threading.Thread):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
 
                 finally:
-                    self._sched.enter(interval, 1, action_function)
+                    self._io_loop.call_later(interval, action_function)
 
-        self._sched.enter(interval, 1, action_function)
+        self._io_loop.call_later(interval, action_function)
         self._scheduled.add(action)
 
         if now:
-            action()
+            self._io_loop.add_callback(action)
 
     def remove(self, action):
         """
@@ -731,14 +729,6 @@ class Scheduler(threading.Thread):
         """
         if action in self._scheduled:
             self._scheduled.remove(action)
-
-    def run(self):
-        while self._running:
-            self._sched.run(blocking=True)
-            time.sleep(0.1)
-
-    def stop(self):
-        self._running = False
 
 
 class Endpoint(object):
@@ -803,7 +793,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         super().__init__(name, role)
         self._transport = transport
         self._transport_instance = None
-        self._sched = Scheduler()
+        self._sched = Scheduler(IOLoop.current())
 
         self.running = True
 
@@ -819,9 +809,6 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
         if self._transport_instance is not None:
             self._transport_instance.start_endpoint()
-
-        LOGGER.debug("Starting scheduler")
-        self._sched.start()
 
         try:
             IOLoop.current().start()
