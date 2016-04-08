@@ -53,10 +53,7 @@ def compile_project(options):
         p = pstats.Stats('run.profile')
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
-        t0 = time.time()
         result = do_compile()
-        t1 = time.time()
-        print(t1-t0)
 
     return result
 
@@ -102,9 +99,9 @@ def export(options):
         Config.set("compiler_rest_transport", "port", options.port)
 
     from impera.export import Exporter
-    result = do_compile()
+    (types, scopes) = do_compile()
     export = Exporter(options)
-    export.run(result)
+    export.run(types, scopes)
 
 
 def deploy_parser_config(parser):

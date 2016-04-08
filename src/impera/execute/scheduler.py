@@ -34,6 +34,7 @@ from impera.compiler.main import Compiler
 from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler, dumpHangs
 from impera.ast.entity import Entity
 from impera.plugins import PluginStatement
+import time
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -58,9 +59,15 @@ class Scheduler(object):
         # need to stay in the queue as long as possible
         self._problem_list = {}
 
+    def freeze_all(self):
+        instances = self.types["std::Entity"].get_all_instances()
+
+        for i in instances:
+            i.final()
+
     def dump(self, type="std::Entity"):
         instances = self.types[type].get_all_instances()
-        
+
         for i in instances:
             i.dump()
 
@@ -72,6 +79,12 @@ class Scheduler(object):
                 notdone.append(i)
 
         return notdone
+
+    def get_types(self):
+        return self.types
+
+    def get_scopes(self):
+        return self.scopes
 
     def dump_not_done(self):
 
@@ -162,7 +175,6 @@ class Scheduler(object):
             if isinstance(value, Unset):
                 self.show_exception(obj.__statement__, "Attribute '%s' of object %s is not set." % (attr, obj))
 
-
     def format_exception_info(self, max_tb_level=100):
         """
             Get information about the last exception
@@ -183,6 +195,8 @@ class Scheduler(object):
         """
             Evaluate the current graph
         """
+        prev = time.time()
+
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
 
@@ -206,24 +220,27 @@ class Scheduler(object):
 
         # start an evaluation loop
         i = 0
+        count = 0
         while i < MAX_ITERATIONS:
+            now = time.time()
+
             # check if we can stop the execution
             if len(basequeue) == 0 and len(waitqueue) == 0 and len(zerowaiters) == 0:
                 break
             else:
                 i += 1
 
-            LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d)", i,
-                         len(self._evaluation_queue), len(self._wait_queue), len(self._problem_list))
-
+            LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
+                         len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+            prev = now
             # determine which of those can be evaluated, prefer generator and
             # reference statements over call statements
             while len(basequeue) > 0:
                 next = basequeue.pop()
                 try:
                     next.execute()
+                    count = count + 1
                 except UnsetException as e:
-                    e.get_result_variable().mark = True
                     next.await(e.get_result_variable())
 
             progress = False
@@ -240,19 +257,28 @@ class Scheduler(object):
                 waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
                 zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
                 if(len(waitqueue) > 0):
+                    LOGGER.debug("Moved zerowaiters to waiters")
                     waitqueue.pop(0).freeze()
                     progress = True
 
             if not progress:
-                print("last resort:")
+                LOGGER.debug("Finishing statements with no waiters")
                 while len(zerowaiters) > 0:
                     next = zerowaiters.pop()
                     next.freeze()
 
+        if i == MAX_ITERATIONS:
+            print("could not complete model")
+            return False
+        #now = time.time()
+        #print(now - prev)
         # end evaluation loop
-        #self.dump_not_done()
+        # self.dump_not_done()
         #print(basequeue, waitqueue)
-        #dumpHangs()
-        self.dump()
-        print(len(self.types["std::Entity"].get_all_instances()))
+        # dumpHangs()
+        # self.dump()
+        # rint(len(self.types["std::Entity"].get_all_instances()))
+
+        self.freeze_all()
+
         return True

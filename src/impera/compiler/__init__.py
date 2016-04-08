@@ -30,7 +30,7 @@ def do_compile():
     """
         Run run run
     """
-    #module.Project.get().verify()
+    # module.Project.get().verify()
     compiler = main.Compiler()
 
     success = False
@@ -45,7 +45,7 @@ def do_compile():
 
         if not success:
             sys.stderr.write("Unable to execute all statements.\n")
-        return sched
+        return (sched.get_types(), sched.get_scopes())
 
     except Exception:
         LOGGER.exception("An exception occurred during compile")

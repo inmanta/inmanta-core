@@ -54,6 +54,9 @@ class ResultVariable(object):
     def is_delayed(self):
         return False
 
+    def freeze(self):
+        pass
+
 
 class AttributeVariable(ResultVariable):
 
@@ -388,10 +391,23 @@ class Instance(ExecutionContext):
         self.slots[name].set_value(value, recur)
 
     def get_attribute(self, name):
-        return self.slots[name]
+        try:
+            return self.slots[name]
+        except KeyError:
+            raise Exception("Attribute %s does not exist for %s" % (name, self.type))
 
     def __repr__(self):
         return "%s %02x" % (self.type, self.sid)
+
+    def final(self):
+        """ the object should be complete, freeze all attributes"""
+        for (n, v) in self.slots.items():
+            if not v.is_ready():
+                if v.can_get():
+                    v.freeze()
+                else:
+                    self.dump()
+                    raise Exception("Object can not be frozen: " + str(self))
 
     def dump(self):
         print("------------ ")
@@ -399,7 +415,7 @@ class Instance(ExecutionContext):
         print("------------ ")
         for (n, v) in self.slots.items():
             if(v.can_get()):
-              
+
                 value = v.value
                 print("%s\t\t%s" % (n, value))
             else:

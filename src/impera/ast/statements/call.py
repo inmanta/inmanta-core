@@ -103,7 +103,7 @@ class FunctionUnit(Waiter):
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
         except UnsetException as e:
-            e.get_result_variable().mark="2"
+            #print("exc " + str(self.function.name) )
             self.await(e.get_result_variable())
 
     def __repr__(self):

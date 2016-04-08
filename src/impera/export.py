@@ -128,15 +128,15 @@ class Exporter(object):
 
         return values
 
-    def _load_resources(self, scope):
+    def _load_resources(self, types):
         """
             Load all registered resources
         """
         entities = resource.get_entity_resources()
         for entity in entities:
-            instances = self._get_instances_of_types([entity])
+            instances = types[entity].get_all_instances()
             if len(instances) > 0:
-                for instance in instances[entity]:
+                for instance in instances:
                     self.add_resource(Resource.create_from_model(self, entity, instance))
 
         Resource.convert_requires()
@@ -163,12 +163,12 @@ class Exporter(object):
             else:
                 function(self)
 
-    def _call_dep_manager(self, scope):
+    def _call_dep_manager(self, types):
         """
             Call all dep managers and let them add dependencies
         """
         for fnc in self.__class__.__dep_manager:
-            fnc(scope, self._resources)
+            fnc(types, self._resources)
 
         # TODO: check for cycles
 
@@ -240,24 +240,25 @@ class Exporter(object):
             for host in hosts:
                 LOGGER.info(" - %s" % host)
 
-    def run(self, scope, offline=False):
+    def run(self, types, scopes, offline=False):
         """
         Run the export functions
         """
         self._offline = offline
-        self._scope = scope
+        self.types = types
+        self.scopes = scopes
         self._version = int(time.time())
         Resource.clear_cache()
 
         # first run other export plugins
         self._run_export_plugins()
 
-        if scope is not None:
+        if types is not None:
             # then process the configuration model to submit it to the mgmt server
-            self._load_resources(scope)
+            self._load_resources(types)
 
             # call dependency managers
-            self._call_dep_manager(scope)
+            self._call_dep_manager(types)
 
         # filter out any resource that belong to hosts that have unknown values
         self._filter_unknowns()
@@ -487,6 +488,7 @@ class dependency_manager(object):
     """
     Register a function that manages dependencies in the configuration model that will be deployed.
     """
+
     def __init__(self, function):
         Exporter.add_dependency_manager(function)
 
@@ -495,6 +497,7 @@ class export(object):
     """
         A decorator that registers an export function
     """
+
     def __init__(self, name, *args):
         self.name = name
         self.types = args
@@ -511,6 +514,7 @@ class resource_to_id(object):
     """
         Register a function to convert a resource to an id
     """
+
     def __init__(self, type_id):
         self.type_id = type_id
 
