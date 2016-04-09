@@ -30,6 +30,7 @@ from cliff.show import ShowOne
 from cliff.command import Command
 from impera.config import Config
 from blessings import Terminal
+from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class ImperaCommand(Command):
     def __init__(self, app, app_args):
         super().__init__(app, app_args)
         self._client = None
+        self._io_loop = IOLoop.current()
 
     def get_parser(self, prog_name):
         parser = super().get_parser(prog_name)
@@ -80,7 +82,10 @@ class ImperaCommand(Command):
 
         method = getattr(self._client, method_name)
 
-        result = method(**arguments)
+        def call():
+            return method(**arguments)
+
+        result = self._io_loop.run_sync(call, 2)
 
         if result is None:
             raise Exception("Failed to call server.")
@@ -299,6 +304,7 @@ class EnvironmentList(ImperaCommand, Lister):
 
         data = []
         for env in environments:
+            print(env)
             prj = self.do_request("get_project", "project", dict(id=env["project"]))
             prj_name = prj['name']
             data.append((prj_name, env['project'], env['name'], env['id']))
@@ -307,6 +313,7 @@ class EnvironmentList(ImperaCommand, Lister):
             return (('Project name', 'Project ID', 'Environment', 'Environment ID'), data)
 
         print("No environment defined.")
+        return ((), ())
 
 
 class EnvironmentShow(ImperaCommand, ShowOne):
