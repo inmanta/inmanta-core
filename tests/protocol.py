@@ -23,6 +23,7 @@ import base64
 from server_test import ServerTest
 
 from nose.tools import assert_equal, assert_count_equal, assert_in
+from tornado.testing import gen_test
 
 
 class testProtocolClient(ServerTest):
@@ -38,20 +39,21 @@ class testProtocolClient(ServerTest):
     def tearDown(self):
         ServerTest.tearDown(self)
 
+    @gen_test
     def test_client_files(self):
         file_name = str(random.randint(0, 10000))
         body = base64.b64encode(b"Hello world\n").decode("ascii")
 
         # Check if the file exists
-        result = self.client.stat_file(id="test" + file_name)
+        result = yield self.client.stat_file(id="test" + file_name)
         assert_equal(result.code, 404, "The test file should not exist yet")
 
         # Create the file
-        result = self.client.upload_file(id="test" + file_name, content=body)
+        result = yield self.client.upload_file(id="test" + file_name, content=body)
         assert_equal(result.code, 200, "The test file failed to upload")
 
         # Get the file
-        result = self.client.get_file(id="test" + file_name)
+        result = yield self.client.get_file(id="test" + file_name)
         assert_equal(result.code, 200, "The test file failed to retrieve")
         assert_in("content", result.result)
         assert_equal(result.result["content"], body, "Retrieving the test file failed")
@@ -60,12 +62,12 @@ class testProtocolClient(ServerTest):
         for _n in range(1, 10):
             file_name = "test%d" % random.randint(0, 10000)
             file_names.append(file_name)
-            result = self.client.upload_file(id=file_name, content="")
+            result = yield self.client.upload_file(id=file_name, content="")
             assert_equal(result.code, 200)
 
-        result = self.client.stat_files(files=file_names)
+        result = yield self.client.stat_files(files=file_names)
         assert_count_equal(result.result["files"], [])
 
         other_files = ["testtest"]
-        result = self.client.stat_files(files=file_names + other_files)
+        result = yield self.client.stat_files(files=file_names + other_files)
         assert_count_equal(result.result["files"], other_files)

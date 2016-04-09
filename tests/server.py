@@ -16,11 +16,12 @@
     Contact: bart@impera.io
 """
 
-import time, threading,sys
+import time
 
 from impera import protocol
 from server_test import ServerTest
 from nose.tools import assert_equal
+from tornado.testing import gen_test
 
 
 class testRestServer(ServerTest):
@@ -36,15 +37,15 @@ class testRestServer(ServerTest):
     def tearDown(self):
         ServerTest.tearDown(self)
 
+    @gen_test
     def test_version_removal(self):
         """
             Test auto removal of older deploy model versions
         """
-        print("Test started in thread " + threading.currentThread().getName(), file=sys.stderr)
-        result = self.client.create_project("env-test")
+        result = yield self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
 
-        result = self.client.create_environment(project_id=project_id, name="dev")
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
         version = int(time.time())
@@ -52,6 +53,6 @@ class testRestServer(ServerTest):
         for _i in range(20):
             version += 1
 
-            res = self.client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
+            res = yield self.client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
             assert_equal(res.code, 200)
-            result = self.client.get_project(id=project_id)
+            result = yield self.client.get_project(id=project_id)

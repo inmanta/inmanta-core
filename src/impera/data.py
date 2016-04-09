@@ -16,7 +16,7 @@
     Contact: bart@impera.io
 """
 
-import json
+import json, sys
 
 from motorengine import Document
 from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
@@ -61,7 +61,7 @@ class Project(IdDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        envs = yield Environment.objects.filter(project=self).find_all()
+        envs = yield Environment.objects.filter(project_id=self.uuid).find_all()
         futures = [env.delete_cascade() for env in envs]
         futures.append(self.delete())
         yield futures
@@ -78,16 +78,14 @@ class Environment(IdDocument):
         :param repo_url The repository branch that contains the configuration model code for this environment
     """
     name = StringField(required=True, unique=True)
-    project = ReferenceField(Project, required=True)
+    project_id = UUIDField(required=True)
     repo_url = StringField()
     repo_branch = StringField()
 
-    @gen.coroutine
     def to_dict(self):
-        yield self.load_references()
         return {"id": self.uuid,
                 "name": self.name,
-                "project": self.project.uuid,
+                "project": self.project_id,
                 "repo_url": self.repo_url,
                 "repo_branch": self.repo_branch
                 }
@@ -496,15 +494,15 @@ class ConfigurationModel(Document):
     deployed = BooleanField(default=False)
     result = StringField(default="pending")
     status = JsonField()
-    version_info = StringField()
+    version_info = JsonField()
 
     resources_total = IntField(default=0)
     resources_done = IntField(default=0)
 
-    @staticmethod
+    @classmethod
     @gen.coroutine
     def get_version(cls, environment, version):
-        versions = cls.objects.filter(environment=environment, version=version).find_all()
+        versions = yield cls.objects.filter(environment=environment, version=version).find_all()
         if len(versions) == 0:
             return None
 

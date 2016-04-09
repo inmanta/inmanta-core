@@ -496,6 +496,7 @@ class Server(protocol.ServerEndpoint):
         return 200, {"record": record_dict}
 
     @protocol.handle(methods.FormRecords.delete_record)
+    @gen.coroutine
     def delete_record(self, tid, id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
@@ -507,6 +508,7 @@ class Server(protocol.ServerEndpoint):
         return 200
 
     @protocol.handle(methods.FileMethod.upload_file)
+    @gen.coroutine
     def upload_file(self, id, content):
         file_name = os.path.join(self._server_storage["files"], id)
 
@@ -519,6 +521,7 @@ class Server(protocol.ServerEndpoint):
         return 200
 
     @protocol.handle(methods.FileMethod.stat_file)
+    @gen.coroutine
     def stat_file(self, id):
         file_name = os.path.join(self._server_storage["files"], id)
 
@@ -528,6 +531,7 @@ class Server(protocol.ServerEndpoint):
             return 404
 
     @protocol.handle(methods.FileMethod.get_file)
+    @gen.coroutine
     def get_file(self, id):
         file_name = os.path.join(self._server_storage["files"], id)
 
@@ -539,6 +543,7 @@ class Server(protocol.ServerEndpoint):
                 return 200, {"content": base64.b64encode(fd.read()).decode("ascii")}
 
     @protocol.handle(methods.FileMethod.stat_files)
+    @gen.coroutine
     def stat_files(self, files):
         """
             Return which files in the list exist on the server
@@ -552,6 +557,7 @@ class Server(protocol.ServerEndpoint):
         return 200, {"files": response}
 
     @protocol.handle(methods.FileDiff.diff)
+    @gen.coroutine
     def file_diff(self, a, b):
         """
             Diff the two files identified with the two hashes
@@ -823,8 +829,8 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        version = yield data.ConfigurationModel.get_version(env, id)
-        if version is not None:
+        cm = yield data.ConfigurationModel.get_version(env, version)
+        if cm is not None:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
 
         cm = data.ConfigurationModel(environment=env, version=version, date=datetime.datetime.now(),
@@ -871,7 +877,7 @@ class Server(protocol.ServerEndpoint):
             yield ra.save()
 
         # search for deleted resources
-        env_resources = yield data.Resource.objects.filter(environment=tid).find_all()  # @UndefinedVariable
+        env_resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for res in env_resources:
             if res.version_latest < version:
                 rv = yield data.ResourceVersion.objects.filter(environment=env, resource=res).order_by("rid", direction=ASCENDING).limit(1).find_all()  # @UndefinedVariable
@@ -1238,7 +1244,7 @@ host = localhost
     def get_project(self, id):
         try:
             future_1 = data.Project.get_uuid(id)
-            future_2 = data.Environment.objects.find_all(project=id)  # @UndefinedVariable
+            future_2 = data.Environment.objects.filter(project_id=id).find_all()  # @UndefinedVariable
 
             project, environments = yield [future_1, future_2]
 
@@ -1267,12 +1273,12 @@ host = localhost
             return 500, {"message": "The project id for the environment does not exist."}
 
         try:
-            env = data.Environment(uuid=uuid.uuid4(), name=name, project=project)
+            env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)
             env.repo_url = repository
             env.repo_branch = branch
             yield env.save()
 
-            env_dict = yield env.to_dict()
+            env_dict = env.to_dict()
             return 200, {"environment": env_dict}
         except errors.UniqueKeyViolationError:
             return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
@@ -1298,8 +1304,7 @@ host = localhost
             return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
                          (env.project.name, env.project.id, name)}
 
-        env_dict = yield env.to_dict()
-        return 200, {"environment": env_dict}
+        return 200, {"environment": env.to_dict()}
 
     @protocol.handle(methods.Environment.get_environment)
     @gen.coroutine
@@ -1312,7 +1317,7 @@ host = localhost
         if env is None:
             return 404, {"message": "The environment id does not exist."}
 
-        env_dict = yield env.to_dict()
+        env_dict = env.to_dict()
 
         if versions > 0:
             v = yield data.ConfigurationModel.objects.filter(environment=env).order_by("date", direction=ASCENDING).limit(versions).find_all()  # @UndefinedVariable
@@ -1336,7 +1341,7 @@ host = localhost
         environments = yield data.Environment.objects.find_all()  # @UndefinedVariable
         dicts = []
         for env in environments:
-            env_dict = yield env.to_dict()
+            env_dict = env.to_dict()
             dicts.append(env_dict)
 
         return 200, {"environments": dicts}  # @UndefinedVariable

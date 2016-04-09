@@ -18,72 +18,46 @@
 
 import os
 import tempfile
-from concurrent import futures
 import shutil
-from http import client
-import time
 import logging
 
 
 from mongobox.unittest import MongoTestCase
 from impera import config
 from impera.server import Server
+from tornado.testing import AsyncTestCase
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ServerTest(MongoTestCase):
-    state_dir = None
-    server_future = None
-    server = None
-    executor = None
-
+class ServerTest(MongoTestCase, AsyncTestCase):
     def __init__(self, methodName='runTest'):
-        super().__init__(methodName)
+        MongoTestCase.__init__(self, methodName)
+        AsyncTestCase.__init__(self, methodName)
 
-    @classmethod
-    def setUpClass(cls):
-        if cls.server is not None:
-            LOGGER.error("Server is already started")
-            return
+        self.state_dir = None
+        self.server = None
 
-        cls.state_dir = tempfile.mkdtemp()
+    def setUp(self):
+        MongoTestCase.setUp(self)
+        AsyncTestCase.setUp(self)
+
+        self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
-        config.Config.set("config", "state-dir", cls.state_dir)
+        config.Config.set("config", "state-dir", self.state_dir)
 
         LOGGER.info("Starting server")
         mongo_port = os.getenv('MONGOBOX_PORT')
         if mongo_port is None:
             raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
 
-        cls.server = Server(database_host="localhost", database_port=int(mongo_port))
-        cls.executor = futures.ThreadPoolExecutor(max_workers=2)
-        cls.server_future = cls.executor.submit(cls.server.start)
-
-        attempts = 10
-        while attempts > 0:
-            attempts -= 1
-            try:
-                LOGGER.info("Waiting for server to become availabe")
-                conn = client.HTTPConnection("localhost", 8888)
-                conn.request("GET", "/")
-                res = conn.getresponse()
-
-                if res.status == 404:
-                    return
-
-            except ConnectionRefusedError:
-                time.sleep(0.1)
+        self.server = Server(database_host="localhost", database_port=int(mongo_port), io_loop=self.io_loop)
+        self.server.start()
 
     def tearDown(self):
+        self.server.stop()
         self.purge_database()
+        shutil.rmtree(self.state_dir)
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.stop()
-        cls.server_future.result()
-        cls.executor.shutdown()
-        shutil.rmtree(cls.state_dir)
-        cls.server = None
-        cls.server_future = None
-        cls.executor = None
+        AsyncTestCase.tearDown(self)
+        MongoTestCase.tearDown(self)

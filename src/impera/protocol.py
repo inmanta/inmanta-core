@@ -27,7 +27,6 @@ import inspect
 import urllib
 import uuid
 import json
-from collections import defaultdict
 from datetime import datetime
 
 import tornado.web
@@ -35,6 +34,7 @@ from tornado import gen
 from impera import methods
 from impera.config import Config
 from tornado.httpserver import HTTPServer
+from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -492,11 +492,11 @@ class RESTTransport(Transport):
             host = Config.get()[self.id]["host"]
 
         LOGGER.debug("Using %s:%s", host, port)
-        return (host, port)
+        return "http://%s:%d" % (host, port)
 
+    @gen.coroutine
     def call(self, properties, args, kwargs={}):
-        host, port = self._get_client_config()
-        conn = client.HTTPConnection(host, port)
+        url_host = self._get_client_config()
 
         operation = properties["operation"]
 
@@ -508,7 +508,7 @@ class RESTTransport(Transport):
         for i in range(len(args)):
             msg[argspec.args[i + 1]] = args[i]
 
-        url = self._create_base_url(properties, msg)
+        url = url_host + self._create_base_url(properties, msg)
 
         headers = {}
         if properties["mt"]:
@@ -527,111 +527,25 @@ class RESTTransport(Transport):
             if len(qs_map) > 0:
                 url += "?" + urllib.parse.urlencode(qs_map)
 
-            body = ""
+            body = None
         else:
             body = json_encode(msg)
 
         LOGGER.debug("Calling server with url %s", url)
 
         try:
-            conn.request(operation, url, body, headers)
-            res = conn.getresponse()
+            request = HTTPRequest(url=url, method=operation, headers=headers, body=body)
+            client = AsyncHTTPClient()
+            response = yield client.fetch(request)
+        except HTTPError as e:
+            body = e.response.body
+            if len(body) > 0:
+                return Result(code=e.code, result=self._decode(e.response.body))
+            return Result(code=e.code, result={"message": e.message})
         except Exception as e:
-            return Result(code=500, result=str(e))
+            return Result(code=500, result={"message": str(e)})
 
-        return Result(code=res.status, result=self._decode(res.read()))
-
-
-class DirectTransport(Transport):
-    """
-        Communicate directly within the same python process
-    """
-    __data__ = ("message", "blob")
-    __transport_name__ = "direct"
-    __network__ = False
-    __broadcast__ = True
-
-    _transports = defaultdict(list)
-    connections = []
-
-    @classmethod
-    def register_transport(cls, transport):
-        cls._transports[transport.endpoint.name].append(transport)
-
-    def __init__(self, endpoint=None):
-        super().__init__(endpoint)
-        self.__class__.register_transport(self)
-        self.set_connected()
-
-    def call(self, method, destination=None, **kwargs):
-        # select the correct transport
-        targets = []
-        for conn in self.connections:
-            if conn[0] == self.endpoint.name:
-                if conn[1] in self._transports:
-                    targets.extend(self._transports[conn[1]])
-
-        if targets is None or len(targets) == 0:
-            raise Exception("Unable to find a direct transport to use.")
-
-        # ##
-        results = []
-        for target in targets:
-            if hasattr(target.endpoint, "__methods__"):
-                method_call = None
-                for method_name, method_class in target.endpoint.__methods__.items():
-                    if method_class == method:
-                        method_call = getattr(target.endpoint, method_name)
-                        break
-
-                operation = None
-                if "operation" in kwargs:
-                    operation = kwargs["operation"]
-
-                if operation == "POST":
-                    operation = None
-
-                if method_call is None:
-                    LOGGER.warning("Cannot find method call for operation.")
-                    continue
-
-                result = method_call(operation=operation, body=kwargs)
-
-                if result is None:
-                    LOGGER.error("Handlers for method calls should at least return a status code.")
-                    continue
-
-                reply = None
-                if isinstance(result, tuple):
-                    if len(result) == 2:
-                        code, reply = result
-                    else:
-                        LOGGER.error("Handlers for method call can only return a status code and a reply")
-                        continue
-
-                else:
-                    code = result
-
-                if method.__reply__:
-                    if reply is None:
-                        body = {}
-                    else:
-                        body = reply
-
-                    results.append((code, body))
-                elif reply is not None:
-                    LOGGER.warn("Method %s returned a result although it is has not reply!" % self._method_type)
-
-        end_result = None
-        if len(results) > 1:
-            end_result = Result(multiple=True)
-            for res in results:
-                end_result.add_result(res)
-
-        elif len(results) == 1:
-            end_result = Result(code=results[0][0], result=results[0][1])
-
-        return end_result
+        return Result(code=response.code, result=self._decode(response.body))
 
 
 class handle(object):

@@ -64,8 +64,8 @@ class testProjectTestCase(MotorEngineTestCase):
         project = yield project.save()
 
         env = yield data.Environment.objects.create(uuid=uuid.uuid4(),  # @UndefinedVariable
-                                                    name="dev", project=project, repo_url="", repo_branch="")
-        assert_equal(env.project.uuid, project.uuid)
+                                                    name="dev", project_id=project.uuid, repo_url="", repo_branch="")
+        assert_equal(env.project_id, project.uuid)
 
         yield project.delete_cascade()
 
