@@ -22,7 +22,7 @@ from impera import protocol
 from impera.config import Config
 from impera.execute.util import Unknown
 from impera.export import Exporter, unknown_parameters
-from impera.stats import Stats
+from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +41,10 @@ def get_fact(res, fact_name: str, default_value=None, metadata={}) -> "any":
         if env is None:
             raise Exception("The environment of this model should be configured in config>environment")
 
-        result = client.get_param(tid=env, id=fact_name, resource_id=resource_id)
+        def call():
+            return client.get_param(tid=env, id=fact_name, resource_id=resource_id)
+
+        result = IOLoop.current().run_sync(call, 5)
 
         if result.code == 200:
             fact_value = result.result["parameter"]["value"]
@@ -56,5 +59,4 @@ def get_fact(res, fact_name: str, default_value=None, metadata={}) -> "any":
     if isinstance(fact_value, Unknown) and default_value is not None:
         return default_value
 
-    Stats.get("get fact").increment()
     return fact_value

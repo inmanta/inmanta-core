@@ -11,5 +11,5 @@ sphinx
 cliff
 blessings
 python-dateutil
-motorengine
 motor
+motorengine

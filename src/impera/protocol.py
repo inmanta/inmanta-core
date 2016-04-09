@@ -478,7 +478,7 @@ class RESTTransport(Transport):
         LOGGER.debug("Getting config in section %s", self.id)
         port = 8888
         if self.id in Config.get() and "port" in Config.get()[self.id]:
-            port = Config.get()[self.id]["port"]
+            port = int(Config.get()[self.id]["port"])
 
         host = "localhost"
         if self.id in Config.get() and "host" in Config.get()[self.id]:
@@ -531,8 +531,7 @@ class RESTTransport(Transport):
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
         except HTTPError as e:
-            body = e.response.body
-            if len(body) > 0:
+            if e.response is not None and len(e.response.body) > 0:
                 return Result(code=e.code, result=self._decode(e.response.body))
             return Result(code=e.code, result={"message": e.message})
         except Exception as e:

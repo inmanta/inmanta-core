@@ -33,6 +33,7 @@ from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
 import base64
+from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ class Exporter(object):
         self._scope = None
 
         self._file_store = {}
+        self._io_loop = IOLoop.current()
 
     def _get_instances_of_types(self, types):
         """
@@ -337,6 +339,9 @@ class Exporter(object):
 
         return resources
 
+    def run_sync(self, function):
+        return self._io_loop.run_sync(function, 5)
+
     def deploy_code(self, tid, version=None):
         """
             Deploy code to the server
@@ -353,7 +358,11 @@ class Exporter(object):
         LOGGER.info("Uploading source files")
 
         conn = protocol.Client("compiler", "client")
-        res = conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
+
+        def call():
+            return conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
+
+        res = self.run_sync(call)
 
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
@@ -381,7 +390,10 @@ class Exporter(object):
         # if they are already uploaded
         hashes = list(self._file_store.keys())
 
-        res = conn.stat_files(files=hashes)
+        def call():
+            return conn.stat_files(files=hashes)
+
+        res = self.run_sync(call)
 
         if res.code != 200:
             raise Exception("Unable to check status of files at server")
@@ -391,7 +403,11 @@ class Exporter(object):
         LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
         for hash_id in to_upload:
             content = self._file_store[hash_id]
-            res = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+
+            def call():
+                return conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+
+            res = self.run_sync(call)
 
             if res.code != 200:
                 LOGGER.error("Unable to upload file with hash %s" % hash_id)
@@ -412,8 +428,12 @@ class Exporter(object):
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
-                               version_info=version_info)
+        def put_call():
+            return conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
+                                    version_info=version_info)
+
+        res = self.run_sync(put_call)
+
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
 
