@@ -119,17 +119,11 @@ class Transport(object):
     __broadcast__ = False
     __network__ = True
 
-    offline = False
-
     @classmethod
     def create(cls, TransportClass, endpoint=None):
         """
-            Create an instance of the transport class or return None if the transport requires a network but we are operating
-            in offline mode
+            Create an instance of the transport class
         """
-        if cls.offline and TransportClass.__network__:
-            return None
-
         return TransportClass(endpoint)
 
     def __init__(self, endpoint=None):

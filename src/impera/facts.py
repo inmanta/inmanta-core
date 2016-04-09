@@ -21,7 +21,7 @@ import logging
 from impera import protocol
 from impera.config import Config
 from impera.execute.util import Unknown
-from impera.export import Exporter, Offline, unknown_parameters
+from impera.export import Exporter, unknown_parameters
 from impera.stats import Stats
 
 LOGGER = logging.getLogger(__name__)
@@ -34,28 +34,24 @@ def get_fact(res, fact_name: str, default_value=None, metadata={}) -> "any":
     resource_id = Exporter.get_id(res)
 
     fact_value = None
-    if Config.getboolean("config", "offline", False):
-        fact_value = Offline.get().get_fact(resource_id, fact_name, Unknown(source=res))
+    try:
+        client = protocol.Client("compiler", "client")
 
-    else:
-        try:
-            client = protocol.Client("compiler", "client")
+        env = Config.get("config", "environment", None)
+        if env is None:
+            raise Exception("The environment of this model should be configured in config>environment")
 
-            env = Config.get("config", "environment", None)
-            if env is None:
-                raise Exception("The environment of this model should be configured in config>environment")
+        result = client.get_param(tid=env, id=fact_name, resource_id=resource_id)
 
-            result = client.get_param(tid=env, id=fact_name, resource_id=resource_id)
-
-            if result.code == 200:
-                fact_value = result.result["parameter"]["value"]
-            else:
-                LOGGER.debug("Param %s of resource %s is unknown", fact_name, resource_id)
-                fact_value = Unknown(source=res)
-                unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
-        except ConnectionRefusedError:
+        if result.code == 200:
+            fact_value = result.result["parameter"]["value"]
+        else:
+            LOGGER.debug("Param %s of resource %s is unknown", fact_name, resource_id)
             fact_value = Unknown(source=res)
             unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
+    except ConnectionRefusedError:
+        fact_value = Unknown(source=res)
+        unknown_parameters.append({"resource": resource_id, "parameter": fact_name, "source": "fact"})
 
     if isinstance(fact_value, Unknown) and default_value is not None:
         return default_value

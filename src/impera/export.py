@@ -113,7 +113,6 @@ class Exporter(object):
         self._version = 0
         self._scope = None
 
-        self._offline = False
         self._file_store = {}
 
     def _get_instances_of_types(self, types):
@@ -241,11 +240,10 @@ class Exporter(object):
             for host in hosts:
                 LOGGER.info(" - %s" % host)
 
-    def run(self, scope, offline=False):
+    def run(self, scope):
         """
         Run the export functions
         """
-        self._offline = offline
         self._scope = scope
         self._version = int(time.time())
         Resource.clear_cache()
@@ -275,7 +273,7 @@ class Exporter(object):
             with open(self.options.json, "wb+") as fd:
                 fd.write(json.dumps(resources).encode("utf-8"))
 
-        elif (len(self._resources) > 0 or len(unknown_parameters) > 0) and not offline:
+        elif len(self._resources) > 0 or len(unknown_parameters) > 0:
             self.commit_resources(self._version, resources)
 
         LOGGER.info("Committed resources with version %d" % self._version)
@@ -346,23 +344,19 @@ class Exporter(object):
         if version is None:
             version = int(time.time())
 
-        if not self._offline:
-            LOGGER.info("Sending resources and handler source to server")
-            sources = resource.sources()
-            sources.update(Commander.sources())
+        LOGGER.info("Sending resources and handler source to server")
+        sources = resource.sources()
+        sources.update(Commander.sources())
 
-            requires = Project.get().collect_requirements()
+        requires = Project.get().collect_requirements()
 
-            LOGGER.info("Uploading source files")
+        LOGGER.info("Uploading source files")
 
-            conn = protocol.Client("compiler", "client")
-            res = conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
+        conn = protocol.Client("compiler", "client")
+        res = conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
 
-            if res is None or res.code != 200:
-                raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
-
-        else:
-            LOGGER.info("Offline mode, so not sending configuration to the server")
+        if res is None or res.code != 200:
+            raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
     def commit_resources(self, version, resources):
         """
@@ -381,29 +375,28 @@ class Exporter(object):
         self.deploy_code(tid, version)
 
         conn = protocol.Client("compiler", "client")
-        if not self._offline:
-            LOGGER.info("Uploading %d files" % len(self._file_store))
+        LOGGER.info("Uploading %d files" % len(self._file_store))
 
-            # collect all hashes and send them at once to the server to check
-            # if they are already uploaded
-            hashes = list(self._file_store.keys())
+        # collect all hashes and send them at once to the server to check
+        # if they are already uploaded
+        hashes = list(self._file_store.keys())
 
-            res = conn.stat_files(files=hashes)
+        res = conn.stat_files(files=hashes)
+
+        if res.code != 200:
+            raise Exception("Unable to check status of files at server")
+
+        to_upload = res.result["files"]
+
+        LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
+        for hash_id in to_upload:
+            content = self._file_store[hash_id]
+            res = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
             if res.code != 200:
-                raise Exception("Unable to check status of files at server")
-
-            to_upload = res.result["files"]
-
-            LOGGER.info("Only %d files are new and need to be uploaded" % len(to_upload))
-            for hash_id in to_upload:
-                content = self._file_store[hash_id]
-                res = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
-
-                if res.code != 200:
-                    LOGGER.error("Unable to upload file with hash %s" % hash_id)
-                else:
-                    LOGGER.debug("Uploaded file with hash %s" % hash_id)
+                LOGGER.error("Unable to upload file with hash %s" % hash_id)
+            else:
+                LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
         project = Project.get()
@@ -455,38 +448,6 @@ class Exporter(object):
         self._file_store[hash_id] = content
 
         return hash_id
-
-    def get_offline_files(self):
-        return self._file_store
-
-
-class Offline(object):
-    """
-        Handles offline stuff
-    """
-    _instance = None
-
-    @classmethod
-    def get(cls, new=False):
-        if cls._instance is None or new:
-            cls._instance = Offline()
-
-        return cls._instance
-
-    def __init__(self):
-        self._facts = {}
-
-    def set_facts(self, resource, facts):
-        """
-            Set the facts for a given resource
-        """
-        self._facts[resource] = facts
-
-    def get_fact(self, resource, name, default=None):
-        if resource not in self._facts or name not in self._facts[resource]:
-            return default
-
-        return self._facts[resource][name]
 
 
 class dependency_manager(object):
