@@ -114,7 +114,7 @@ class Parameter(Document):
     """
     name = StringField(required=True)
     value = StringField(default="", required=True)
-    environment = ReferenceField(Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True)
     source = StringField(required=True)
     resource_id = StringField(default="")
     updated = DateTimeField()
@@ -146,7 +146,7 @@ class UnknownParameter(Document):
         :param version The version id of the configuration model on which this parameter was reported
     """
     name = StringField(required=True)
-    environment = ReferenceField(Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True)
     source = StringField(required=True)
     resource_id = StringField(default="")
     version = IntField(required=True)
@@ -204,8 +204,8 @@ class Agent(Document):
         :param last_seen When did the server receive data from the node for the last time.
         :param interval The reporting interval of this agent
     """
-    environment = ReferenceField(Environment)
-    node = ReferenceField(Node, required=True)
+    environment = ReferenceField(reference_document_type=Environment)
+    node = ReferenceField(reference_document_type=Node, required=True)
     name = StringField(required=True)
     role = StringField(required=True)
     last_seen = DateTimeField()
@@ -241,7 +241,7 @@ class Report(Document):
     errstream = StringField(required=True)
     outstream = StringField(required=True)
     returncode = IntField()
-    compile = ReferenceField("Compile")
+    compile = ReferenceField(reference_document_type="impera.data.Compile")
 
     def to_dict(self):
         return {"started": self.started.isoformat(),
@@ -263,7 +263,7 @@ class Compile(Document):
         :param completed Time to compile was completed
         :param reports Per stage reports
     """
-    environment = ReferenceField(Environment)
+    environment = ReferenceField(reference_document_type=Environment)
     started = DateTimeField()
     completed = DateTimeField()
 
@@ -292,7 +292,7 @@ class Form(IdDocument):
     """
         A form in the dashboard defined by the configuration model
     """
-    environment = ReferenceField(Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True)
     form_type = StringField(required=True)
     options = JsonField()
     fields = JsonField(StringField())
@@ -329,8 +329,8 @@ class FormRecord(IdDocument):
     """
         A form record
     """
-    form = ReferenceField(Form, required=True)
-    environment = ReferenceField(Environment, required=True)
+    form = ReferenceField(reference_document_type=Form, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True)
     fields = JsonField()
     changed = DateTimeField()
 
@@ -359,7 +359,7 @@ class Resource(Document):
         :param attribute_value The value of the identifying attribute
         :param last_deploy When was the last deploy this resource
     """
-    environment = ReferenceField(Environment)
+    environment = ReferenceField(reference_document_type=Environment)
     resource_id = StringField(required=True)
 
     resource_type = StringField(required=True)
@@ -406,7 +406,7 @@ class ResourceAction(Document):
         :param level The "urgency" of this action
         :param data A python dictionary that can be serialized to json with additional data
     """
-    resource_version = ReferenceField("ResourceVersion")
+    resource_version = ReferenceField(reference_document_type="impera.data.ResourceVersion")
     action = StringField(required=True)
     timestamp = DateTimeField(required=True)
     message = StringField()
@@ -438,10 +438,10 @@ class ResourceVersion(Document):
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
     """
-    environment = ReferenceField(Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True)
     rid = StringField(required=True)
-    resource = ReferenceField(Resource, required=True)
-    model = ReferenceField("ConfigurationModel", required=True)
+    resource = ReferenceField(reference_document_type=Resource, required=True)
+    model = ReferenceField(reference_document_type="impera.data.ConfigurationModel", required=True)
     attributes = JsonField()
     status = StringField(default="")
 
@@ -485,13 +485,13 @@ class ConfigurationModel(Document):
         :param result The result of the deployment. Success or error.
     """
     version = IntField(required=True)
-    environment = ReferenceField(Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True)
     date = DateTimeField()
 
     released = BooleanField(default=False)
     deployed = BooleanField(default=False)
     result = StringField(default="pending")
-    status = JsonField()
+    status = JsonField(default={})
     version_info = JsonField()
 
     resources_total = IntField(default=0)
@@ -549,7 +549,7 @@ class Code(Document):
         :param sources The source code of plugins
         :param requires Python requires for the source code above
     """
-    environment = ReferenceField(Environment)
+    environment = ReferenceField(reference_document_type=Environment)
     version = IntField()
     sources = JsonField()
     requires = JsonField()
@@ -557,7 +557,7 @@ class Code(Document):
     @classmethod
     @gen.coroutine
     def get_version(cls, environment, version):
-        codes = cls.objects.filter(environment=environment, version=version).find_all()
+        codes = yield cls.objects.filter(environment=environment, version=version).find_all()
         if len(codes) == 0:
             return None
 
@@ -576,8 +576,8 @@ class DryRun(IdDocument):
         :param resource_todo The number of resources left to do
         :param resources Changes for each of the resources in the version
     """
-    environment = ReferenceField(Environment)
-    model = ReferenceField(ConfigurationModel)
+    environment = ReferenceField(reference_document_type=Environment)
+    model = ReferenceField(reference_document_type=ConfigurationModel)
     date = DateTimeField()
     resource_total = IntField()
     resource_todo = IntField()
@@ -602,8 +602,8 @@ class ResourceSnapshot(Document):
 
         :param error Indicates if an error made the snapshot fail
     """
-    environment = ReferenceField(Environment)
-    snapshot = ReferenceField("Snapshot")
+    environment = ReferenceField(reference_document_type=Environment)
+    snapshot = ReferenceField(reference_document_type="impera.data.Snapshot")
     resource_id = StringField()
     state_id = StringField()
     started = DateTimeField()
@@ -631,8 +631,8 @@ class ResourceRestore(Document):
     """
         A restore of a resource from a snapshot
     """
-    environment = ReferenceField(Environment)
-    restore = ReferenceField("SnapshotRestore")
+    environment = ReferenceField(reference_document_type=Environment)
+    restore = ReferenceField(reference_document_type="impera.data.SnapshotRestore")
     state_id = StringField()
     resource_id = StringField()
     started = DateTimeField()
@@ -657,8 +657,8 @@ class SnapshotRestore(IdDocument):
     """
         Information about a snapshot restore
     """
-    environment = ReferenceField(Environment)
-    snapshot = ReferenceField("Snapshot")
+    environment = ReferenceField(reference_document_type=Environment)
+    snapshot = ReferenceField(reference_document_type="impera.data.Snapshot")
     started = DateTimeField()
     finished = DateTimeField()
     resources_todo = IntField(default=0)
@@ -690,8 +690,8 @@ class Snapshot(IdDocument):
         :param finished When was this snapshot finished
         :param total_size The total size of this snapshot
     """
-    environment = ReferenceField(Environment)
-    model = ReferenceField(ConfigurationModel)
+    environment = ReferenceField(reference_document_type=Environment)
+    model = ReferenceField(reference_document_type=ConfigurationModel)
     name = StringField()
     started = DateTimeField()
     finished = DateTimeField()

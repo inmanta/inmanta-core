@@ -6,10 +6,10 @@ pyyaml
 urllib3
 six
 pymongo
+motor
 sphinx-argparse
 sphinx
 cliff
 blessings
 python-dateutil
-motor
 motorengine

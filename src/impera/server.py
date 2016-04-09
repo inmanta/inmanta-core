@@ -126,9 +126,12 @@ class Server(protocol.ServerEndpoint):
             versions = yield data.ConfigurationModel.objects.filter(released=False,  # @UndefinedVariable
                                                                     environment=env_item).find_all()  # @UndefinedVariable
             if len(versions) > n_versions:
-                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
-                versions = versions.order_by("-date")[n_versions:]
-                futures = [v.delete() for v in versions]
+                LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.uuid)
+                version_dict = {x.version: x for x in versions}
+                delete_list = sorted(version_dict.keys())
+                delete_list = delete_list[:-n_versions]
+
+                futures = [version_dict[v].delete() for v in delete_list]
                 yield futures
 
     def check_storage(self):
@@ -781,7 +784,7 @@ class Server(protocol.ServerEndpoint):
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.ResourceVersion.objects(model=version)  # @UndefinedVariable
+        resources = yield data.ResourceVersion.objects.filter(model=version).find_all()  # @UndefinedVariable
 
         version_dict = yield version.to_dict()
         d = {"model": version_dict}
@@ -1132,7 +1135,7 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = data.Code.get_version(environment=env, version=id)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=env, version=id)  # @UndefinedVariable
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
@@ -1333,11 +1336,8 @@ host = localhost
                 env_dict["versions"].append(model_dict)
 
         if resources > 0:
-            r = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
-            env_dict["resources"] = []
-            for x in r:
-                d = yield x.to_dict()
-                env_dict["resources"].append(d)
+            resource_list = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
+            env_dict["resources"] = [x.to_dict() for x in resource_list]
 
         return 200, {"environment": env_dict}
 

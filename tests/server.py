@@ -20,7 +20,7 @@ import time
 
 from impera import protocol
 from server_test import ServerTest
-from nose.tools import assert_equal
+from nose.tools import assert_equal, assert_less_equal
 from tornado.testing import gen_test
 
 
@@ -53,6 +53,10 @@ class testRestServer(ServerTest):
         for _i in range(20):
             version += 1
 
+            yield self.server._purge_versions()
             res = yield self.client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
             assert_equal(res.code, 200)
             result = yield self.client.get_project(id=project_id)
+
+            versions = yield self.client.list_versions(tid=env_id)
+            assert_less_equal(versions.result["count"], 2 + 1)
