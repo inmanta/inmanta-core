@@ -20,7 +20,7 @@ from functools import wraps
 import uuid
 import datetime
 
-#from impera.data import ROLES, ACTIONS, LOGLEVEL
+from impera.data import ROLES, ACTIONS, LOGLEVEL
 
 
 def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
@@ -204,8 +204,8 @@ class HeartBeatMethod(Method):
             :param interval The expected interval between heart beats
             :param environment The environment this agent belongs to
         """
-        #if role not in ROLES:
-        #    raise Exception("Invalid agent role (%s) should be %s" % (role, ", ".join(ROLES)))
+        if role not in ROLES:
+            raise Exception("Invalid agent role (%s) should be %s" % (role, ", ".join(ROLES)))
 
 
 class FileMethod(Method):
@@ -298,11 +298,11 @@ class ResourceMethod(Method):
             :param status The current status of the resource (if known)
             :param extra_data A map with additional data
         """
-        #if level not in LOGLEVEL:
-        #    raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(LOGLEVEL)))
+        if level not in LOGLEVEL:
+            raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(LOGLEVEL)))
 
-        #if action not in ACTIONS:
-        #    raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(ACTIONS)))
+        if action not in ACTIONS:
+            raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(ACTIONS)))
 
 
 class CMVersionMethod(Method):

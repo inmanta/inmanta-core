@@ -19,7 +19,6 @@
     transport independent. Example support can be json over http and amqp
 """
 
-from http import client
 import logging
 import socket
 import time

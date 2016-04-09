@@ -9,7 +9,7 @@ pymongo
 sphinx-argparse
 sphinx
 cliff
-mongoengine
 blessings
 python-dateutil
 motorengine
+motor

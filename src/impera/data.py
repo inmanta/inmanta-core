@@ -16,15 +16,13 @@
     Contact: bart@impera.io
 """
 
-import json, sys
+import json
 
 from motorengine import Document
 from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
 from motorengine.fields.dynamic_field import DynamicField
-
-from impera.resources import Id
 from motorengine.fields.json_field import JsonField
-
+from impera.resources import Id
 from tornado import gen
 
 

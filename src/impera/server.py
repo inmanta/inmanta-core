@@ -712,7 +712,8 @@ class Server(protocol.ServerEndpoint):
             cm = versions[0]
 
         else:
-            versions = yield data.ConfigurationModel.objects.filter(environment=env, version=version).find_all()  # @UndefinedVariable
+            versions = yield (data.ConfigurationModel.objects.filter(environment=env, version=version).  # @UndefinedVariable
+                              find_all())  # @UndefinedVariable
             if len(versions) == 0:
                 return 404, {"message": "The given version does not exist"}
 
@@ -749,7 +750,8 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        models = yield data.ConfigurationModel.objects.filter(environment=env).order_by("version", direction=ASCENDING).find_all()  # @UndefinedVariable
+        models = yield (data.ConfigurationModel.objects.filter(environment=env).  # @UndefinedVariable
+                        order_by("version", direction=ASCENDING).find_all())  # @UndefinedVariable
         count = len(models)
 
         if start is not None:
@@ -803,7 +805,8 @@ class Server(protocol.ServerEndpoint):
 
             d["resources"].append(res_dict)
 
-        unp = yield data.UnknownParameter.objects.filter(environment=env, version=version.version).find_all()  # @UndefinedVariable
+        unp = yield (data.UnknownParameter.objects.  # @UndefinedVariable
+                     filter(environment=env, version=version.version).find_all())  # @UndefinedVariable
         d["unknowns"] = [x.to_dict() for x in unp]
 
         return 200, d
@@ -841,7 +844,8 @@ class Server(protocol.ServerEndpoint):
             resource_obj = Id.parse_id(res_dict['id'])
             resource_id = resource_obj.resource_str()
 
-            resources = yield data.Resource.objects.filter(environment=env, resource_id=resource_id).find_all()  # @UndefinedVariable
+            resources = yield (data.Resource.objects.filter(environment=env, resource_id=resource_id).  # @UndefinedVariable
+                               find_all())  # @UndefinedVariable
             if len(resources) > 0:
                 if len(resources) == 1:
                     resource = resources[0]
@@ -880,7 +884,8 @@ class Server(protocol.ServerEndpoint):
         env_resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for res in env_resources:
             if res.version_latest < version:
-                rv = yield data.ResourceVersion.objects.filter(environment=env, resource=res).order_by("rid", direction=ASCENDING).limit(1).find_all()  # @UndefinedVariable
+                rv = yield (data.ResourceVersion.objects.filter(environment=env, resource=res).  # @UndefinedVariable
+                            order_by("rid", direction=ASCENDING).limit(1).find_all())  # @UndefinedVariable
                 if len(rv) > 0:
                     rv = rv[0]
                     if "purge_on_delete" in rv.attributes and rv.attributes["purge_on_delete"]:
@@ -1320,7 +1325,8 @@ host = localhost
         env_dict = env.to_dict()
 
         if versions > 0:
-            v = yield data.ConfigurationModel.objects.filter(environment=env).order_by("date", direction=ASCENDING).limit(versions).find_all()  # @UndefinedVariable
+            v = yield (data.ConfigurationModel.objects.filter(environment=env).  # @UndefinedVariable
+                       order_by("date", direction=ASCENDING).limit(versions).find_all())  # @UndefinedVariable
             env_dict["versions"] = []
             for model in v:
                 model_dict = yield model.to_dict()
@@ -1575,7 +1581,8 @@ host = localhost
         # find resources with state
         resources_to_snapshot = defaultdict(list)
         resource_list = []
-        resource_states = yield data.ResourceVersion.objects.filter(environment=env, model=version).find_all()  # @UndefinedVariable
+        resource_states = yield (data.ResourceVersion.objects.filter(environment=env, model=version).  # @UndefinedVariable
+                                 find_all())  # @UndefinedVariable
         for rs in resource_states:
             if rs.resource.holds_state and "state_id" in rs.attributes:
                 agent = rs.resource.agent
@@ -1612,8 +1619,8 @@ host = localhost
         if snapshot is None:
             return 404, {"message": "Snapshot with id %s does not exist!" % id}
 
-        res = yield data.ResourceSnapshot.objects.filter(environment=env,  # @UndefinedVariable
-                                                         snapshot=snapshot, resource_id=resource_id).find_all()  # @UndefinedVariable
+        res = yield (data.ResourceSnapshot.objects.  # @UndefinedVariable
+                     filter(environment=env, snapshot=snapshot, resource_id=resource_id).find_all())  # @UndefinedVariable
 
         res.content_hash = snapshot_data
         res.started = start
@@ -1741,7 +1748,8 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        rr = yield data.ResourceRestore.objects.filter(environment=env, restore=id, resource_id=resource_id).find_all()  # @UndefinedVariable
+        rr = yield (data.ResourceRestore.objects.  # @UndefinedVariable
+                    filter(environment=env, restore=id, resource_id=resource_id).find_all())  # @UndefinedVariable
         if rr is None:
             return 404, {"message": "Resource restore not found."}
 
