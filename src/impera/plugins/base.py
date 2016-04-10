@@ -24,6 +24,8 @@ from impera.execute.proxy import DynamicProxy, UnknownException
 from impera.ast.statements.call import ExpressionState
 from impera.execute.util import Unknown
 from impera.execute import NotFoundException
+from impera import protocol
+from tornado.ioloop import IOLoop
 
 
 class Context(object):
@@ -59,6 +61,13 @@ class Context(object):
             os.makedirs(data_dir, exist_ok=True)
 
         return data_dir
+
+    def get_client(self):
+        client = protocol.Client("compiler", "client")
+        return client
+
+    def run_sync(self, function):
+        return IOLoop.current().run_sync(function, 5)
 
 
 class PluginMeta(type):
