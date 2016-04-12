@@ -20,7 +20,6 @@
 import logging
 
 from . import DefinitionStatement
-from impera.ast.variables import Variable, Reference
 from impera.ast.type import ConstraintType, Type
 from impera.ast.attribute import Attribute, RelationAttribute
 from impera.ast.entity import Implementation, Entity, Default, Implement
@@ -34,24 +33,32 @@ from impera.ast import Namespace
 LOGGER = logging.getLogger(__name__)
 
 
+class DefineAttribute(object):
+
+    def __init__(self, attr_type, name, default_value=None):
+        self.type = attr_type
+        self.name = name
+        self.default = default_value
+
+
 class DefineEntity(TypeDefinitionStatement):
     """
         Define a new entity in the configuration
     """
 
-    def __init__(self, namespace: Namespace, name, comment, parents):
+    def __init__(self, namespace: Namespace, name, comment, parents, attributes):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
-        self.attributes = []
+        self.attributes = attributes
         self.comment = comment
-        
+
         self.parents = parents
 
         if len(self.parents) == 0 and not (self.name == "Entity" and self.namespace.name == "std"):
-            self.parents.append(Reference("Entity", ["std"]))
+            self.parents.append("std::Entity")
 
         self.type = Entity(self.name, namespace)
- 
+
     def get_type(self):
         return (self.fullName, self.type)
 
@@ -59,7 +66,7 @@ class DefineEntity(TypeDefinitionStatement):
         """
             Add an attribute to this entity
         """
-        self.attributes.append((attr_type, name, default_value))
+        self.attributes.append(DefineAttribute(attr_type, name, default_value))
 
     def __repr__(self):
         """
@@ -76,14 +83,14 @@ class DefineEntity(TypeDefinitionStatement):
 
         add_attributes = set()
         for attribute in self.attributes:
-            attr_type = resolver.get_type(self.namespace, str(attribute[0]))
+            attr_type = resolver.get_type(self.namespace, attribute.type)
             if not isinstance(attr_type, (Type, type)):
                 raise Exception("Attributes can only be a type. Entities need to be defined as relations.")
 
-            add_attributes.add(attribute[1])
-            Attribute(entity_type, attr_type, attribute[1])
+            add_attributes.add(attribute.name)
+            Attribute(entity_type, attr_type, attribute.name)
 
-            entity_type.add_default_value(attribute[1], attribute[2])
+            entity_type.add_default_value(attribute.name, attribute.default)
 
         for parent in self.parents:
             parent_type = resolver.get_type(self.namespace, str(parent))
@@ -108,19 +115,12 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
-    def __init__(self, namespace, name):
+    def __init__(self, namespace, name, target_type, statements):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
-        self.block = BasicBlock(namespace)
-        self.entity = None
+        self.block = statements
+        self.entity = target_type
         self.type = Implementation(self.name, self.block)
-
-    def add_statement(self, statement):
-        """
-            Add a statement that is included in the implementation to this
-            class.
-        """
-        self.block.add(statement)
 
     def __repr__(self):
         """
@@ -134,7 +134,6 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         cls = resolver.get_type(self.namespace, self.entity)
         self.type.set_type(cls)
-        
 
 
 class DefineImplement(DefinitionStatement):
@@ -163,7 +162,7 @@ class DefineImplement(DefinitionStatement):
             Evaluate this statement.
         """
         entity_type = resolver.get_type(self.namespace, self.entity)
-        
+
         entity_type = entity_type.get_entity()
 
         implement = Implement()
@@ -174,7 +173,7 @@ class DefineImplement(DefinitionStatement):
             i += 1
             # check if the implementation has the correct type
             impl_obj = resolver.get_type(self.namespace, _impl)
-            
+
             if impl_obj.entity is not None and not (entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)):
                 raise Exception("Type mismatch: cannot use %s as implementation for %s because its implementing type is %s" %
                                 (impl_obj.name, entity_type, impl_obj.entity))
@@ -194,10 +193,11 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         @param basetype: The name of the type that is "refined"
     """
 
-    def __init__(self, namespace, name, basetype):
+    def __init__(self, namespace, name, basetype, expression):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.basetype = basetype
         self.__expression = None
+        self.set_expression(expression)
         self.type = ConstraintType(name)
 
     def get_expression(self):
@@ -317,10 +317,10 @@ class DefineRelation(DefinitionStatement):
             raise Exception(("Attribute name %s is already defined in %s, unable to define relationship")
                             % (self.left[1], right.name))
 
-        left_end = RelationAttribute(right, left, self.left[1], self.left[3])
+        left_end = RelationAttribute(right, left, self.left[1])
         left_end.set_multiplicity(self.left[2])
 
-        right_end = RelationAttribute(left, right, self.right[1], self.right[3])
+        right_end = RelationAttribute(left, right, self.right[1])
         right_end.set_multiplicity(self.right[2])
 
         left_end.end = right_end

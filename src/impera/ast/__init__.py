@@ -19,10 +19,21 @@
 from impera import util
 
 
+class Location(object):
+
+    def __init__(self, file, lnr):
+        self.file = file
+        self.lnr = lnr
+
+    def __str__(self, *args, **kwargs):
+        return "%s:%d" % (self.file, self.lnr)
+
+
 class Namespace(object):
     """
         This class models a namespace that contains defined types, modules, ...
     """
+
     def __init__(self, name, parent=None):
         self.__name = name
         self.__parent = parent
@@ -34,11 +45,13 @@ class Namespace(object):
             Get the name of this namespace
         """
         return self.__name
-    
+
     def get_full_name(self):
         """
             Get the name of this namespace
         """
+        if(self.__parent is None) :
+            print("DANG")
         if self.__parent.__parent is None:
             return self.get_name()
         return self.__parent.get_full_name() + "::" + self.get_name()

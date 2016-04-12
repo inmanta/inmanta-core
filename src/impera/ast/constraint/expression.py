@@ -19,11 +19,7 @@
 from abc import ABCMeta, abstractmethod
 import re
 
-from impera.ast.variables import Variable, Reference, AttributeVariable
 from impera.ast.statements import ReferenceStatement, Literal
-from impera.execute.proxy import DynamicProxy
-import impera.ast.statements.call
-from impera.execute.runtime import ResultVariable
 
 
 def create_function(expression):

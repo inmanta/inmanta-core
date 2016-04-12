@@ -16,7 +16,6 @@
     Contact: bart@impera.io
 """
 
-from impera.ast.variables import Variable, LazyVariable
 from impera.stats import Stats
 from impera.ast.statements import ReferenceStatement
 from impera.execute.runtime import ResultVariable, Waiter
@@ -43,7 +42,7 @@ class FunctionCall(ReferenceStatement):
 
     def normalize(self, resolver):
         ReferenceStatement.normalize(self, resolver)
-        self.function = resolver.get_type(self.name.full_name)
+        self.function = resolver.get_type(self.name)
 
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)

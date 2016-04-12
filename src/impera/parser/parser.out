@@ -1,0 +1,3525 @@
+Created by PLY version 3.8 (http://www.dabeaz.com/ply)
+
+Grammar
+
+Rule 0     S' -> main
+Rule 1     main -> top_stmt main
+Rule 2     main -> top_stmt
+Rule 3     top_stmt -> mls
+Rule 4     top_stmt -> entity_def
+Rule 5     top_stmt -> implement_def
+Rule 6     top_stmt -> implementation_def
+Rule 7     top_stmt -> relation
+Rule 8     top_stmt -> statement
+Rule 9     top_stmt -> typedef
+Rule 10    top_stmt -> index
+Rule 11    statement -> assign
+Rule 12    statement -> constructor
+Rule 13    statement -> function_call
+Rule 14    statement -> for
+Rule 15    stmt_list -> statement stmt_list
+Rule 16    stmt_list -> statement
+Rule 17    assign -> var_ref = operand
+Rule 18    for -> FOR ID IN operand implementation
+Rule 19    entity_def -> ENTITY CID : entity_body_outer
+Rule 20    entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer
+Rule 21    entity_body_outer -> mls entity_body END
+Rule 22    entity_body_outer -> entity_body END
+Rule 23    entity_body_outer -> END
+Rule 24    entity_body_outer -> mls END
+Rule 25    entity_body -> entity_body attr
+Rule 26    entity_body -> attr
+Rule 27    attr -> ns_ref ID
+Rule 28    attr -> ns_ref ID = constant
+Rule 29    implement_def -> IMPLEMENT class_ref USING ns_list
+Rule 30    implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition
+Rule 31    implementation_def -> IMPLEMENTATION ID FOR class_ref implementation
+Rule 32    implementation_def -> IMPLEMENTATION ID implementation
+Rule 33    implementation -> : mls stmt_list END
+Rule 34    implementation -> : stmt_list END
+Rule 35    implementation -> : END
+Rule 36    relation -> class_ref ID multi REL multi class_ref ID
+Rule 37    multi -> [ INT ]
+Rule 38    multi -> [ INT : ]
+Rule 39    multi -> [ INT : INT ]
+Rule 40    multi -> [ : INT ]
+Rule 41    typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX
+Rule 42    typedef -> TYPEDEF ID AS ns_ref MATCHING condition
+Rule 43    typedef -> TYPEDEF CID AS constructor
+Rule 44    index -> INDEX class_ref ( id_list )
+Rule 45    condition -> ( condition )
+Rule 46    condition -> operand CMP_OP operand
+Rule 47    condition -> operand IN list_def
+Rule 48    condition -> operand IN var_ref
+Rule 49    condition -> condition AND condition
+Rule 50    condition -> condition OR condition
+Rule 51    condition -> function_call
+Rule 52    condition -> NOT condition
+Rule 53    condition -> TRUE
+Rule 54    condition -> FALSE
+Rule 55    operand -> constant
+Rule 56    operand -> function_call
+Rule 57    operand -> constructor
+Rule 58    operand -> list_def
+Rule 59    operand -> var_ref
+Rule 60    operand -> index_lookup
+Rule 61    constructor -> class_ref ( param_list )
+Rule 62    function_call -> ns_ref ( operand_list )
+Rule 63    list_def -> [ operand_list ]
+Rule 64    index_lookup -> class_ref [ param_list ]
+Rule 65    constant -> TRUE
+Rule 66    constant -> FALSE
+Rule 67    constant -> INT
+Rule 68    constant -> FLOAT
+Rule 69    constant -> mls
+Rule 70    constant -> REGEX
+Rule 71    constant -> STRING
+Rule 72    param_list -> ID = operand , param_list
+Rule 73    param_list -> ID = operand
+Rule 74    operand_list -> operand , operand_list
+Rule 75    operand_list -> operand
+Rule 76    ns_list -> ns_ref , ns_list
+Rule 77    ns_list -> ns_ref
+Rule 78    var_ref -> var_ref . ID
+Rule 79    var_ref -> ns_ref
+Rule 80    class_ref -> CID
+Rule 81    class_ref -> ns_ref SEP CID
+Rule 82    class_ref_list -> class_ref , class_ref_list
+Rule 83    class_ref_list -> class_ref
+Rule 84    ns_ref -> ns_ref SEP ID
+Rule 85    ns_ref -> ID
+Rule 86    id_list -> ID , id_list
+Rule 87    id_list -> ID
+Rule 88    mls -> MLS
+Rule 89    mls -> MLS mls
+
+Terminals, with rules where they appear
+
+(                    : 44 45 61 62
+)                    : 44 45 61 62
+,                    : 72 74 76 82 86
+.                    : 78
+:                    : 19 20 33 34 35 38 39 40
+=                    : 17 28 72 73
+AND                  : 49
+AS                   : 41 42 43
+CID                  : 19 20 43 80 81
+CMP_OP               : 46
+END                  : 21 22 23 24 33 34 35
+ENTITY               : 19 20
+EXTENDS              : 20
+FALSE                : 54 66
+FLOAT                : 68
+FOR                  : 18 31
+ID                   : 18 27 28 31 32 36 36 41 42 72 73 78 84 85 86 87
+IMPLEMENT            : 29 30
+IMPLEMENTATION       : 31 32
+IN                   : 18 47 48
+INDEX                : 44
+INT                  : 37 38 39 39 40 67
+MATCHING             : 41 42
+MLS                  : 88 89
+NOT                  : 52
+OR                   : 50
+REGEX                : 41 70
+REL                  : 36
+SEP                  : 81 84
+STRING               : 71
+TRUE                 : 53 65
+TYPEDEF              : 41 42 43
+USING                : 29 30
+WHEN                 : 30
+[                    : 37 38 39 40 63 64
+]                    : 37 38 39 40 63 64
+error                : 
+
+Nonterminals, with rules where they appear
+
+assign               : 11
+attr                 : 25 26
+class_ref            : 29 30 31 36 36 44 61 64 82 83
+class_ref_list       : 20 82
+condition            : 30 42 45 49 49 50 50 52
+constant             : 28 55
+constructor          : 12 43 57
+entity_body          : 21 22 25
+entity_body_outer    : 19 20
+entity_def           : 4
+for                  : 14
+function_call        : 13 51 56
+id_list              : 44 86
+implement_def        : 5
+implementation       : 18 31 32
+implementation_def   : 6
+index                : 10
+index_lookup         : 60
+list_def             : 47 58
+main                 : 1 0
+mls                  : 3 21 24 33 69 89
+multi                : 36 36
+ns_list              : 29 30 76
+ns_ref               : 27 28 41 42 62 76 77 79 81 84
+operand              : 17 18 46 46 47 48 72 73 74 75
+operand_list         : 62 63 74
+param_list           : 61 64 72
+relation             : 7
+statement            : 8 15 16
+stmt_list            : 15 33 34
+top_stmt             : 1 2
+typedef              : 9
+var_ref              : 17 48 59 78
+
+Parsing method: LALR
+
+state 0
+
+    (0) S' -> . main
+    (1) main -> . top_stmt main
+    (2) main -> . top_stmt
+    (3) top_stmt -> . mls
+    (4) top_stmt -> . entity_def
+    (5) top_stmt -> . implement_def
+    (6) top_stmt -> . implementation_def
+    (7) top_stmt -> . relation
+    (8) top_stmt -> . statement
+    (9) top_stmt -> . typedef
+    (10) top_stmt -> . index
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (19) entity_def -> . ENTITY CID : entity_body_outer
+    (20) entity_def -> . ENTITY CID EXTENDS class_ref_list : entity_body_outer
+    (29) implement_def -> . IMPLEMENT class_ref USING ns_list
+    (30) implement_def -> . IMPLEMENT class_ref USING ns_list WHEN condition
+    (31) implementation_def -> . IMPLEMENTATION ID FOR class_ref implementation
+    (32) implementation_def -> . IMPLEMENTATION ID implementation
+    (36) relation -> . class_ref ID multi REL multi class_ref ID
+    (11) statement -> . assign
+    (12) statement -> . constructor
+    (13) statement -> . function_call
+    (14) statement -> . for
+    (41) typedef -> . TYPEDEF ID AS ns_ref MATCHING REGEX
+    (42) typedef -> . TYPEDEF ID AS ns_ref MATCHING condition
+    (43) typedef -> . TYPEDEF CID AS constructor
+    (44) index -> . INDEX class_ref ( id_list )
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (17) assign -> . var_ref = operand
+    (61) constructor -> . class_ref ( param_list )
+    (62) function_call -> . ns_ref ( operand_list )
+    (18) for -> . FOR ID IN operand implementation
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+
+    MLS             shift and go to state 4
+    ENTITY          shift and go to state 8
+    IMPLEMENT       shift and go to state 6
+    IMPLEMENTATION  shift and go to state 15
+    TYPEDEF         shift and go to state 23
+    INDEX           shift and go to state 13
+    CID             shift and go to state 26
+    FOR             shift and go to state 19
+    ID              shift and go to state 5
+
+    implement_def                  shift and go to state 9
+    main                           shift and go to state 12
+    ns_ref                         shift and go to state 21
+    entity_def                     shift and go to state 3
+    implementation_def             shift and go to state 1
+    class_ref                      shift and go to state 14
+    function_call                  shift and go to state 17
+    assign                         shift and go to state 2
+    index                          shift and go to state 24
+    statement                      shift and go to state 16
+    top_stmt                       shift and go to state 18
+    typedef                        shift and go to state 20
+    for                            shift and go to state 22
+    mls                            shift and go to state 10
+    constructor                    shift and go to state 7
+    var_ref                        shift and go to state 11
+    relation                       shift and go to state 25
+
+state 1
+
+    (6) top_stmt -> implementation_def .
+
+    MLS             reduce using rule 6 (top_stmt -> implementation_def .)
+    ENTITY          reduce using rule 6 (top_stmt -> implementation_def .)
+    IMPLEMENT       reduce using rule 6 (top_stmt -> implementation_def .)
+    IMPLEMENTATION  reduce using rule 6 (top_stmt -> implementation_def .)
+    TYPEDEF         reduce using rule 6 (top_stmt -> implementation_def .)
+    INDEX           reduce using rule 6 (top_stmt -> implementation_def .)
+    CID             reduce using rule 6 (top_stmt -> implementation_def .)
+    FOR             reduce using rule 6 (top_stmt -> implementation_def .)
+    ID              reduce using rule 6 (top_stmt -> implementation_def .)
+    $end            reduce using rule 6 (top_stmt -> implementation_def .)
+
+
+state 2
+
+    (11) statement -> assign .
+
+    FOR             reduce using rule 11 (statement -> assign .)
+    CID             reduce using rule 11 (statement -> assign .)
+    ID              reduce using rule 11 (statement -> assign .)
+    END             reduce using rule 11 (statement -> assign .)
+    MLS             reduce using rule 11 (statement -> assign .)
+    ENTITY          reduce using rule 11 (statement -> assign .)
+    IMPLEMENT       reduce using rule 11 (statement -> assign .)
+    IMPLEMENTATION  reduce using rule 11 (statement -> assign .)
+    TYPEDEF         reduce using rule 11 (statement -> assign .)
+    INDEX           reduce using rule 11 (statement -> assign .)
+    $end            reduce using rule 11 (statement -> assign .)
+
+
+state 3
+
+    (4) top_stmt -> entity_def .
+
+    MLS             reduce using rule 4 (top_stmt -> entity_def .)
+    ENTITY          reduce using rule 4 (top_stmt -> entity_def .)
+    IMPLEMENT       reduce using rule 4 (top_stmt -> entity_def .)
+    IMPLEMENTATION  reduce using rule 4 (top_stmt -> entity_def .)
+    TYPEDEF         reduce using rule 4 (top_stmt -> entity_def .)
+    INDEX           reduce using rule 4 (top_stmt -> entity_def .)
+    CID             reduce using rule 4 (top_stmt -> entity_def .)
+    FOR             reduce using rule 4 (top_stmt -> entity_def .)
+    ID              reduce using rule 4 (top_stmt -> entity_def .)
+    $end            reduce using rule 4 (top_stmt -> entity_def .)
+
+
+state 4
+
+    (88) mls -> MLS .
+    (89) mls -> MLS . mls
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+
+  ! shift/reduce conflict for MLS resolved as shift
+    CMP_OP          reduce using rule 88 (mls -> MLS .)
+    IN              reduce using rule 88 (mls -> MLS .)
+    ENTITY          reduce using rule 88 (mls -> MLS .)
+    IMPLEMENT       reduce using rule 88 (mls -> MLS .)
+    IMPLEMENTATION  reduce using rule 88 (mls -> MLS .)
+    TYPEDEF         reduce using rule 88 (mls -> MLS .)
+    INDEX           reduce using rule 88 (mls -> MLS .)
+    CID             reduce using rule 88 (mls -> MLS .)
+    FOR             reduce using rule 88 (mls -> MLS .)
+    ID              reduce using rule 88 (mls -> MLS .)
+    $end            reduce using rule 88 (mls -> MLS .)
+    END             reduce using rule 88 (mls -> MLS .)
+    ,               reduce using rule 88 (mls -> MLS .)
+    )               reduce using rule 88 (mls -> MLS .)
+    ]               reduce using rule 88 (mls -> MLS .)
+    :               reduce using rule 88 (mls -> MLS .)
+    AND             reduce using rule 88 (mls -> MLS .)
+    OR              reduce using rule 88 (mls -> MLS .)
+    MLS             shift and go to state 4
+
+  ! MLS             [ reduce using rule 88 (mls -> MLS .) ]
+
+    mls                            shift and go to state 27
+
+state 5
+
+    (85) ns_ref -> ID .
+
+    ID              reduce using rule 85 (ns_ref -> ID .)
+    SEP             reduce using rule 85 (ns_ref -> ID .)
+    (               reduce using rule 85 (ns_ref -> ID .)
+    .               reduce using rule 85 (ns_ref -> ID .)
+    CMP_OP          reduce using rule 85 (ns_ref -> ID .)
+    IN              reduce using rule 85 (ns_ref -> ID .)
+    =               reduce using rule 85 (ns_ref -> ID .)
+    MLS             reduce using rule 85 (ns_ref -> ID .)
+    ENTITY          reduce using rule 85 (ns_ref -> ID .)
+    IMPLEMENT       reduce using rule 85 (ns_ref -> ID .)
+    IMPLEMENTATION  reduce using rule 85 (ns_ref -> ID .)
+    TYPEDEF         reduce using rule 85 (ns_ref -> ID .)
+    INDEX           reduce using rule 85 (ns_ref -> ID .)
+    CID             reduce using rule 85 (ns_ref -> ID .)
+    FOR             reduce using rule 85 (ns_ref -> ID .)
+    $end            reduce using rule 85 (ns_ref -> ID .)
+    END             reduce using rule 85 (ns_ref -> ID .)
+    ,               reduce using rule 85 (ns_ref -> ID .)
+    )               reduce using rule 85 (ns_ref -> ID .)
+    AND             reduce using rule 85 (ns_ref -> ID .)
+    OR              reduce using rule 85 (ns_ref -> ID .)
+    :               reduce using rule 85 (ns_ref -> ID .)
+    ]               reduce using rule 85 (ns_ref -> ID .)
+    WHEN            reduce using rule 85 (ns_ref -> ID .)
+    MATCHING        reduce using rule 85 (ns_ref -> ID .)
+
+
+state 6
+
+    (29) implement_def -> IMPLEMENT . class_ref USING ns_list
+    (30) implement_def -> IMPLEMENT . class_ref USING ns_list WHEN condition
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 28
+    ns_ref                         shift and go to state 29
+
+state 7
+
+    (12) statement -> constructor .
+
+    FOR             reduce using rule 12 (statement -> constructor .)
+    CID             reduce using rule 12 (statement -> constructor .)
+    ID              reduce using rule 12 (statement -> constructor .)
+    END             reduce using rule 12 (statement -> constructor .)
+    MLS             reduce using rule 12 (statement -> constructor .)
+    ENTITY          reduce using rule 12 (statement -> constructor .)
+    IMPLEMENT       reduce using rule 12 (statement -> constructor .)
+    IMPLEMENTATION  reduce using rule 12 (statement -> constructor .)
+    TYPEDEF         reduce using rule 12 (statement -> constructor .)
+    INDEX           reduce using rule 12 (statement -> constructor .)
+    $end            reduce using rule 12 (statement -> constructor .)
+
+
+state 8
+
+    (19) entity_def -> ENTITY . CID : entity_body_outer
+    (20) entity_def -> ENTITY . CID EXTENDS class_ref_list : entity_body_outer
+
+    CID             shift and go to state 30
+
+
+state 9
+
+    (5) top_stmt -> implement_def .
+
+    MLS             reduce using rule 5 (top_stmt -> implement_def .)
+    ENTITY          reduce using rule 5 (top_stmt -> implement_def .)
+    IMPLEMENT       reduce using rule 5 (top_stmt -> implement_def .)
+    IMPLEMENTATION  reduce using rule 5 (top_stmt -> implement_def .)
+    TYPEDEF         reduce using rule 5 (top_stmt -> implement_def .)
+    INDEX           reduce using rule 5 (top_stmt -> implement_def .)
+    CID             reduce using rule 5 (top_stmt -> implement_def .)
+    FOR             reduce using rule 5 (top_stmt -> implement_def .)
+    ID              reduce using rule 5 (top_stmt -> implement_def .)
+    $end            reduce using rule 5 (top_stmt -> implement_def .)
+
+
+state 10
+
+    (3) top_stmt -> mls .
+
+    MLS             reduce using rule 3 (top_stmt -> mls .)
+    ENTITY          reduce using rule 3 (top_stmt -> mls .)
+    IMPLEMENT       reduce using rule 3 (top_stmt -> mls .)
+    IMPLEMENTATION  reduce using rule 3 (top_stmt -> mls .)
+    TYPEDEF         reduce using rule 3 (top_stmt -> mls .)
+    INDEX           reduce using rule 3 (top_stmt -> mls .)
+    CID             reduce using rule 3 (top_stmt -> mls .)
+    FOR             reduce using rule 3 (top_stmt -> mls .)
+    ID              reduce using rule 3 (top_stmt -> mls .)
+    $end            reduce using rule 3 (top_stmt -> mls .)
+
+
+state 11
+
+    (17) assign -> var_ref . = operand
+    (78) var_ref -> var_ref . . ID
+
+    =               shift and go to state 32
+    .               shift and go to state 31
+
+
+state 12
+
+    (0) S' -> main .
+
+
+
+state 13
+
+    (44) index -> INDEX . class_ref ( id_list )
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 33
+    ns_ref                         shift and go to state 29
+
+state 14
+
+    (36) relation -> class_ref . ID multi REL multi class_ref ID
+    (61) constructor -> class_ref . ( param_list )
+
+    ID              shift and go to state 35
+    (               shift and go to state 34
+
+
+state 15
+
+    (31) implementation_def -> IMPLEMENTATION . ID FOR class_ref implementation
+    (32) implementation_def -> IMPLEMENTATION . ID implementation
+
+    ID              shift and go to state 36
+
+
+state 16
+
+    (8) top_stmt -> statement .
+
+    MLS             reduce using rule 8 (top_stmt -> statement .)
+    ENTITY          reduce using rule 8 (top_stmt -> statement .)
+    IMPLEMENT       reduce using rule 8 (top_stmt -> statement .)
+    IMPLEMENTATION  reduce using rule 8 (top_stmt -> statement .)
+    TYPEDEF         reduce using rule 8 (top_stmt -> statement .)
+    INDEX           reduce using rule 8 (top_stmt -> statement .)
+    CID             reduce using rule 8 (top_stmt -> statement .)
+    FOR             reduce using rule 8 (top_stmt -> statement .)
+    ID              reduce using rule 8 (top_stmt -> statement .)
+    $end            reduce using rule 8 (top_stmt -> statement .)
+
+
+state 17
+
+    (13) statement -> function_call .
+
+    FOR             reduce using rule 13 (statement -> function_call .)
+    CID             reduce using rule 13 (statement -> function_call .)
+    ID              reduce using rule 13 (statement -> function_call .)
+    END             reduce using rule 13 (statement -> function_call .)
+    MLS             reduce using rule 13 (statement -> function_call .)
+    ENTITY          reduce using rule 13 (statement -> function_call .)
+    IMPLEMENT       reduce using rule 13 (statement -> function_call .)
+    IMPLEMENTATION  reduce using rule 13 (statement -> function_call .)
+    TYPEDEF         reduce using rule 13 (statement -> function_call .)
+    INDEX           reduce using rule 13 (statement -> function_call .)
+    $end            reduce using rule 13 (statement -> function_call .)
+
+
+state 18
+
+    (1) main -> top_stmt . main
+    (2) main -> top_stmt .
+    (1) main -> . top_stmt main
+    (2) main -> . top_stmt
+    (3) top_stmt -> . mls
+    (4) top_stmt -> . entity_def
+    (5) top_stmt -> . implement_def
+    (6) top_stmt -> . implementation_def
+    (7) top_stmt -> . relation
+    (8) top_stmt -> . statement
+    (9) top_stmt -> . typedef
+    (10) top_stmt -> . index
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (19) entity_def -> . ENTITY CID : entity_body_outer
+    (20) entity_def -> . ENTITY CID EXTENDS class_ref_list : entity_body_outer
+    (29) implement_def -> . IMPLEMENT class_ref USING ns_list
+    (30) implement_def -> . IMPLEMENT class_ref USING ns_list WHEN condition
+    (31) implementation_def -> . IMPLEMENTATION ID FOR class_ref implementation
+    (32) implementation_def -> . IMPLEMENTATION ID implementation
+    (36) relation -> . class_ref ID multi REL multi class_ref ID
+    (11) statement -> . assign
+    (12) statement -> . constructor
+    (13) statement -> . function_call
+    (14) statement -> . for
+    (41) typedef -> . TYPEDEF ID AS ns_ref MATCHING REGEX
+    (42) typedef -> . TYPEDEF ID AS ns_ref MATCHING condition
+    (43) typedef -> . TYPEDEF CID AS constructor
+    (44) index -> . INDEX class_ref ( id_list )
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (17) assign -> . var_ref = operand
+    (61) constructor -> . class_ref ( param_list )
+    (62) function_call -> . ns_ref ( operand_list )
+    (18) for -> . FOR ID IN operand implementation
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+
+    $end            reduce using rule 2 (main -> top_stmt .)
+    MLS             shift and go to state 4
+    ENTITY          shift and go to state 8
+    IMPLEMENT       shift and go to state 6
+    IMPLEMENTATION  shift and go to state 15
+    TYPEDEF         shift and go to state 23
+    INDEX           shift and go to state 13
+    CID             shift and go to state 26
+    FOR             shift and go to state 19
+    ID              shift and go to state 5
+
+    implement_def                  shift and go to state 9
+    main                           shift and go to state 37
+    ns_ref                         shift and go to state 21
+    entity_def                     shift and go to state 3
+    implementation_def             shift and go to state 1
+    class_ref                      shift and go to state 14
+    function_call                  shift and go to state 17
+    assign                         shift and go to state 2
+    index                          shift and go to state 24
+    statement                      shift and go to state 16
+    top_stmt                       shift and go to state 18
+    typedef                        shift and go to state 20
+    for                            shift and go to state 22
+    mls                            shift and go to state 10
+    constructor                    shift and go to state 7
+    var_ref                        shift and go to state 11
+    relation                       shift and go to state 25
+
+state 19
+
+    (18) for -> FOR . ID IN operand implementation
+
+    ID              shift and go to state 38
+
+
+state 20
+
+    (9) top_stmt -> typedef .
+
+    MLS             reduce using rule 9 (top_stmt -> typedef .)
+    ENTITY          reduce using rule 9 (top_stmt -> typedef .)
+    IMPLEMENT       reduce using rule 9 (top_stmt -> typedef .)
+    IMPLEMENTATION  reduce using rule 9 (top_stmt -> typedef .)
+    TYPEDEF         reduce using rule 9 (top_stmt -> typedef .)
+    INDEX           reduce using rule 9 (top_stmt -> typedef .)
+    CID             reduce using rule 9 (top_stmt -> typedef .)
+    FOR             reduce using rule 9 (top_stmt -> typedef .)
+    ID              reduce using rule 9 (top_stmt -> typedef .)
+    $end            reduce using rule 9 (top_stmt -> typedef .)
+
+
+state 21
+
+    (81) class_ref -> ns_ref . SEP CID
+    (62) function_call -> ns_ref . ( operand_list )
+    (84) ns_ref -> ns_ref . SEP ID
+    (79) var_ref -> ns_ref .
+
+    SEP             shift and go to state 40
+    (               shift and go to state 39
+    =               reduce using rule 79 (var_ref -> ns_ref .)
+    .               reduce using rule 79 (var_ref -> ns_ref .)
+
+
+state 22
+
+    (14) statement -> for .
+
+    FOR             reduce using rule 14 (statement -> for .)
+    CID             reduce using rule 14 (statement -> for .)
+    ID              reduce using rule 14 (statement -> for .)
+    END             reduce using rule 14 (statement -> for .)
+    MLS             reduce using rule 14 (statement -> for .)
+    ENTITY          reduce using rule 14 (statement -> for .)
+    IMPLEMENT       reduce using rule 14 (statement -> for .)
+    IMPLEMENTATION  reduce using rule 14 (statement -> for .)
+    TYPEDEF         reduce using rule 14 (statement -> for .)
+    INDEX           reduce using rule 14 (statement -> for .)
+    $end            reduce using rule 14 (statement -> for .)
+
+
+state 23
+
+    (41) typedef -> TYPEDEF . ID AS ns_ref MATCHING REGEX
+    (42) typedef -> TYPEDEF . ID AS ns_ref MATCHING condition
+    (43) typedef -> TYPEDEF . CID AS constructor
+
+    ID              shift and go to state 42
+    CID             shift and go to state 41
+
+
+state 24
+
+    (10) top_stmt -> index .
+
+    MLS             reduce using rule 10 (top_stmt -> index .)
+    ENTITY          reduce using rule 10 (top_stmt -> index .)
+    IMPLEMENT       reduce using rule 10 (top_stmt -> index .)
+    IMPLEMENTATION  reduce using rule 10 (top_stmt -> index .)
+    TYPEDEF         reduce using rule 10 (top_stmt -> index .)
+    INDEX           reduce using rule 10 (top_stmt -> index .)
+    CID             reduce using rule 10 (top_stmt -> index .)
+    FOR             reduce using rule 10 (top_stmt -> index .)
+    ID              reduce using rule 10 (top_stmt -> index .)
+    $end            reduce using rule 10 (top_stmt -> index .)
+
+
+state 25
+
+    (7) top_stmt -> relation .
+
+    MLS             reduce using rule 7 (top_stmt -> relation .)
+    ENTITY          reduce using rule 7 (top_stmt -> relation .)
+    IMPLEMENT       reduce using rule 7 (top_stmt -> relation .)
+    IMPLEMENTATION  reduce using rule 7 (top_stmt -> relation .)
+    TYPEDEF         reduce using rule 7 (top_stmt -> relation .)
+    INDEX           reduce using rule 7 (top_stmt -> relation .)
+    CID             reduce using rule 7 (top_stmt -> relation .)
+    FOR             reduce using rule 7 (top_stmt -> relation .)
+    ID              reduce using rule 7 (top_stmt -> relation .)
+    $end            reduce using rule 7 (top_stmt -> relation .)
+
+
+state 26
+
+    (80) class_ref -> CID .
+
+    (               reduce using rule 80 (class_ref -> CID .)
+    [               reduce using rule 80 (class_ref -> CID .)
+    ,               reduce using rule 80 (class_ref -> CID .)
+    :               reduce using rule 80 (class_ref -> CID .)
+    ID              reduce using rule 80 (class_ref -> CID .)
+    USING           reduce using rule 80 (class_ref -> CID .)
+
+
+state 27
+
+    (89) mls -> MLS mls .
+
+    CMP_OP          reduce using rule 89 (mls -> MLS mls .)
+    IN              reduce using rule 89 (mls -> MLS mls .)
+    MLS             reduce using rule 89 (mls -> MLS mls .)
+    ENTITY          reduce using rule 89 (mls -> MLS mls .)
+    IMPLEMENT       reduce using rule 89 (mls -> MLS mls .)
+    IMPLEMENTATION  reduce using rule 89 (mls -> MLS mls .)
+    TYPEDEF         reduce using rule 89 (mls -> MLS mls .)
+    INDEX           reduce using rule 89 (mls -> MLS mls .)
+    CID             reduce using rule 89 (mls -> MLS mls .)
+    FOR             reduce using rule 89 (mls -> MLS mls .)
+    ID              reduce using rule 89 (mls -> MLS mls .)
+    $end            reduce using rule 89 (mls -> MLS mls .)
+    END             reduce using rule 89 (mls -> MLS mls .)
+    ,               reduce using rule 89 (mls -> MLS mls .)
+    )               reduce using rule 89 (mls -> MLS mls .)
+    ]               reduce using rule 89 (mls -> MLS mls .)
+    :               reduce using rule 89 (mls -> MLS mls .)
+    AND             reduce using rule 89 (mls -> MLS mls .)
+    OR              reduce using rule 89 (mls -> MLS mls .)
+
+
+state 28
+
+    (29) implement_def -> IMPLEMENT class_ref . USING ns_list
+    (30) implement_def -> IMPLEMENT class_ref . USING ns_list WHEN condition
+
+    USING           shift and go to state 43
+
+
+state 29
+
+    (81) class_ref -> ns_ref . SEP CID
+    (84) ns_ref -> ns_ref . SEP ID
+
+    SEP             shift and go to state 40
+
+
+state 30
+
+    (19) entity_def -> ENTITY CID . : entity_body_outer
+    (20) entity_def -> ENTITY CID . EXTENDS class_ref_list : entity_body_outer
+
+    :               shift and go to state 44
+    EXTENDS         shift and go to state 45
+
+
+state 31
+
+    (78) var_ref -> var_ref . . ID
+
+    ID              shift and go to state 46
+
+
+state 32
+
+    (17) assign -> var_ref = . operand
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 62
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+
+state 33
+
+    (44) index -> INDEX class_ref . ( id_list )
+
+    (               shift and go to state 64
+
+
+state 34
+
+    (61) constructor -> class_ref ( . param_list )
+    (72) param_list -> . ID = operand , param_list
+    (73) param_list -> . ID = operand
+
+    ID              shift and go to state 66
+
+    param_list                     shift and go to state 65
+
+state 35
+
+    (36) relation -> class_ref ID . multi REL multi class_ref ID
+    (37) multi -> . [ INT ]
+    (38) multi -> . [ INT : ]
+    (39) multi -> . [ INT : INT ]
+    (40) multi -> . [ : INT ]
+
+    [               shift and go to state 68
+
+    multi                          shift and go to state 67
+
+state 36
+
+    (31) implementation_def -> IMPLEMENTATION ID . FOR class_ref implementation
+    (32) implementation_def -> IMPLEMENTATION ID . implementation
+    (33) implementation -> . : mls stmt_list END
+    (34) implementation -> . : stmt_list END
+    (35) implementation -> . : END
+
+    FOR             shift and go to state 69
+    :               shift and go to state 71
+
+    implementation                 shift and go to state 70
+
+state 37
+
+    (1) main -> top_stmt main .
+
+    $end            reduce using rule 1 (main -> top_stmt main .)
+
+
+state 38
+
+    (18) for -> FOR ID . IN operand implementation
+
+    IN              shift and go to state 72
+
+
+state 39
+
+    (62) function_call -> ns_ref ( . operand_list )
+    (74) operand_list -> . operand , operand_list
+    (75) operand_list -> . operand
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    operand_list                   shift and go to state 73
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 74
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+
+state 40
+
+    (81) class_ref -> ns_ref SEP . CID
+    (84) ns_ref -> ns_ref SEP . ID
+
+    CID             shift and go to state 76
+    ID              shift and go to state 75
+
+
+state 41
+
+    (43) typedef -> TYPEDEF CID . AS constructor
+
+    AS              shift and go to state 77
+
+
+state 42
+
+    (41) typedef -> TYPEDEF ID . AS ns_ref MATCHING REGEX
+    (42) typedef -> TYPEDEF ID . AS ns_ref MATCHING condition
+
+    AS              shift and go to state 78
+
+
+state 43
+
+    (29) implement_def -> IMPLEMENT class_ref USING . ns_list
+    (30) implement_def -> IMPLEMENT class_ref USING . ns_list WHEN condition
+    (76) ns_list -> . ns_ref , ns_list
+    (77) ns_list -> . ns_ref
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    ID              shift and go to state 5
+
+    ns_list                        shift and go to state 80
+    ns_ref                         shift and go to state 79
+
+state 44
+
+    (19) entity_def -> ENTITY CID : . entity_body_outer
+    (21) entity_body_outer -> . mls entity_body END
+    (22) entity_body_outer -> . entity_body END
+    (23) entity_body_outer -> . END
+    (24) entity_body_outer -> . mls END
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (25) entity_body -> . entity_body attr
+    (26) entity_body -> . attr
+    (27) attr -> . ns_ref ID
+    (28) attr -> . ns_ref ID = constant
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             shift and go to state 86
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+
+    mls                            shift and go to state 84
+    ns_ref                         shift and go to state 81
+    entity_body_outer              shift and go to state 85
+    entity_body                    shift and go to state 83
+    attr                           shift and go to state 82
+
+state 45
+
+    (20) entity_def -> ENTITY CID EXTENDS . class_ref_list : entity_body_outer
+    (82) class_ref_list -> . class_ref , class_ref_list
+    (83) class_ref_list -> . class_ref
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 87
+    class_ref_list                 shift and go to state 88
+    ns_ref                         shift and go to state 29
+
+state 46
+
+    (78) var_ref -> var_ref . ID .
+
+    .               reduce using rule 78 (var_ref -> var_ref . ID .)
+    MLS             reduce using rule 78 (var_ref -> var_ref . ID .)
+    ENTITY          reduce using rule 78 (var_ref -> var_ref . ID .)
+    IMPLEMENT       reduce using rule 78 (var_ref -> var_ref . ID .)
+    IMPLEMENTATION  reduce using rule 78 (var_ref -> var_ref . ID .)
+    TYPEDEF         reduce using rule 78 (var_ref -> var_ref . ID .)
+    INDEX           reduce using rule 78 (var_ref -> var_ref . ID .)
+    CID             reduce using rule 78 (var_ref -> var_ref . ID .)
+    FOR             reduce using rule 78 (var_ref -> var_ref . ID .)
+    ID              reduce using rule 78 (var_ref -> var_ref . ID .)
+    $end            reduce using rule 78 (var_ref -> var_ref . ID .)
+    END             reduce using rule 78 (var_ref -> var_ref . ID .)
+    =               reduce using rule 78 (var_ref -> var_ref . ID .)
+    CMP_OP          reduce using rule 78 (var_ref -> var_ref . ID .)
+    IN              reduce using rule 78 (var_ref -> var_ref . ID .)
+    :               reduce using rule 78 (var_ref -> var_ref . ID .)
+    ,               reduce using rule 78 (var_ref -> var_ref . ID .)
+    )               reduce using rule 78 (var_ref -> var_ref . ID .)
+    ]               reduce using rule 78 (var_ref -> var_ref . ID .)
+    AND             reduce using rule 78 (var_ref -> var_ref . ID .)
+    OR              reduce using rule 78 (var_ref -> var_ref . ID .)
+
+
+state 47
+
+    (58) operand -> list_def .
+
+    CMP_OP          reduce using rule 58 (operand -> list_def .)
+    IN              reduce using rule 58 (operand -> list_def .)
+    ,               reduce using rule 58 (operand -> list_def .)
+    )               reduce using rule 58 (operand -> list_def .)
+    ]               reduce using rule 58 (operand -> list_def .)
+    MLS             reduce using rule 58 (operand -> list_def .)
+    ENTITY          reduce using rule 58 (operand -> list_def .)
+    IMPLEMENT       reduce using rule 58 (operand -> list_def .)
+    IMPLEMENTATION  reduce using rule 58 (operand -> list_def .)
+    TYPEDEF         reduce using rule 58 (operand -> list_def .)
+    INDEX           reduce using rule 58 (operand -> list_def .)
+    CID             reduce using rule 58 (operand -> list_def .)
+    FOR             reduce using rule 58 (operand -> list_def .)
+    ID              reduce using rule 58 (operand -> list_def .)
+    $end            reduce using rule 58 (operand -> list_def .)
+    END             reduce using rule 58 (operand -> list_def .)
+    AND             reduce using rule 58 (operand -> list_def .)
+    OR              reduce using rule 58 (operand -> list_def .)
+    :               reduce using rule 58 (operand -> list_def .)
+
+
+state 48
+
+    (59) operand -> var_ref .
+    (78) var_ref -> var_ref . . ID
+
+    CMP_OP          reduce using rule 59 (operand -> var_ref .)
+    IN              reduce using rule 59 (operand -> var_ref .)
+    ,               reduce using rule 59 (operand -> var_ref .)
+    )               reduce using rule 59 (operand -> var_ref .)
+    ]               reduce using rule 59 (operand -> var_ref .)
+    MLS             reduce using rule 59 (operand -> var_ref .)
+    ENTITY          reduce using rule 59 (operand -> var_ref .)
+    IMPLEMENT       reduce using rule 59 (operand -> var_ref .)
+    IMPLEMENTATION  reduce using rule 59 (operand -> var_ref .)
+    TYPEDEF         reduce using rule 59 (operand -> var_ref .)
+    INDEX           reduce using rule 59 (operand -> var_ref .)
+    CID             reduce using rule 59 (operand -> var_ref .)
+    FOR             reduce using rule 59 (operand -> var_ref .)
+    ID              reduce using rule 59 (operand -> var_ref .)
+    $end            reduce using rule 59 (operand -> var_ref .)
+    END             reduce using rule 59 (operand -> var_ref .)
+    AND             reduce using rule 59 (operand -> var_ref .)
+    OR              reduce using rule 59 (operand -> var_ref .)
+    :               reduce using rule 59 (operand -> var_ref .)
+    .               shift and go to state 31
+
+
+state 49
+
+    (60) operand -> index_lookup .
+
+    CMP_OP          reduce using rule 60 (operand -> index_lookup .)
+    IN              reduce using rule 60 (operand -> index_lookup .)
+    ,               reduce using rule 60 (operand -> index_lookup .)
+    )               reduce using rule 60 (operand -> index_lookup .)
+    ]               reduce using rule 60 (operand -> index_lookup .)
+    MLS             reduce using rule 60 (operand -> index_lookup .)
+    ENTITY          reduce using rule 60 (operand -> index_lookup .)
+    IMPLEMENT       reduce using rule 60 (operand -> index_lookup .)
+    IMPLEMENTATION  reduce using rule 60 (operand -> index_lookup .)
+    TYPEDEF         reduce using rule 60 (operand -> index_lookup .)
+    INDEX           reduce using rule 60 (operand -> index_lookup .)
+    CID             reduce using rule 60 (operand -> index_lookup .)
+    FOR             reduce using rule 60 (operand -> index_lookup .)
+    ID              reduce using rule 60 (operand -> index_lookup .)
+    $end            reduce using rule 60 (operand -> index_lookup .)
+    END             reduce using rule 60 (operand -> index_lookup .)
+    AND             reduce using rule 60 (operand -> index_lookup .)
+    OR              reduce using rule 60 (operand -> index_lookup .)
+    :               reduce using rule 60 (operand -> index_lookup .)
+
+
+state 50
+
+    (70) constant -> REGEX .
+
+    CMP_OP          reduce using rule 70 (constant -> REGEX .)
+    IN              reduce using rule 70 (constant -> REGEX .)
+    ,               reduce using rule 70 (constant -> REGEX .)
+    )               reduce using rule 70 (constant -> REGEX .)
+    ]               reduce using rule 70 (constant -> REGEX .)
+    END             reduce using rule 70 (constant -> REGEX .)
+    ID              reduce using rule 70 (constant -> REGEX .)
+    MLS             reduce using rule 70 (constant -> REGEX .)
+    ENTITY          reduce using rule 70 (constant -> REGEX .)
+    IMPLEMENT       reduce using rule 70 (constant -> REGEX .)
+    IMPLEMENTATION  reduce using rule 70 (constant -> REGEX .)
+    TYPEDEF         reduce using rule 70 (constant -> REGEX .)
+    INDEX           reduce using rule 70 (constant -> REGEX .)
+    CID             reduce using rule 70 (constant -> REGEX .)
+    FOR             reduce using rule 70 (constant -> REGEX .)
+    $end            reduce using rule 70 (constant -> REGEX .)
+    :               reduce using rule 70 (constant -> REGEX .)
+    AND             reduce using rule 70 (constant -> REGEX .)
+    OR              reduce using rule 70 (constant -> REGEX .)
+
+
+state 51
+
+    (61) constructor -> class_ref . ( param_list )
+    (64) index_lookup -> class_ref . [ param_list ]
+
+    (               shift and go to state 34
+    [               shift and go to state 89
+
+
+state 52
+
+    (66) constant -> FALSE .
+
+    ,               reduce using rule 66 (constant -> FALSE .)
+    )               reduce using rule 66 (constant -> FALSE .)
+    ]               reduce using rule 66 (constant -> FALSE .)
+    END             reduce using rule 66 (constant -> FALSE .)
+    ID              reduce using rule 66 (constant -> FALSE .)
+    MLS             reduce using rule 66 (constant -> FALSE .)
+    ENTITY          reduce using rule 66 (constant -> FALSE .)
+    IMPLEMENT       reduce using rule 66 (constant -> FALSE .)
+    IMPLEMENTATION  reduce using rule 66 (constant -> FALSE .)
+    TYPEDEF         reduce using rule 66 (constant -> FALSE .)
+    INDEX           reduce using rule 66 (constant -> FALSE .)
+    CID             reduce using rule 66 (constant -> FALSE .)
+    FOR             reduce using rule 66 (constant -> FALSE .)
+    $end            reduce using rule 66 (constant -> FALSE .)
+    :               reduce using rule 66 (constant -> FALSE .)
+    AND             reduce using rule 66 (constant -> FALSE .)
+    OR              reduce using rule 66 (constant -> FALSE .)
+
+
+state 53
+
+    (55) operand -> constant .
+
+    CMP_OP          reduce using rule 55 (operand -> constant .)
+    IN              reduce using rule 55 (operand -> constant .)
+    ,               reduce using rule 55 (operand -> constant .)
+    )               reduce using rule 55 (operand -> constant .)
+    ]               reduce using rule 55 (operand -> constant .)
+    MLS             reduce using rule 55 (operand -> constant .)
+    ENTITY          reduce using rule 55 (operand -> constant .)
+    IMPLEMENT       reduce using rule 55 (operand -> constant .)
+    IMPLEMENTATION  reduce using rule 55 (operand -> constant .)
+    TYPEDEF         reduce using rule 55 (operand -> constant .)
+    INDEX           reduce using rule 55 (operand -> constant .)
+    CID             reduce using rule 55 (operand -> constant .)
+    FOR             reduce using rule 55 (operand -> constant .)
+    ID              reduce using rule 55 (operand -> constant .)
+    $end            reduce using rule 55 (operand -> constant .)
+    END             reduce using rule 55 (operand -> constant .)
+    AND             reduce using rule 55 (operand -> constant .)
+    OR              reduce using rule 55 (operand -> constant .)
+    :               reduce using rule 55 (operand -> constant .)
+
+
+state 54
+
+    (56) operand -> function_call .
+
+    ,               reduce using rule 56 (operand -> function_call .)
+    )               reduce using rule 56 (operand -> function_call .)
+    ]               reduce using rule 56 (operand -> function_call .)
+    MLS             reduce using rule 56 (operand -> function_call .)
+    ENTITY          reduce using rule 56 (operand -> function_call .)
+    IMPLEMENT       reduce using rule 56 (operand -> function_call .)
+    IMPLEMENTATION  reduce using rule 56 (operand -> function_call .)
+    TYPEDEF         reduce using rule 56 (operand -> function_call .)
+    INDEX           reduce using rule 56 (operand -> function_call .)
+    CID             reduce using rule 56 (operand -> function_call .)
+    FOR             reduce using rule 56 (operand -> function_call .)
+    ID              reduce using rule 56 (operand -> function_call .)
+    $end            reduce using rule 56 (operand -> function_call .)
+    END             reduce using rule 56 (operand -> function_call .)
+    AND             reduce using rule 56 (operand -> function_call .)
+    OR              reduce using rule 56 (operand -> function_call .)
+    :               reduce using rule 56 (operand -> function_call .)
+
+
+state 55
+
+    (67) constant -> INT .
+
+    CMP_OP          reduce using rule 67 (constant -> INT .)
+    IN              reduce using rule 67 (constant -> INT .)
+    ,               reduce using rule 67 (constant -> INT .)
+    )               reduce using rule 67 (constant -> INT .)
+    ]               reduce using rule 67 (constant -> INT .)
+    END             reduce using rule 67 (constant -> INT .)
+    ID              reduce using rule 67 (constant -> INT .)
+    MLS             reduce using rule 67 (constant -> INT .)
+    ENTITY          reduce using rule 67 (constant -> INT .)
+    IMPLEMENT       reduce using rule 67 (constant -> INT .)
+    IMPLEMENTATION  reduce using rule 67 (constant -> INT .)
+    TYPEDEF         reduce using rule 67 (constant -> INT .)
+    INDEX           reduce using rule 67 (constant -> INT .)
+    CID             reduce using rule 67 (constant -> INT .)
+    FOR             reduce using rule 67 (constant -> INT .)
+    $end            reduce using rule 67 (constant -> INT .)
+    :               reduce using rule 67 (constant -> INT .)
+    AND             reduce using rule 67 (constant -> INT .)
+    OR              reduce using rule 67 (constant -> INT .)
+
+
+state 56
+
+    (71) constant -> STRING .
+
+    CMP_OP          reduce using rule 71 (constant -> STRING .)
+    IN              reduce using rule 71 (constant -> STRING .)
+    ,               reduce using rule 71 (constant -> STRING .)
+    )               reduce using rule 71 (constant -> STRING .)
+    ]               reduce using rule 71 (constant -> STRING .)
+    END             reduce using rule 71 (constant -> STRING .)
+    ID              reduce using rule 71 (constant -> STRING .)
+    MLS             reduce using rule 71 (constant -> STRING .)
+    ENTITY          reduce using rule 71 (constant -> STRING .)
+    IMPLEMENT       reduce using rule 71 (constant -> STRING .)
+    IMPLEMENTATION  reduce using rule 71 (constant -> STRING .)
+    TYPEDEF         reduce using rule 71 (constant -> STRING .)
+    INDEX           reduce using rule 71 (constant -> STRING .)
+    CID             reduce using rule 71 (constant -> STRING .)
+    FOR             reduce using rule 71 (constant -> STRING .)
+    $end            reduce using rule 71 (constant -> STRING .)
+    :               reduce using rule 71 (constant -> STRING .)
+    AND             reduce using rule 71 (constant -> STRING .)
+    OR              reduce using rule 71 (constant -> STRING .)
+
+
+state 57
+
+    (69) constant -> mls .
+
+    CMP_OP          reduce using rule 69 (constant -> mls .)
+    IN              reduce using rule 69 (constant -> mls .)
+    ,               reduce using rule 69 (constant -> mls .)
+    )               reduce using rule 69 (constant -> mls .)
+    ]               reduce using rule 69 (constant -> mls .)
+    END             reduce using rule 69 (constant -> mls .)
+    ID              reduce using rule 69 (constant -> mls .)
+    MLS             reduce using rule 69 (constant -> mls .)
+    ENTITY          reduce using rule 69 (constant -> mls .)
+    IMPLEMENT       reduce using rule 69 (constant -> mls .)
+    IMPLEMENTATION  reduce using rule 69 (constant -> mls .)
+    TYPEDEF         reduce using rule 69 (constant -> mls .)
+    INDEX           reduce using rule 69 (constant -> mls .)
+    CID             reduce using rule 69 (constant -> mls .)
+    FOR             reduce using rule 69 (constant -> mls .)
+    $end            reduce using rule 69 (constant -> mls .)
+    :               reduce using rule 69 (constant -> mls .)
+    AND             reduce using rule 69 (constant -> mls .)
+    OR              reduce using rule 69 (constant -> mls .)
+
+
+state 58
+
+    (62) function_call -> ns_ref . ( operand_list )
+    (79) var_ref -> ns_ref .
+    (84) ns_ref -> ns_ref . SEP ID
+    (81) class_ref -> ns_ref . SEP CID
+
+    (               shift and go to state 39
+    .               reduce using rule 79 (var_ref -> ns_ref .)
+    MLS             reduce using rule 79 (var_ref -> ns_ref .)
+    ENTITY          reduce using rule 79 (var_ref -> ns_ref .)
+    IMPLEMENT       reduce using rule 79 (var_ref -> ns_ref .)
+    IMPLEMENTATION  reduce using rule 79 (var_ref -> ns_ref .)
+    TYPEDEF         reduce using rule 79 (var_ref -> ns_ref .)
+    INDEX           reduce using rule 79 (var_ref -> ns_ref .)
+    CID             reduce using rule 79 (var_ref -> ns_ref .)
+    FOR             reduce using rule 79 (var_ref -> ns_ref .)
+    ID              reduce using rule 79 (var_ref -> ns_ref .)
+    $end            reduce using rule 79 (var_ref -> ns_ref .)
+    END             reduce using rule 79 (var_ref -> ns_ref .)
+    CMP_OP          reduce using rule 79 (var_ref -> ns_ref .)
+    IN              reduce using rule 79 (var_ref -> ns_ref .)
+    :               reduce using rule 79 (var_ref -> ns_ref .)
+    ,               reduce using rule 79 (var_ref -> ns_ref .)
+    )               reduce using rule 79 (var_ref -> ns_ref .)
+    ]               reduce using rule 79 (var_ref -> ns_ref .)
+    AND             reduce using rule 79 (var_ref -> ns_ref .)
+    OR              reduce using rule 79 (var_ref -> ns_ref .)
+    SEP             shift and go to state 90
+
+
+state 59
+
+    (68) constant -> FLOAT .
+
+    CMP_OP          reduce using rule 68 (constant -> FLOAT .)
+    IN              reduce using rule 68 (constant -> FLOAT .)
+    ,               reduce using rule 68 (constant -> FLOAT .)
+    )               reduce using rule 68 (constant -> FLOAT .)
+    ]               reduce using rule 68 (constant -> FLOAT .)
+    END             reduce using rule 68 (constant -> FLOAT .)
+    ID              reduce using rule 68 (constant -> FLOAT .)
+    MLS             reduce using rule 68 (constant -> FLOAT .)
+    ENTITY          reduce using rule 68 (constant -> FLOAT .)
+    IMPLEMENT       reduce using rule 68 (constant -> FLOAT .)
+    IMPLEMENTATION  reduce using rule 68 (constant -> FLOAT .)
+    TYPEDEF         reduce using rule 68 (constant -> FLOAT .)
+    INDEX           reduce using rule 68 (constant -> FLOAT .)
+    CID             reduce using rule 68 (constant -> FLOAT .)
+    FOR             reduce using rule 68 (constant -> FLOAT .)
+    $end            reduce using rule 68 (constant -> FLOAT .)
+    :               reduce using rule 68 (constant -> FLOAT .)
+    AND             reduce using rule 68 (constant -> FLOAT .)
+    OR              reduce using rule 68 (constant -> FLOAT .)
+
+
+state 60
+
+    (57) operand -> constructor .
+
+    CMP_OP          reduce using rule 57 (operand -> constructor .)
+    IN              reduce using rule 57 (operand -> constructor .)
+    ,               reduce using rule 57 (operand -> constructor .)
+    )               reduce using rule 57 (operand -> constructor .)
+    ]               reduce using rule 57 (operand -> constructor .)
+    MLS             reduce using rule 57 (operand -> constructor .)
+    ENTITY          reduce using rule 57 (operand -> constructor .)
+    IMPLEMENT       reduce using rule 57 (operand -> constructor .)
+    IMPLEMENTATION  reduce using rule 57 (operand -> constructor .)
+    TYPEDEF         reduce using rule 57 (operand -> constructor .)
+    INDEX           reduce using rule 57 (operand -> constructor .)
+    CID             reduce using rule 57 (operand -> constructor .)
+    FOR             reduce using rule 57 (operand -> constructor .)
+    ID              reduce using rule 57 (operand -> constructor .)
+    $end            reduce using rule 57 (operand -> constructor .)
+    END             reduce using rule 57 (operand -> constructor .)
+    AND             reduce using rule 57 (operand -> constructor .)
+    OR              reduce using rule 57 (operand -> constructor .)
+    :               reduce using rule 57 (operand -> constructor .)
+
+
+state 61
+
+    (65) constant -> TRUE .
+
+    ,               reduce using rule 65 (constant -> TRUE .)
+    )               reduce using rule 65 (constant -> TRUE .)
+    ]               reduce using rule 65 (constant -> TRUE .)
+    END             reduce using rule 65 (constant -> TRUE .)
+    ID              reduce using rule 65 (constant -> TRUE .)
+    MLS             reduce using rule 65 (constant -> TRUE .)
+    ENTITY          reduce using rule 65 (constant -> TRUE .)
+    IMPLEMENT       reduce using rule 65 (constant -> TRUE .)
+    IMPLEMENTATION  reduce using rule 65 (constant -> TRUE .)
+    TYPEDEF         reduce using rule 65 (constant -> TRUE .)
+    INDEX           reduce using rule 65 (constant -> TRUE .)
+    CID             reduce using rule 65 (constant -> TRUE .)
+    FOR             reduce using rule 65 (constant -> TRUE .)
+    $end            reduce using rule 65 (constant -> TRUE .)
+    :               reduce using rule 65 (constant -> TRUE .)
+    AND             reduce using rule 65 (constant -> TRUE .)
+    OR              reduce using rule 65 (constant -> TRUE .)
+
+
+state 62
+
+    (17) assign -> var_ref = operand .
+
+    MLS             reduce using rule 17 (assign -> var_ref = operand .)
+    ENTITY          reduce using rule 17 (assign -> var_ref = operand .)
+    IMPLEMENT       reduce using rule 17 (assign -> var_ref = operand .)
+    IMPLEMENTATION  reduce using rule 17 (assign -> var_ref = operand .)
+    TYPEDEF         reduce using rule 17 (assign -> var_ref = operand .)
+    INDEX           reduce using rule 17 (assign -> var_ref = operand .)
+    CID             reduce using rule 17 (assign -> var_ref = operand .)
+    FOR             reduce using rule 17 (assign -> var_ref = operand .)
+    ID              reduce using rule 17 (assign -> var_ref = operand .)
+    $end            reduce using rule 17 (assign -> var_ref = operand .)
+    END             reduce using rule 17 (assign -> var_ref = operand .)
+
+
+state 63
+
+    (63) list_def -> [ . operand_list ]
+    (74) operand_list -> . operand , operand_list
+    (75) operand_list -> . operand
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    operand_list                   shift and go to state 91
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 74
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+
+state 64
+
+    (44) index -> INDEX class_ref ( . id_list )
+    (86) id_list -> . ID , id_list
+    (87) id_list -> . ID
+
+    ID              shift and go to state 93
+
+    id_list                        shift and go to state 92
+
+state 65
+
+    (61) constructor -> class_ref ( param_list . )
+
+    )               shift and go to state 94
+
+
+state 66
+
+    (72) param_list -> ID . = operand , param_list
+    (73) param_list -> ID . = operand
+
+    =               shift and go to state 95
+
+
+state 67
+
+    (36) relation -> class_ref ID multi . REL multi class_ref ID
+
+    REL             shift and go to state 96
+
+
+state 68
+
+    (37) multi -> [ . INT ]
+    (38) multi -> [ . INT : ]
+    (39) multi -> [ . INT : INT ]
+    (40) multi -> [ . : INT ]
+
+    INT             shift and go to state 97
+    :               shift and go to state 98
+
+
+state 69
+
+    (31) implementation_def -> IMPLEMENTATION ID FOR . class_ref implementation
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 99
+    ns_ref                         shift and go to state 29
+
+state 70
+
+    (32) implementation_def -> IMPLEMENTATION ID implementation .
+
+    MLS             reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    ENTITY          reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    IMPLEMENT       reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    IMPLEMENTATION  reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    TYPEDEF         reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    INDEX           reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    CID             reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    FOR             reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    ID              reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+    $end            reduce using rule 32 (implementation_def -> IMPLEMENTATION ID implementation .)
+
+
+state 71
+
+    (33) implementation -> : . mls stmt_list END
+    (34) implementation -> : . stmt_list END
+    (35) implementation -> : . END
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (15) stmt_list -> . statement stmt_list
+    (16) stmt_list -> . statement
+    (11) statement -> . assign
+    (12) statement -> . constructor
+    (13) statement -> . function_call
+    (14) statement -> . for
+    (17) assign -> . var_ref = operand
+    (61) constructor -> . class_ref ( param_list )
+    (62) function_call -> . ns_ref ( operand_list )
+    (18) for -> . FOR ID IN operand implementation
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             shift and go to state 105
+    MLS             shift and go to state 4
+    FOR             shift and go to state 19
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    statement                      shift and go to state 102
+    var_ref                        shift and go to state 11
+    ns_ref                         shift and go to state 103
+    stmt_list                      shift and go to state 104
+    for                            shift and go to state 22
+    mls                            shift and go to state 101
+    class_ref                      shift and go to state 100
+    constructor                    shift and go to state 7
+    assign                         shift and go to state 2
+    function_call                  shift and go to state 17
+
+state 72
+
+    (18) for -> FOR ID IN . operand implementation
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 106
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+
+state 73
+
+    (62) function_call -> ns_ref ( operand_list . )
+
+    )               shift and go to state 107
+
+
+state 74
+
+    (74) operand_list -> operand . , operand_list
+    (75) operand_list -> operand .
+
+    ,               shift and go to state 108
+    )               reduce using rule 75 (operand_list -> operand .)
+    ]               reduce using rule 75 (operand_list -> operand .)
+
+
+state 75
+
+    (84) ns_ref -> ns_ref SEP ID .
+
+    ID              reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    SEP             reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    (               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    .               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    CMP_OP          reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    IN              reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    =               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    MLS             reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    ENTITY          reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    IMPLEMENT       reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    IMPLEMENTATION  reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    TYPEDEF         reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    INDEX           reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    CID             reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    FOR             reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    $end            reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    END             reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    ,               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    )               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    AND             reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    OR              reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    :               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    ]               reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    WHEN            reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+    MATCHING        reduce using rule 84 (ns_ref -> ns_ref SEP ID .)
+
+
+state 76
+
+    (81) class_ref -> ns_ref SEP CID .
+
+    (               reduce using rule 81 (class_ref -> ns_ref SEP CID .)
+    [               reduce using rule 81 (class_ref -> ns_ref SEP CID .)
+    ,               reduce using rule 81 (class_ref -> ns_ref SEP CID .)
+    :               reduce using rule 81 (class_ref -> ns_ref SEP CID .)
+    ID              reduce using rule 81 (class_ref -> ns_ref SEP CID .)
+    USING           reduce using rule 81 (class_ref -> ns_ref SEP CID .)
+
+
+state 77
+
+    (43) typedef -> TYPEDEF CID AS . constructor
+    (61) constructor -> . class_ref ( param_list )
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 100
+    constructor                    shift and go to state 109
+    ns_ref                         shift and go to state 29
+
+state 78
+
+    (41) typedef -> TYPEDEF ID AS . ns_ref MATCHING REGEX
+    (42) typedef -> TYPEDEF ID AS . ns_ref MATCHING condition
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    ID              shift and go to state 5
+
+    ns_ref                         shift and go to state 110
+
+state 79
+
+    (76) ns_list -> ns_ref . , ns_list
+    (77) ns_list -> ns_ref .
+    (84) ns_ref -> ns_ref . SEP ID
+
+    ,               shift and go to state 112
+    WHEN            reduce using rule 77 (ns_list -> ns_ref .)
+    MLS             reduce using rule 77 (ns_list -> ns_ref .)
+    ENTITY          reduce using rule 77 (ns_list -> ns_ref .)
+    IMPLEMENT       reduce using rule 77 (ns_list -> ns_ref .)
+    IMPLEMENTATION  reduce using rule 77 (ns_list -> ns_ref .)
+    TYPEDEF         reduce using rule 77 (ns_list -> ns_ref .)
+    INDEX           reduce using rule 77 (ns_list -> ns_ref .)
+    CID             reduce using rule 77 (ns_list -> ns_ref .)
+    FOR             reduce using rule 77 (ns_list -> ns_ref .)
+    ID              reduce using rule 77 (ns_list -> ns_ref .)
+    $end            reduce using rule 77 (ns_list -> ns_ref .)
+    SEP             shift and go to state 111
+
+
+state 80
+
+    (29) implement_def -> IMPLEMENT class_ref USING ns_list .
+    (30) implement_def -> IMPLEMENT class_ref USING ns_list . WHEN condition
+
+    MLS             reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    ENTITY          reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    IMPLEMENT       reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    IMPLEMENTATION  reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    TYPEDEF         reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    INDEX           reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    CID             reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    FOR             reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    ID              reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    $end            reduce using rule 29 (implement_def -> IMPLEMENT class_ref USING ns_list .)
+    WHEN            shift and go to state 113
+
+
+state 81
+
+    (27) attr -> ns_ref . ID
+    (28) attr -> ns_ref . ID = constant
+    (84) ns_ref -> ns_ref . SEP ID
+
+    ID              shift and go to state 114
+    SEP             shift and go to state 111
+
+
+state 82
+
+    (26) entity_body -> attr .
+
+    END             reduce using rule 26 (entity_body -> attr .)
+    ID              reduce using rule 26 (entity_body -> attr .)
+
+
+state 83
+
+    (22) entity_body_outer -> entity_body . END
+    (25) entity_body -> entity_body . attr
+    (27) attr -> . ns_ref ID
+    (28) attr -> . ns_ref ID = constant
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             shift and go to state 115
+    ID              shift and go to state 5
+
+    ns_ref                         shift and go to state 81
+    attr                           shift and go to state 116
+
+state 84
+
+    (21) entity_body_outer -> mls . entity_body END
+    (24) entity_body_outer -> mls . END
+    (25) entity_body -> . entity_body attr
+    (26) entity_body -> . attr
+    (27) attr -> . ns_ref ID
+    (28) attr -> . ns_ref ID = constant
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             shift and go to state 118
+    ID              shift and go to state 5
+
+    entity_body                    shift and go to state 117
+    ns_ref                         shift and go to state 81
+    attr                           shift and go to state 82
+
+state 85
+
+    (19) entity_def -> ENTITY CID : entity_body_outer .
+
+    MLS             reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    ENTITY          reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    IMPLEMENT       reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    IMPLEMENTATION  reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    TYPEDEF         reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    INDEX           reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    CID             reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    FOR             reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    ID              reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+    $end            reduce using rule 19 (entity_def -> ENTITY CID : entity_body_outer .)
+
+
+state 86
+
+    (23) entity_body_outer -> END .
+
+    MLS             reduce using rule 23 (entity_body_outer -> END .)
+    ENTITY          reduce using rule 23 (entity_body_outer -> END .)
+    IMPLEMENT       reduce using rule 23 (entity_body_outer -> END .)
+    IMPLEMENTATION  reduce using rule 23 (entity_body_outer -> END .)
+    TYPEDEF         reduce using rule 23 (entity_body_outer -> END .)
+    INDEX           reduce using rule 23 (entity_body_outer -> END .)
+    CID             reduce using rule 23 (entity_body_outer -> END .)
+    FOR             reduce using rule 23 (entity_body_outer -> END .)
+    ID              reduce using rule 23 (entity_body_outer -> END .)
+    $end            reduce using rule 23 (entity_body_outer -> END .)
+
+
+state 87
+
+    (82) class_ref_list -> class_ref . , class_ref_list
+    (83) class_ref_list -> class_ref .
+
+    ,               shift and go to state 119
+    :               reduce using rule 83 (class_ref_list -> class_ref .)
+
+
+state 88
+
+    (20) entity_def -> ENTITY CID EXTENDS class_ref_list . : entity_body_outer
+
+    :               shift and go to state 120
+
+
+state 89
+
+    (64) index_lookup -> class_ref [ . param_list ]
+    (72) param_list -> . ID = operand , param_list
+    (73) param_list -> . ID = operand
+
+    ID              shift and go to state 66
+
+    param_list                     shift and go to state 121
+
+state 90
+
+    (84) ns_ref -> ns_ref SEP . ID
+    (81) class_ref -> ns_ref SEP . CID
+
+    ID              shift and go to state 75
+    CID             shift and go to state 76
+
+
+state 91
+
+    (63) list_def -> [ operand_list . ]
+
+    ]               shift and go to state 122
+
+
+state 92
+
+    (44) index -> INDEX class_ref ( id_list . )
+
+    )               shift and go to state 123
+
+
+state 93
+
+    (86) id_list -> ID . , id_list
+    (87) id_list -> ID .
+
+    ,               shift and go to state 124
+    )               reduce using rule 87 (id_list -> ID .)
+
+
+state 94
+
+    (61) constructor -> class_ref ( param_list ) .
+
+    CMP_OP          reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    IN              reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    ,               reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    )               reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    ]               reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    MLS             reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    ENTITY          reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    IMPLEMENT       reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    IMPLEMENTATION  reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    TYPEDEF         reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    INDEX           reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    CID             reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    FOR             reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    ID              reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    $end            reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    END             reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    :               reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    AND             reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+    OR              reduce using rule 61 (constructor -> class_ref ( param_list ) .)
+
+
+state 95
+
+    (72) param_list -> ID = . operand , param_list
+    (73) param_list -> ID = . operand
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 125
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+    var_ref                        shift and go to state 48
+
+state 96
+
+    (36) relation -> class_ref ID multi REL . multi class_ref ID
+    (37) multi -> . [ INT ]
+    (38) multi -> . [ INT : ]
+    (39) multi -> . [ INT : INT ]
+    (40) multi -> . [ : INT ]
+
+    [               shift and go to state 68
+
+    multi                          shift and go to state 126
+
+state 97
+
+    (37) multi -> [ INT . ]
+    (38) multi -> [ INT . : ]
+    (39) multi -> [ INT . : INT ]
+
+    ]               shift and go to state 127
+    :               shift and go to state 128
+
+
+state 98
+
+    (40) multi -> [ : . INT ]
+
+    INT             shift and go to state 129
+
+
+state 99
+
+    (31) implementation_def -> IMPLEMENTATION ID FOR class_ref . implementation
+    (33) implementation -> . : mls stmt_list END
+    (34) implementation -> . : stmt_list END
+    (35) implementation -> . : END
+
+    :               shift and go to state 71
+
+    implementation                 shift and go to state 130
+
+state 100
+
+    (61) constructor -> class_ref . ( param_list )
+
+    (               shift and go to state 34
+
+
+state 101
+
+    (33) implementation -> : mls . stmt_list END
+    (15) stmt_list -> . statement stmt_list
+    (16) stmt_list -> . statement
+    (11) statement -> . assign
+    (12) statement -> . constructor
+    (13) statement -> . function_call
+    (14) statement -> . for
+    (17) assign -> . var_ref = operand
+    (61) constructor -> . class_ref ( param_list )
+    (62) function_call -> . ns_ref ( operand_list )
+    (18) for -> . FOR ID IN operand implementation
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    FOR             shift and go to state 19
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    statement                      shift and go to state 102
+    var_ref                        shift and go to state 11
+    ns_ref                         shift and go to state 103
+    stmt_list                      shift and go to state 131
+    for                            shift and go to state 22
+    class_ref                      shift and go to state 100
+    constructor                    shift and go to state 7
+    assign                         shift and go to state 2
+    function_call                  shift and go to state 17
+
+state 102
+
+    (15) stmt_list -> statement . stmt_list
+    (16) stmt_list -> statement .
+    (15) stmt_list -> . statement stmt_list
+    (16) stmt_list -> . statement
+    (11) statement -> . assign
+    (12) statement -> . constructor
+    (13) statement -> . function_call
+    (14) statement -> . for
+    (17) assign -> . var_ref = operand
+    (61) constructor -> . class_ref ( param_list )
+    (62) function_call -> . ns_ref ( operand_list )
+    (18) for -> . FOR ID IN operand implementation
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             reduce using rule 16 (stmt_list -> statement .)
+    FOR             shift and go to state 19
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    statement                      shift and go to state 102
+    var_ref                        shift and go to state 11
+    ns_ref                         shift and go to state 103
+    stmt_list                      shift and go to state 132
+    for                            shift and go to state 22
+    class_ref                      shift and go to state 100
+    constructor                    shift and go to state 7
+    assign                         shift and go to state 2
+    function_call                  shift and go to state 17
+
+state 103
+
+    (62) function_call -> ns_ref . ( operand_list )
+    (79) var_ref -> ns_ref .
+    (81) class_ref -> ns_ref . SEP CID
+    (84) ns_ref -> ns_ref . SEP ID
+
+    (               shift and go to state 39
+    =               reduce using rule 79 (var_ref -> ns_ref .)
+    .               reduce using rule 79 (var_ref -> ns_ref .)
+    SEP             shift and go to state 40
+
+
+state 104
+
+    (34) implementation -> : stmt_list . END
+
+    END             shift and go to state 133
+
+
+state 105
+
+    (35) implementation -> : END .
+
+    MLS             reduce using rule 35 (implementation -> : END .)
+    ENTITY          reduce using rule 35 (implementation -> : END .)
+    IMPLEMENT       reduce using rule 35 (implementation -> : END .)
+    IMPLEMENTATION  reduce using rule 35 (implementation -> : END .)
+    TYPEDEF         reduce using rule 35 (implementation -> : END .)
+    INDEX           reduce using rule 35 (implementation -> : END .)
+    CID             reduce using rule 35 (implementation -> : END .)
+    FOR             reduce using rule 35 (implementation -> : END .)
+    ID              reduce using rule 35 (implementation -> : END .)
+    $end            reduce using rule 35 (implementation -> : END .)
+    END             reduce using rule 35 (implementation -> : END .)
+
+
+state 106
+
+    (18) for -> FOR ID IN operand . implementation
+    (33) implementation -> . : mls stmt_list END
+    (34) implementation -> . : stmt_list END
+    (35) implementation -> . : END
+
+    :               shift and go to state 71
+
+    implementation                 shift and go to state 134
+
+state 107
+
+    (62) function_call -> ns_ref ( operand_list ) .
+
+    MLS             reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    ENTITY          reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    IMPLEMENT       reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    IMPLEMENTATION  reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    TYPEDEF         reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    INDEX           reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    CID             reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    FOR             reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    ID              reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    $end            reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    END             reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    AND             reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    OR              reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    )               reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    CMP_OP          reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    IN              reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    :               reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    ,               reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+    ]               reduce using rule 62 (function_call -> ns_ref ( operand_list ) .)
+
+
+state 108
+
+    (74) operand_list -> operand , . operand_list
+    (74) operand_list -> . operand , operand_list
+    (75) operand_list -> . operand
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    operand_list                   shift and go to state 135
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 74
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+
+state 109
+
+    (43) typedef -> TYPEDEF CID AS constructor .
+
+    MLS             reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    ENTITY          reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    IMPLEMENT       reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    IMPLEMENTATION  reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    TYPEDEF         reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    INDEX           reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    CID             reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    FOR             reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    ID              reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+    $end            reduce using rule 43 (typedef -> TYPEDEF CID AS constructor .)
+
+
+state 110
+
+    (41) typedef -> TYPEDEF ID AS ns_ref . MATCHING REGEX
+    (42) typedef -> TYPEDEF ID AS ns_ref . MATCHING condition
+    (84) ns_ref -> ns_ref . SEP ID
+
+    MATCHING        shift and go to state 136
+    SEP             shift and go to state 111
+
+
+state 111
+
+    (84) ns_ref -> ns_ref SEP . ID
+
+    ID              shift and go to state 75
+
+
+state 112
+
+    (76) ns_list -> ns_ref , . ns_list
+    (76) ns_list -> . ns_ref , ns_list
+    (77) ns_list -> . ns_ref
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    ID              shift and go to state 5
+
+    ns_list                        shift and go to state 137
+    ns_ref                         shift and go to state 79
+
+state 113
+
+    (30) implement_def -> IMPLEMENT class_ref USING ns_list WHEN . condition
+    (45) condition -> . ( condition )
+    (46) condition -> . operand CMP_OP operand
+    (47) condition -> . operand IN list_def
+    (48) condition -> . operand IN var_ref
+    (49) condition -> . condition AND condition
+    (50) condition -> . condition OR condition
+    (51) condition -> . function_call
+    (52) condition -> . NOT condition
+    (53) condition -> . TRUE
+    (54) condition -> . FALSE
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (62) function_call -> . ns_ref ( operand_list )
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    (               shift and go to state 142
+    NOT             shift and go to state 141
+    TRUE            shift and go to state 143
+    FALSE           shift and go to state 139
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    ID              shift and go to state 5
+    MLS             shift and go to state 4
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    condition                      shift and go to state 138
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 144
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 140
+
+state 114
+
+    (27) attr -> ns_ref ID .
+    (28) attr -> ns_ref ID . = constant
+
+    END             reduce using rule 27 (attr -> ns_ref ID .)
+    ID              reduce using rule 27 (attr -> ns_ref ID .)
+    =               shift and go to state 145
+
+
+state 115
+
+    (22) entity_body_outer -> entity_body END .
+
+    MLS             reduce using rule 22 (entity_body_outer -> entity_body END .)
+    ENTITY          reduce using rule 22 (entity_body_outer -> entity_body END .)
+    IMPLEMENT       reduce using rule 22 (entity_body_outer -> entity_body END .)
+    IMPLEMENTATION  reduce using rule 22 (entity_body_outer -> entity_body END .)
+    TYPEDEF         reduce using rule 22 (entity_body_outer -> entity_body END .)
+    INDEX           reduce using rule 22 (entity_body_outer -> entity_body END .)
+    CID             reduce using rule 22 (entity_body_outer -> entity_body END .)
+    FOR             reduce using rule 22 (entity_body_outer -> entity_body END .)
+    ID              reduce using rule 22 (entity_body_outer -> entity_body END .)
+    $end            reduce using rule 22 (entity_body_outer -> entity_body END .)
+
+
+state 116
+
+    (25) entity_body -> entity_body attr .
+
+    END             reduce using rule 25 (entity_body -> entity_body attr .)
+    ID              reduce using rule 25 (entity_body -> entity_body attr .)
+
+
+state 117
+
+    (21) entity_body_outer -> mls entity_body . END
+    (25) entity_body -> entity_body . attr
+    (27) attr -> . ns_ref ID
+    (28) attr -> . ns_ref ID = constant
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             shift and go to state 146
+    ID              shift and go to state 5
+
+    ns_ref                         shift and go to state 81
+    attr                           shift and go to state 116
+
+state 118
+
+    (24) entity_body_outer -> mls END .
+
+    MLS             reduce using rule 24 (entity_body_outer -> mls END .)
+    ENTITY          reduce using rule 24 (entity_body_outer -> mls END .)
+    IMPLEMENT       reduce using rule 24 (entity_body_outer -> mls END .)
+    IMPLEMENTATION  reduce using rule 24 (entity_body_outer -> mls END .)
+    TYPEDEF         reduce using rule 24 (entity_body_outer -> mls END .)
+    INDEX           reduce using rule 24 (entity_body_outer -> mls END .)
+    CID             reduce using rule 24 (entity_body_outer -> mls END .)
+    FOR             reduce using rule 24 (entity_body_outer -> mls END .)
+    ID              reduce using rule 24 (entity_body_outer -> mls END .)
+    $end            reduce using rule 24 (entity_body_outer -> mls END .)
+
+
+state 119
+
+    (82) class_ref_list -> class_ref , . class_ref_list
+    (82) class_ref_list -> . class_ref , class_ref_list
+    (83) class_ref_list -> . class_ref
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 87
+    class_ref_list                 shift and go to state 147
+    ns_ref                         shift and go to state 29
+
+state 120
+
+    (20) entity_def -> ENTITY CID EXTENDS class_ref_list : . entity_body_outer
+    (21) entity_body_outer -> . mls entity_body END
+    (22) entity_body_outer -> . entity_body END
+    (23) entity_body_outer -> . END
+    (24) entity_body_outer -> . mls END
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (25) entity_body -> . entity_body attr
+    (26) entity_body -> . attr
+    (27) attr -> . ns_ref ID
+    (28) attr -> . ns_ref ID = constant
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    END             shift and go to state 86
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+
+    mls                            shift and go to state 84
+    ns_ref                         shift and go to state 81
+    entity_body_outer              shift and go to state 148
+    entity_body                    shift and go to state 83
+    attr                           shift and go to state 82
+
+state 121
+
+    (64) index_lookup -> class_ref [ param_list . ]
+
+    ]               shift and go to state 149
+
+
+state 122
+
+    (63) list_def -> [ operand_list ] .
+
+    AND             reduce using rule 63 (list_def -> [ operand_list ] .)
+    OR              reduce using rule 63 (list_def -> [ operand_list ] .)
+    MLS             reduce using rule 63 (list_def -> [ operand_list ] .)
+    ENTITY          reduce using rule 63 (list_def -> [ operand_list ] .)
+    IMPLEMENT       reduce using rule 63 (list_def -> [ operand_list ] .)
+    IMPLEMENTATION  reduce using rule 63 (list_def -> [ operand_list ] .)
+    TYPEDEF         reduce using rule 63 (list_def -> [ operand_list ] .)
+    INDEX           reduce using rule 63 (list_def -> [ operand_list ] .)
+    CID             reduce using rule 63 (list_def -> [ operand_list ] .)
+    FOR             reduce using rule 63 (list_def -> [ operand_list ] .)
+    ID              reduce using rule 63 (list_def -> [ operand_list ] .)
+    $end            reduce using rule 63 (list_def -> [ operand_list ] .)
+    )               reduce using rule 63 (list_def -> [ operand_list ] .)
+    CMP_OP          reduce using rule 63 (list_def -> [ operand_list ] .)
+    IN              reduce using rule 63 (list_def -> [ operand_list ] .)
+    ,               reduce using rule 63 (list_def -> [ operand_list ] .)
+    ]               reduce using rule 63 (list_def -> [ operand_list ] .)
+    :               reduce using rule 63 (list_def -> [ operand_list ] .)
+    END             reduce using rule 63 (list_def -> [ operand_list ] .)
+
+
+state 123
+
+    (44) index -> INDEX class_ref ( id_list ) .
+
+    MLS             reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    ENTITY          reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    IMPLEMENT       reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    IMPLEMENTATION  reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    TYPEDEF         reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    INDEX           reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    CID             reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    FOR             reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    ID              reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+    $end            reduce using rule 44 (index -> INDEX class_ref ( id_list ) .)
+
+
+state 124
+
+    (86) id_list -> ID , . id_list
+    (86) id_list -> . ID , id_list
+    (87) id_list -> . ID
+
+    ID              shift and go to state 93
+
+    id_list                        shift and go to state 150
+
+state 125
+
+    (72) param_list -> ID = operand . , param_list
+    (73) param_list -> ID = operand .
+
+    ,               shift and go to state 151
+    )               reduce using rule 73 (param_list -> ID = operand .)
+    ]               reduce using rule 73 (param_list -> ID = operand .)
+
+
+state 126
+
+    (36) relation -> class_ref ID multi REL multi . class_ref ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    CID             shift and go to state 26
+    ID              shift and go to state 5
+
+    class_ref                      shift and go to state 152
+    ns_ref                         shift and go to state 29
+
+state 127
+
+    (37) multi -> [ INT ] .
+
+    CID             reduce using rule 37 (multi -> [ INT ] .)
+    ID              reduce using rule 37 (multi -> [ INT ] .)
+    REL             reduce using rule 37 (multi -> [ INT ] .)
+
+
+state 128
+
+    (38) multi -> [ INT : . ]
+    (39) multi -> [ INT : . INT ]
+
+    ]               shift and go to state 153
+    INT             shift and go to state 154
+
+
+state 129
+
+    (40) multi -> [ : INT . ]
+
+    ]               shift and go to state 155
+
+
+state 130
+
+    (31) implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .
+
+    MLS             reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    ENTITY          reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    IMPLEMENT       reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    IMPLEMENTATION  reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    TYPEDEF         reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    INDEX           reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    CID             reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    FOR             reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    ID              reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+    $end            reduce using rule 31 (implementation_def -> IMPLEMENTATION ID FOR class_ref implementation .)
+
+
+state 131
+
+    (33) implementation -> : mls stmt_list . END
+
+    END             shift and go to state 156
+
+
+state 132
+
+    (15) stmt_list -> statement stmt_list .
+
+    END             reduce using rule 15 (stmt_list -> statement stmt_list .)
+
+
+state 133
+
+    (34) implementation -> : stmt_list END .
+
+    MLS             reduce using rule 34 (implementation -> : stmt_list END .)
+    ENTITY          reduce using rule 34 (implementation -> : stmt_list END .)
+    IMPLEMENT       reduce using rule 34 (implementation -> : stmt_list END .)
+    IMPLEMENTATION  reduce using rule 34 (implementation -> : stmt_list END .)
+    TYPEDEF         reduce using rule 34 (implementation -> : stmt_list END .)
+    INDEX           reduce using rule 34 (implementation -> : stmt_list END .)
+    CID             reduce using rule 34 (implementation -> : stmt_list END .)
+    FOR             reduce using rule 34 (implementation -> : stmt_list END .)
+    ID              reduce using rule 34 (implementation -> : stmt_list END .)
+    $end            reduce using rule 34 (implementation -> : stmt_list END .)
+    END             reduce using rule 34 (implementation -> : stmt_list END .)
+
+
+state 134
+
+    (18) for -> FOR ID IN operand implementation .
+
+    FOR             reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    CID             reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    ID              reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    END             reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    MLS             reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    ENTITY          reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    IMPLEMENT       reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    IMPLEMENTATION  reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    TYPEDEF         reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    INDEX           reduce using rule 18 (for -> FOR ID IN operand implementation .)
+    $end            reduce using rule 18 (for -> FOR ID IN operand implementation .)
+
+
+state 135
+
+    (74) operand_list -> operand , operand_list .
+
+    )               reduce using rule 74 (operand_list -> operand , operand_list .)
+    ]               reduce using rule 74 (operand_list -> operand , operand_list .)
+
+
+state 136
+
+    (41) typedef -> TYPEDEF ID AS ns_ref MATCHING . REGEX
+    (42) typedef -> TYPEDEF ID AS ns_ref MATCHING . condition
+    (45) condition -> . ( condition )
+    (46) condition -> . operand CMP_OP operand
+    (47) condition -> . operand IN list_def
+    (48) condition -> . operand IN var_ref
+    (49) condition -> . condition AND condition
+    (50) condition -> . condition OR condition
+    (51) condition -> . function_call
+    (52) condition -> . NOT condition
+    (53) condition -> . TRUE
+    (54) condition -> . FALSE
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (62) function_call -> . ns_ref ( operand_list )
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    REGEX           shift and go to state 158
+    (               shift and go to state 142
+    NOT             shift and go to state 141
+    TRUE            shift and go to state 143
+    FALSE           shift and go to state 139
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    ID              shift and go to state 5
+    MLS             shift and go to state 4
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    condition                      shift and go to state 157
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 144
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 140
+
+state 137
+
+    (76) ns_list -> ns_ref , ns_list .
+
+    WHEN            reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    MLS             reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    ENTITY          reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    IMPLEMENT       reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    IMPLEMENTATION  reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    TYPEDEF         reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    INDEX           reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    CID             reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    FOR             reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    ID              reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+    $end            reduce using rule 76 (ns_list -> ns_ref , ns_list .)
+
+
+state 138
+
+    (30) implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .
+    (49) condition -> condition . AND condition
+    (50) condition -> condition . OR condition
+
+    MLS             reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    ENTITY          reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    IMPLEMENT       reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    IMPLEMENTATION  reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    TYPEDEF         reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    INDEX           reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    CID             reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    FOR             reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    ID              reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    $end            reduce using rule 30 (implement_def -> IMPLEMENT class_ref USING ns_list WHEN condition .)
+    AND             shift and go to state 160
+    OR              shift and go to state 159
+
+
+state 139
+
+    (54) condition -> FALSE .
+    (66) constant -> FALSE .
+
+    )               reduce using rule 54 (condition -> FALSE .)
+    AND             reduce using rule 54 (condition -> FALSE .)
+    OR              reduce using rule 54 (condition -> FALSE .)
+    MLS             reduce using rule 54 (condition -> FALSE .)
+    ENTITY          reduce using rule 54 (condition -> FALSE .)
+    IMPLEMENT       reduce using rule 54 (condition -> FALSE .)
+    IMPLEMENTATION  reduce using rule 54 (condition -> FALSE .)
+    TYPEDEF         reduce using rule 54 (condition -> FALSE .)
+    INDEX           reduce using rule 54 (condition -> FALSE .)
+    CID             reduce using rule 54 (condition -> FALSE .)
+    FOR             reduce using rule 54 (condition -> FALSE .)
+    ID              reduce using rule 54 (condition -> FALSE .)
+    $end            reduce using rule 54 (condition -> FALSE .)
+    CMP_OP          reduce using rule 66 (constant -> FALSE .)
+    IN              reduce using rule 66 (constant -> FALSE .)
+
+
+state 140
+
+    (51) condition -> function_call .
+    (56) operand -> function_call .
+
+    )               reduce using rule 51 (condition -> function_call .)
+    AND             reduce using rule 51 (condition -> function_call .)
+    OR              reduce using rule 51 (condition -> function_call .)
+    MLS             reduce using rule 51 (condition -> function_call .)
+    ENTITY          reduce using rule 51 (condition -> function_call .)
+    IMPLEMENT       reduce using rule 51 (condition -> function_call .)
+    IMPLEMENTATION  reduce using rule 51 (condition -> function_call .)
+    TYPEDEF         reduce using rule 51 (condition -> function_call .)
+    INDEX           reduce using rule 51 (condition -> function_call .)
+    CID             reduce using rule 51 (condition -> function_call .)
+    FOR             reduce using rule 51 (condition -> function_call .)
+    ID              reduce using rule 51 (condition -> function_call .)
+    $end            reduce using rule 51 (condition -> function_call .)
+    CMP_OP          reduce using rule 56 (operand -> function_call .)
+    IN              reduce using rule 56 (operand -> function_call .)
+
+
+state 141
+
+    (52) condition -> NOT . condition
+    (45) condition -> . ( condition )
+    (46) condition -> . operand CMP_OP operand
+    (47) condition -> . operand IN list_def
+    (48) condition -> . operand IN var_ref
+    (49) condition -> . condition AND condition
+    (50) condition -> . condition OR condition
+    (51) condition -> . function_call
+    (52) condition -> . NOT condition
+    (53) condition -> . TRUE
+    (54) condition -> . FALSE
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (62) function_call -> . ns_ref ( operand_list )
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    (               shift and go to state 142
+    NOT             shift and go to state 141
+    TRUE            shift and go to state 143
+    FALSE           shift and go to state 139
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    ID              shift and go to state 5
+    MLS             shift and go to state 4
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    condition                      shift and go to state 161
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 144
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 140
+
+state 142
+
+    (45) condition -> ( . condition )
+    (45) condition -> . ( condition )
+    (46) condition -> . operand CMP_OP operand
+    (47) condition -> . operand IN list_def
+    (48) condition -> . operand IN var_ref
+    (49) condition -> . condition AND condition
+    (50) condition -> . condition OR condition
+    (51) condition -> . function_call
+    (52) condition -> . NOT condition
+    (53) condition -> . TRUE
+    (54) condition -> . FALSE
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (62) function_call -> . ns_ref ( operand_list )
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    (               shift and go to state 142
+    NOT             shift and go to state 141
+    TRUE            shift and go to state 143
+    FALSE           shift and go to state 139
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    ID              shift and go to state 5
+    MLS             shift and go to state 4
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    condition                      shift and go to state 162
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 144
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 140
+
+state 143
+
+    (53) condition -> TRUE .
+    (65) constant -> TRUE .
+
+    )               reduce using rule 53 (condition -> TRUE .)
+    AND             reduce using rule 53 (condition -> TRUE .)
+    OR              reduce using rule 53 (condition -> TRUE .)
+    MLS             reduce using rule 53 (condition -> TRUE .)
+    ENTITY          reduce using rule 53 (condition -> TRUE .)
+    IMPLEMENT       reduce using rule 53 (condition -> TRUE .)
+    IMPLEMENTATION  reduce using rule 53 (condition -> TRUE .)
+    TYPEDEF         reduce using rule 53 (condition -> TRUE .)
+    INDEX           reduce using rule 53 (condition -> TRUE .)
+    CID             reduce using rule 53 (condition -> TRUE .)
+    FOR             reduce using rule 53 (condition -> TRUE .)
+    ID              reduce using rule 53 (condition -> TRUE .)
+    $end            reduce using rule 53 (condition -> TRUE .)
+    CMP_OP          reduce using rule 65 (constant -> TRUE .)
+    IN              reduce using rule 65 (constant -> TRUE .)
+
+
+state 144
+
+    (46) condition -> operand . CMP_OP operand
+    (47) condition -> operand . IN list_def
+    (48) condition -> operand . IN var_ref
+
+    CMP_OP          shift and go to state 164
+    IN              shift and go to state 163
+
+
+state 145
+
+    (28) attr -> ns_ref ID = . constant
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    MLS             shift and go to state 4
+
+    mls                            shift and go to state 57
+    constant                       shift and go to state 165
+
+state 146
+
+    (21) entity_body_outer -> mls entity_body END .
+
+    MLS             reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    ENTITY          reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    IMPLEMENT       reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    IMPLEMENTATION  reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    TYPEDEF         reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    INDEX           reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    CID             reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    FOR             reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    ID              reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+    $end            reduce using rule 21 (entity_body_outer -> mls entity_body END .)
+
+
+state 147
+
+    (82) class_ref_list -> class_ref , class_ref_list .
+
+    :               reduce using rule 82 (class_ref_list -> class_ref , class_ref_list .)
+
+
+state 148
+
+    (20) entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .
+
+    MLS             reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    ENTITY          reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    IMPLEMENT       reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    IMPLEMENTATION  reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    TYPEDEF         reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    INDEX           reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    CID             reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    FOR             reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    ID              reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+    $end            reduce using rule 20 (entity_def -> ENTITY CID EXTENDS class_ref_list : entity_body_outer .)
+
+
+state 149
+
+    (64) index_lookup -> class_ref [ param_list ] .
+
+    ,               reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    )               reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    ]               reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    CMP_OP          reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    IN              reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    MLS             reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    ENTITY          reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    IMPLEMENT       reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    IMPLEMENTATION  reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    TYPEDEF         reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    INDEX           reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    CID             reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    FOR             reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    ID              reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    $end            reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    END             reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    AND             reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    OR              reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+    :               reduce using rule 64 (index_lookup -> class_ref [ param_list ] .)
+
+
+state 150
+
+    (86) id_list -> ID , id_list .
+
+    )               reduce using rule 86 (id_list -> ID , id_list .)
+
+
+state 151
+
+    (72) param_list -> ID = operand , . param_list
+    (72) param_list -> . ID = operand , param_list
+    (73) param_list -> . ID = operand
+
+    ID              shift and go to state 66
+
+    param_list                     shift and go to state 166
+
+state 152
+
+    (36) relation -> class_ref ID multi REL multi class_ref . ID
+
+    ID              shift and go to state 167
+
+
+state 153
+
+    (38) multi -> [ INT : ] .
+
+    CID             reduce using rule 38 (multi -> [ INT : ] .)
+    ID              reduce using rule 38 (multi -> [ INT : ] .)
+    REL             reduce using rule 38 (multi -> [ INT : ] .)
+
+
+state 154
+
+    (39) multi -> [ INT : INT . ]
+
+    ]               shift and go to state 168
+
+
+state 155
+
+    (40) multi -> [ : INT ] .
+
+    CID             reduce using rule 40 (multi -> [ : INT ] .)
+    ID              reduce using rule 40 (multi -> [ : INT ] .)
+    REL             reduce using rule 40 (multi -> [ : INT ] .)
+
+
+state 156
+
+    (33) implementation -> : mls stmt_list END .
+
+    MLS             reduce using rule 33 (implementation -> : mls stmt_list END .)
+    ENTITY          reduce using rule 33 (implementation -> : mls stmt_list END .)
+    IMPLEMENT       reduce using rule 33 (implementation -> : mls stmt_list END .)
+    IMPLEMENTATION  reduce using rule 33 (implementation -> : mls stmt_list END .)
+    TYPEDEF         reduce using rule 33 (implementation -> : mls stmt_list END .)
+    INDEX           reduce using rule 33 (implementation -> : mls stmt_list END .)
+    CID             reduce using rule 33 (implementation -> : mls stmt_list END .)
+    FOR             reduce using rule 33 (implementation -> : mls stmt_list END .)
+    ID              reduce using rule 33 (implementation -> : mls stmt_list END .)
+    $end            reduce using rule 33 (implementation -> : mls stmt_list END .)
+    END             reduce using rule 33 (implementation -> : mls stmt_list END .)
+
+
+state 157
+
+    (42) typedef -> TYPEDEF ID AS ns_ref MATCHING condition .
+    (49) condition -> condition . AND condition
+    (50) condition -> condition . OR condition
+
+    MLS             reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    ENTITY          reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    IMPLEMENT       reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    IMPLEMENTATION  reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    TYPEDEF         reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    INDEX           reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    CID             reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    FOR             reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    ID              reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    $end            reduce using rule 42 (typedef -> TYPEDEF ID AS ns_ref MATCHING condition .)
+    AND             shift and go to state 160
+    OR              shift and go to state 159
+
+
+state 158
+
+    (41) typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .
+    (70) constant -> REGEX .
+
+    MLS             reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    ENTITY          reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    IMPLEMENT       reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    IMPLEMENTATION  reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    TYPEDEF         reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    INDEX           reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    CID             reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    FOR             reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    ID              reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    $end            reduce using rule 41 (typedef -> TYPEDEF ID AS ns_ref MATCHING REGEX .)
+    CMP_OP          reduce using rule 70 (constant -> REGEX .)
+    IN              reduce using rule 70 (constant -> REGEX .)
+
+
+state 159
+
+    (50) condition -> condition OR . condition
+    (45) condition -> . ( condition )
+    (46) condition -> . operand CMP_OP operand
+    (47) condition -> . operand IN list_def
+    (48) condition -> . operand IN var_ref
+    (49) condition -> . condition AND condition
+    (50) condition -> . condition OR condition
+    (51) condition -> . function_call
+    (52) condition -> . NOT condition
+    (53) condition -> . TRUE
+    (54) condition -> . FALSE
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (62) function_call -> . ns_ref ( operand_list )
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    (               shift and go to state 142
+    NOT             shift and go to state 141
+    TRUE            shift and go to state 143
+    FALSE           shift and go to state 139
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    ID              shift and go to state 5
+    MLS             shift and go to state 4
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    condition                      shift and go to state 169
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 144
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 140
+
+state 160
+
+    (49) condition -> condition AND . condition
+    (45) condition -> . ( condition )
+    (46) condition -> . operand CMP_OP operand
+    (47) condition -> . operand IN list_def
+    (48) condition -> . operand IN var_ref
+    (49) condition -> . condition AND condition
+    (50) condition -> . condition OR condition
+    (51) condition -> . function_call
+    (52) condition -> . NOT condition
+    (53) condition -> . TRUE
+    (54) condition -> . FALSE
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (62) function_call -> . ns_ref ( operand_list )
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    (               shift and go to state 142
+    NOT             shift and go to state 141
+    TRUE            shift and go to state 143
+    FALSE           shift and go to state 139
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    ID              shift and go to state 5
+    MLS             shift and go to state 4
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    condition                      shift and go to state 170
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 144
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 140
+
+state 161
+
+    (52) condition -> NOT condition .
+    (49) condition -> condition . AND condition
+    (50) condition -> condition . OR condition
+
+  ! shift/reduce conflict for AND resolved as shift
+  ! shift/reduce conflict for OR resolved as shift
+    )               reduce using rule 52 (condition -> NOT condition .)
+    MLS             reduce using rule 52 (condition -> NOT condition .)
+    ENTITY          reduce using rule 52 (condition -> NOT condition .)
+    IMPLEMENT       reduce using rule 52 (condition -> NOT condition .)
+    IMPLEMENTATION  reduce using rule 52 (condition -> NOT condition .)
+    TYPEDEF         reduce using rule 52 (condition -> NOT condition .)
+    INDEX           reduce using rule 52 (condition -> NOT condition .)
+    CID             reduce using rule 52 (condition -> NOT condition .)
+    FOR             reduce using rule 52 (condition -> NOT condition .)
+    ID              reduce using rule 52 (condition -> NOT condition .)
+    $end            reduce using rule 52 (condition -> NOT condition .)
+    AND             shift and go to state 160
+    OR              shift and go to state 159
+
+  ! AND             [ reduce using rule 52 (condition -> NOT condition .) ]
+  ! OR              [ reduce using rule 52 (condition -> NOT condition .) ]
+
+
+state 162
+
+    (45) condition -> ( condition . )
+    (49) condition -> condition . AND condition
+    (50) condition -> condition . OR condition
+
+    )               shift and go to state 171
+    AND             shift and go to state 160
+    OR              shift and go to state 159
+
+
+state 163
+
+    (47) condition -> operand IN . list_def
+    (48) condition -> operand IN . var_ref
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+
+    [               shift and go to state 63
+    ID              shift and go to state 5
+
+    ns_ref                         shift and go to state 172
+    var_ref                        shift and go to state 173
+    list_def                       shift and go to state 174
+
+state 164
+
+    (46) condition -> operand CMP_OP . operand
+    (55) operand -> . constant
+    (56) operand -> . function_call
+    (57) operand -> . constructor
+    (58) operand -> . list_def
+    (59) operand -> . var_ref
+    (60) operand -> . index_lookup
+    (65) constant -> . TRUE
+    (66) constant -> . FALSE
+    (67) constant -> . INT
+    (68) constant -> . FLOAT
+    (69) constant -> . mls
+    (70) constant -> . REGEX
+    (71) constant -> . STRING
+    (62) function_call -> . ns_ref ( operand_list )
+    (61) constructor -> . class_ref ( param_list )
+    (63) list_def -> . [ operand_list ]
+    (78) var_ref -> . var_ref . ID
+    (79) var_ref -> . ns_ref
+    (64) index_lookup -> . class_ref [ param_list ]
+    (88) mls -> . MLS
+    (89) mls -> . MLS mls
+    (84) ns_ref -> . ns_ref SEP ID
+    (85) ns_ref -> . ID
+    (80) class_ref -> . CID
+    (81) class_ref -> . ns_ref SEP CID
+
+    TRUE            shift and go to state 61
+    FALSE           shift and go to state 52
+    INT             shift and go to state 55
+    FLOAT           shift and go to state 59
+    REGEX           shift and go to state 50
+    STRING          shift and go to state 56
+    [               shift and go to state 63
+    MLS             shift and go to state 4
+    ID              shift and go to state 5
+    CID             shift and go to state 26
+
+    var_ref                        shift and go to state 48
+    ns_ref                         shift and go to state 58
+    index_lookup                   shift and go to state 49
+    mls                            shift and go to state 57
+    class_ref                      shift and go to state 51
+    constructor                    shift and go to state 60
+    list_def                       shift and go to state 47
+    operand                        shift and go to state 175
+    constant                       shift and go to state 53
+    function_call                  shift and go to state 54
+
+state 165
+
+    (28) attr -> ns_ref ID = constant .
+
+    END             reduce using rule 28 (attr -> ns_ref ID = constant .)
+    ID              reduce using rule 28 (attr -> ns_ref ID = constant .)
+
+
+state 166
+
+    (72) param_list -> ID = operand , param_list .
+
+    )               reduce using rule 72 (param_list -> ID = operand , param_list .)
+    ]               reduce using rule 72 (param_list -> ID = operand , param_list .)
+
+
+state 167
+
+    (36) relation -> class_ref ID multi REL multi class_ref ID .
+
+    MLS             reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    ENTITY          reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    IMPLEMENT       reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    IMPLEMENTATION  reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    TYPEDEF         reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    INDEX           reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    CID             reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    FOR             reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    ID              reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+    $end            reduce using rule 36 (relation -> class_ref ID multi REL multi class_ref ID .)
+
+
+state 168
+
+    (39) multi -> [ INT : INT ] .
+
+    CID             reduce using rule 39 (multi -> [ INT : INT ] .)
+    ID              reduce using rule 39 (multi -> [ INT : INT ] .)
+    REL             reduce using rule 39 (multi -> [ INT : INT ] .)
+
+
+state 169
+
+    (50) condition -> condition OR condition .
+    (49) condition -> condition . AND condition
+    (50) condition -> condition . OR condition
+
+  ! shift/reduce conflict for AND resolved as shift
+  ! shift/reduce conflict for OR resolved as shift
+    )               reduce using rule 50 (condition -> condition OR condition .)
+    MLS             reduce using rule 50 (condition -> condition OR condition .)
+    ENTITY          reduce using rule 50 (condition -> condition OR condition .)
+    IMPLEMENT       reduce using rule 50 (condition -> condition OR condition .)
+    IMPLEMENTATION  reduce using rule 50 (condition -> condition OR condition .)
+    TYPEDEF         reduce using rule 50 (condition -> condition OR condition .)
+    INDEX           reduce using rule 50 (condition -> condition OR condition .)
+    CID             reduce using rule 50 (condition -> condition OR condition .)
+    FOR             reduce using rule 50 (condition -> condition OR condition .)
+    ID              reduce using rule 50 (condition -> condition OR condition .)
+    $end            reduce using rule 50 (condition -> condition OR condition .)
+    AND             shift and go to state 160
+    OR              shift and go to state 159
+
+  ! AND             [ reduce using rule 50 (condition -> condition OR condition .) ]
+  ! OR              [ reduce using rule 50 (condition -> condition OR condition .) ]
+
+
+state 170
+
+    (49) condition -> condition AND condition .
+    (49) condition -> condition . AND condition
+    (50) condition -> condition . OR condition
+
+  ! shift/reduce conflict for AND resolved as shift
+  ! shift/reduce conflict for OR resolved as shift
+    )               reduce using rule 49 (condition -> condition AND condition .)
+    MLS             reduce using rule 49 (condition -> condition AND condition .)
+    ENTITY          reduce using rule 49 (condition -> condition AND condition .)
+    IMPLEMENT       reduce using rule 49 (condition -> condition AND condition .)
+    IMPLEMENTATION  reduce using rule 49 (condition -> condition AND condition .)
+    TYPEDEF         reduce using rule 49 (condition -> condition AND condition .)
+    INDEX           reduce using rule 49 (condition -> condition AND condition .)
+    CID             reduce using rule 49 (condition -> condition AND condition .)
+    FOR             reduce using rule 49 (condition -> condition AND condition .)
+    ID              reduce using rule 49 (condition -> condition AND condition .)
+    $end            reduce using rule 49 (condition -> condition AND condition .)
+    AND             shift and go to state 160
+    OR              shift and go to state 159
+
+  ! AND             [ reduce using rule 49 (condition -> condition AND condition .) ]
+  ! OR              [ reduce using rule 49 (condition -> condition AND condition .) ]
+
+
+state 171
+
+    (45) condition -> ( condition ) .
+
+    )               reduce using rule 45 (condition -> ( condition ) .)
+    AND             reduce using rule 45 (condition -> ( condition ) .)
+    OR              reduce using rule 45 (condition -> ( condition ) .)
+    MLS             reduce using rule 45 (condition -> ( condition ) .)
+    ENTITY          reduce using rule 45 (condition -> ( condition ) .)
+    IMPLEMENT       reduce using rule 45 (condition -> ( condition ) .)
+    IMPLEMENTATION  reduce using rule 45 (condition -> ( condition ) .)
+    TYPEDEF         reduce using rule 45 (condition -> ( condition ) .)
+    INDEX           reduce using rule 45 (condition -> ( condition ) .)
+    CID             reduce using rule 45 (condition -> ( condition ) .)
+    FOR             reduce using rule 45 (condition -> ( condition ) .)
+    ID              reduce using rule 45 (condition -> ( condition ) .)
+    $end            reduce using rule 45 (condition -> ( condition ) .)
+
+
+state 172
+
+    (79) var_ref -> ns_ref .
+    (84) ns_ref -> ns_ref . SEP ID
+
+    .               reduce using rule 79 (var_ref -> ns_ref .)
+    AND             reduce using rule 79 (var_ref -> ns_ref .)
+    OR              reduce using rule 79 (var_ref -> ns_ref .)
+    MLS             reduce using rule 79 (var_ref -> ns_ref .)
+    ENTITY          reduce using rule 79 (var_ref -> ns_ref .)
+    IMPLEMENT       reduce using rule 79 (var_ref -> ns_ref .)
+    IMPLEMENTATION  reduce using rule 79 (var_ref -> ns_ref .)
+    TYPEDEF         reduce using rule 79 (var_ref -> ns_ref .)
+    INDEX           reduce using rule 79 (var_ref -> ns_ref .)
+    CID             reduce using rule 79 (var_ref -> ns_ref .)
+    FOR             reduce using rule 79 (var_ref -> ns_ref .)
+    ID              reduce using rule 79 (var_ref -> ns_ref .)
+    $end            reduce using rule 79 (var_ref -> ns_ref .)
+    )               reduce using rule 79 (var_ref -> ns_ref .)
+    SEP             shift and go to state 111
+
+
+state 173
+
+    (48) condition -> operand IN var_ref .
+    (78) var_ref -> var_ref . . ID
+
+    )               reduce using rule 48 (condition -> operand IN var_ref .)
+    AND             reduce using rule 48 (condition -> operand IN var_ref .)
+    OR              reduce using rule 48 (condition -> operand IN var_ref .)
+    MLS             reduce using rule 48 (condition -> operand IN var_ref .)
+    ENTITY          reduce using rule 48 (condition -> operand IN var_ref .)
+    IMPLEMENT       reduce using rule 48 (condition -> operand IN var_ref .)
+    IMPLEMENTATION  reduce using rule 48 (condition -> operand IN var_ref .)
+    TYPEDEF         reduce using rule 48 (condition -> operand IN var_ref .)
+    INDEX           reduce using rule 48 (condition -> operand IN var_ref .)
+    CID             reduce using rule 48 (condition -> operand IN var_ref .)
+    FOR             reduce using rule 48 (condition -> operand IN var_ref .)
+    ID              reduce using rule 48 (condition -> operand IN var_ref .)
+    $end            reduce using rule 48 (condition -> operand IN var_ref .)
+    .               shift and go to state 31
+
+
+state 174
+
+    (47) condition -> operand IN list_def .
+
+    )               reduce using rule 47 (condition -> operand IN list_def .)
+    AND             reduce using rule 47 (condition -> operand IN list_def .)
+    OR              reduce using rule 47 (condition -> operand IN list_def .)
+    MLS             reduce using rule 47 (condition -> operand IN list_def .)
+    ENTITY          reduce using rule 47 (condition -> operand IN list_def .)
+    IMPLEMENT       reduce using rule 47 (condition -> operand IN list_def .)
+    IMPLEMENTATION  reduce using rule 47 (condition -> operand IN list_def .)
+    TYPEDEF         reduce using rule 47 (condition -> operand IN list_def .)
+    INDEX           reduce using rule 47 (condition -> operand IN list_def .)
+    CID             reduce using rule 47 (condition -> operand IN list_def .)
+    FOR             reduce using rule 47 (condition -> operand IN list_def .)
+    ID              reduce using rule 47 (condition -> operand IN list_def .)
+    $end            reduce using rule 47 (condition -> operand IN list_def .)
+
+
+state 175
+
+    (46) condition -> operand CMP_OP operand .
+
+    )               reduce using rule 46 (condition -> operand CMP_OP operand .)
+    AND             reduce using rule 46 (condition -> operand CMP_OP operand .)
+    OR              reduce using rule 46 (condition -> operand CMP_OP operand .)
+    MLS             reduce using rule 46 (condition -> operand CMP_OP operand .)
+    ENTITY          reduce using rule 46 (condition -> operand CMP_OP operand .)
+    IMPLEMENT       reduce using rule 46 (condition -> operand CMP_OP operand .)
+    IMPLEMENTATION  reduce using rule 46 (condition -> operand CMP_OP operand .)
+    TYPEDEF         reduce using rule 46 (condition -> operand CMP_OP operand .)
+    INDEX           reduce using rule 46 (condition -> operand CMP_OP operand .)
+    CID             reduce using rule 46 (condition -> operand CMP_OP operand .)
+    FOR             reduce using rule 46 (condition -> operand CMP_OP operand .)
+    ID              reduce using rule 46 (condition -> operand CMP_OP operand .)
+    $end            reduce using rule 46 (condition -> operand CMP_OP operand .)
+
+WARNING: 
+WARNING: Conflicts:
+WARNING: 
+WARNING: shift/reduce conflict for MLS in state 4 resolved as shift
+WARNING: shift/reduce conflict for AND in state 161 resolved as shift
+WARNING: shift/reduce conflict for OR in state 161 resolved as shift
+WARNING: shift/reduce conflict for AND in state 169 resolved as shift
+WARNING: shift/reduce conflict for OR in state 169 resolved as shift
+WARNING: shift/reduce conflict for AND in state 170 resolved as shift
+WARNING: shift/reduce conflict for OR in state 170 resolved as shift

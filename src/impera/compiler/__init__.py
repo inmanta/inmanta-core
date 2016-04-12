@@ -20,8 +20,7 @@ import sys
 import logging
 
 from impera.execute import scheduler
-from impera import module
-from . import main
+import impera.compiler.main
 
 LOGGER = logging.getLogger(__name__)
 

@@ -18,7 +18,6 @@
 
 from impera.compiler.unit import CompileUnit
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
-from impera.ast.variables import Variable
 
 
 class PluginStatement(TypeDefinitionStatement):

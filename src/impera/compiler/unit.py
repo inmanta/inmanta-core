@@ -18,6 +18,7 @@
 
 import logging
 from antlr3.exceptions import NoViableAltException, MismatchedTokenException
+from impera.parser import plyInmantaParser
 
 LOGGER = logging.getLogger()
 
@@ -56,10 +57,9 @@ class FileCompileUnit(CompileUnit):
             Compile the configuration file for this compile unit
         """
         # compile the data
-        parser = self._compiler.get_parser()
 
         try:
-            self.__ast = parser.parse(self._namespace, self.__path)
+            self.__ast = plyInmantaParser.parse(self._namespace, self.__path)
         except NoViableAltException as exp:
             msg = str(exp) + " in file %s at line %d position %d" % (self.__path, exp.line, exp.charPositionInLine)
             raise Exception(msg)

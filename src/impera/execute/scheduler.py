@@ -24,16 +24,13 @@ import inspect
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.execute.util import Unset
 from impera.execute.proxy import UnsetException
-from impera.ast.variables import AttributeVariable, Variable
 import impera.plugins.base
 from impera.stats import Stats
 from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
 
 from impera.ast.statements.define import DefineEntity, DefineImplement
-from impera.compiler.main import Compiler
 from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler, dumpHangs
 from impera.ast.entity import Entity
-from impera.plugins import PluginStatement
 import time
 
 DEBUG = True
@@ -106,7 +103,7 @@ class Scheduler(object):
 
         raise Exception()
 
-    def define_types(self, compiler: Compiler, statements, blocks):
+    def define_types(self, compiler, statements, blocks):
         """
             This is the first compiler stage that defines all types_and_impl
         """

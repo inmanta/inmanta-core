@@ -31,10 +31,7 @@ class Statement(object):
             Copy the location of this statement in the given statement
         """
         statement.location = self.location
-        if hasattr(self, "filename"):
-            statement.filename = self.filename
-            statement.line = self.line
-
+      
     def evaluate(self, state, scope):
         """
             Evaluate this statement.

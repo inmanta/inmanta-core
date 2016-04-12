@@ -4,7 +4,9 @@ Created on Apr 10, 2016
 @author: wouter
 '''
 import ply.lex as lex
-import time
+from impera.parser import ParserException
+from impera.ast.variables import Reference
+from impera.ast.constraint.expression import Regex
 
 states = (
     ('mls', 'exclusive'),
@@ -44,7 +46,7 @@ def t_SEP(t):
 
 
 def t_REL(t):
-    r'[-]{2}'
+    r'--|->|<-'
     return t
 
 
@@ -80,17 +82,38 @@ def t_mls_MLS(t):
     r'.+'
     return t
 
-t_INT = r'[0-9]+'
-t_FLOAT = r'[0-9]*[.][0-9]+'
+
+def t_INT(t):
+    r'[0-9]+'
+    t.value = int(t.value)
+    return t
+
+
+def t_FLOAT(t):
+    r'[0-9]*[.][0-9]+'
+    t.value = float(t.value)
+    return t
 
 
 def t_STRING_EMPTY(t):
     r'\"\"'
     t.type = "STRING"
+    t.value = ""
     return t
 
-t_STRING = r'\".*?[^\\]\"'
-t_REGEX = r'/[^/]*/'
+
+def t_STRING(t):
+    r'\".*?[^\\]\"'
+    t.value = t.value[1: -1]
+    return t
+
+
+def t_REGEX(t):
+    r'/[^/]*/'
+    value = Reference("self")  # anonymous value
+    expr = Regex(value, t.value[1:-1])
+    t.value = expr
+    return t
 
 # Define a rule so we can track line numbers
 
@@ -101,38 +124,14 @@ def t_ANY_newline(t):
 
 # A string containing ignored characters (spaces and tabs)
 t_ignore = ' \t'
+t_mls_ignore = ''
 
 # Error handling rule
 
 
 def t_ANY_error(t):
-    print("Illegal character '%s' %s" % (t.value[0], t.lexer.lineno))
-    t.lexer.skip(1)
+    raise ParserException(t.lexer.lineno, "Illegal character '%s' %s" % (t.value[0], t.lexer.lineno))
 
 
 # Build the lexer
 lexer = lex.lex()
-
-
-def test():
-    f1 = "/home/wouter/projects/inmanta-infra/main.cf"
-    f2 = "/home/wouter/projects/inmanta-infra/libs/config/model/_init.cf"
-
-    now = time.time()
-    with open(f2, 'r') as myfile:
-        data = myfile.read()
-
-        # Give the lexer some input
-        lexer.input(data)
-
-        # Tokenize
-        i = 0
-        while True:
-            tok = lexer.token()
-            if not tok:
-                break      # No more input
-            # print(tok)
-            i = i + 1
-    print(time.time() - now)
-
-# test()

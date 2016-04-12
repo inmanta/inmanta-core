@@ -21,11 +21,12 @@
 from . import GeneratorStatement
 from impera.ast import Namespace
 from impera.ast.statements.assign import SetAttribute
-from impera.ast.variables import AttributeVariable, Reference, Variable
+from impera.ast.variables import Reference
 from impera.execute import DuplicateVariableException, NotFoundException
 from impera.stats import Stats
 from impera.execute.util import Unknown
 from impera.execute.runtime import ExecutionContext, ResultVariable
+
 
 class SubConstructor(GeneratorStatement):
     """
@@ -43,7 +44,7 @@ class SubConstructor(GeneratorStatement):
 
     def requires_emit(self, resolver, queue):
         out = {rk: rv for i in self.type.implements for (
-            rk, rv) in i.constraint.stmts[0].requires_emit(resolver, queue).items()}
+            rk, rv) in i.constraint.requires_emit(resolver, queue).items()}
         return out
 
     def execute(self, requires, resolver, queue):
@@ -81,9 +82,6 @@ class SubConstructor(GeneratorStatement):
 
         for implementation in self.type.implements:
             expr = implementation.constraint
-            if len(expr.stmts) != 1:
-                raise Exception("Compiler fault: two statements in selector")
-            expr = expr.stmts[0]
             if expr.execute(requires, resolver, queue):
                 select_list.append(implementation)
 
@@ -146,15 +144,17 @@ class Constructor(GeneratorStatement):
             constructor call.
     """
 
-    def __init__(self, class_type):
+    def __init__(self, class_type, attributes):
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}
         self.implemented = False
         self.register = False
+        for a in attributes:
+            self.add_attribute(a[0], a[1])
 
     def normalize(self, resolver):
-        self.type = resolver.get_type(self.class_type.full_name)
+        self.type = resolver.get_type(self.class_type)
         for (k, v) in self.__attributes.items():
             v.normalize(resolver)
 

@@ -16,7 +16,6 @@
     Contact: bart@impera.io
 """
 
-from impera.ast.variables import Variable
 from impera.execute.util import Unset, Unknown
 from impera.stats import Stats
 from impera.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
@@ -106,13 +105,11 @@ class RelationAttribute(Attribute):
         An attribute that is a relation
     """
 
-    def __init__(self, entity, value_type, name, default):
+    def __init__(self, entity, value_type, name):
         Attribute.__init__(self, entity, value_type, name)
         self.end = None
         self.low = 1
         self.high = 1
-        self.default = default
-
         self.depends = False
 
     def __repr__(self):

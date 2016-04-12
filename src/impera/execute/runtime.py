@@ -190,27 +190,20 @@ class Waiter(object):
         self.waitcount = 1
         self.queue = queue
         waiters.append(self)
-        self.Xdepends = []
 
     def await(self, waitable):
         self.waitcount = self.waitcount + 1
-        self.Xdepends.append(waitable)
         waitable.await(self)
 
     def ready(self, other):
         self.waitcount = self.waitcount - 1
         if self.waitcount == 0:
-            if self in waiters:
-                waiters.remove(self)
-            waitersdone.append(self)
             self.queue.add_running(self)
         if self.waitcount < 0:
             raise Exception("waitcount negative")
 
     def validate(self):
         waiters = [x for x in self.Xdepends if not x.can_get()]
-        if len(waiters) != self.waitcount:
-            print("odd: " + self)
 
 
 class QueueScheduler(object):
@@ -269,7 +262,7 @@ class NamespaceResolver(Resolver):
             namespace = '::'.join(namespace)
         if isinstance(namespace, Namespace):
             namespace = namespace.get_full_name()
-        if len(namespace) == 0:
+        if namespace is None or len(namespace) == 0:
             print("X")
         self.scope = scopes[namespace]
 

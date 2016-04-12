@@ -19,14 +19,9 @@
 # pylint: disable-msg=W0613
 
 from . import ReferenceStatement
-from impera.ast.variables import Variable, AttributeVariable, Reference
-from impera.execute.proxy import DynamicProxy
-from impera.execute.util import Optional
 from impera.ast.type import List
-from impera.ast.statements import Statement, AssignStatement, ExpressionStatement
-from impera.util import memoize
+from impera.ast.statements import AssignStatement, ExpressionStatement
 from impera.execute.runtime import ExecutionUnit, WaitUnit, ResultVariable, HangUnit
-import impera.execute.scheduler
 import random
 
 
@@ -77,8 +72,6 @@ class SetAttribute(AssignStatement):
 
     def __init__(self, instance_name, attribute_name, value):
         AssignStatement.__init__(self, instance_name, value)
-        if not isinstance(instance_name, Reference):
-            raise Exception("assumed Reference")
         self.instance_name = instance_name
         self.attribute_name = attribute_name
         self.value = value
@@ -122,7 +115,7 @@ class Assign(AssignStatement):
         return self.value.requires()
 
     def emit(self, resolver, queue):
-        target = resolver.lookup(self.name.full_name)
+        target = resolver.lookup(self.name)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value)
 
@@ -142,7 +135,7 @@ class IndexLookup(ReferenceStatement):
 
     def normalize(self, resolver):
         ReferenceStatement.normalize(self, resolver)
-        self.type = resolver.get_type(self.index_type.full_name)
+        self.type = resolver.get_type(self.index_type)
 
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)

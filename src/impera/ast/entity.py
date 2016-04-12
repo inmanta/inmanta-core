@@ -105,7 +105,7 @@ class Entity(Type):
 
         for parent in self.parent_entities:
             values.extend(parent.__default_value.items())
-
+        
         return dict(values)
 
     def get_namespace(self):

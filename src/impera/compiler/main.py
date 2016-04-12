@@ -24,13 +24,13 @@ import imp
 
 from impera.ast import Namespace
 from impera.ast.statements.define import DefineEntity, DefineRelation
-from impera.ast.variables import Reference
 from impera.compiler.unit import FileCompileUnit
 from impera.module import Project, Module
-from impera.parser import Parser
+
 from impera.plugins import PluginCompileUnit
 from impera.ast.blocks import BasicBlock
 from impera.ast.statements import DefinitionStatement
+from builtins import isinstance
 
 
 class Compiler(object):
@@ -44,19 +44,12 @@ class Compiler(object):
         self.__init_cf = "_init.cf"
 
         self.__cf_file = cf_file
-        self.__parser = Parser()
-
         self.__root_ns = None
 
         self.loaded_modules = {}  # a map of the paths of all loaded modules
         self._units = []
         self.types = {}
 
-    def get_parser(self):
-        """
-            Get an instace of the compiler to parse an input string
-        """
-        return self.__parser
 
     def get_plugins(self):
         return self.plugins
@@ -212,16 +205,17 @@ class Compiler(object):
                 for s in stmts:
                     if isinstance(s, DefinitionStatement):
                         statements.append(s)
+                    elif isinstance(s, str):
+                        pass
                     else:
                         block.add(s)
                 blocks.append(block)
 
         # add the entity type (hack?)
-        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.",[])
+        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.",[],[])
 
-        requires_rel = DefineRelation([Reference("Entity", ["std"]), "requires", [0, None], False],
-                                      [Reference("Entity", ["std"]), "provides", [0, None], False])
-        requires_rel.requires = ">"
+        requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
+                                      ("std::Entity", "provides", [0, None], False))
         requires_rel.namespace = Namespace("std", self.__root_ns)
 
         statements.append(entity)

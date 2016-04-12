@@ -17,7 +17,7 @@
 """
 
 from impera.ast.constraint.expression import create_function
-from impera.ast.variables import Variable, Reference
+import impera.ast.variables
 from impera.ast import Namespace
 
 
@@ -27,8 +27,8 @@ class BasicResolver(object):
         self.types = types
 
     def get_type(self, namespace, name):
-        if isinstance(name, Reference):
-            name = name.full_name
+        if isinstance(name, impera.ast.variables.Reference):
+            raise Exception("Bad")
         if "::" in name:
             if name in self.types:
                 return self.types[name]
@@ -134,7 +134,6 @@ class Number(Type):
         try:
             float(value)
         except TypeError as t:
-            print(t)
             raise ValueError("Invalid value '%s'" % value)
         except ValueError:
             raise ValueError("Invalid value '%s'" % value)
