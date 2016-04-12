@@ -30,7 +30,7 @@ def do_compile():
         Run run run
     """
     # module.Project.get().verify()
-    compiler = main.Compiler()
+    compiler = impera.compiler.main.Compiler()
 
     success = False
     try:

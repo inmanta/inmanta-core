@@ -175,7 +175,7 @@ def p_implementation_def(p):
 
 def p_implementation_def_2(p):
     "implementation_def : IMPLEMENTATION ID implementation"
-    p[0] = DefineImplementation(p[2], None, BasicBlock(namespace, p[3]))
+    p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
     attach_lnr(p)
 
 
@@ -298,6 +298,12 @@ def p_operand(p):
 def p_constructor(p):
     " constructor : class_ref '(' param_list ')' "
     p[0] = Constructor(p[1], p[3])
+    attach_lnr(p)
+
+
+def p_constructor_empty(p):
+    " constructor : class_ref '(' ')' "
+    p[0] = Constructor(p[1], [])
     attach_lnr(p)
 
 

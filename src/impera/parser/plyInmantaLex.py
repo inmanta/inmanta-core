@@ -130,7 +130,7 @@ t_mls_ignore = ''
 
 
 def t_ANY_error(t):
-    raise ParserException(t.lexer.lineno, "Illegal character '%s' %s" % (t.value[0], t.lexer.lineno))
+    raise ParserException("",t.lexer.lineno, "Illegal character '%s' %s" % (t.value[0], t.lexer.lineno))
 
 
 # Build the lexer
