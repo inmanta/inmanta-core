@@ -301,6 +301,12 @@ def p_constructor(p):
     attach_lnr(p)
 
 
+def p_function_call_empty(p):
+    " function_call : ns_ref '(' ')'"
+    p[0] = FunctionCall(p[1], [])
+    attach_lnr(p)
+
+
 def p_function_call(p):
     " function_call : ns_ref '(' operand_list ')'"
     p[0] = FunctionCall(p[1], p[3])
@@ -470,7 +476,7 @@ def p_mls_collect(p):
 # Error rule for syntax errors
 def p_error(p):
     print("Syntax error in input!", p)
-    raise Exception()
+    raise Exception(file, p.lineno)
 
 
 # Build the parser
@@ -486,7 +492,7 @@ def myparse(ns, tfile):
     with open(tfile, 'r') as myfile:
         data = myfile.read()
         lexer.lineno = 1
-        return parser.parse(data, lexer=lexer)
+        return parser.parse(data, lexer=lexer, debug=False)
 
 
 def parse(namespace, filename, content=None):

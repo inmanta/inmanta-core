@@ -54,7 +54,7 @@ class Context(object):
 
     def get_queue_scheduler(self):
         return self.queue
-    
+
     def get_compiler(self):
         return self.queue.get_compiler()
 
@@ -217,6 +217,9 @@ class Plugin(object, metaclass=PluginMeta):
         """
             Check if value is of arg_type
         """
+        if arg_type is None:
+            return True
+
         if hasattr(arg_type, "validate"):
             return arg_type.validate(value)
 
@@ -282,7 +285,6 @@ class Plugin(object, metaclass=PluginMeta):
                 else:
                     new_args.append(arg)
 
-            
             value = self.call(*new_args)
 
             if self.returntype is not None and not isinstance(value, Unknown):
@@ -303,7 +305,7 @@ class Plugin(object, metaclass=PluginMeta):
                     raise Exception("Plugin %s should return value of type %s ('%s' was returned) %s" %
                                     (self.__class__.__function_name__, self.returntype, value, msg))
 
-            #print(value)
+            # print(value)
             return value
         except UnknownException as e:
             # just pass it along

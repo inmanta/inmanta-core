@@ -531,45 +531,6 @@ def export_none(options, scope, config):
     pass
 
 
-@export("report", "std::File", "std::Host", "drm::Logconfig")
-def export_report(options, types):
-    # prefix = types["drm::Logconfig"][0].prefix
-    prefix = "report"
-
-    with open(prefix + "_host.csv", "w+") as fd:
-        # first, generate stats about each host
-        fd.write("hostname, files, services, packages, directories\n")
-        for host in types["std::Host"]:
-            fd.write("%s,%d,%d,%d,%d\n" % (host.name, len(host.files),
-                                           len(host.services), len(host.packages), len(host.directories)))
-
-    report = defaultdict(int)
-    with open(prefix + "_parameters.csv", "w+") as fd:
-        # print out template stats
-        fd.write("hostname, template, filename, name, value, type, index\n")
-        for host in types["std::Host"]:
-            for file in host.files:
-                if hasattr(file.content, "stats"):
-                    stats = file.content.stats
-                    row = "%s,%s,%s" % (host.name, file.content.template, file.path)
-
-                    for stat in stats:
-                        fd.write("%s,%s,%s,%s,%s\n" % (row, stat[0], stat[1], stat[3], stat[2]))
-                        report[stat[3]] += 1
-
-    with open(prefix + "_param_summary.csv", "w+") as fd:
-        for t, value in report.items():
-            fd.write("%s,%s\n" % (t, value))
-
-    if not os.path.exists(prefix):
-        os.mkdir(prefix)
-
-    for file in types["std::File"]:
-        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))
-        with open(path, "w+") as fd:
-            fd.write(file.content)
-
-
 @export("dump", "std::File", "std::Service", "std::Package")
 def export_dumpfiles(options, types):
     prefix = "dump"
