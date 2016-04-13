@@ -3,7 +3,7 @@ Created on Apr 4, 2016
 
 @author: wouter
 '''
-from impera.execute.util import Unset
+from impera.execute.util import Unset, Unknown
 from impera.execute.proxy import UnsetException
 from impera.ast import Namespace
 
@@ -35,7 +35,7 @@ class ResultVariable(object):
     def set_value(self, value, recur=True):
         if self.hasValue:
             raise Exception("Value set twice")
-        if self.type is not None:
+        if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
         self.hasValue = True
@@ -68,7 +68,7 @@ class AttributeVariable(ResultVariable):
     def set_value(self, value, recur=True):
         if self.hasValue:
             raise Exception("Value set twice")
-        if self.type is not None:
+        if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
         self.hasValue = True
@@ -157,7 +157,7 @@ class OptionVariable(DelayedResultVariable):
         if self.hasValue:
             raise Exception("Option set after freeze %s.%s = %s / %s " % (self.myself, self.attribute, value, self.value))
 
-        if self.type is not None:
+        if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
 
         # set counterpart

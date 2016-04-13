@@ -22,7 +22,7 @@ import logging
 import re
 
 from impera.execute import util
-from impera.execute.proxy import DynamicProxy
+from impera.execute.proxy import DynamicProxy, UnknownException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -177,11 +177,17 @@ class Resource(object):
         for field in cls.fields:
             try:
                 if hasattr(cls, "map") and field in cls.map:
-                    value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
-                    setattr(obj, field, value)
+                    try:
+                        value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
+                        setattr(obj, field, value)
+                    except UnknownException as e:
+                        setattr(obj, field, e.unknown)
 
                 else:
-                    setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
+                    try:
+                        setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
+                    except UnknownException as e:
+                        setattr(obj, field, e.unknown)
 
             except AttributeError:
                 raise AttributeError("Attribute %s does not exist on entity of type %s" % (field, entity_name))

@@ -263,7 +263,11 @@ class Scheduler(object):
                 while len(zerowaiters) > 0:
                     next = zerowaiters.pop()
                     next.freeze()
-
+                    
+        now = time.time()
+        LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
+                         len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+        
         if i == MAX_ITERATIONS:
             print("could not complete model")
             return False
