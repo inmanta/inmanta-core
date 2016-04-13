@@ -98,7 +98,7 @@ class For(GeneratorStatement):
 
     def __init__(self, variable, loop_var, module):
         GeneratorStatement.__init__(self)
-        self.variable = variable
+        self.base = variable
         self.loop_var = loop_var
         self.module = module
 
@@ -106,12 +106,12 @@ class For(GeneratorStatement):
         return "For(%s)" % self.variable
 
     def normalize(self, resolver):
-        self.variable.normalize(resolver)
+        self.base.normalize(resolver)
         # self.loop_var.normalize(resolver)
         self.module.normalize(resolver)
 
     def requires(self):
-        base = self.variable.requires()
+        base = self.base.requires()
         var = self.loop_var
         ext = self.module.requires
         self.module.add_var(var)
@@ -132,7 +132,7 @@ class For(GeneratorStatement):
         for loop_var in var:
             # generate a subscope/namespace for each loop
             xc = ExecutionContext(self.module, resolver)
-            xc.lookup(self.loop_var, loop_var)
+            xc.lookup(self.loop_var).set_value(loop_var)
             xc.emit(queue)
 
 

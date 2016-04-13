@@ -240,12 +240,13 @@ class Plugin(object, metaclass=PluginMeta):
 
         for i in range(len(args)):
             if isinstance(args[i], Unknown):
-                continue
+                return False
 
             if self.arguments[i][0] is not None and not self._is_instance(args[i], self.argtypes[i]):
                 raise Exception(("Invalid type for argument %d of '%s', it should be " +
                                  "%s and %s given.") % (i + 1, self.__class__.__function_name__,
                                                         self.arguments[i][1], args[i].__class__.__name__))
+        return True
 
     def emit_statement(self):
         """
@@ -278,40 +279,37 @@ class Plugin(object, metaclass=PluginMeta):
         """
             The function call itself
         """
-        try:
-            self.check_requirements()
-            new_args = []
-            for arg in args:
-                if isinstance(arg, Instance):
-                    new_args.append(DynamicProxy.return_value(arg))
-                else:
-                    new_args.append(arg)
 
-            value = self.call(*new_args)
+        self.check_requirements()
+        new_args = []
+        for arg in args:
+            if isinstance(arg, Context):
+                new_args.append(arg)
+            else:
+                new_args.append(DynamicProxy.return_value(arg))
 
-            if self.returntype is not None and not isinstance(value, Unknown):
-                valid = False
-                exception = None
+        value = self.call(*new_args)
 
-                try:
-                    valid = (
-                        value is None or self._is_instance(value, self.returntype))
-                except Exception as exp:
-                    exception = exp
+        if self.returntype is not None and not isinstance(value, Unknown):
+            valid = False
+            exception = None
 
-                if not valid:
-                    msg = ""
-                    if exception is not None:
-                        msg = "\n\tException details: " + str(exception)
+            try:
+                valid = (
+                    value is None or self._is_instance(value, self.returntype))
+            except Exception as exp:
+                exception = exp
 
-                    raise Exception("Plugin %s should return value of type %s ('%s' was returned) %s" %
-                                    (self.__class__.__function_name__, self.returntype, value, msg))
+            if not valid:
+                msg = ""
+                if exception is not None:
+                    msg = "\n\tException details: " + str(exception)
 
-            # print(value)
-            return value
-        except UnknownException as e:
-            # just pass it along
-            return e.unknown
+                raise Exception("Plugin %s should return value of type %s ('%s' was returned) %s" %
+                                (self.__class__.__function_name__, self.returntype, value, msg))
+
+        # print(value)
+        return value
 
 
 def plugin(function=None, commands=None, emits_statements=False):

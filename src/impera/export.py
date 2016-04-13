@@ -32,6 +32,7 @@ from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
 import base64
+from impera.execute.proxy import DynamicProxy
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,8 +66,8 @@ class Exporter(object):
         """
             Get an id using a registered id conversion function
         """
-        
-        for cls_name in resource.type():
+
+        for cls_name in resource.type().get_all_parent_names()+[str(resource.type())]:
             if cls_name in cls.__id_conversion:
                 function = cls.__id_conversion[cls_name]
 
@@ -102,18 +103,11 @@ class Exporter(object):
         self._offline = False
         self._file_store = {}
 
-    def _get_instances_of_types(self, types):
+    def _get_instance_proxies_of_types(self, types):
         """
             Returns a dict of instances for the given types
         """
-        values = {}
-        for t in types:
-            variable = self.get_variable(t)
-
-            if variable is not None:
-                values[t] = set([x for x in variable.get_all_instances()])
-
-        return values
+        return {t: [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()] for t in types}
 
     def _load_resources(self, types):
         """
@@ -146,7 +140,7 @@ class Exporter(object):
             types, function = self.__class__.__export_functions[name]
 
             if len(types) > 0:
-                function(self, types=self._get_instances_of_types(types))
+                function(self, types=self._get_instance_proxies_of_types(types))
             else:
                 function(self)
 

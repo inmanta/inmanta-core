@@ -67,7 +67,7 @@ class AttributeRef(object):
         self.instance = instance
 
     def resume(self, requires, resolver, queue_scheduler):
-        obj = self.instance.execute(requires, resolver, queue_scheduler).get_value()
+        obj = self.instance.execute(requires, resolver, queue_scheduler)
         if isinstance(obj, list):
             print("KAK")
         attr = obj.get_attribute(self.attribute)

@@ -19,6 +19,7 @@
 from impera.ast.constraint.expression import create_function
 import impera.ast.variables
 from impera.ast import Namespace
+from impera.execute.util import Unknown
 
 
 class BasicResolver(object):
@@ -261,7 +262,7 @@ class String(Type, str):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        if value is None:
+        if isinstance(value, Unknown):
             return True
         if not isinstance(value, str):
             raise ValueError("Invalid value '%s'" % value)
@@ -354,6 +355,8 @@ class ConstraintType(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
+        if isinstance(value, Unknown):
+            return True
 
         self.basetype.validate(value)
 

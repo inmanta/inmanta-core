@@ -61,6 +61,7 @@ class CreateList(ExpressionStatement):
     def __repr__(self):
         return "List()"
 
+
 class SetAttribute(AssignStatement):
     """
         Set an attribute of a given instance to a given value
@@ -75,7 +76,6 @@ class SetAttribute(AssignStatement):
         self.instance_name = instance_name
         self.attribute_name = attribute_name
         self.value = value
-        self.token = random.randint(0, 2147483647)
 
     def normalize(self, resolver):
         self.value.normalize(resolver)
@@ -86,11 +86,11 @@ class SetAttribute(AssignStatement):
         return out
 
     def emit(self, resolver, queue):
-        target = resolver.lookup(self.instance_name.name)
-        WaitUnit(queue, resolver, target, self)
+        reqs = self.instance_name.requires_emit(resolver, queue)
+        WaitUnit(queue, resolver, reqs, self)
 
-    def resume(self, target, resolver, queue):
-        var = target.get_value().get_attribute(self.attribute_name)
+    def resume(self, requires, resolver, queue):
+        var = self.instance_name.execute(requires, resolver, queue).get_attribute(self.attribute_name)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, var, reqs, self.value)
 

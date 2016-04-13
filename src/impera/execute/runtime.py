@@ -225,7 +225,7 @@ class QueueScheduler(object):
 
     def get_compiler(self):
         return self.compiler
-    
+
     def get_types(self):
         return self.types
 
@@ -306,6 +306,9 @@ class ExecutionContext(object):
 
 
 class WaitUnit(Waiter):
+    """ Wait for either a single requirement or a map of requirements, call the resume method on the resumer 
+       
+    """
 
     def __init__(self, queue_scheduler, resolver, require, resumer):
         Waiter.__init__(self, queue_scheduler)
@@ -321,7 +324,8 @@ class WaitUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        self.resumer.resume(self.require, self.resolver, self.queue_scheduler)
+        requires = {k: v.get_value() for (k, v) in self.require.items()}
+        self.resumer.resume(requires, self.resolver, self.queue_scheduler)
 
 
 class HangUnit(Waiter):

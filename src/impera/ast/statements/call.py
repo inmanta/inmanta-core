@@ -19,8 +19,9 @@
 from impera.stats import Stats
 from impera.ast.statements import ReferenceStatement
 from impera.execute.runtime import ResultVariable, Waiter
-from impera.execute.proxy import UnsetException
+from impera.execute.proxy import UnsetException, UnknownException
 import impera.plugins.base
+from impera.execute.util import Unknown
 
 
 class FunctionCall(ReferenceStatement):
@@ -62,19 +63,25 @@ class FunctionCall(ReferenceStatement):
         # get the object to call the function on
         function = self.function
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
-        function.check_args(arguments)
+        no_unknows = function.check_args(arguments)
+
+        if not no_unknows:
+            result.set_value(Unknown(self))
+            return
 
         if function._context is not -1:
             arguments.insert(function._context,  impera.plugins.base.Context(resolver, queue, self, result))
 
         if function.opts["emits_statements"]:
-
             function(*arguments)
             Stats.get("function call").increment()
         else:
-            value = function(*arguments)
-            Stats.get("function call").increment()
-            result.set_value(value)
+            try:
+                value = function(*arguments)
+                Stats.get("function call").increment()
+                result.set_value(value)
+            except UnknownException as e:
+                result.set_value(e.unknown)
 
 
 class Dummy(object):
