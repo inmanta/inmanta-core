@@ -74,7 +74,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\" %s
     \"\"\"
     string hello
-    bool bar
+    bool bar = true
     number ten=5
 end
 """ % documentation)
@@ -94,6 +94,8 @@ end
     tools.assert_equals(stmt.attributes[0].name, "hello")
     tools.assert_equals(stmt.attributes[1].name, "bar")
     tools.assert_equals(stmt.attributes[2].name, "ten")
+
+    tools.assert_equals(stmt.attributes[1].default.execute(None, None, None), True)
 
     tools.assert_equals(stmt.attributes[2].default.execute(None, None, None), 5)
 
