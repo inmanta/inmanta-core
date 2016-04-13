@@ -334,13 +334,25 @@ def p_index_lookup(p):
 
 
 def p_constant(p):
-    """ constant : TRUE 
-    | FALSE
-    | INT
+    """ constant : INT
     | FLOAT
     | mls
     | REGEX """
     p[0] = Literal(p[1])
+    attach_lnr(p)
+
+
+def p_constant_t(p):
+    """ constant : TRUE
+    """
+    p[0] = Literal(True)
+    attach_lnr(p)
+
+
+def p_constant_f(p):
+    """ constant : FALSE
+    """
+    p[0] = Literal(False)
     attach_lnr(p)
 
 formatRegex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
