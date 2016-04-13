@@ -337,8 +337,15 @@ def p_constant(p):
     """ constant : INT
     | FLOAT
     | mls
-    | REGEX """
+    |  """
     p[0] = Literal(p[1])
+    attach_lnr(p)
+
+
+def p_constant_regex(p):
+    """ constant : REGEX
+    """
+    p[0] = p[0]
     attach_lnr(p)
 
 
@@ -502,19 +509,23 @@ lexer = plyInmantaLex.lexer
 parser = yacc.yacc()
 
 
-def myparse(ns, tfile):
+def myparse(ns, tfile, content):
     global file
     file = tfile
     global namespace
     namespace = ns
-    with open(tfile, 'r') as myfile:
-        data = myfile.read()
+    if content is None:
+        with open(tfile, 'r') as myfile:
+            data = myfile.read()
+            lexer.lineno = 1
+            return parser.parse(data, lexer=lexer, debug=False)
+    else:
         lexer.lineno = 1
-        return parser.parse(data, lexer=lexer, debug=False)
+        return parser.parse(content, lexer=lexer, debug=False)
 
 
 def parse(namespace, filename, content=None):
 
-    statements = myparse(namespace, filename)
+    statements = myparse(namespace, filename, content)
     # self.cache(filename, statements)
     return statements

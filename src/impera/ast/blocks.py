@@ -14,6 +14,9 @@ class BasicBlock(object):
         for st in stmts:
             self.add(st)
 
+    def get_stmts(self):
+        return self.__stmts
+
     def add(self, stmt: Statement):
         self.__stmts.append(stmt)
 
