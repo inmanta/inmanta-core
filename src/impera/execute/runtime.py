@@ -208,11 +208,11 @@ class Waiter(object):
 
 class QueueScheduler(object):
 
-    def __init__(self, compiler, runqueue, waitqueue):
-        self.queues = {}
+    def __init__(self, compiler, runqueue, waitqueue, types):
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
+        self.types = types
 
     def set_queue(self, name, queue):
         self.queues[name] = queue
@@ -223,11 +223,11 @@ class QueueScheduler(object):
     def add_possible(self, rv):
         return self.waitqueue.append(rv)
 
-    def get_queue(self, queue):
-        return self.queues[queue]
-
     def get_compiler(self):
         return self.compiler
+    
+    def get_types(self):
+        return self.types
 
 
 class Resolver(object):

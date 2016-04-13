@@ -105,7 +105,7 @@ class DynamicProxy(object):
         """
             Return the type of the proxied instance
         """
-        return self._get_instance().type()
+        return self._get_instance().type
 
     def is_unknown(self):
         """

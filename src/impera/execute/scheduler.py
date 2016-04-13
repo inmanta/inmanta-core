@@ -210,7 +210,7 @@ class Scheduler(object):
         basequeue = []
         waitqueue = []
         zerowaiters = []
-        queue = QueueScheduler(compiler, basequeue, waitqueue)
+        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
 
         for block in blocks:
             block.context.emit(queue)

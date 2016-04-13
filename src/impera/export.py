@@ -38,20 +38,6 @@ LOGGER = logging.getLogger(__name__)
 unknown_parameters = []
 
 
-def classes(t):
-    if t.__name__ == "EntityType" and t.__module__.startswith("impera"):
-        return []
-
-    cls_name = t.__name__
-    nm_name = t.__module__.replace(".", "::")
-    clslist = ["%s::%s" % (nm_name, cls_name)]
-
-    for nt in t.__bases__:
-        clslist += classes(nt)
-
-    return clslist
-
-
 class Exporter(object):
     """
         This class handles exporting the compiled configuration model
@@ -79,7 +65,8 @@ class Exporter(object):
         """
             Get an id using a registered id conversion function
         """
-        for cls_name in classes(resource.type()):
+        
+        for cls_name in resource.type():
             if cls_name in cls.__id_conversion:
                 function = cls.__id_conversion[cls_name]
 

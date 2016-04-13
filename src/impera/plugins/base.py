@@ -22,7 +22,6 @@ import os
 
 from impera.execute.proxy import DynamicProxy, UnknownException
 from impera.execute.util import Unknown
-from impera.execute import NotFoundException
 from impera.ast import Namespace
 from impera.execute.runtime import Instance, ExecutionUnit
 import impera.ast.statements.call
@@ -51,6 +50,9 @@ class Context(object):
 
     def get_resolver(self):
         return self.resolver
+
+    def get_type(self, name):
+        return self.queue.types[name]
 
     def get_queue_scheduler(self):
         return self.queue
