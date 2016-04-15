@@ -13,13 +13,7 @@ suite/tests/*c
 
 *.swp
 
-src/westmalle/parser/output
-suite/output
-project/*/output
-project/isim/scripts/out
 run.profile
-
-src/pygraphviz
 
 example/*/output
 __pycache__
@@ -38,3 +32,4 @@ junit*.xml
 
 build-result
 /env/
+src/*/parser/parser.out
