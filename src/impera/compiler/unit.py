@@ -57,16 +57,7 @@ class FileCompileUnit(CompileUnit):
             Compile the configuration file for this compile unit
         """
         # compile the data
-
-        try:
-            self.__ast = plyInmantaParser.parse(self._namespace, self.__path)
-        except NoViableAltException as exp:
-            msg = str(exp) + " in file %s at line %d position %d" % (self.__path, exp.line, exp.charPositionInLine)
-            raise Exception(msg)
-        except MismatchedTokenException as exp:
-            msg = str(exp) + " in file %s at line %d position %d" % (self.__path, exp.line, exp.charPositionInLine)
-            raise Exception(msg)
-
+        self.__ast = plyInmantaParser.parse(self._namespace, self.__path)
         return self.__ast
 
     def is_compiled(self):

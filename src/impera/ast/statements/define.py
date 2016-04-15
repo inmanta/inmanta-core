@@ -25,9 +25,8 @@ from impera.ast.attribute import Attribute, RelationAttribute
 from impera.ast.entity import Implementation, Entity, Default, Implement
 from impera.ast.constraint.expression import Equals
 
-from impera.ast.blocks import BasicBlock
 from impera.ast.statements import TypeDefinitionStatement
-from impera.ast import Namespace
+from impera.ast import Namespace, TypingException, DuplicateException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -85,7 +84,7 @@ class DefineEntity(TypeDefinitionStatement):
         for attribute in self.attributes:
             attr_type = resolver.get_type(self.namespace, attribute.type)
             if not isinstance(attr_type, (Type, type)):
-                raise Exception("Attributes can only be a type. Entities need to be defined as relations.")
+                raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
             add_attributes.add(attribute.name)
             Attribute(entity_type, attr_type, attribute.name)
@@ -95,15 +94,16 @@ class DefineEntity(TypeDefinitionStatement):
         for parent in self.parents:
             parent_type = resolver.get_type(self.namespace, str(parent))
             if not isinstance(parent_type, Entity):
-                raise Exception("Parents of an entity need to be entities. Default constructors " +
-                                "are not supported. %s is not an entity" % parent)
+                raise TypingException(
+                    self, "Parents of an entity need to be entities. Default constructors are not supported. %s is not an entity" % parent)
 
             for attr_name in parent_type.attributes.keys():
                 if attr_name not in add_attributes:
                     add_attributes.add(attr_name)
 
                 else:
-                    raise Exception("Hiding attributes with inheritance is not allowed. %s is already defined" % attr_name)
+                    raise TypingException(
+                        self, "Hiding attributes with inheritance is not allowed. %s is already defined" % attr_name)
 
             entity_type.parent_entities.add(parent_type)
 
@@ -223,7 +223,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
                 contains_var = True
 
         if not contains_var:
-            raise Exception("typedef expressions should reference the self variable")
+            raise TypingException(self, "typedef expressions should reference the self variable")
 
         self.__expression = expression
 
@@ -306,22 +306,24 @@ class DefineRelation(DefinitionStatement):
             left = left.get_entity()
 
         if left.get_attribute(self.right[1]) is not None:
-            raise Exception(("Attribute name %s is already defined in %s, unable to define relationship")
-                            % (self.right[1], left.name))
+            raise DuplicateException(self, left.get_attribute(self.right[1]), ("Attribute name %s is already defined in %s, unable to define relationship")
+                                     % (self.right[1], left.name))
 
         right = resolver.get_type(self.namespace, self.right[0])
         if isinstance(right, Default):
             right = right.get_entity()
 
         if right.get_attribute(self.left[1]) is not None:
-            raise Exception(("Attribute name %s is already defined in %s, unable to define relationship")
-                            % (self.left[1], right.name))
+            raise DuplicateException(self, right.get_attribute(self.left[1]), ("Attribute name %s is already defined in %s, unable to define relationship")
+                                     % (self.left[1], right.name))
 
         left_end = RelationAttribute(right, left, self.left[1])
         left_end.set_multiplicity(self.left[2])
+        self.copy_location(left_end)
 
         right_end = RelationAttribute(left, right, self.right[1])
         right_end.set_multiplicity(self.right[2])
+        self.copy_location(right_end)
 
         left_end.end = right_end
         right_end.end = left_end

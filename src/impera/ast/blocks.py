@@ -1,7 +1,7 @@
 from impera.ast.statements import Statement
 from impera.ast.statements.assign import Assign
 from impera.ast.type import NameSpacedResolver
-from impera.execute.runtime import ExecutionContext
+from impera.ast import TypeNotFoundException, RuntimeException
 
 
 class BasicBlock(object):
@@ -33,17 +33,25 @@ class BasicBlock(object):
         self.variables = [s.name for s in assigns]
 
         for s in self.__stmts:
-            s.normalize(resolver)
+            try:
+                s.normalize(resolver)
+            except TypeNotFoundException as e:
+                e.set_location(s.location)
+                raise e
+        # not used yet
+        #self.requires = set([require for s in self.__stmts for require in s.requires()])
 
-        self.requires = set([require for s in self.__stmts for require in s.requires()])
+        #self.external = self.requires - set(self.variables)
 
-        self.external = self.requires - set(self.variables)
-
-        self.external_not_global = [x for x in self.external if "::" not in x]
+        #self.external_not_global = [x for x in self.external if "::" not in x]
 
     def get_requires(self):
         return self.external
 
     def emit(self, resolver, queue):
         for s in self.__stmts:
-            s.emit(resolver, queue)
+            try:
+                s.emit(resolver, queue)
+            except RuntimeException as e:
+                e.set_statement(s)
+                raise e

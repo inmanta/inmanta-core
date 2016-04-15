@@ -10,16 +10,16 @@ import ply.yacc as yacc
 
 # Get the token map from the lexer.  This is required.
 from impera.parser.plyInmantaLex import tokens
-from impera.ast.statements import AssignStatement, Literal
+from impera.ast.statements import Literal
 from impera.ast import Location
 from impera.ast.statements.generator import For, Constructor
 from impera.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation,\
     DefineTypeConstraint, DefineTypeDefault, DefineIndex
 from impera.ast.constraint.expression import Operator, Not
 from impera.ast.statements.call import FunctionCall
-from impera.ast.statements.assign import CreateList, IndexLookup, Assign, StringFormat
+from impera.ast.statements.assign import CreateList, IndexLookup, StringFormat
 from impera.ast.variables import Reference, AttributeReference
-from impera.parser import plyInmantaLex
+from impera.parser import plyInmantaLex, ParserException
 from impera.ast.blocks import BasicBlock
 import re
 
@@ -27,10 +27,15 @@ file = "NOFILE"
 namespace = None
 
 
-def attach_lnr(p):
+def attach_lnr(p, token=1):
     v = p[0]
-    v.location = Location(file, p.lineno(1))
+    v.location = Location(file, p.lineno(token))
     v.namespace = namespace
+
+
+def attach_lnr_for_parser(p, token=1):
+    v = p[0]
+    v.lineno = p.lineno(token)
 
 
 def p_main_collect(p):
@@ -84,13 +89,13 @@ def p_stmt_list_term(p):
 def p_assign(p):
     "assign : var_ref '=' operand"
     p[0] = p[1].as_assign(p[3])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_for(p):
     "for : FOR ID IN operand implementation"
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[5]))
-    attach_lnr(p)
+    attach_lnr(p, 1)
 #######################
 # DEFINITIONS
 #######################
@@ -142,13 +147,13 @@ def p_entity_body(p):
 def p_attr(p):
     "attr : ns_ref ID"
     p[0] = DefineAttribute(p[1], p[2], None)
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_attr_cte(p):
     "attr : ns_ref ID '=' constant"
     p[0] = DefineAttribute(p[1], p[2], p[4])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 # IMPLEMENT
 
@@ -199,7 +204,7 @@ def p_implementation_2(p):
 def p_relation(p):
     "relation : class_ref ID multi REL multi class_ref ID"
     p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_multi_1(p):
@@ -260,7 +265,7 @@ def p_condition_2(p):
                 | condition OR condition """
     operator = Operator.get_operator_class(p[2])
     p[0] = operator(p[1], p[3])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_condition_3(p):
@@ -297,38 +302,36 @@ def p_operand(p):
 
 def p_constructor(p):
     " constructor : class_ref '(' param_list ')' "
-    p[0] = Constructor(p[1], p[3])
-    attach_lnr(p)
+    p[0] = Constructor(p[1], p[3], Location(file, p.lineno(2)), namespace)
 
 
 def p_constructor_empty(p):
     " constructor : class_ref '(' ')' "
-    p[0] = Constructor(p[1], [])
-    attach_lnr(p)
+    p[0] = Constructor(p[1], [],  Location(file, p.lineno(2)), namespace)
 
 
 def p_function_call_empty(p):
     " function_call : ns_ref '(' ')'"
     p[0] = FunctionCall(p[1], [])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_function_call(p):
     " function_call : ns_ref '(' operand_list ')'"
     p[0] = FunctionCall(p[1], p[3])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_list_def(p):
     " list_def : '[' operand_list ']'"
     p[0] = CreateList(p[2])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_index_lookup(p):
     " index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 #######################
 # HELPERS
 
@@ -437,7 +440,7 @@ def p_ns_list_term(p):
 def p_var_ref(p):
     "var_ref : var_ref '.' ID"
     p[0] = AttributeReference(p[1], p[3])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_var_ref_2(p):
@@ -470,11 +473,13 @@ def p_class_ref_list_term(p):
 def p_ns_ref(p):
     "ns_ref : ns_ref SEP ID"
     p[0] = "%s::%s" % (p[1], p[3])
+    #attach_lnr_for_parser(p, 2)
 
 
 def p_ns_ref_term(p):
     "ns_ref : ID"
     p[0] = p[1]
+    #attach_lnr_for_parser(p, 1)
 
 
 def p_id_list_collect(p):
@@ -491,17 +496,18 @@ def p_id_list_term(p):
 def p_mls_term(p):
     "mls : MLS"
     p[0] = p[1]
+    # attach_lnr_for_parser(p)
 
 
 def p_mls_collect(p):
     "mls : MLS mls"
     p[0] = "%s\n%s" % (p[1], p[2])
+    # attach_lnr_for_parser(p)
 
 
 # Error rule for syntax errors
 def p_error(p):
-    print("Syntax error in input!", p)
-    raise Exception(file, p.lineno)
+    raise ParserException(file, p.lineno, p.lexpos, p.value)
 
 
 # Build the parser
@@ -514,14 +520,19 @@ def myparse(ns, tfile, content):
     file = tfile
     global namespace
     namespace = ns
-    if content is None:
-        with open(tfile, 'r') as myfile:
-            data = myfile.read()
+    try:
+        if content is None:
+            with open(tfile, 'r') as myfile:
+                data = myfile.read()
+                lexer.lineno = 1
+                return parser.parse(data, lexer=lexer, debug=False)
+        else:
             lexer.lineno = 1
-            return parser.parse(data, lexer=lexer, debug=False)
-    else:
-        lexer.lineno = 1
-        return parser.parse(content, lexer=lexer, debug=False)
+            return parser.parse(content, lexer=lexer, debug=False)
+    except ParserException as e:
+        e.findCollumn(data)
+        e.location.file = tfile
+        raise e
 
 
 def parse(namespace, filename, content=None):

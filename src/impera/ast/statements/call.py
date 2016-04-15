@@ -22,6 +22,7 @@ from impera.execute.runtime import ResultVariable, Waiter
 from impera.execute.proxy import UnsetException, UnknownException
 import impera.plugins.base
 from impera.execute.util import Unknown
+from impera.ast import RuntimeException
 
 
 class FunctionCall(ReferenceStatement):
@@ -84,12 +85,6 @@ class FunctionCall(ReferenceStatement):
                 result.set_value(e.unknown)
 
 
-class Dummy(object):
-
-    def __getattr__(self, name):
-        return self
-
-
 class FunctionUnit(Waiter):
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
@@ -111,76 +106,9 @@ class FunctionUnit(Waiter):
         except UnsetException as e:
             #print("exc " + str(self.function.name) )
             self.await(e.get_result_variable())
+        except RuntimeException as e:
+            e.set_statement(self.function)
+            raise e
 
     def __repr__(self):
         return repr(self.function)
-
-
-class ExpressionState(object):
-    """
-        Class emulates a state object to allow a statement to be used as a
-        function with positional arguments
-    """
-
-    def __init__(self, state, expression, arguments, argument_map):
-        self.state = state
-        self.expression = expression
-        self._map = argument_map
-        self._arguments = []
-
-        self._call_args = None
-
-        self._register_variables(arguments)
-
-    def _register_variables(self, arguments):
-        """
-            Register the argument variables
-        """
-        scope = self.state.get_local_scope()
-
-        # first add the mapped values
-        added = {}
-        for name, value in self._map.items():
-            index, ref = value
-
-            var = Variable(Dummy())
-            scope.add_variable(ref.name, var)
-            added[index] = var
-
-            self.state._refs[name] = var
-
-        # check that we add all arguments
-        for i in range(len(arguments)):
-            if i in added:
-                self._arguments.append(added[i])
-            else:
-                var = Variable(Dummy())
-                scope.add_variable(arguments[i], var)
-                self._arguments.append(var)
-
-    def __getattr__(self, name):
-        return getattr(self.state, name)
-
-    def has_parameters(self):
-        """
-            Does this expression have any parameters?
-        """
-        return len(self._arguments) > 0
-
-    def __call__(self, *args):
-        self._call_args = args
-
-        for index in range(len(args)):
-            try:
-                self._arguments[index].value = args[index]
-            except Exception:
-                # optional value?
-                pass
-
-        result = self.expression.evaluate(self, self.state.get_local_scope())
-        self._call_args = None
-
-        return result
-
-    def __repr__(self):
-        return "exp state: %s " % repr(self.expression)

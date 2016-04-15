@@ -50,7 +50,6 @@ class Compiler(object):
         self._units = []
         self.types = {}
 
-
     def get_plugins(self):
         return self.plugins
 

@@ -16,7 +16,7 @@
     Contact: bart@impera.io
 """
 
-from impera.execute.util import Unset, Unknown
+from impera.execute.util import Unknown
 from impera.stats import Stats
 from impera.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
 
@@ -76,23 +76,6 @@ class Attribute(object):
         if (not hasattr(value, "is_unknown") or not value.is_unknown()) and not isinstance(value, Unknown):
             self.type.validate(value)
 
-    def set_attribute(self, instance, value):
-        """
-            Set a value to this attribute on instance
-        """
-        if (self.name in instance._attributes and instance._attributes[self.name] is not None
-                and instance._attributes[self.name] != value):
-            raise Exception("Attribute %s.%s can only be set once. Current value is %s, new value %s." %
-                            (instance, self.name, instance._attributes[self.name], value))
-
-        try:
-            value.validate(self.validate)
-        except ValueError:
-            raise ValueError("Invalid value %s for attribute %s" % (value, self.name))
-
-        instance._attributes[self.name] = value
-        Stats.get("set attribute").increment()
-
     def get_new_Result_Variable(self, instance, queue):
         out = ResultVariable()
         out.set_type(self.__type)
@@ -121,44 +104,6 @@ class RelationAttribute(Attribute):
         """
         self.low = values[0]
         self.high = values[1]
-
-    def set_attribute(self, instance, value, double=True):
-        """
-            Set value to this attribute on instance
-
-            @param double: Make a double binding of the relation
-        """
-        if self.low == 1 and self.high == 1:
-            # this relation is handled as a normal attribute
-            Attribute.set_attribute(self, instance, value)
-
-        else:
-            if (self.name not in instance._attributes or instance._attributes[self.name] is None
-                    or isinstance(instance._attributes[self.name], Unset)):
-                # initialize the attribute to a variable with an empty list
-                current_value = Variable(list())
-                instance._attributes[self.name] = current_value
-
-            else:
-                current_value = instance._attributes[self.name]
-
-            num_items = len(current_value.value)
-            if self.high is not None and num_items + 1 > self.high:
-                raise Exception("%s: This relation has a maximum multiplicity of %d" % (self, self.high))
-
-            value.validate(self.validate)
-
-            # store the value if it not yet in the list
-            if value.value not in current_value.value:
-                current_value.value.append(value.value)
-
-            else:
-                double = False
-
-        # set the other side on value
-        if double:
-            Stats.get("set relation").increment()
-            self.end.set_attribute(value.value, Variable(instance), False)
 
     def get_new_Result_Variable(self, instance, queue):
         if self.low == 1 and self.high == 1:

@@ -20,30 +20,13 @@ import imp
 import sys
 
 
-class Unset(object):
-    """
-        Instances of this class are used as values for attributes to indicate
-        that they have not been set yet.
-    """
-    def is_none(self):
-        """
-            Unset is always none
-        """
-        return True
-
-
-class Optional(object):
-    """
-        An instance of this class is raised when a value is optional
-    """
-
-
 class Unknown(object):
     """
         An instance of this class is used to indicate that this value can not be determined yet.
 
         :param source The source object that can determine the value
     """
+
     def __init__(self, source):
         self.source = source
 

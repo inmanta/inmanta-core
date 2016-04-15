@@ -19,18 +19,14 @@
 import logging
 import sys
 import traceback
-import inspect
 
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
-from impera.execute.util import Unset
 from impera.execute.proxy import UnsetException
 import impera.plugins.base
-from impera.stats import Stats
 from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
 
 from impera.ast.statements.define import DefineEntity, DefineImplement
-from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler, dumpHangs
-from impera.ast.entity import Entity
+from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler
 import time
 
 DEBUG = True
@@ -45,16 +41,7 @@ class Scheduler(object):
     """
 
     def __init__(self):
-        self._statement_count = 0
-
-        self._statements = {}
-
-        self._evaluation_queue = set()
-        self._wait_queue = set()
-
-        # a set of statements that we know that are problematic and that
-        # need to stay in the queue as long as possible
-        self._problem_list = {}
+        pass
 
     def freeze_all(self):
         instances = self.types["std::Entity"].get_all_instances()
@@ -87,21 +74,6 @@ class Scheduler(object):
 
         for i in self.verify_done():
             i.dump()
-
-    def show_exception(self, statement, message):
-        """
-            Print out the given exception
-        """
-        if DEBUG and not isinstance(message, str):
-            print("Exception while evaluation %s" % statement)
-            exec_name, _exec_args, exec_tb = self.format_exception_info()
-            print(exec_name)
-            print("".join(exec_tb))
-
-        sys.stderr.write("%s\n" % message)
-        sys.stderr.write("  at %s:%d\n" % (statement.statement.filename, statement.statement.line))
-
-        raise Exception()
 
     def define_types(self, compiler, statements, blocks):
         """
@@ -151,42 +123,15 @@ class Scheduler(object):
 
         resolver = NameSpacedResolver(types, None)
 
+        # give type info to all types, to normalize blocks inside them
         for (n, t) in types.items():
             t.normalize(resolver)
 
+        # normalize other blocks
         for block in blocks:
             block.normalize(resolver)
 
         self.types = types
-
-    def check_unset_attributes(self, obj):
-        """
-            Check if any attributes of obj are unset
-        """
-        cls_def = obj.__class__.__definition__
-        attributes = cls_def.get_all_attribute_names()
-
-        for attr in attributes:
-            value = getattr(obj, attr)
-
-            if isinstance(value, Unset):
-                self.show_exception(obj.__statement__, "Attribute '%s' of object %s is not set." % (attr, obj))
-
-    def format_exception_info(self, max_tb_level=100):
-        """
-            Get information about the last exception
-        """
-        cla, exc, trbk = sys.exc_info()
-        exec_name = cla.__name__
-
-        try:
-            exec_args = exc.__dict__["args"]
-        except KeyError:
-            exec_args = "<no args>"
-
-        exec_tb = traceback.format_tb(trbk, max_tb_level)
-
-        return (exec_name, exec_args, exec_tb)
 
     def run(self, compiler, statements, blocks):
         """
@@ -200,18 +145,25 @@ class Scheduler(object):
         self.scopes = {}
         rootresolver = Resolver(self.scopes)
 
-        # add all other statements to the graph (create the initial model)
+        # give all loose blocks an empty XC
+        # register the XC's as scopes
+        # All named scopes are now present
         for block in blocks:
             xc = ExecutionContext(block, rootresolver)
             self.scopes[block.namespace.get_full_name()] = xc
             block.context = xc
 
         # setup queues
+        # queue for runnable items
         basequeue = []
+        # queue for RV's that are delayed
         waitqueue = []
+        # queue for RV's that are delayed and had no waiters when they were first in the waitqueue
         zerowaiters = []
+        # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
 
+        # emit all top level statements
         for block in blocks:
             block.context.emit(queue)
 
@@ -230,8 +182,8 @@ class Scheduler(object):
             LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
                          len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
             prev = now
-            # determine which of those can be evaluated, prefer generator and
-            # reference statements over call statements
+
+            # evaluate all that is ready
             while len(basequeue) > 0:
                 next = basequeue.pop()
                 try:
@@ -240,16 +192,21 @@ class Scheduler(object):
                 except UnsetException as e:
                     next.await(e.get_result_variable())
 
+            # all safe stmts are done
             progress = False
 
+            # find a RV that is has waiters
             while len(waitqueue) > 0 and not progress:
                 next = waitqueue.pop(0)
                 if len(next.waiters) == 0:
                     zerowaiters.append(next)
                 else:
+                    # freeze it and go to next iteration, new statements will be on the basequeue
                     next.freeze()
                     progress = True
 
+            # no waiters in waitqueue,...
+            # see if any zerowaiters have become gotten waiters
             if not progress:
                 waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
                 zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
@@ -258,16 +215,17 @@ class Scheduler(object):
                     waitqueue.pop(0).freeze()
                     progress = True
 
+            # no one waiting anymore, all done, freeze and finish
             if not progress:
                 LOGGER.debug("Finishing statements with no waiters")
                 while len(zerowaiters) > 0:
                     next = zerowaiters.pop()
                     next.freeze()
-                    
+
         now = time.time()
         LOGGER.debug("Iteration %d (e: %d, w: %d, p: %d, done: %d, time: %f)", i,
-                         len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
-        
+                     len(basequeue), len(waitqueue), len(zerowaiters), count, now - prev)
+
         if i == MAX_ITERATIONS:
             print("could not complete model")
             return False

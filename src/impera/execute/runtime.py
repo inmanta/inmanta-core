@@ -3,9 +3,9 @@ Created on Apr 4, 2016
 
 @author: wouter
 '''
-from impera.execute.util import Unset, Unknown
+from impera.execute.util import Unknown
 from impera.execute.proxy import UnsetException
-from impera.ast import Namespace
+from impera.ast import Namespace, RuntimeException, NotFoundException
 
 
 class ResultVariable(object):
@@ -27,14 +27,14 @@ class ResultVariable(object):
         return self.hasValue
 
     def await(self, waiter):
-        if self.is_ready() and not self.is_delayed():
+        if self.is_ready():
             waiter.ready(self)
         else:
             self.waiters.append(waiter)
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise Exception("Value set twice")
+            raise RuntimeException(None, "Value set twice")
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
@@ -51,9 +51,6 @@ class ResultVariable(object):
     def can_get(self):
         return self.hasValue
 
-    def is_delayed(self):
-        return False
-
     def freeze(self):
         pass
 
@@ -67,7 +64,7 @@ class AttributeVariable(ResultVariable):
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise Exception("Value set twice")
+            raise RuntimeException(None, "Value set twice")
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
@@ -101,9 +98,6 @@ class DelayedResultVariable(ResultVariable):
         self.queued = True
         self.queues.add_possible(self)
 
-    def is_delayed(self):
-        return True
-
 
 class ListVariable(DelayedResultVariable):
 
@@ -114,7 +108,7 @@ class ListVariable(DelayedResultVariable):
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise Exception("List modified after freeze")
+            raise RuntimeException(None, "List modified after freeze")
 
         if isinstance(value, list):
             for v in value:
@@ -132,7 +126,8 @@ class ListVariable(DelayedResultVariable):
 
         if self.attribute.high is not None:
             if self.attribute.high > len(self.value):
-                raise Exception("List over full: max nr of items is %d, content is %s" % (self.attribute.high, self.value))
+                raise RuntimeException(None, "List over full: max nr of items is %d, content is %s" %
+                                       (self.attribute.high, self.value))
 
             if self.attribute.high > len(self.value):
                 self.freeze()
@@ -155,7 +150,8 @@ class OptionVariable(DelayedResultVariable):
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise Exception("Option set after freeze %s.%s = %s / %s " % (self.myself, self.attribute, value, self.value))
+            raise RuntimeException(None, "Option set after freeze %s.%s = %s / %s " %
+                                   (self.myself, self.attribute, value, self.value))
 
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
@@ -170,26 +166,12 @@ class OptionVariable(DelayedResultVariable):
     def can_get(self):
         return True
 
-    def is_delayed(self):
-        return True
-
-waiters = []
-waitersdone = []
-
-
-def dumpHangs():
-    for i in waiters:
-        print ("Waiting", i, [(r, r.provider) for r in i.Xdepends if not r.can_get()])
-    # for i in waitersdone:
-    #    print ("Done", i)
-
 
 class Waiter(object):
 
     def __init__(self, queue):
         self.waitcount = 1
         self.queue = queue
-        waiters.append(self)
 
     def await(self, waitable):
         self.waitcount = self.waitcount + 1
@@ -200,10 +182,7 @@ class Waiter(object):
         if self.waitcount == 0:
             self.queue.add_running(self)
         if self.waitcount < 0:
-            raise Exception("waitcount negative")
-
-    def validate(self):
-        waiters = [x for x in self.Xdepends if not x.can_get()]
+            raise Exception("SEVERE: COMPILER STATE CORRUPT: waitcount negative")
 
 
 class QueueScheduler(object):
@@ -237,12 +216,12 @@ class Resolver(object):
 
     def lookup(self, name):
         if "::" not in name:
-            raise Exception("root resolver requesting relative name, should not occur " + name)
+            raise NotFoundException(None, name)
 
         parts = name.rsplit("::", 1)
 
         if parts[0] not in self.scopes:
-            raise Exception("Namespace %s not found" % parts[0])
+            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
 
         return self.scopes[parts[0]].lookup(parts[1])
 
@@ -258,12 +237,8 @@ class NamespaceResolver(Resolver):
     def __init__(self, scopes, namespace):
         self.scopes = scopes
         # FIXME clean this up
-        if isinstance(namespace, list):
-            namespace = '::'.join(namespace)
         if isinstance(namespace, Namespace):
             namespace = namespace.get_full_name()
-        if namespace is None or len(namespace) == 0:
-            print("X")
         self.scope = scopes[namespace]
 
     def lookup(self, name):
@@ -281,12 +256,6 @@ class ExecutionContext(object):
         for (n, s) in self.slots.items():
             s.set_provider(self)
         self.resolver = resolver
-
-    def add_slot(self, name, value):
-        raise Exception("depricated")
-        out = ResultVariable()
-        out.set_value(value)
-        self.slots[name] = out
 
     def lookup(self, name):
         if "::" in name:
@@ -306,8 +275,9 @@ class ExecutionContext(object):
 
 
 class WaitUnit(Waiter):
-    """ Wait for either a single requirement or a map of requirements, call the resume method on the resumer 
-       
+    """ 
+        Wait for either a single requirement or a map of requirements, call the resume method on the resumer 
+
     """
 
     def __init__(self, queue_scheduler, resolver, require, resumer):
@@ -324,8 +294,12 @@ class WaitUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        requires = {k: v.get_value() for (k, v) in self.require.items()}
-        self.resumer.resume(requires, self.resolver, self.queue_scheduler)
+        try:
+            requires = {k: v.get_value() for (k, v) in self.require.items()}
+            self.resumer.resume(requires, self.resolver, self.queue_scheduler)
+        except RuntimeException as e:
+            e.set_statement(self.resumer)
+            raise e
 
 
 class HangUnit(Waiter):
@@ -342,8 +316,12 @@ class HangUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        self.resumer.resume({k: v.get_value()
-                             for (k, v) in self.requires.items()}, self.resolver, self.queue_scheduler, self.target)
+        try:
+            self.resumer.resume({k: v.get_value()
+                                 for (k, v) in self.requires.items()}, self.resolver, self.queue_scheduler, self.target)
+        except RuntimeException as e:
+            e.set_statement(self.resumer)
+            raise e
 
 
 class ExecutionUnit(Waiter):
@@ -362,8 +340,12 @@ class ExecutionUnit(Waiter):
 
     def execute(self):
         requires = {k: v.get_value() for (k, v) in self.requires.items()}
-        value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
-        self.result.set_value(value)
+        try:
+            value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
+            self.result.set_value(value)
+        except RuntimeException as e:
+            e.set_statement(self.expression)
+            raise e
 
     def __repr__(self):
         return repr(self.expression)
@@ -384,14 +366,14 @@ class Instance(ExecutionContext):
 
     def set_attribute(self, name, value, recur=True):
         if name not in self.slots:
-            raise Exception("could not find variable with name: %s in type %s" % (name, repr(self.type)))
+            raise NotFoundException(None, name, "could not find attribute with name: %s in type %s" % (name, repr(self.type)))
         self.slots[name].set_value(value, recur)
 
     def get_attribute(self, name):
         try:
             return self.slots[name]
         except KeyError:
-            raise Exception("Attribute %s does not exist for %s" % (name, self.type))
+            raise NotFoundException(None, name, "could not find attribute with name: %s in type %s" % (name, self.type))
 
     def __repr__(self):
         return "%s %02x" % (self.type, self.sid)
@@ -403,8 +385,7 @@ class Instance(ExecutionContext):
                 if v.can_get():
                     v.freeze()
                 else:
-                    self.dump()
-                    raise Exception("Object can not be frozen: " + str(self))
+                    raise RuntimeException(self, "The object %s is not complete: " % self)
 
     def dump(self):
         print("------------ ")

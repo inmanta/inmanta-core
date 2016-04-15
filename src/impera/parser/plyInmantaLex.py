@@ -57,11 +57,13 @@ def t_CMP_OP(t):
 
 def t_COMMENT(t):
     r'\#.*?\n'
+    t.lexer.lineno += 1
     pass
 
 
 def t_JCOMMENT(t):
     r'\//.*?\n'
+    t.lexer.lineno += 1
     pass
 
 
@@ -130,7 +132,10 @@ t_mls_ignore = ''
 
 
 def t_ANY_error(t):
-    raise ParserException("", t.lexer.lineno, "Illegal character '%s' %s" % (t.value[0], t.lexer.lineno))
+    value = t.value
+    if len(value) > 10:
+        value = value[:10]
+    raise ParserException("", t.lineno, t.lexpos, value)
 
 
 # Build the lexer

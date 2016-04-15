@@ -50,7 +50,7 @@ class Namespace(object):
         """
             Get the name of this namespace
         """
-        if(self.__parent is None) :
+        if(self.__parent is None):
             print("DANG")
         if self.__parent.__parent is None:
             return self.get_name()
@@ -157,3 +157,76 @@ class Namespace(object):
             return [self.name]
         else:
             return self.parent.to_path() + [self.name]
+
+
+class CompilerException(Exception):
+
+    def __init__(self):
+        Exception.__init__(self)
+        self.location = None
+
+    def set_location(self, location):
+        if self.location is None:
+            self.location = location
+
+
+class TypeNotFoundException(CompilerException):
+
+    def __init__(self, type, ns):
+        CompilerException.__init__(self)
+        self.type = type
+        self.ns = ns
+
+    def __str__(self, *args, **kwargs):
+        return "could not find type %s in namespace %s (%s)" % (self.type, self.ns, self.location)
+
+
+class RuntimeException(CompilerException):
+
+    def __init__(self, stmt, msg):
+        CompilerException.__init__(self)
+        if stmt is not None:
+            self.set_location(stmt.location)
+            self.stmt = stmt
+        self.msg = msg
+
+    def set_statement(self, stmt):
+        self.set_location(stmt.location)
+        self.stmt = stmt
+
+    def __str__(self, *args, **kwargs):
+        return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
+
+
+class TypingException(CompilerException):
+
+    def __init__(self, stmt, msg):
+        CompilerException.__init__(self)
+        self.set_location(stmt.location)
+        self.msg = msg
+        self.stmt = stmt
+
+    def __str__(self, *args, **kwargs):
+        return "%s (reported in type: %s) (%s)" % (self.msg, self.stmt, self.location)
+
+
+class NotFoundException(RuntimeException):
+
+    def __init__(self, stmt, name, msg=None):
+        RuntimeException.__init__(self, stmt, msg)
+        self.name = name
+
+    def __str__(self, *args, **kwargs):
+        if self.msg is not None:
+            return " %s (reported at (%s))" % (self.msg, self.location)
+        return "could not find value %s (reported at (%s))" % (self.name, self.location)
+
+
+class DuplicateException(TypingException):
+
+    def __init__(self, stmt, other, msg):
+        TypingException.__init__(self, stmt, msg)
+        self.other = other
+
+    def __str__(self, *args, **kwargs):
+        return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.location)

@@ -20,31 +20,18 @@
 
 from . import ReferenceStatement
 from impera.ast.type import List
-from impera.ast.statements import AssignStatement, ExpressionStatement
+from impera.ast.statements import AssignStatement
 from impera.execute.runtime import ExecutionUnit, WaitUnit, ResultVariable, HangUnit
-import random
 
 
-class CreateList(ExpressionStatement):
+class CreateList(ReferenceStatement):
     """
         Create list of values
     """
 
     def __init__(self, items):
-        ExpressionStatement.__init__(self)
+        ReferenceStatement.__init__(self, items)
         self.items = items
-
-    def normalize(self, resolver):
-        for i in self.items:
-            i.normalize(resolver)
-
-    def requires(self):
-        out = [req for i in self.items for req in i.requires()]
-        return out
-
-    def requires_emit(self, resolver, queue):
-        out = {rk: rv for i in self.items for (rk, rv) in i.requires_emit(resolver, queue).items()}
-        return out
 
     def execute(self, requires, resolver, queue):
         """
@@ -65,32 +52,20 @@ class CreateList(ExpressionStatement):
 class SetAttribute(AssignStatement):
     """
         Set an attribute of a given instance to a given value
-
-        uses:          object, value
-        provides:      object.attribute, other end
-        contributes:   object.attribute, other end
     """
 
-    def __init__(self, instance_name, attribute_name, value):
-        AssignStatement.__init__(self, instance_name, value)
-        self.instance_name = instance_name
+    def __init__(self, instance, attribute_name, value):
+        AssignStatement.__init__(self, instance, value)
+        self.instance = instance
         self.attribute_name = attribute_name
         self.value = value
 
-    def normalize(self, resolver):
-        self.value.normalize(resolver)
-
-    def requires(self):
-        out = self.value.requires()
-        out.extend(self.instance_name.requires())
-        return out
-
     def emit(self, resolver, queue):
-        reqs = self.instance_name.requires_emit(resolver, queue)
+        reqs = self.instance.requires_emit(resolver, queue)
         WaitUnit(queue, resolver, reqs, self)
 
     def resume(self, requires, resolver, queue):
-        var = self.instance_name.execute(requires, resolver, queue).get_attribute(self.attribute_name)
+        var = self.instance.execute(requires, resolver, queue).get_attribute(self.attribute_name)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, var, reqs, self.value)
 

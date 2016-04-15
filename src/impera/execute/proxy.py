@@ -18,17 +18,18 @@
 
 from copy import copy
 
-from .util import Optional, Unset
 from impera.execute.util import Unknown
+from impera.ast import RuntimeException
 
 
-class UnsetException(Exception):
+class UnsetException(RuntimeException):
     """
         This exception is thrown when an attribute is read that was not yet
         available.
     """
 
     def __init__(self, msg, instance=None, attribute=None):
+        RuntimeException.__init__(self, None, msg)
         self.instance = instance
         self.attribute = attribute
         self.msg = msg
@@ -65,13 +66,6 @@ class DynamicProxy(object):
     def return_value(cls, value):
         if value is None:
             return None
-
-        if isinstance(value, Optional):
-            return None
-
-        if isinstance(value, Unset):
-            # suspend
-            raise UnsetException()
 
         if isinstance(value, Unknown):
             raise UnknownException(value)

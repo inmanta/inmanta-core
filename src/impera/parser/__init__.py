@@ -15,12 +15,22 @@
 
     Contact: bart@impera.io
 """
+from impera.ast import CompilerException, Location
 
 
-class ParserException(Exception):
+class ParserException(CompilerException):
 
-    def __init__(self, file, lnr, msg):
-        Exception.__init__(self, msg)
-        self.file = file
-        self.lnr = lnr
-        self.msg = msg
+    def __init__(self, file, lnr, position, value):
+        CompilerException.__init__(self)
+        self.set_location(Location(file, lnr))
+        self.value = value
+        self.position = position
+
+    def findCollumn(self, content):
+        last_cr = content.rfind('\n', 0, self.position)
+        if last_cr < 0:
+            last_cr = 0
+        self.column = (self.position - last_cr) + 1
+
+    def __str__(self, *args, **kwargs):
+        return "Syntax error: %s:%d, at token %s" % (self.location, self.column, self.value)

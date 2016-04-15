@@ -17,6 +17,7 @@
 """
 from impera.execute.runtime import ResultVariable, ExecutionUnit
 
+
 class Statement(object):
     """
         An abstract baseclass representing a statement in the configuration policy.
@@ -31,30 +32,6 @@ class Statement(object):
             Copy the location of this statement in the given statement
         """
         statement.location = self.location
-      
-    def evaluate(self, state, scope):
-        """
-            Evaluate this statement.
-
-            @param state: The object that contains all state of this statement
-            @param scope: The scope that is connected to the namespace in which
-                the evaluation is done.
-        """
-
-    def can_evaluate(self, state):
-        """
-            Can this statement be evaluated given 'state'. This method may not manipulate any state!
-        """
-        return True
-
-    def types(self, recursive=False):
-        """
-            Return a list of tupples with the first element the name of how the
-            type should be available and the second element the type.
-
-            :param recursive: Recurse into embedded statement to retrieve all types
-        """
-        return []
 
     def get_containing_namespace(self,):
         return self.namespace
@@ -75,7 +52,7 @@ class DynamicStatement(Statement):
     def requires(self):
         raise Exception("Not Implemented" + str(type(self)))
 
-    def execute(self, requires, resolver, queue):
+    def emit(self, resolver, queue):
         raise Exception("Not Implemented" + str(type(self)))
 
 
@@ -95,7 +72,7 @@ class ExpressionStatement(DynamicStatement):
             returns a dict of the result variables required, names are an opaque identifier
             may emit statements to break execution is smaller segements
         """
-        raise "Not Implemented"
+        raise Exception("Not Implemented" + str(type(self)))
 
 
 class AssignStatement(DynamicStatement):
@@ -110,6 +87,11 @@ class AssignStatement(DynamicStatement):
 
     def normalize(self, resolver):
         self.rhs.normalize(resolver)
+
+    def requires(self):
+        out = self.lhs.requires()
+        out.extend(self.rhs.requires())
+        return out
 
 
 class ReferenceStatement(ExpressionStatement):

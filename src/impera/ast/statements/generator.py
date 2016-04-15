@@ -19,13 +19,10 @@
 # pylint: disable-msg=W0613,R0201
 
 from . import GeneratorStatement
-from impera.ast import Namespace
-from impera.ast.statements.assign import SetAttribute
-from impera.ast.variables import Reference
-from impera.execute import DuplicateVariableException, NotFoundException
 from impera.stats import Stats
 from impera.execute.util import Unknown
-from impera.execute.runtime import ExecutionContext, ResultVariable
+from impera.execute.runtime import ExecutionContext
+from impera.ast import RuntimeException, TypingException
 
 
 class SubConstructor(GeneratorStatement):
@@ -54,8 +51,8 @@ class SubConstructor(GeneratorStatement):
         implement_list = self.get_implementation(requires, resolver, queue)
 
         if len(implement_list) == 0:
-            raise Exception("Unable to select implementation for entity %s" %
-                            self.type.name)
+            raise RuntimeException(resolver, "Unable to select implementation for entity %s" %
+                                   self.type.name)
 
         implementations = []
         for impl in implement_list:
@@ -144,12 +141,14 @@ class Constructor(GeneratorStatement):
             constructor call.
     """
 
-    def __init__(self, class_type, attributes):
+    def __init__(self, class_type, attributes, location, namespace):
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}
         self.implemented = False
         self.register = False
+        self.location = location
+        self.namespace = namespace
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
@@ -163,7 +162,7 @@ class Constructor(GeneratorStatement):
         for index in self.type.get_entity().get_indices():
             for attr in index:
                 if attr not in self.attributes:
-                    raise Exception("%s is part of an index and should be set in the constructor." % attr)
+                    raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
 
     def requires(self):
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
@@ -222,6 +221,7 @@ class Constructor(GeneratorStatement):
         else:
             # create the instance
             object_instance = type_class.get_instance(attributes, resolver, queue)
+            self.copy_location(object_instance)
 
         # add anonymous implementations
         if self.implemented:
@@ -245,8 +245,8 @@ class Constructor(GeneratorStatement):
         if name not in self.__attributes:
             self.__attributes[name] = value
         else:
-            raise DuplicateVariableException("The attribute %s in the constructor call of %s is already set."
-                                             % (name, self.class_type))
+            raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
+                                   % (name, self.class_type))
 
     def get_attributes(self):
         """

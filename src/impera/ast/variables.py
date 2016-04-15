@@ -31,11 +31,7 @@ class Reference(ExpressionStatement):
     """
 
     def __init__(self, name):
-        self.line = 0
-        self.filename = ""
-
         self.name = name
-
         self.full_name = name
 
     def normalize(self, resolver):
@@ -46,11 +42,11 @@ class Reference(ExpressionStatement):
 
     def requires_emit(self, resolver, queue):
         # FIXME: may be done more efficient?
-        out = {self.full_name: resolver.lookup(self.full_name)}
+        out = {self.name: resolver.lookup(self.full_name)}
         return out
 
     def execute(self, requires, resolver, queue):
-        return requires[self.full_name]
+        return requires[self.name]
 
     def get_containing_namespace(self,):
         return self.namespace
@@ -59,7 +55,8 @@ class Reference(ExpressionStatement):
         return Assign(self.name, value)
 
 
-class AttributeRef(object):
+class AttributeReferenceHelper(object):
+    """ Helper class for AttributeReference, reschedules itself if  """
 
     def __init__(self, target, instance, attribute):
         self.attribute = attribute
@@ -67,23 +64,24 @@ class AttributeRef(object):
         self.instance = instance
 
     def resume(self, requires, resolver, queue_scheduler):
+        """ Instance is ready to execute, do it and see if the attribute is alreayd present"""
+        # get the Instance
         obj = self.instance.execute(requires, resolver, queue_scheduler)
-        if isinstance(obj, list):
-            print("KAK")
+        # get the attribute result variable
         attr = obj.get_attribute(self.attribute)
+        # Cache it
         self.attr = attr
 
         if attr.is_ready():
             # go ahead
+            # i.e. back to the AttributeReference itself
             self.target.set_value(attr.get_value())
-        elif attr.is_delayed():
-            # wait on delay queue
-            ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
         else:
-            # wait on execute queue
+            # reschedule on the attribute, XU will assign it to the target variable
             ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
 
     def execute(self, requires, resolver, queue):
+        # Attribute is ready, return it,
         return self.attr.get_value()
 
 
@@ -103,23 +101,26 @@ class AttributeReference(Reference):
         # if the reference resolves, this attribute contains the instance
         self._instance_value = None
 
-    def normalize(self, resolver):
-        self.instance.normalize(resolver)
-
     def requires(self):
         return self.instance.requires()
 
     def requires_emit(self, resolver, queue):
         # The tricky one!
-        # make wait chain on right queue
+
+        # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         temp.set_provider(self)
-        resumer = AttributeRef(temp, self.instance, self.attribute)
+
+        # construct waiter
+        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute)
         self.copy_location(resumer)
+
+        # wait for the instance
         WaitUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)
         return {self: temp}
 
     def execute(self, requires, resolver, queue):
+        # helper returned: return result
         return requires[self]
 
     def as_assign(self, value):

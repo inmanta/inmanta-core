@@ -209,7 +209,7 @@ class Plugin(object, metaclass=PluginMeta):
             return list
 
         if arg_type == "expression":
-            return impera.ast.statements.call.ExpressionState
+            return None
 
         return resolver.get_type(arg_type)
 

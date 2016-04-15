@@ -26,13 +26,13 @@ import glob
 
 from impera import protocol
 from impera.agent.handler import Commander
-from impera.execute import NotFoundException
 from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
 import base64
 from impera.execute.proxy import DynamicProxy
+from impera.ast import RuntimeException
 
 LOGGER = logging.getLogger(__name__)
 
@@ -272,7 +272,7 @@ class Exporter(object):
 
         try:
             variable = self._scope.get_variable(variable_name, namespace).value
-        except NotFoundException:
+        except RuntimeException:
             return None
 
         return variable

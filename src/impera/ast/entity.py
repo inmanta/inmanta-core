@@ -23,6 +23,7 @@ from impera import stats
 from impera.ast.blocks import BasicBlock
 from impera.execute.runtime import Instance, ResultVariable
 from impera.ast.statements.generator import SubConstructor
+from impera.ast import RuntimeException, DuplicateException
 
 
 class Entity(Type):
@@ -105,7 +106,7 @@ class Entity(Type):
 
         for parent in self.parent_entities:
             values.extend(parent.__default_value.items())
-        
+
         return dict(values)
 
     def get_namespace(self):
@@ -249,30 +250,6 @@ class Entity(Type):
         stats.Stats.get("construct").increment()
         return out
 
-    def get_class_type(self):
-        """
-            Get the generated class type
-        """
-        if self.__cls_type is None:
-            parents = []
-            # create a tuple of parent entities and check attributes
-            attributes = set(self._attributes.keys())
-            for parent in self.parent_entities:
-                for attr in parent.attributes.keys():
-                    if attr not in attributes:
-                        attributes.add(attr)
-
-                    else:
-                        raise Exception("Hiding attributes with inheritance is not allowed. %s is already defined" % attr)
-
-                cls = parent.get_class_type()
-                parents.append(cls)
-
-            # generate the class with voodoo
-            self.__cls_type = EntityTypeMeta.__new__(EntityTypeMeta, "", tuple(parents), {"__definition__": self})
-
-        return self.__cls_type
-
     def is_subclass(self, cls):
         """
             Is the given class a subclass of this class
@@ -284,11 +261,11 @@ class Entity(Type):
             Validate the given value
         """
         if not isinstance(value, Instance):
-            raise ValueError("Invalid class type for %s, should be %s" % (value, self))
+            raise RuntimeException(None, "Invalid class type for %s, should be %s" % (value, self))
 
         value_definition = value.type
         if not (value_definition is self or self.is_subclass(value_definition)):
-            raise ValueError("Invalid class type for %s, should be %s" % (value, self))
+            raise RuntimeException(None, "Invalid class type for %s, should be %s" % (value, self))
 
         return True
 
@@ -362,7 +339,7 @@ class Entity(Type):
                 key = ", ".join(key)
 
                 if key in self._index and self._index[key] is not instance:
-                    raise Exception("Duplicate key in index. %s" % key)
+                    raise DuplicateException(instance, self._index[key], "Duplicate key in index. %s" % key)
 
                 self._index[key] = instance
 

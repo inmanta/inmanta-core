@@ -15,28 +15,3 @@
 
     Contact: bart@impera.io
 """
-
-import logging
-
-
-
-LOGGER = logging.getLogger(__name__)
-
-
-class DuplicateVariableException(Exception):
-    """
-        This exception thrown when a variable is declared twice in the same
-        scope.
-    """
-
-
-class DuplicateScopeException(Exception):
-    """
-        This exception is raised when a scope with a duplicate name is created.
-    """
-
-
-class NotFoundException(Exception):
-    """
-        This exception is thrown when a variable is not found
-    """

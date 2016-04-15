@@ -32,20 +32,14 @@ def do_compile():
     # module.Project.get().verify()
     compiler = impera.compiler.main.Compiler()
 
-    success = False
-    try:
-        LOGGER.debug("Starting compile")
+    LOGGER.debug("Starting compile")
 
-        (statements, blocks) = compiler.compile()
-        sched = scheduler.Scheduler()
-        success = sched.run(compiler, statements, blocks)
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    success = sched.run(compiler, statements, blocks)
 
-        LOGGER.debug("Compile done")
+    LOGGER.debug("Compile done")
 
-        if not success:
-            sys.stderr.write("Unable to execute all statements.\n")
-        return (sched.get_types(), sched.get_scopes())
-
-    except Exception:
-        LOGGER.exception("An exception occurred during compile")
-        return None
+    if not success:
+        sys.stderr.write("Unable to execute all statements.\n")
+    return (sched.get_types(), sched.get_scopes())
