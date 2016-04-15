@@ -519,7 +519,9 @@ def p_mls_collect(p):
 
 # Error rule for syntax errors
 def p_error(p):
-    raise ParserException(file, p.lineno, p.lexpos, p.value)
+    if p is not None:
+        raise ParserException(file, p.lineno, p.lexpos, p.value)
+    raise ParserException(file, -1, -1, "")
 
 
 # Build the parser
@@ -536,6 +538,8 @@ def myparse(ns, tfile, content):
         if content is None:
             with open(tfile, 'r') as myfile:
                 data = myfile.read()
+                if len(data) == 0:
+                    return []
                 lexer.lineno = 1
                 return parser.parse(data, lexer=lexer, debug=False)
         else:
