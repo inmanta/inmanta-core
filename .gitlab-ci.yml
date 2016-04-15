@@ -11,9 +11,6 @@ tox:
         - docker
     script:
         - tox
-    cache:
-        paths:
-            - .tox
 
 fedora-rpm:
     stage: package
