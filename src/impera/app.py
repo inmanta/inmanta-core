@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,12 +13,13 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 from argparse import ArgumentParser
 import logging
 import sys
+import time
 
 import colorlog
 from impera.command import command, Commander
@@ -26,7 +27,6 @@ from impera.compiler import do_compile
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
 from impera.stats import Stats
-import time
 
 LOGGER = logging.getLogger()
 
@@ -55,7 +55,7 @@ def compile_project(options):
     else:
         t1 = time.time()
         result = do_compile()
-        print(time.time()-t1)
+        LOGGER.debug("Compile time: %d", time.time() - t1)
     return result
 
 

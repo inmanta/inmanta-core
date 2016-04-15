@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 import logging
@@ -56,7 +56,9 @@ class Reference(ExpressionStatement):
 
 
 class AttributeReferenceHelper(object):
-    """ Helper class for AttributeReference, reschedules itself if  """
+    """
+        Helper class for AttributeReference, reschedules itself
+    """
 
     def __init__(self, target, instance, attribute):
         self.attribute = attribute
@@ -64,7 +66,9 @@ class AttributeReferenceHelper(object):
         self.instance = instance
 
     def resume(self, requires, resolver, queue_scheduler):
-        """ Instance is ready to execute, do it and see if the attribute is alreayd present"""
+        """
+            Instance is ready to execute, do it and see if the attribute is already present
+        """
         # get the Instance
         obj = self.instance.execute(requires, resolver, queue_scheduler)
         # get the attribute result variable

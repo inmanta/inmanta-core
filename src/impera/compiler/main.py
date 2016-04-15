@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,24 +13,21 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
-
-# pylint: disable-msg=R0201
 
 import glob
 import os
 import imp
+from builtins import isinstance
 
 from impera.ast import Namespace
 from impera.ast.statements.define import DefineEntity, DefineRelation
 from impera.compiler.unit import FileCompileUnit
 from impera.module import Project, Module
-
 from impera.plugins import PluginCompileUnit
 from impera.ast.blocks import BasicBlock
 from impera.ast.statements import DefinitionStatement
-from builtins import isinstance
 
 
 class Compiler(object):
@@ -166,7 +163,7 @@ class Compiler(object):
                 # load the python file
                 imp.load_source(sub_mod, py_file)
 
-    def load_module(self, module: Module, root_ns:Namespace):
+    def load_module(self, module: Module, root_ns: Namespace):
         """
             Load all libraries located in a directory.
 
@@ -211,7 +208,7 @@ class Compiler(object):
                 blocks.append(block)
 
         # add the entity type (hack?)
-        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.",[],[])
+        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.", [], [])
 
         requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
                                       ("std::Entity", "provides", [0, None], False))

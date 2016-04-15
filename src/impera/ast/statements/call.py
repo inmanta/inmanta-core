@@ -71,7 +71,7 @@ class FunctionCall(ReferenceStatement):
             return
 
         if function._context is not -1:
-            arguments.insert(function._context,  impera.plugins.base.Context(resolver, queue, self, result))
+            arguments.insert(function._context, impera.plugins.base.Context(resolver, queue, self, result))
 
         if function.opts["emits_statements"]:
             function(*arguments)
@@ -95,7 +95,7 @@ class FunctionUnit(Waiter):
         self.function = function
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
-        for (s, r) in requires.items():
+        for r in requires.values():
             self.await(r)
         self.ready(self)
 
@@ -104,7 +104,6 @@ class FunctionUnit(Waiter):
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
         except UnsetException as e:
-            #print("exc " + str(self.function.name) )
             self.await(e.get_result_variable())
         except RuntimeException as e:
             e.set_statement(self.function)

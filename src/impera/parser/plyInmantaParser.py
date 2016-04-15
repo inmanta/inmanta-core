@@ -1,19 +1,31 @@
-'''
-Created on Apr 10, 2016
+"""
+    Copyright 2016 Inmanta
 
-@author: wouter
-'''
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
 
 # Yacc example
 
 import ply.yacc as yacc
 
-# Get the token map from the lexer.  This is required.
+# Get the token map from the lexer. This is required.
 from impera.parser.plyInmantaLex import tokens
 from impera.ast.statements import Literal
 from impera.ast import Location
 from impera.ast.statements.generator import For, Constructor
-from impera.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation,\
+from impera.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
     DefineTypeConstraint, DefineTypeDefault, DefineIndex
 from impera.ast.constraint.expression import Operator, Not
 from impera.ast.statements.call import FunctionCall
@@ -307,7 +319,7 @@ def p_constructor(p):
 
 def p_constructor_empty(p):
     " constructor : class_ref '(' ')' "
-    p[0] = Constructor(p[1], [],  Location(file, p.lineno(2)), namespace)
+    p[0] = Constructor(p[1], [], Location(file, p.lineno(2)), namespace)
 
 
 def p_function_call_empty(p):
@@ -473,13 +485,13 @@ def p_class_ref_list_term(p):
 def p_ns_ref(p):
     "ns_ref : ns_ref SEP ID"
     p[0] = "%s::%s" % (p[1], p[3])
-    #attach_lnr_for_parser(p, 2)
+    # attach_lnr_for_parser(p, 2)
 
 
 def p_ns_ref_term(p):
     "ns_ref : ID"
     p[0] = p[1]
-    #attach_lnr_for_parser(p, 1)
+    # attach_lnr_for_parser(p, 1)
 
 
 def p_id_list_collect(p):

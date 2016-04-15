@@ -242,7 +242,7 @@ class Entity(Type):
             Return an instance of the class defined in this entity
         """
         out = Instance(self, resolver, queue)
-        for (k, v) in attributes.items():
+        for k, v in attributes.items():
             out.set_attribute(k, v)
 
         self.add_instance(out)
@@ -323,7 +323,6 @@ class Entity(Type):
             Update indexes based on the instance and the attribute that has
             been set
         """
-
         attributes = {k: v.get_value() for (k, v) in instance.slots.items() if v.is_ready()}
         # check if an index entry can be added
         for index_attributes in self._index_def:
@@ -348,7 +347,7 @@ class Entity(Type):
                         x.set_value(instance)
                     self.index_queue.pop(key)
 
-    def lookup_index(self, params, target: ResultVariable = None):
+    def lookup_index(self, params, target: ResultVariable=None):
         """
             Search an instance in the index.
         """

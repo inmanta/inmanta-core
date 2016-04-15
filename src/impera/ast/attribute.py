@@ -17,7 +17,6 @@
 """
 
 from impera.execute.util import Unknown
-from impera.stats import Stats
 from impera.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
 
 
@@ -111,7 +110,7 @@ class RelationAttribute(Attribute):
         elif self.low == 0 and self.high == 1:
             out = OptionVariable(self, instance, queue)
         else:
-            out = ListVariable(self,  instance, queue)
+            out = ListVariable(self, instance, queue)
         out.set_type(self.get_type())
         out.set_provider(self)
         return out

@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,11 +13,12 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 from impera.compiler.unit import CompileUnit
-from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
+from impera.ast.statements import TypeDefinitionStatement
+from . import base
 
 
 class PluginStatement(TypeDefinitionStatement):
@@ -39,7 +40,7 @@ class PluginStatement(TypeDefinitionStatement):
     def evaluate(self, resolver):
         """
             Evaluate this plugin
-        """        
+        """
 
 
 class PluginCompileUnit(CompileUnit):
@@ -71,7 +72,7 @@ class PluginCompileUnit(CompileUnit):
 
             if ns is None:
                 raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
-            
+
             cls.namespace = ns
 
             name = name.split("::")[-1]

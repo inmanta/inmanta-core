@@ -1,8 +1,21 @@
-'''
-Created on Apr 4, 2016
+"""
+    Copyright 2016 Inmanta
 
-@author: wouter
-'''
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+
 from impera.execute.util import Unknown
 from impera.execute.proxy import UnsetException
 from impera.ast import Namespace, RuntimeException, NotFoundException
@@ -275,11 +288,9 @@ class ExecutionContext(object):
 
 
 class WaitUnit(Waiter):
-    """ 
-        Wait for either a single requirement or a map of requirements, call the resume method on the resumer 
-
     """
-
+        Wait for either a single requirement or a map of requirements, call the resume method on the resumer
+    """
     def __init__(self, queue_scheduler, resolver, require, resumer):
         Waiter.__init__(self, queue_scheduler)
         self.queue_scheduler = queue_scheduler
@@ -287,7 +298,7 @@ class WaitUnit(Waiter):
         self.require = require
         self.resumer = resumer
         if isinstance(require, dict):
-            for (s, r) in require.items():
+            for r in require.values():
                 self.await(r)
         else:
             self.await(require)
@@ -311,7 +322,7 @@ class HangUnit(Waiter):
         self.requires = requires
         self.resumer = resumer
         self.target = target
-        for (s, r) in requires.items():
+        for r in requires.values():
             self.await(r)
         self.ready(self)
 
@@ -334,7 +345,7 @@ class ExecutionUnit(Waiter):
         self.expression = expression
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
-        for (s, r) in requires.items():
+        for r in requires.values():
             self.await(r)
         self.ready(self)
 
@@ -379,8 +390,10 @@ class Instance(ExecutionContext):
         return "%s %02x" % (self.type, self.sid)
 
     def final(self):
-        """ the object should be complete, freeze all attributes"""
-        for (n, v) in self.slots.items():
+        """
+            The object should be complete, freeze all attributes
+        """
+        for v in self.slots.values():
             if not v.is_ready():
                 if v.can_get():
                     v.freeze()
@@ -400,7 +413,7 @@ class Instance(ExecutionContext):
                 print("BAD: %s\t\t%s" % (n, v.provider))
 
     def verify_done(self):
-        for (n, v) in self.slots.items():
+        for v in self.slots.values():
             if not v.can_get():
                 return False
         return True

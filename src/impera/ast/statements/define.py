@@ -24,7 +24,6 @@ from impera.ast.type import ConstraintType, Type
 from impera.ast.attribute import Attribute, RelationAttribute
 from impera.ast.entity import Implementation, Entity, Default, Implement
 from impera.ast.constraint.expression import Equals
-
 from impera.ast.statements import TypeDefinitionStatement
 from impera.ast import Namespace, TypingException, DuplicateException
 
@@ -94,8 +93,8 @@ class DefineEntity(TypeDefinitionStatement):
         for parent in self.parents:
             parent_type = resolver.get_type(self.namespace, str(parent))
             if not isinstance(parent_type, Entity):
-                raise TypingException(
-                    self, "Parents of an entity need to be entities. Default constructors are not supported. %s is not an entity" % parent)
+                raise TypingException(self, "Parents of an entity need to be entities. "
+                                      "Default constructors are not supported. %s is not an entity" % parent)
 
             for attr_name in parent_type.attributes.keys():
                 if attr_name not in add_attributes:
@@ -306,7 +305,8 @@ class DefineRelation(DefinitionStatement):
             left = left.get_entity()
 
         if left.get_attribute(self.right[1]) is not None:
-            raise DuplicateException(self, left.get_attribute(self.right[1]), ("Attribute name %s is already defined in %s, unable to define relationship")
+            raise DuplicateException(self, left.get_attribute(self.right[1]),
+                                     ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.right[1], left.name))
 
         right = resolver.get_type(self.namespace, self.right[0])
@@ -314,7 +314,8 @@ class DefineRelation(DefinitionStatement):
             right = right.get_entity()
 
         if right.get_attribute(self.left[1]) is not None:
-            raise DuplicateException(self, right.get_attribute(self.left[1]), ("Attribute name %s is already defined in %s, unable to define relationship")
+            raise DuplicateException(self, right.get_attribute(self.left[1]),
+                                     ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.left[1], right.name))
 
         left_end = RelationAttribute(right, left, self.left[1])

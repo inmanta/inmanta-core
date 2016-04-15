@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,12 +13,11 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 import logging
-import sys
-import traceback
+import time
 
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.execute.proxy import UnsetException
@@ -27,7 +26,6 @@ from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
 
 from impera.ast.statements.define import DefineEntity, DefineImplement
 from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler
-import time
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -124,7 +122,7 @@ class Scheduler(object):
         resolver = NameSpacedResolver(types, None)
 
         # give type info to all types, to normalize blocks inside them
-        for (n, t) in types.items():
+        for t in types.values():
             t.normalize(resolver)
 
         # normalize other blocks
@@ -229,11 +227,11 @@ class Scheduler(object):
         if i == MAX_ITERATIONS:
             print("could not complete model")
             return False
-        #now = time.time()
-        #print(now - prev)
+        # now = time.time()
+        # print(now - prev)
         # end evaluation loop
         # self.dump_not_done()
-        #print(basequeue, waitqueue)
+        # print(basequeue, waitqueue)
         # dumpHangs()
         # self.dump()
         # rint(len(self.types["std::Entity"].get_all_instances()))

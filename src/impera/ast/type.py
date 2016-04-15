@@ -17,7 +17,6 @@
 """
 
 from impera.ast.constraint.expression import create_function
-import impera.ast.variables
 from impera.ast import Namespace, TypeNotFoundException, RuntimeException
 from impera.execute.util import Unknown
 
@@ -134,7 +133,7 @@ class Number(Type):
         """
         try:
             float(value)
-        except TypeError as t:
+        except TypeError:
             raise RuntimeException(None, "Invalid value '%s'expected Number" % value)
         except ValueError:
             raise RuntimeException(None, "Invalid value '%s'expected Number" % value)

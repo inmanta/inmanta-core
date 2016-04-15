@@ -33,12 +33,9 @@ import yaml
 import impera
 from impera import env
 from impera.config import Config
-from impera import parser
 from impera.ast import Namespace
 from impera.plugins.base import PluginMeta
 from impera.parser.plyInmantaParser import parse
-import impera.compiler.main
-from impera.execute import scheduler
 
 
 LOGGER = logging.getLogger(__name__)

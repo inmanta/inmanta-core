@@ -20,11 +20,10 @@ import inspect
 import subprocess
 import os
 
-from impera.execute.proxy import DynamicProxy, UnknownException
+from impera.execute.proxy import DynamicProxy
 from impera.execute.util import Unknown
 from impera.ast import Namespace
-from impera.execute.runtime import Instance, ExecutionUnit
-import impera.ast.statements.call
+from impera.execute.runtime import ExecutionUnit
 
 
 class Context(object):

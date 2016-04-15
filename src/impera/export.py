@@ -23,6 +23,7 @@ import logging
 import os
 import time
 import glob
+import base64
 
 from impera import protocol
 from impera.agent.handler import Commander
@@ -30,7 +31,6 @@ from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
-import base64
 from impera.execute.proxy import DynamicProxy
 from impera.ast import RuntimeException
 
@@ -67,7 +67,7 @@ class Exporter(object):
             Get an id using a registered id conversion function
         """
 
-        for cls_name in resource.type().get_all_parent_names()+[str(resource.type())]:
+        for cls_name in resource.type().get_all_parent_names() + [str(resource.type())]:
             if cls_name in cls.__id_conversion:
                 function = cls.__id_conversion[cls_name]
 

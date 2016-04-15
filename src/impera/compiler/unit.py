@@ -17,12 +17,10 @@
 """
 
 import logging
-from antlr3.exceptions import NoViableAltException, MismatchedTokenException
+
 from impera.parser import plyInmantaParser
 
 LOGGER = logging.getLogger()
-
-# pylint: disable-msg=R0201,R0902
 
 
 class CompileUnit(object):
