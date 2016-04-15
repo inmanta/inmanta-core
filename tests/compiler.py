@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 from nose import tools
-from impera import app  # NOQA
 from impera.ast import Namespace
 from impera.ast.statements import define
 from impera.parser.plyInmantaParser import parse

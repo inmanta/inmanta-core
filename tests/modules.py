@@ -22,7 +22,6 @@ import logging
 import unittest
 from unittest import mock
 
-from impera import app  # NOQA
 from impera import module
 from nose.tools import raises
 
