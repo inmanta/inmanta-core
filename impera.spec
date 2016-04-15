@@ -55,6 +55,7 @@ Requires:       python3-impera
 %setup -q -n impera-%{sourceversion}
 
 %build
+PYTHONPATH=src %{__python3} -m impera.app
 %{__python3} setup.py build
 
 
