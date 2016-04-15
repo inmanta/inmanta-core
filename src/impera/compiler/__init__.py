@@ -21,6 +21,8 @@ import logging
 
 from impera.execute import scheduler
 import impera.compiler.main
+from impera.module import Project
+import os
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +32,7 @@ def do_compile():
         Run run run
     """
     # module.Project.get().verify()
-    compiler = impera.compiler.main.Compiler()
+    compiler = impera.compiler.main.Compiler(os.path.join(Project.get().project_path, "main.cf"))
 
     LOGGER.debug("Starting compile")
 
