@@ -15,13 +15,10 @@
 
     Contact: code@inmanta.com
 """
-from impera import app
-from impera import parser
-from impera.ast import Namespace
-
 from nose import tools
+from impera import app  # NOQA
+from impera.ast import Namespace
 from impera.ast.statements import define
-from impera.ast.variables import Reference
 from impera.parser.plyInmantaParser import parse
 
 
@@ -35,7 +32,7 @@ def parse_code(model_code: str):
 
 
 def test_define_entity():
-    """ Test the definition of entities
+    """Test the definition of entities
     """
     statements = parse_code("""
 entity Test:
@@ -52,7 +49,7 @@ end
 
 
 def test_extend_entity():
-    """ Test extending entities
+    """Test extending entities
     """
     statements = parse_code("""
 entity Test extends Foo:
@@ -66,7 +63,7 @@ end
 
 
 def test_complex_entity():
-    """ Test definition of a complex entity
+    """Test definition of a complex entity
     """
     documentation = "This entity has documentation"
     statements = parse_code("""
@@ -101,7 +98,7 @@ end
 
 
 def test_relation():
-    """ Test definition of relations
+    """Test definition of relations
     """
     statements = parse_code("""
 Test tests [0:] -- [5:10] Foo bars
@@ -125,7 +122,7 @@ Test tests [0:] -- [5:10] Foo bars
 
 
 def test_directional_relation():
-    """ Test definition of relations
+    """Test definition of relations
     """
     statements = parse_code("""
 Test tests [0:] -> [5:10] Foo bars
@@ -143,7 +140,7 @@ Test tests [0:] <- [5:10] Foo bars
 
 
 def test_implementation():
-    """ Test the definition of implementations
+    """Test the definition of implementations
     """
     statements = parse_code("""
 implementation test for Test:
@@ -167,7 +164,7 @@ end
 
 
 def test_implementation_with_for():
-    """ Test the propagation of type requires when using a for
+    """Test the propagation of type requires when using a for
     """
     statements = parse_code("""
 implementation test for Test:
