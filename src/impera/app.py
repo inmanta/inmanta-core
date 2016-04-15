@@ -55,7 +55,7 @@ def compile_project(options):
     else:
         t1 = time.time()
         result = do_compile()
-        LOGGER.debug("Compile time: %d", time.time() - t1)
+        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
     return result
 
 
