@@ -15,14 +15,13 @@
 
     Contact: bart@impera.io
 """
-
+import os
 import sys
 import logging
 
 from impera.execute import scheduler
 import impera.compiler.main
 from impera.module import Project
-import os
 
 LOGGER = logging.getLogger(__name__)
 
