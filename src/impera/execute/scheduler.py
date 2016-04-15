@@ -21,7 +21,7 @@ import time
 
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.execute.proxy import UnsetException
-import impera.plugins.base
+from impera import plugins
 from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
 
 from impera.ast.statements.define import DefineEntity, DefineImplement
@@ -116,8 +116,8 @@ class Scheduler(object):
         for d in implements:
             d.evaluate(resolver)
 
-        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, impera.plugins.base.Plugin)}
-        compiler.plugins = {k: v for k, v in types.items() if isinstance(v, impera.plugins.base.Plugin)}
+        types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, plugins.Plugin)}
+        compiler.plugins = {k: v for k, v in types.items() if isinstance(v, plugins.Plugin)}
 
         resolver = NameSpacedResolver(types, None)
 

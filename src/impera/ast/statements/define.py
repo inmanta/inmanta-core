@@ -360,3 +360,25 @@ class DefineIndex(DefinitionStatement):
         """
         entity_type = resolver.get_type(self.namespace, self.type)
         entity_type.add_index(self.attributes)
+
+
+class PluginStatement(TypeDefinitionStatement):
+    """
+        This statement defines a plugin function
+    """
+    def __init__(self, namespace, name, function_class):
+        TypeDefinitionStatement.__init__(self, namespace, name)
+        self._name = name
+        self._function_class = function_class
+        self.type = self._function_class(namespace)
+
+    def __repr__(self):
+        """
+            The representation of this function
+        """
+        return "Function(%s)" % self._name
+
+    def evaluate(self, resolver):
+        """
+            Evaluate this plugin
+        """

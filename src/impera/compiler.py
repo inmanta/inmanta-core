@@ -16,23 +16,129 @@
     Contact: code@inmanta.com
 """
 
-import glob
 import os
+import sys
+import logging
+import glob
 import imp
 from builtins import isinstance
 
+from impera.parser import plyInmantaParser
+from impera.execute import scheduler
 from impera.ast import Namespace
-from impera.ast.statements.define import DefineEntity, DefineRelation
-from impera.compiler.unit import FileCompileUnit
+from impera.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from impera.module import Project, Module
-from impera.plugins import PluginCompileUnit
 from impera.ast.blocks import BasicBlock
 from impera.ast.statements import DefinitionStatement
+from impera.plugins import PluginMeta
+
+LOGGER = logging.getLogger(__name__)
+
+
+def do_compile():
+    """
+        Run run run
+    """
+    # module.Project.get().verify()
+    compiler = Compiler(os.path.join(Project.get().project_path, "main.cf"))
+
+    LOGGER.debug("Starting compile")
+
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    success = sched.run(compiler, statements, blocks)
+
+    LOGGER.debug("Compile done")
+
+    if not success:
+        sys.stderr.write("Unable to execute all statements.\n")
+    return (sched.get_types(), sched.get_scopes())
+
+
+class CompileUnit(object):
+    """
+        This class represents a module containing configuration statements
+    """
+    def __init__(self, compiler, namespace):
+        self._compiler = compiler
+        self._namespace = namespace
+
+    def compile(self):
+        """
+            Compile the configuration file for this compile unit
+        """
+        raise NotImplementedError()
+
+
+class FileCompileUnit(CompileUnit):
+    """
+        A compile unit based on a parsed file.
+    """
+    def __init__(self, compiler, path, namespace):
+        CompileUnit.__init__(self, compiler, namespace)
+        self.__statements = {}
+        self.__requires = {}
+        self.__provides = {}
+        self.__path = path
+        self.__ast = None
+
+    def compile(self):
+        """
+            Compile the configuration file for this compile unit
+        """
+        # compile the data
+        self.__ast = plyInmantaParser.parse(self._namespace, self.__path)
+        return self.__ast
+
+    def is_compiled(self):
+        """
+            Is this already compiled?
+        """
+        return self.__ast is not None
+
+
+class PluginCompileUnit(CompileUnit):
+    """
+        A compile unit that contains all embeded types
+    """
+    def __init__(self, compiler, namespace):
+        CompileUnit.__init__(self, compiler, namespace)
+
+    def compile(self):
+        """
+            Compile the configuration file for this compile unit
+        """
+        statements = []
+        for name, cls in PluginMeta.get_functions().items():
+            ns_root = self._namespace.get_root()
+
+            mod_ns = cls.__module__.split(".")
+            if mod_ns[0] != "impera_plugins":
+                raise Exception("All plugin modules should be loaded in the impera_plugins package")
+
+            mod_ns = mod_ns[1:]
+
+            ns = ns_root
+            for part in mod_ns:
+                if ns is None:
+                    break
+                ns = ns.get_child(part)
+
+            if ns is None:
+                raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
+
+            cls.namespace = ns
+
+            name = name.split("::")[-1]
+            statement = PluginStatement(ns, name, cls)
+            statements.append(statement)
+
+        return statements
 
 
 class Compiler(object):
     """
-        This class represents a Westmalle compiler.
+        An inmanta compiler
 
         @param options: Options passed to the application
         @param config: The parsed configuration file

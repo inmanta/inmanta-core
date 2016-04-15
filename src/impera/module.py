@@ -34,7 +34,7 @@ import impera
 from impera import env
 from impera.config import Config
 from impera.ast import Namespace
-from impera.plugins.base import PluginMeta
+from impera import plugins
 from impera.parser.plyInmantaParser import parse
 
 
@@ -256,7 +256,7 @@ class Project(GitVersioned):
             Get the instance of the project
         """
         cls._project = project
-        PluginMeta.clear()
+        plugins.PluginMeta.clear()
 
     def _load_freeze(self, freeze_file: str) -> {}:
         """
