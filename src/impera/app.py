@@ -49,7 +49,16 @@ def start_server(options):
 @command("agent", help_msg="Start the impera agent")
 def start_agent(options):
     from impera import agent
-    agent.Agent().start()
+    io_loop = IOLoop.current()
+
+    a = agent.Agent(io_loop)
+    a.start()
+
+    try:
+        io_loop.start()
+    except KeyboardInterrupt:
+        IOLoop.current().stop()
+        a.stop()
 
 
 @command("compile", help_msg="Compile the project to a configuration model", require_project=True)

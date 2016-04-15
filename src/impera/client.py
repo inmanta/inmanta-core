@@ -192,7 +192,7 @@ class ImperaCommand(Command):
         return env_id
 
     def take_action(self, parsed_args):
-        self._client = protocol.Client("cmdline", "client")
+        self._client = protocol.Client("cmdline")
         return self.run_action(parsed_args)
 
     def run_action(self, parsed_args):

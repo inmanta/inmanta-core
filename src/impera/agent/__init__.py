@@ -19,20 +19,21 @@
 from collections import defaultdict
 import logging
 import os
-from threading import enumerate
 import time
 import threading
 import datetime
 
 from impera import env
 from impera import protocol
+from impera import methods
 from impera.agent.handler import Commander
 from impera.config import Config
 from impera.loader import CodeLoader
-from impera.protocol import Scheduler
+from impera.protocol import Scheduler, AgentEndPoint
 from impera.resources import Resource, Id
 import hashlib
 import base64
+from tornado import gen
 
 
 LOGGER = logging.getLogger(__name__)
@@ -228,13 +229,13 @@ class QueueManager(object):
             LOGGER.info("\t-> %s" % r.requires_queue)
 
 
-class Agent(threading.Thread):
+class Agent(AgentEndPoint):
     """
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
-    def __init__(self, hostname=None, agent_map=None, code_loader=True):
-        super().__init__()
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True):
+        super().__init__("agent", io_loop, heartbeat_interval=10)
 
         if agent_map is None:
             agent_map = Config.get("config", "agent-map", None)
@@ -247,9 +248,10 @@ class Agent(threading.Thread):
 
         self._last_update = 0
 
-        self._env_id = Config.get("config", "environment")
-        if self._env_id is None:
+        env_id = Config.get("config", "environment")
+        if env_id is None:
             raise Exception("The agent requires an environment to be set.")
+        self.set_environment(env_id)
 
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
@@ -258,9 +260,9 @@ class Agent(threading.Thread):
         else:
             self._loader = None
 
-        self._client = protocol.Client("agent", "agent")
+        self._client = protocol.Client("agent")
         if hostname is not None:
-            self._client.add_end_point_name(hostname)
+            self.add_end_point_name(hostname)
 
         else:
             # load agent names from the config file
@@ -269,32 +271,26 @@ class Agent(threading.Thread):
                 names = [x.strip() for x in agent_names.split(",")]
                 for name in names:
                     if "$" in name:
-                        name = name.replace("$node-name", self._client.node_name)
+                        name = name.replace("$node-name", self.node_name)
 
-                    self._client.add_end_point_name(name)
+                    self.add_end_point_name(name)
 
         # do regular deploys
-        self._heart_beat_interval = 10
         self._deploy_interval = 600
         self.latest_version = 0
         self.latest_code_version = 0
 
-        self._sched = Scheduler()
-
-        self._sched.add_action(self.beat, self._heart_beat_interval, True)
+        self._sched = Scheduler(io_loop=self._io_loop)
         self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
+        self._io_loop.add_callback(self.check_deploy)
 
-        self._sched.start()
-
-    def run(self):
-        """
-            Run a deploy thread
-        """
+    @gen.coroutine
+    def check_deploy(self):
         while True:
             if self._queue.size() > 0:
                 self.deploy_config()
-
-            time.sleep(1)
+            else:
+                yield gen.sleep(1)
 
     def _process_map(self, agent_map):
         """
@@ -320,6 +316,7 @@ class Agent(threading.Thread):
         """
         return self._client.node_name == agent_name or agent_name == "localhost"
 
+    @gen.coroutine
     def get_latest_version(self):
         """
             Get the latest version of managed resources for all agents
@@ -327,12 +324,13 @@ class Agent(threading.Thread):
         for agent in self._client.end_point_names:
             self.get_latest_version_for_agent(agent)
 
+    @gen.coroutine
     def _ensure_code(self, environment, version):
         """
             Ensure that the code for the given environment and version is loaded
         """
         if self.latest_code_version < version and self._loader is not None:
-            result = self._client.get_code(environment, version)
+            result = yield self._client.get_code(environment, version)
 
             if result.code == 200:
                 self._env.install_from_list(result.result["requires"])
@@ -340,19 +338,30 @@ class Agent(threading.Thread):
 
                 self.latest_code_version = version
 
+    @protocol.handle(methods.NotifyMethod.trigger_agent)
+    @gen.coroutine
+    def trigger_update(self, tid, agent, id):
+        """
+            Trigger an update
+        """
+        future = self.get_latest_version_for_agent(agent)
+        self.add_future(future)
+        return 200
+
+    @gen.coroutine
     def get_latest_version_for_agent(self, agent):
         """
-            Get the latest version for the given agent (this is also how we are notified
+            Get the latest version for the given agent (this is also how we are notified)
         """
         LOGGER.debug("Getting latest resources for %s" % agent)
-        result = self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
+        result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
         if result.code == 404:
             LOGGER.info("No released configuration model version available for agent %s", agent)
         elif result.code != 200:
             LOGGER.warning("Got an error while pulling resources for agent %s", agent)
 
         else:
-            self._ensure_code(self._env_id, result.result["version"])
+            yield self._ensure_code(self._env_id, result.result["version"])
 
             try:
                 for res in result.result["resources"]:
@@ -364,15 +373,22 @@ class Agent(threading.Thread):
             except TypeError as e:
                 LOGGER.error("Failed to receive update", e)
 
-    def run_dryrun(self, agent, version, dry_run_id):
+    @protocol.handle(methods.AgentDryRun.do_dryrun)
+    @gen.coroutine
+    def run_dryrun(self, tid, id, agent, version):
         """
            Run a dryrun of the given version
         """
-        result = self._client.get_resources_for_agent(tid=self._env_id, agent=agent, version=version)
+        assert tid == self._env_id
+
+        result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent, version=version)
         if result.code == 404:
             LOGGER.info("Version %s does not exist", version)
+            return 404
+
         elif result.code != 200:
             LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
+            return 500
 
         self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
 
@@ -392,11 +408,14 @@ class Agent(threading.Thread):
 
                 results = provider.execute(resource, dry_run=True)
 
-                self._client.dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                           changes=results["changes"], log_msg=results["log_msg"])
+                yield self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                                 changes=results["changes"], log_msg=results["log_msg"])
 
         except TypeError:
-            LOGGER.error("Unable to process resource for dryrun")
+            LOGGER.exception("Unable to process resource for dryrun.")
+            return 500
+
+        return 200
 
     def get_agent_hostname(self, agent_name):
         """
@@ -438,52 +457,9 @@ class Agent(threading.Thread):
 
         return dir_map
 
-    def beat(self):
-        """
-            Send a heart beat to the server to indicate we are there
-        """
-        result = self._client.heartbeat(endpoint_names=self._client.end_point_names, nodename=self._client.node_name,
-                                        role=self._client.role, interval=self._heart_beat_interval, environment=self._env_id)
-
-        if result.code != 200:
-            msg = ""
-            if result.result is not None and "message" in result.result:
-                msg = result.result["message"]
-            LOGGER.warning("Got non successful response on a heartbeat: %s", msg)
-            return
-
-        if "requests" in result.result and len(result.result["requests"]) > 0:
-            LOGGER.info("Received requests from server after heartbeat.")
-
-            fact_requests = {}
-            for request in result.result["requests"]:
-                agent = request["agent"]
-                for item in request["items"]:
-                    if "method" in item:
-                        if item["method"] == "version":
-                            self.get_latest_version_for_agent(agent)
-
-                        elif item["method"] == "fact":
-                            key = (item["environment"], item["resource_id"])
-                            if key not in fact_requests:
-                                fact_requests[key] = item["resource"]
-
-                        elif item["method"] == "dryrun":
-                            self.run_dryrun(agent, int(item["version"]), item["dryrun"])
-
-                        elif item["method"] == "snapshot":
-                            threading.Thread(target=self.do_snapshot,
-                                             args=(item["environment"], agent, item["snapshot_id"], item["resources"])).start()
-
-                        elif item["method"] == "restore":
-                            threading.Thread(target=self.do_restore, args=(item["environment"], item["restore_id"],
-                                                                           item["snapshot_id"], item["resources"])).start()
-
-            for key, resource in fact_requests.items():
-                LOGGER.info("Requesting facts for resource %s in environment %s", key[0], key[1])
-                self.get_facts(key[0], key[1], resource)
-
-    def do_restore(self, environment, restore_id, snapshot_id, resources):
+    @protocol.handle(methods.AgentRestore.do_restore)
+    @gen.coroutine
+    def do_restore(self, tid, agent, restore_id, snapshot_id, resources):
         """
             Restore a snapshot
         """
@@ -498,30 +474,35 @@ class Agent(threading.Thread):
                 provider = Commander.get_provider(self, resource_obj)
 
                 if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
-                    self._client.update_restore(tid=environment, id=restore_id, resource_id=str(resource_obj.id),
-                                                start=start, stop=datetime.datetime.now(), success=False, error=False,
-                                                msg="Resource %s does not allow restore" % resource["id"])
+                    yield self._client.update_restore(tid=tid, id=restore_id, resource_id=str(resource_obj.id),
+                                                      start=start, stop=datetime.datetime.now(), success=False, error=False,
+                                                      msg="Resource %s does not allow restore" % resource["id"])
                     continue
 
                 try:
                     provider.restore(resource_obj, restore["content_hash"])
-                    self._client.update_restore(tid=environment, id=restore_id,
-                                                resource_id=str(resource_obj.id), success=True, error=False,
-                                                start=start, stop=datetime.datetime.now(), msg="")
+                    yield self._client.update_restore(tid=tid, id=restore_id,
+                                                      resource_id=str(resource_obj.id), success=True, error=False,
+                                                      start=start, stop=datetime.datetime.now(), msg="")
                 except NotImplementedError:
-                    self._client.update_restore(tid=environment, id=restore_id,
-                                                resource_id=str(resource_obj.id), success=False, error=False,
-                                                start=start, stop=datetime.datetime.now(),
-                                                msg="The handler for resource %s does not support restores" % resource["id"])
+                    yield self._client.update_restore(tid=tid, id=restore_id,
+                                                      resource_id=str(resource_obj.id), success=False, error=False,
+                                                      start=start, stop=datetime.datetime.now(),
+                                                      msg="The handler for resource "
+                                                      "%s does not support restores" % resource["id"])
 
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                self._client.update_restore(tid=environment, id=restore_id, resource_id=resource_obj.id.resource_str(),
-                                            success=False, error=False, start=start, stop=datetime.datetime.now(),
-                                            msg="Unable to find a handler to restore a snapshot of resource %s" %
-                                            resource["id"])
+                yield self._client.update_restore(tid=tid, id=restore_id, resource_id=resource_obj.id.resource_str(),
+                                                  success=False, error=False, start=start, stop=datetime.datetime.now(),
+                                                  msg="Unable to find a handler to restore a snapshot of resource %s" %
+                                                  resource["id"])
 
-    def do_snapshot(self, environment, agent, snapshot_id, resources):
+        return 200
+
+    @protocol.handle(methods.AgentSnapshot.do_snapshot)
+    @gen.coroutine
+    def do_snapshot(self, tid, agent, snapshot_id, resources):
         """
             Create a snapshot of stateful resources managed by this agent
         """
@@ -536,11 +517,11 @@ class Agent(threading.Thread):
                 provider = Commander.get_provider(self, resource_obj)
 
                 if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
-                    self._client.update_snapshot(tid=environment, id=snapshot_id,
-                                                 resource_id=resource_obj.id.resource_str(), snapshot_data="",
-                                                 start=start, stop=datetime.datetime.now(), size=0,
-                                                 success=False, error=False,
-                                                 msg="Resource %s does not allow snapshots" % resource["id"])
+                    yield self._client.update_snapshot(tid=tid, id=snapshot_id,
+                                                       resource_id=resource_obj.id.resource_str(), snapshot_data="",
+                                                       start=start, stop=datetime.datetime.now(), size=0,
+                                                       success=False, error=False,
+                                                       msg="Resource %s does not allow snapshots" % resource["id"])
                     continue
 
                 try:
@@ -549,34 +530,38 @@ class Agent(threading.Thread):
                         sha1sum = hashlib.sha1()
                         sha1sum.update(result)
                         content_id = sha1sum.hexdigest()
-                        self._client.upload_file(id=content_id, content=base64.b64encode(result).decode("ascii"))
+                        yield self._client.upload_file(id=content_id, content=base64.b64encode(result).decode("ascii"))
 
-                        self._client.update_snapshot(tid=environment, id=snapshot_id,
-                                                     resource_id=resource_obj.id.resource_str(),
-                                                     snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
-                                                     size=len(result), success=True, error=False,
-                                                     msg="")
+                        yield self._client.update_snapshot(tid=tid, id=snapshot_id,
+                                                           resource_id=resource_obj.id.resource_str(),
+                                                           snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
+                                                           size=len(result), success=True, error=False,
+                                                           msg="")
                     else:
                         raise Exception("Snapshot returned no data")
 
                 except NotImplementedError:
-                    self._client.update_snapshot(tid=environment, id=snapshot_id,
-                                                 resource_id=resource_obj.id.resource_str(), snapshot_data="",
-                                                 start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
-                                                 msg="The handler for resource %s does not support snapshots" % resource["id"])
+                    yield self._client.update_snapshot(tid=tid, id=snapshot_id, error=False,
+                                                       resource_id=resource_obj.id.resource_str(), snapshot_data="",
+                                                       start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                       msg="The handler for resource "
+                                                       "%s does not support snapshots" % resource["id"])
                 except Exception:
                     LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
-                    self._client.update_snapshot(tid=environment, id=snapshot_id, snapshot_data="",
-                                                 resource_id=resource_obj.id.resource_str(),
-                                                 start=start, stop=datetime.datetime.now(), size=0, success=False, error=True,
-                                                 msg="The handler for resource %s does not support snapshots" % resource["id"])
+                    yield self._client.update_snapshot(tid=tid, id=snapshot_id, snapshot_data="",
+                                                       resource_id=resource_obj.id.resource_str(), error=True,
+                                                       start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                       msg="The handler for resource "
+                                                       "%s does not support snapshots" % resource["id"])
 
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                self._client.update_snapshot(tid=environment, id=snapshot_id, snapshot_data="",
-                                             resource_id=resource_obj.id.resource_str(),
-                                             start=start, stop=datetime.datetime.now(), size=0, success=False, error=False,
-                                             msg="Unable to find a handler for %s" % resource["id"])
+                yield self._client.update_snapshot(tid=tid, id=snapshot_id, snapshot_data="",
+                                                   resource_id=resource_obj.id.resource_str(), error=False,
+                                                   start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                   msg="Unable to find a handler for %s" % resource["id"])
+
+        return 200
 
     def status(self, operation, body):
         if "id" not in body:
@@ -604,23 +589,28 @@ class Agent(threading.Thread):
         else:
             return 501
 
-    def get_facts(self, environment, resource_id, resource):
+    @protocol.handle(methods.AgentParameterMethod.get_parameter)
+    @gen.coroutine
+    def get_facts(self, tid, agent, resource):
         try:
             data = resource["fields"]
-            data["id"] = resource_id
+            data["id"] = resource["id"]
             resource_obj = Resource.deserialize(data)
             provider = Commander.get_provider(self, resource_obj)
 
             try:
                 result = provider.check_facts(resource_obj)
                 for param, value in result.items():
-                    self._client.set_param(tid=environment, resource_id=resource_id, source="fact", id=param, value=value)
+                    yield self._client.set_param(tid=tid, resource_id=resource["id"], source="fact", id=param, value=value)
 
             except Exception:
                 LOGGER.exception("Unable to retrieve fact")
 
         except Exception:
-            LOGGER.exception("Unable to find a handler for %s" % resource_id)
+            LOGGER.exception("Unable to find a handler for %s", resource["id"])
+            return 500
+
+        return 200
 
     def queue(self, operation, body):
         """
@@ -698,6 +688,7 @@ class Agent(threading.Thread):
         else:
             return base64.b64decode(result.result["content"])
 
+    @gen.coroutine
     def resource_updated(self, resource, reload_requires=False, changes={}, status="", log_msg=""):
         """
             A resource with id $rid calls this method to indicate that it is now at version $version.
@@ -720,5 +711,5 @@ class Agent(threading.Thread):
         else:
             level = "ERROR"
 
-        self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action, status=status,
-                                      message="%s: %s" % (status, log_msg), extra_data=changes)
+        yield self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action, status=status,
+                                            message="%s: %s" % (status, log_msg), extra_data=changes)

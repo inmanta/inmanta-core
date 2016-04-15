@@ -357,7 +357,7 @@ class Exporter(object):
 
         LOGGER.info("Uploading source files")
 
-        conn = protocol.Client("compiler", "client")
+        conn = protocol.Client("compiler")
 
         def call():
             return conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
@@ -383,7 +383,7 @@ class Exporter(object):
 
         self.deploy_code(tid, version)
 
-        conn = protocol.Client("compiler", "client")
+        conn = protocol.Client("compiler")
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
         # collect all hashes and send them at once to the server to check

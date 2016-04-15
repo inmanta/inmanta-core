@@ -63,7 +63,7 @@ class Context(object):
         return data_dir
 
     def get_client(self):
-        client = protocol.Client("compiler", "client")
+        client = protocol.Client("compiler")
         return client
 
     def run_sync(self, function):

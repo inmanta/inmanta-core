@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 import datetime
@@ -22,7 +22,6 @@ import os
 import difflib
 import subprocess
 import re
-import threading
 import sys
 from collections import defaultdict
 import uuid
@@ -42,6 +41,7 @@ import dateutil
 from impera.agent.io.remote import RemoteIO
 from impera.ast import type
 from tornado import gen
+from tornado import process
 
 
 LOGGER = logging.getLogger(__name__)
@@ -49,16 +49,15 @@ LOGGER = logging.getLogger(__name__)
 
 class Server(protocol.ServerEndpoint):
     """
-        The central Impera server that communicates with clients and agents and persists configuration
+        The central Inmanta server that communicates with clients and agents and persists configuration
         information
 
         :param usedb Use a database to store data. If not, only facts are persisted in a yaml file.
     """
     def __init__(self, io_loop, database_host=None, database_port=None):
-        super().__init__("server", role="server", io_loop=io_loop)
+        super().__init__("server", io_loop=io_loop)
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
-        self.check_keys()
 
         self._db = None
         if database_host is None:
@@ -81,38 +80,37 @@ class Server(protocol.ServerEndpoint):
 
         self._io_loop.add_callback(self._purge_versions)
 
-        self._requests = defaultdict(dict)
         self._recompiles = defaultdict(lambda: None)
 
         self._requires_agents = {}
 
         if Config.getboolean("server", "autostart-on-start", True):
-            def start_agents(agents):
-                for agent in agents:
-                    if self._agent_matches(agent.name):
-                        env_id = str(agent.environment.id)
-                        if env_id not in self._requires_agents:
-                            agent_data = {"agents": set(), "process": None}
-                            self._requires_agents[env_id] = agent_data
+            future = self.start_agents()
+            self.add_future(future)
 
-                        self._requires_agents[env_id]["agents"].add(agent.name)
+        self.add_heartbeat_callback(self.heartbeat_cb)
 
-                for env_id in self._requires_agents.keys():
-                    agent = list(self._requires_agents[env_id]["agents"])[0]
-                    self._requires_agents[env_id]["agents"].remove(agent)
-                    self._ensure_agent(env_id, agent)
+    @gen.coroutine
+    def start_agents(self):
+        agents = yield data.Agent.objects.find_all()  # @UndefinedVariable
+        for agent in agents:
+            if self._agent_matches(agent.name):
+                yield agent.load_references()
+                env_id = str(agent.environment.uuid)
+                if env_id not in self._requires_agents:
+                    agent_data = {"agents": set(), "process": None}
+                    self._requires_agents[env_id] = agent_data
 
-            data.Agent.objects.find_all(callback=start_agents)  # @UndefinedVariable
+                self._requires_agents[env_id]["agents"].add(agent.name)
+
+        for env_id in self._requires_agents.keys():
+            agent = list(self._requires_agents[env_id]["agents"])[0]
+            self._requires_agents[env_id]["agents"].remove(agent)
+            self._ensure_agent(env_id, agent)
 
     def stop(self):
         disconnect()
         super().stop()
-
-    def check_keys(self):
-        """
-            Check if the ssh key(s) credentials of this server are configured properly
-        """
-        # TODO
 
     @gen.coroutine
     def _purge_versions(self):
@@ -175,17 +173,6 @@ class Server(protocol.ServerEndpoint):
 
         return dir_map
 
-    def queue_request(self, environment, agent, request):
-        """
-            Queue a request for the agent in the given environment
-        """
-        environment = str(environment)
-        LOGGER.debug("Queueing request for agent %s in environment %s", agent, environment)
-        if agent not in self._requests[environment]:
-            self._requests[environment][agent] = []
-
-        self._requests[environment][agent].append(request)
-
     @gen.coroutine
     def _request_parameter(self, param):
         """
@@ -221,8 +208,11 @@ class Server(protocol.ServerEndpoint):
             if len(rvs) == 0:
                 return 404, {"message": "The parameter does not exist."}
 
-            self.queue_request(tid, resource.agent, {"method": "fact", "resource_id": resource_id, "environment": tid,
-                                                     "name": param.name, "resource": rvs[0].to_dict()})
+            self._ensure_agent(tid, resource.agent)
+            client = self.get_agent_client(tid, resource.agent)
+            if client is not None:
+                future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
+                self.add_future(future)
 
             return 503, {"message": "Agents queried for resource parameter."}
 
@@ -287,8 +277,10 @@ class Server(protocol.ServerEndpoint):
                     return 404, {"message": "The parameter does not exist."}
 
                 self._ensure_agent(tid, resource.agent)
-                self.queue_request(tid, resource.agent, {"method": "fact", "resource_id": resource_id, "environment": tid,
-                                                         "name": id, "resource": rvs[0].to_dict()})
+                client = self.get_agent_client(tid, resource.agent)
+                if client is not None:
+                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
+                    self.add_future(future)
 
                 return 503, {"message": "Agents queried for resource parameter."}
 
@@ -370,26 +362,25 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form = yield data.Form.get_form(environment=env, form_type=id)
-
+        form_doc = yield data.Form.get_form(environment=env, form_type=id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
         field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
 
-        if form is None:
-            form = data.Form(form_id=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults,
-                             options=form["options"], field_options=field_options)
+        if form_doc is None:
+            form_doc = data.Form(uuid=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults,
+                                 options=form["options"], field_options=field_options)
 
         else:
             # update the definition
-            form.fields = fields
-            form.defaults = defaults
-            form.options = form["options"]
-            form.field_options = field_options
+            form_doc.fields = fields
+            form_doc.defaults = defaults
+            form_doc.options = form["options"]
+            form_doc.field_options = field_options
 
-        yield form.save()
+        yield form_doc.save()
 
-        return 200, {"form": {"id": form.uuid}}
+        return 200, {"form": {"id": form_doc.uuid}}
 
     @protocol.handle(methods.FormMethod.get_form)
     @gen.coroutine
@@ -414,7 +405,7 @@ class Server(protocol.ServerEndpoint):
 
         forms = yield data.Form.objects.filter(environment=env).find_all()  # @UndefinedVariable
 
-        return 200, {"forms": [{"form_id": x.form_id, "form_type": x.form_type} for x in forms]}
+        return 200, {"forms": [{"form_id": x.uuid, "form_type": x.form_type} for x in forms]}
 
     @protocol.handle(methods.FormRecords.list_records)
     @gen.coroutine
@@ -423,7 +414,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form_type = yield data.Form.get_form(environment=env, form_type=id)
+        form_type = yield data.Form.get_form(environment=env, form_type=form_type)
         if form_type is None:
             return 404, {"message": "No form is defined with id %s" % form_type}
 
@@ -438,7 +429,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        record = data.FormRecord.get_uuid(id)
+        record = yield data.FormRecord.get_uuid(id)
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % id}
 
@@ -476,10 +467,10 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form_obj = yield data.Form.get_form(environment=env, form_type=id)
+        form_obj = yield data.Form.get_form(environment=env, form_type=form_type)
 
         record_id = uuid.uuid4()
-        record = data.FormRecord(uuid=record_id, environment=env, form=form_obj)
+        record = data.FormRecord(uuid=record_id, environment=env, form=form_obj, fields={})
         record.changed = datetime.datetime.now()
 
         form_fields = record.form.fields
@@ -495,7 +486,11 @@ class Server(protocol.ServerEndpoint):
 
         yield record.save()
         self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+
+        # need to query this again, to_dict with load_references only works on retrieved document and not on newly created
+        record = yield data.FormRecord.get_uuid(record_id)
         record_dict = yield record.to_dict()
+
         return 200, {"record": record_dict}
 
     @protocol.handle(methods.FormRecords.delete_record)
@@ -592,12 +587,11 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"diff": list(diff)}
 
-    @protocol.handle(methods.HeartBeatMethod.heartbeat)
     @gen.coroutine
-    def heartbeat(self, endpoint_names, nodename, role, interval, environment):
-        env = yield data.Environment.get_uuid(environment)
+    def heartbeat_cb(self, tid, endpoint_names, nodename, interval):
+        env = yield data.Environment.get_uuid(tid)
         if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
+            LOGGER.warning("The given environment id %s does not exist!", tid)
 
         now = datetime.datetime.now()
         LOGGER.debug("Seen node %s" % nodename)
@@ -610,12 +604,11 @@ class Server(protocol.ServerEndpoint):
             node = data.Node(hostname=nodename, last_seen=now)
             yield node.save()
 
-        response = []
         for nh in endpoint_names:
             LOGGER.debug("Seen agent %s on %s", nh, nodename)
             agents = yield data.Agent.objects.filter(name=nh, node=node, environment=env).find_all()  # @UndefinedVariable
             if len(agents) == 0:
-                agent = data.Agent(name=nh, node=node, role=role, environment=env)
+                agent = data.Agent(name=nh, node=node, environment=env)
 
             else:
                 agent = agents[0]
@@ -623,14 +616,6 @@ class Server(protocol.ServerEndpoint):
             agent.interval = interval
             agent.last_seen = now
             yield agent.save()
-
-            # check if there is something we need to push to the client
-            environment = str(environment)
-            if environment in self._requests and nh in self._requests[environment]:
-                response.append({"items": self._requests[environment][nh], "agent": nh})
-                del self._requests[environment][nh]
-
-        return 200, {"requests": response, "environment": environment}
 
     @protocol.handle(methods.NodeMethod.get_agent)
     @gen.coroutine
@@ -654,7 +639,13 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        self.queue_request(tid, id, {"method": "version", "version": -1, "environment": tid})
+        agent_env = self.get_env(tid)
+        for agent in agent_env.agents:
+            client = self.get_agent_client(tid, agent)
+            if client is not None:
+                future = client.trigger_agent(tid, agent, -1)
+                self.add_future(future)
+
         return 200
 
     @protocol.handle(methods.NodeMethod.list_agents)
@@ -700,6 +691,7 @@ class Server(protocol.ServerEndpoint):
         return 200, {"resource": resv[0].to_dict(), "logs": action_list}
 
     @protocol.handle(methods.ResourceMethod.get_resources_for_agent)
+    @gen.coroutine
     def get_resources_for_agent(self, tid, agent, version):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
@@ -725,11 +717,9 @@ class Server(protocol.ServerEndpoint):
         deploy_model = []
         resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).find_all()  # @UndefinedVariable
 
-        futures = [rv.load_references() for rv in resources]
-        yield futures
-
-        futures = [rv.agent.load_references() for rv in resources]
-        yield futures
+        for rv in resources:
+            yield rv.load_references()
+            yield rv.resource.load_references()
 
         futures = []
         for rv in resources:
@@ -873,7 +863,7 @@ class Server(protocol.ServerEndpoint):
             attributes = {}
             for field, value in res_dict.items():
                 if field != "id":
-                    attributes[field.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(value)
+                    attributes[field] = value
 
             yield resource.save()
 
@@ -941,6 +931,8 @@ class Server(protocol.ServerEndpoint):
         """
             Ensure that the agent is running if required
         """
+        return
+    #    FIXME:
         if self._agent_matches(agent_name):
             LOGGER.debug("%s matches agents managed by server, ensuring it is started.", agent_name)
             agent_data = None
@@ -999,6 +991,7 @@ host = localhost
 
             threading.Thread(target=proc.communicate).start()
             agent_data["process"] = proc
+            self._requires_agents[environment_id] = agent_data["process"]
 
             LOGGER.debug("Started new agent with PID %s", proc.pid)
 
@@ -1026,7 +1019,10 @@ host = localhost
 
             for agent in agents:
                 self._ensure_agent(tid, agent)
-                self.queue_request(tid, agent, {"method": "version", "version": id, "environment": tid})
+                client = self.get_agent_client(tid, agent)
+                if client is not None:
+                    future = client.trigger_agent(tid, agent, id)
+                    self.add_future(future)
 
         model_dict = yield model.to_dict()
         return 200, {"model": model_dict}
@@ -1044,23 +1040,35 @@ host = localhost
 
         # Create a dryrun document
         dryrun_id = str(uuid.uuid4())
-        dryrun = data.DryRun(uuid=dryrun_id, environment=env, model=model, date=datetime.datetime.now())
+        dryrun = data.DryRun(uuid=dryrun_id, environment=env, model=model, date=datetime.datetime.now(), resources={})
 
         # fetch all resource in this cm and create a list of distinct agents
         rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
         dryrun.resource_total = len(rvs)
         dryrun.resource_todo = dryrun.resource_total
 
+        # FIXME: This gives error on large models, possibly due to many queries at the same time
+        # yield [rv.load_references() for rv in rvs]
+        # yield [rv.resource.load_references() for rv in rvs]
+
         agents = set()
         for rv in rvs:
+            yield rv.load_references()
+            yield rv.resource.load_references()
             agents.add(rv.resource.agent)
 
         tid = str(tid)
         for agent in agents:
             self._ensure_agent(tid, agent)
-            self.queue_request(tid, agent, {"method": "dryrun", "version": id, "environment": tid, "dryrun": dryrun_id})
+            client = self.get_agent_client(tid, agent)
+            if client is not None:
+                future = client.do_dryrun(tid, dryrun_id, agent, id)
+                self.add_future(future)
 
-        _, dryrun_dict = yield dryrun.save(), dryrun.to_dict()
+        yield dryrun.save()
+
+        dryrun = yield data.DryRun.get_uuid(dryrun_id)
+        dryrun_dict = yield dryrun.to_dict()
         return 200, {"dryrun": dryrun_dict}
 
     @protocol.handle(methods.DryRunMethod.dryrun_list)
@@ -1084,7 +1092,7 @@ host = localhost
         dryrun_futures = [x.load_references() for x in dryruns]
         yield dryrun_futures
 
-        return 200, {"dryruns": [{"id": x.id, "version": x.model.version,
+        return 200, {"dryruns": [{"id": x.uuid, "version": x.model.version,
                                   "date": x.date.isoformat(), "total": x.resource_total,
                                   "todo": x.resource_todo
                                   } for x in dryruns]}
@@ -1122,7 +1130,7 @@ host = localhost
                    "id_fields": Id.parse_id(resource).to_dict()
                    }
 
-        dryrun.resources[resource.replace(".", "\uff0e").replace("$", "\uff04")] = json.dumps(payload)
+        dryrun.resources[resource] = payload
         dryrun.resource_todo -= 1
         yield dryrun.save()
 
@@ -1151,7 +1159,7 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = data.Code.get_version(environment=env, version=id)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=env, version=id)  # @UndefinedVariable
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
@@ -1180,7 +1188,7 @@ host = localhost
         yield ra.save(), resv.load_references()
 
         model = resv.model
-        rid = resv.rid.replace(".", "\uff0e").replace("$", "\uff04")
+        rid = resv.rid
         if rid not in model.status:
             model.resources_done += 1
 
@@ -1360,7 +1368,7 @@ host = localhost
             return 404, {"message": "The environment with given id does not exist."}
 
         compiles = yield data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        futures = [compile.delete_cascade() for compile in compiles]
+        futures = [compile.delete() for compile in compiles]
         futures.append(env.delete_cascade())
         yield futures
 
@@ -1399,8 +1407,7 @@ host = localhost
                 LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
             self._recompiles[environment_id] = self
-            threading.Thread(target=self._recompile_environment, args=(environment_id, update_repo, wait)).start()
-
+            self._io_loop.add_callback(self._recompile_environment, environment_id, update_repo, wait)
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
 
@@ -1414,14 +1421,21 @@ host = localhost
 
         return proc
 
+    @gen.coroutine
     def _run_compile_stage(self, name, cmd, cwd, **kwargs):
         start = datetime.datetime.now()
-        proc = subprocess.Popen(cmd, cwd=cwd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, **kwargs)
-        log_out, log_err = proc.communicate()
-        returncode = proc.returncode
+
+        sub_process = process.Subprocess(cmd, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM,
+                                         cwd=cwd, **kwargs)
+
+        log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
+                                              gen.Task(sub_process.stderr.read_until_close),
+                                              sub_process.wait_for_exit(raise_error=False)]
+        returncode
+
         stop = datetime.datetime.now()
         return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
-                           errstream=log_err, outstream=log_out, returncode=returncode)
+                           errstream=log_err.decode(), outstream=log_out.decode(), returncode=returncode)
 
     @gen.coroutine
     def _recompile_environment(self, environment_id, update_repo=False, wait=0):
@@ -1429,18 +1443,19 @@ host = localhost
             Recompile an environment
         """
         if wait > 0:
-            time.sleep(wait)
+            yield gen.sleep(wait)
+
+        env = yield data.Environment.get_uuid(environment_id)
+        if env is None:
+            LOGGER.error("Environment %s does not exist.", environment_id)
+            return
+
+        requested = datetime.datetime.now()
+        stages = []
 
         try:
             impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
             project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
-            requested = datetime.datetime.now()
-            stages = []
-
-            env = yield data.Environment.get_uuid(environment_id)
-            if env is None:
-                LOGGER.error("Environment %s does not exist.", environment_id)
-                return
 
             if not os.path.exists(project_dir):
                 LOGGER.info("Creating project directory for environment %s at %s", environment_id, project_dir)
@@ -1449,14 +1464,15 @@ host = localhost
             # checkout repo
             if not os.path.exists(os.path.join(project_dir, ".git")):
                 LOGGER.info("Cloning repository into environment directory %s", project_dir)
-                result = self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."], project_dir)
+                result = yield self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."], project_dir)
                 stages.append(result)
                 if result.returncode > 0:
                     return
 
             elif update_repo:
                 LOGGER.info("Fetching changes from repo %s", env.repo_url)
-                stages.append(self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir))
+                result = yield self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir)
+                stages.append(result)
 
             # verify if branch is correct
             proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1465,26 +1481,33 @@ host = localhost
             o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
             if o is not None and env.repo_branch != o.group(1):
                 LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
-                stages.append(self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir))
+                result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir)
+                stages.append(result)
 
             if update_repo:
-                stages.append(self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir))
+                result = yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                stages.append(result)
                 LOGGER.info("Installing and updating modules")
-                stages.append(self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir))
-                stages.append(self._run_compile_stage("Updating modules", impera_path + ["modules", "update"], project_dir,
-                                                      env=os.environ.copy()))
+                result = yield self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir)
+                stages.append(result)
+                result = yield self._run_compile_stage("Updating modules", impera_path + ["modules", "update"], project_dir,
+                                                       env=os.environ.copy())
+                stages.append(result)
 
             LOGGER.info("Recompiling configuration model")
             server_address = Config.get("server", "server_address", "localhost")
-            stages.append(self._run_compile_stage("Recompiling configuration model",
-                                                  impera_path + ["-vvv", "export", "-e", str(environment_id),
-                                                                 "--server_address", server_address, "--server_port",
-                                                                 Config.get("server_rest_transport", "port", "8888")],
-                                                  project_dir, env=os.environ.copy()))
+            result = yield self._run_compile_stage("Recompiling configuration model",
+                                                   impera_path + ["-vvv", "export", "-e", str(environment_id),
+                                                                  "--server_address", server_address, "--server_port",
+                                                                  Config.get("server_rest_transport", "port", "8888")],
+                                                   project_dir, env=os.environ.copy())
+            stages.append(result)
         finally:
             end = datetime.datetime.now()
             self._recompiles[environment_id] = end
-            futures = [x.save() for x in stages]
+            for stage in stages:
+                yield stage.save()
+            futures = []  # [x.save() for x in stages]
             futures.append(data.Compile(environment=env, started=requested, completed=end, reports=stages).save())
 
             yield futures
@@ -1522,7 +1545,11 @@ host = localhost
             if limit is not None:
                 models = models[:int(limit)]
 
-        futures = [m.to_dict() for m in models]
+        futures = []
+        for m in models:
+            report_dict = m.to_dict()
+            futures.append(report_dict)
+
         reports = yield futures
         d = {"reports": reports}
 
@@ -1601,8 +1628,10 @@ host = localhost
         yield snapshot.save()
 
         for agent, resources in resources_to_snapshot.items():
-            self.queue_request(tid, agent, {"method": "snapshot", "environment": tid, "snapshot_id": snapshot_id,
-                               "resources": resources})
+            client = self.get_agent_client(tid, agent)
+            if client is not None:
+                future = client.do_snapshot(tid, agent, snapshot_id, resources)
+                self.add_future(future)
 
         value = yield snapshot.to_dict()
         value["resources"] = resource_list
@@ -1702,15 +1731,17 @@ host = localhost
                 restore_list[env_res.resource.agent].append((r.to_dict(), env_res.to_dict()))
 
                 rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id, resource_id=env_res.rid,
-                                          started=datetime.datetime.now(), )
+                                          started=datetime.datetime.now(),)
                 yield rr.save()
                 restore.resources_todo += 1
 
         yield restore.save()
 
         for agent, resources in restore_list.items():
-            self.queue_request(tid, agent, {"method": "restore", "environment": tid, "restore_id": restore_id,
-                                            "snapshot_id": snapshot.id, "resources": resources})
+            client = self.get_agent_client(tid, agent)
+            future = client.do_restore(tid, agent, restore_id, snapshot.id, resources)
+            self.add_future(future)
+
         restore_dict = yield restore.to_dict()
         return 200, restore_dict
 

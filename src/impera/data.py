@@ -20,10 +20,11 @@ import json
 
 from motorengine import Document
 from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
-from motorengine.fields.dynamic_field import DynamicField
 from motorengine.fields.json_field import JsonField
 from impera.resources import Id
 from tornado import gen
+from motorengine.fields.list_field import ListField
+from motorengine.fields.embedded_document_field import EmbeddedDocumentField
 
 
 class IdDocument(Document):
@@ -189,8 +190,6 @@ class Node(Document):
 
         return nodes[0]
 
-ROLES = ("server", "agent")
-
 
 class Agent(Document):
     """
@@ -207,19 +206,17 @@ class Agent(Document):
     environment = ReferenceField(reference_document_type=Environment)
     node = ReferenceField(reference_document_type=Node, required=True)
     name = StringField(required=True)
-    role = StringField(required=True)
     last_seen = DateTimeField()
     interval = IntField()
 
     @gen.coroutine
     def to_dict(self):
-        self.load_references()
+        yield self.load_references()
         return {"name": self.name,
-                "role": self.role,
                 "last_seen": self.last_seen.isoformat(),
                 "interval": self.interval,
                 "node": self.node.hostname,
-                "environment": str(self.environment.id),
+                "environment": str(self.environment.uuid),
                 }
 
 
@@ -241,7 +238,7 @@ class Report(Document):
     errstream = StringField(required=True)
     outstream = StringField(required=True)
     returncode = IntField()
-    compile = ReferenceField(reference_document_type="impera.data.Compile")
+    # compile = ReferenceField(reference_document_type="impera.data.Compile")
 
     def to_dict(self):
         return {"started": self.started.isoformat(),
@@ -266,26 +263,16 @@ class Compile(Document):
     environment = ReferenceField(reference_document_type=Environment)
     started = DateTimeField()
     completed = DateTimeField()
-
-    @gen.coroutine
-    def get_reports(self):
-        reports = yield Report.objects.filter(compile=self).find_all()
-        return reports
+    reports = ListField(EmbeddedDocumentField(embedded_document_type=Report))
 
     @gen.coroutine
     def to_dict(self):
-        return {"environment": str(self.environment.id),
+        yield self.load_references()
+        return {"environment": str(self.environment.uuid),
                 "started": self.started.isoformat(),
                 "completed": self.completed.isoformat(),
-                "reports": [v.to_dict() for v in self.get_reports()],
+                "reports": [v.to_dict() for v in self.reports],
                 }
-
-    @gen.coroutine
-    def delete_cascade(self):
-        reports = yield self.get_reports()
-        futures = [report.delete() for report in reports]
-        futures.append(self.delete())
-        yield futures
 
 
 class Form(IdDocument):
@@ -295,9 +282,9 @@ class Form(IdDocument):
     environment = ReferenceField(reference_document_type=Environment, required=True)
     form_type = StringField(required=True)
     options = JsonField()
-    fields = JsonField(StringField())
-    defaults = JsonField(DynamicField())
-    field_options = JsonField(DynamicField())
+    fields = JsonField()
+    defaults = JsonField()
+    field_options = JsonField()
 
 #     meta = {
 #         'indexes': ['environment', 'form_type']
@@ -336,9 +323,9 @@ class FormRecord(IdDocument):
 
     @gen.coroutine
     def to_dict(self):
-        self.load_references()
+        yield self.load_references()
         return {"record_id": self.uuid,
-                "form_id": self.form.form_id,
+                "form_id": self.form.uuid,
                 "form_type": self.form.form_type,
                 "changed": self.changed,
                 "fields": self.fields
@@ -451,14 +438,7 @@ class ResourceVersion(Document):
 
     def to_dict(self):
         data = {}
-        data["fields"] = {}
-        for key, value in self.attributes.items():
-            try:
-                if isinstance(value, str):
-                    data["fields"][key.replace("\uff0e", ".").replace("\uff04", "$")] = json.loads(value)
-            except ValueError:
-                pass
-
+        data["fields"] = self.attributes
         data["id"] = self.rid
         data["id_fields"] = Id.parse_id(self.rid).to_dict()
         data["status"] = self.status
@@ -515,7 +495,7 @@ class ConfigurationModel(Document):
                 "released": self.released,
                 "deployed": self.deployed,
                 "result": self.result,
-                "status": {k.replace("\uff0e", ".").replace("\uff04", "$"): v for k, v in self.status.items()},
+                "status": self.status,
                 "total": self.resources_total,
                 "done": self.resources_done,
                 "version_info": self.version_info,
@@ -561,7 +541,7 @@ class Code(Document):
         if len(codes) == 0:
             return None
 
-        return version[0]
+        return codes[0]
 
 
 class DryRun(IdDocument):
@@ -586,13 +566,13 @@ class DryRun(IdDocument):
     @gen.coroutine
     def to_dict(self):
         yield self.load_references()
-        return {"id": self.id,
-                "environment": str(self.environment.id),
+        return {"id": self.uuid,
+                "environment": str(self.environment.uuid),
                 "model": str(self.model.version),
                 "date": self.date.isoformat(),
                 "total": self.resource_total,
                 "todo": self.resource_todo,
-                "resources": {k.replace("\uff0e", ".").replace("\uff04", "$"): json.loads(v) for k, v in self.resources.items()}
+                "resources": self.resources,
                 }
 
 
@@ -614,8 +594,10 @@ class ResourceSnapshot(Document):
     msg = StringField()
     size = IntField()
 
+    @gen.coroutine
     def to_dict(self):
-        return {"snapshot_id": self.snapshot.id,
+        yield self.load_references()
+        return {"snapshot_id": self.snapshot.uuid,
                 "state_id": self.state_id,
                 "started": self.started,
                 "finished": self.finished,
@@ -641,8 +623,10 @@ class ResourceRestore(Document):
     error = BooleanField()
     msg = StringField()
 
+    @gen.coroutine
     def to_dict(self):
-        return {"restore_id": self.restore.id,
+        yield self.load_references()
+        return {"restore_id": self.restore.uuid,
                 "state_id": self.state_id,
                 "resource_id": self.resource_id,
                 "started": self.started,
@@ -667,7 +651,7 @@ class SnapshotRestore(IdDocument):
     def to_dict(self):
         self.load_references()
         return {"id": self.uuid,
-                "snapshot": self.snapshot.id,
+                "snapshot": self.snapshot.uuid,
                 "started": self.started,
                 "finished": self.finished,
                 "resources_todo": self.resources_todo,

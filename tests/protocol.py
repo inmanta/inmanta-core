@@ -34,7 +34,7 @@ class testProtocolClient(ServerTest):
     def setUp(self):
         ServerTest.setUp(self)
         # start the client
-        self.client = protocol.Client("client", "client")
+        self.client = protocol.Client("client")
 
     def tearDown(self):
         ServerTest.tearDown(self)

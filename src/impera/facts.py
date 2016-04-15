@@ -35,7 +35,7 @@ def get_fact(res, fact_name: str, default_value=None, metadata={}) -> "any":
 
     fact_value = None
     try:
-        client = protocol.Client("compiler", "client")
+        client = protocol.Client("compiler")
 
         env = Config.get("config", "environment", None)
         if env is None:

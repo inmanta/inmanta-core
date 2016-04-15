@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,14 +13,15 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: bart@inmanta.com
 """
 
 from functools import wraps
 import uuid
 import datetime
 
-from impera.data import ROLES, ACTIONS, LOGLEVEL
+from impera.data import ACTIONS, LOGLEVEL
+from tornado import gen
 
 
 def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
@@ -56,6 +57,7 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
             decorator to the method.
         """
         @wraps(func)
+        @gen.coroutine
         def wrapped_method(self, *args, **kwargs):
             """
                 This wrapper will first call the original method to validate the arguments passed and possible custom
@@ -63,7 +65,8 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
             """
             func(self, *args, **kwargs)
 
-            return self._call(args=args, kwargs=kwargs, protocol_properties=properties)
+            result = yield self._call(args=args, kwargs=kwargs, protocol_properties=properties)
+            return result
 
         properties["method"] = func
         wrapped_method.__protocol_properties__ = properties
@@ -193,19 +196,26 @@ class HeartBeatMethod(Method):
     """
     __method_name__ = "heartbeat"
 
-    @protocol(reply=False)
-    def heartbeat(self, endpoint_names: list, nodename: str, role: str, interval: int, environment: uuid.UUID):
+    @protocol(operation="POST", mt=True)
+    def heartbeat(self, tid: uuid.UUID, endpoint_names: list, nodename: str, interval: int):
         """
-            Broadcast a heart beat to everyone
+            Send a heartbeat to the server
 
+            :param tid The environment this node and its agents belongs to
             :param endpoint_names The names of the endpoints on this node
             :param nodename The name of the node from which the heart beat comes
-            :param role The role of the compnent sending the heart beat
             :param interval The expected interval between heart beats
-            :param environment The environment this agent belongs to
         """
-        if role not in ROLES:
-            raise Exception("Invalid agent role (%s) should be %s" % (role, ", ".join(ROLES)))
+
+    @protocol(operation="PUT")
+    def heartbeat_reply(self, tid: uuid.UUID, reply_id: uuid.UUID, data: dict):
+        """
+            Send a reply back to the server
+
+            :param tid The environment this node and its agents belongs to
+            :param reply_id The id data is a reply to
+            :param data The data as a response to the reply
+        """
 
 
 class FileMethod(Method):
@@ -411,6 +421,24 @@ class DryRunMethod(Method):
         """
 
 
+class AgentDryRun(Method):
+    """
+        Method for requesting a dryrun from an agent
+    """
+    __method_name__ = "agent/dryrun"
+
+    @protocol(operation="POST", mt=True, id=True)
+    def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
+        """
+            Do a dryrun on an agent
+
+            :param tid The environment id
+            :param id The id of the dryrun
+            :param agent The agent to do the dryrun for
+            :param version The version of the model to dryrun
+        """
+
+
 class NotifyMethod(Method):
     """
         Method to notify the server of changes in the configuration model source code
@@ -430,6 +458,18 @@ class NotifyMethod(Method):
     def is_compiling(self, id: uuid.UUID):
         """
            Is a compiler running for the given environment
+
+           :param id The environment id
+        """
+
+    @protocol(operation="POST", mt=True, id=True)
+    def trigger_agent(self, tid: uuid.UUID, agent: str, id: int):
+        """
+            Trigger a new deploy on the agent
+
+            :param tid The environment id
+            :param agent The agent to trigger
+            :param id The version to trigger
         """
 
 
@@ -474,6 +514,23 @@ class ParameterMethod(Method):
 
             :param tid The id of the environment
             :param query A query to match against metadata
+        """
+
+
+class AgentParameterMethod(Method):
+    """
+        Get parameters from the agent
+    """
+    __method_name__ = "agent/parameter"
+
+    @protocol(operation="POST", mt=True)
+    def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
+        """
+            Get all parameters/facts known by the agents for the given resource
+
+            :param tid The environment
+            :param agent The agent get the parameters froms
+            :param resource The resource to query the parameters from
         """
 
 
@@ -697,6 +754,24 @@ class Snapshot(Method):
         """
 
 
+class AgentSnapshot(Method):
+    """
+        Snapshot operations performed on the agent
+    """
+    __method_name__ = "agent/snapshot"
+
+    @protocol(operation="POST", mt=True)
+    def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
+        """
+            Create a snapshot of the requested resource
+
+            :param tid The environment the snapshot is created in
+            :param agent The name of the agent
+            :param snapshot_id The id of the snapshot to create
+            :param resource A list of resources to snapshot
+        """
+
+
 class RestoreSnapshot(Method):
     """
         Restore a snapshot
@@ -739,4 +814,23 @@ class RestoreSnapshot(Method):
     def delete_restore(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Cancel a restore
+        """
+
+
+class AgentRestore(Method):
+    """
+        Snapshot operations performed on the agent
+    """
+    __method_name__ = "agent/restore"
+
+    @protocol(operation="POST", mt=True)
+    def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):
+        """
+            Create a snapshot of the requested resource
+
+            :param tid The environment the snapshot is created in
+            :param agent The name of the agent
+            :parma restore_id THe id of the restore operation
+            :param snapshot_id The id of the snapshot to restore
+            :param resource A list of resources to restore
         """
