@@ -16,40 +16,41 @@
     Contact: bart@impera.io
 """
 
-import tempfile
-import shutil
 import time
-from concurrent import futures
 
-from impera import config
-from impera import server
 from impera import protocol
-from impera import methods
+from server_test import ServerTest
+from nose.tools import assert_equal
 
-from nose import tools
 
+class testRestServer(ServerTest):
+    def __init__(self, methodName='runTest'):
+        super().__init__(methodName)
+        self.client = None
 
-def test_version_removal():
-    """ Test auto removal of older deploy model versions
-    """
-    try:
-        state_dir = tempfile.mkdtemp()
-        config.Config.load_config()
-        config.Config.set("config", "state-dir", state_dir)
+    def setUp(self):
+        ServerTest.setUp(self)
+        # start the client
+        self.client = protocol.Client("client", "client")
 
-        executor = futures.ThreadPoolExecutor(max_workers=2)
+    def tearDown(self):
+        ServerTest.tearDown(self)
 
-        server_obj = server.Server(code_loader=False)
-        server_future = executor.submit(server_obj.start)
+    def test_version_removal(self):
+        """
+            Test auto removal of older deploy model versions
+        """
+        result = self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
 
-        conn = protocol.Client("client", "client")
+        result = self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
         version = int(time.time())
+
         for _i in range(20):
             version += 1
-            conn.call(methods.VersionMethod, operation="PUT", id=version, version=version, resources=[])
-            tools.assert_less_equal(len(server_obj._db.filter(server.persistence.Version, {})), 2)
 
-    finally:
-        server_obj.stop()
-        server_future.result()
-        shutil.rmtree(state_dir)
+            res = self.client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
+            assert_equal(res.code, 200)
+            result = self.client.get_project(id=project_id)

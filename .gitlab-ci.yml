@@ -4,13 +4,16 @@ stages:
     - package
     - deploy
 
-pep8:
+tox:
     stage: test
     image: fedora-python3
     tags:
         - docker
     script:
-        - tox -e pep8
+        - tox
+    cache:
+        paths:
+            - .tox
 
 fedora-rpm:
     stage: package

@@ -15,70 +15,57 @@
 
     Contact: bart@impera.io
 """
-from impera import methods
 from impera import protocol
-from impera.config import Config
-from impera.server import Server
 
-from concurrent import futures
 import random
-import unittest
-import time
-import tempfile
-import shutil
+import base64
 
-from nose.tools import assert_equal, assert_count_equal
+from server_test import ServerTest
+
+from nose.tools import assert_equal, assert_count_equal, assert_in
 
 
-class testProtocolClient(unittest.TestCase):
+class testProtocolClient(ServerTest):
     def __init__(self, methodName='runTest'):
-        unittest.TestCase.__init__(self, methodName)
-        self._tempdir = tempfile.mkdtemp()
+        super().__init__(methodName)
+        self.client = None
 
     def setUp(self):
-        Config.load_config()
-        Config.set("config", "state-dir", self._tempdir)
-        executor = futures.ThreadPoolExecutor(max_workers=2)
+        ServerTest.setUp(self)
+        # start the client
+        self.client = protocol.Client("client", "client")
 
-        self.server = Server(code_loader=False)
-        self.server_future = executor.submit(self.server.start)
-        # give the server time to start
-        time.sleep(1)
+    def tearDown(self):
+        ServerTest.tearDown(self)
 
     def test_client_files(self):
-        c = protocol.Client("client", "client")
         file_name = str(random.randint(0, 10000))
-        body = "Hello world\n"
+        body = base64.b64encode(b"Hello world\n").decode("ascii")
 
         # Check if the file exists
-        result = c.stat_file(id="test" + file_name)
+        result = self.client.stat_file(id="test" + file_name)
         assert_equal(result.code, 404, "The test file should not exist yet")
 
         # Create the file
-        result = c.upload_file(id="test" + file_name, content=body)
+        result = self.client.upload_file(id="test" + file_name, content=body)
         assert_equal(result.code, 200, "The test file failed to upload")
 
         # Get the file
-        result = c.get_file(id="test" + file_name)
+        result = self.client.get_file(id="test" + file_name)
         assert_equal(result.code, 200, "The test file failed to retrieve")
-        assert("content" in result.result)
+        assert_in("content", result.result)
         assert_equal(result.result["content"], body, "Retrieving the test file failed")
 
         file_names = []
         for _n in range(1, 10):
             file_name = "test%d" % random.randint(0, 10000)
             file_names.append(file_name)
-            result = c.upload_file(id=file_name, content="")
+            result = self.client.upload_file(id=file_name, content="")
             assert_equal(result.code, 200)
 
-        result = c.stat_files(files=file_names)
+        result = self.client.stat_files(files=file_names)
         assert_count_equal(result.result["files"], [])
 
         other_files = ["testtest"]
-        result = c.stat_files(files=file_names + other_files)
+        result = self.client.stat_files(files=file_names + other_files)
         assert_count_equal(result.result["files"], other_files)
-
-    def tearDown(self):
-        self.server.stop()
-        self.server_future.cancel()
-        shutil.rmtree(self._tempdir)

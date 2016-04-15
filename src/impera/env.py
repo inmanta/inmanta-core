@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: bart@inmanta.com
 """
 
 import sys
@@ -21,6 +21,10 @@ import os
 import subprocess
 import tempfile
 import hashlib
+import logging
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class VirtualEnv(object):
@@ -47,7 +51,14 @@ class VirtualEnv(object):
             if not os.path.exists(virtualenv_path):
                 raise Exception("Unable to find virtualenv script (%s does not exist)" % virtualenv_path)
 
-            subprocess.call(["/usr/bin/virtualenv", "-p", python_exec, self.env_path], env={})
+            proc = subprocess.Popen(["/usr/bin/virtualenv", "-p", python_exec, self.env_path], env={}, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            out, err = proc.communicate()
+
+            if proc.returncode == 0:
+                LOGGER.debug("Created a new virtualenv at %s", self.env_path)
+            else:
+                LOGGER.error("Unable to create new virtualenv at %s (%s, %s)", self.env_path, out.decode(), err.decode())
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
@@ -65,7 +76,7 @@ class VirtualEnv(object):
                 code = compile(f.read(), activate_file, 'exec')
                 exec(code, {"__file__": activate_file})
         else:
-            print("Unable to activate virtual environment because %s does not exist." % activate_file)
+            raise Exception("Unable to activate virtual environment because %s does not exist." % activate_file)
 
     def install(self, requirements):
         """

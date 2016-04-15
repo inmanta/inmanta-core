@@ -36,7 +36,7 @@ Additional resources
 .. _Impera user mailinglist: <https://groups.google.com/forum/#!forum/impera-users>
 .. _Impera developer mailinglist: <https://groups.google.com/forum/#!forum/impera-devel>
 .. _Impera issue tracker: https://github.com/impera-io/impera/issues
-.. _Impera Twitter: https://twitter.com/impera_io
+.. _Impera Twitter: https://twitter.com/inmanta_com
 
 Indices and tables
 ==================

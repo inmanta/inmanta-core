@@ -58,7 +58,12 @@ class BashIO(object):
         return False
 
     def hash_file(self, path):
-        result = subprocess.Popen(self._run_as_args("sha1sum", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        cwd = os.curdir
+        if not os.path.exists(cwd):
+            # When this code is executed with nosetests, curdir does not exist anymore
+            cwd = "/"
+
+        result = subprocess.Popen(self._run_as_args("sha1sum", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
         data = result.communicate()
 
         if result.returncode > 0 or len(data[1]) > 0:
@@ -70,7 +75,12 @@ class BashIO(object):
         """
             Read in the file in path and return its content as string (UTF-8)
         """
-        result = subprocess.Popen(self._run_as_args("cat", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        cwd = os.curdir
+        if not os.path.exists(cwd):
+            # When this code is executed with nosetests, curdir does not exist anymore
+            cwd = "/"
+
+        result = subprocess.Popen(self._run_as_args("cat", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
         data = result.communicate()
 
         if result.returncode > 0 or len(data[1]) > 0:

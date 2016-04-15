@@ -164,7 +164,10 @@ class GitVersioned:
             version = version.strip()
             if len(version) != 0:
                 return {"source": source.strip(), "version": version.strip()}
-            return {"source": spec, "version": "master"}
+
+            return {"source": source, "version": "master"}
+
+        return {"source": spec, "version": "master"}
 
 
 class Project(GitVersioned):
@@ -431,19 +434,21 @@ class Module(GitVersioned):
         new_source = source_string
         try:
             result = util.parse_url(source_string)
+            if result.scheme is None:
+                return new_source
+
             if result.scheme != "http" and result.scheme != "https":
                 # try to convert it to an anonymous https url
                 new_source = source_string.replace(result.scheme, "http")
+
         except exceptions.LocationParseError:
             # probably in git@host:repo format
-            m = re.search(
-                "^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source_string)
+            m = re.search("^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source_string)
             if m is not None:
                 new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
 
         if new_source != source_string:
-            LOGGER.info("Reformated source from %s to %s" %
-                        (source_string, new_source))
+            LOGGER.info("Reformated source from %s to %s" % (source_string, new_source))
 
         return new_source
 
@@ -840,8 +845,8 @@ class ModuleTool(object):
 
         mod_path = os.path.join(module_path, name)
         if mod_path not in self._mod_handled_list:
-            module = Module(project, mod_path, load=False, source=spec[
-                            "source"], version=spec["version"].strip("\""), name=name)
+            module = Module(project, mod_path, load=False, source=spec["source"],
+                            version=spec["version"].strip("\""), name=name)
             new_mod = module.install(module_path)
 
             if not new_mod.get_name() == name:

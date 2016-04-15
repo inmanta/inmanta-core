@@ -15,140 +15,125 @@
 
     Contact: bart@impera.io
 """
+
 from impera import protocol
-from impera.config import Config
-from impera.server import Server
-
-from concurrent import futures
-import unittest
-import time
-import tempfile
-import shutil
-
-from nose.tools import assert_equal, assert_true
+from server_test import ServerTest
+from nose.tools import assert_equal, assert_in
 
 
-class testRestServer(unittest.TestCase):
-    def __init__(self, methodName='runTe    st'):
-        unittest.TestCase.__init__(self, methodName)
-
-    @classmethod
-    def setUpClass(cls):
-        cls._tempdir = tempfile.mkdtemp()
-        Config.load_config()
-        Config.set("config", "state-dir", cls._tempdir)
-        Config.set("database", "name", "unittest")
-
-        executor = futures.ThreadPoolExecutor(max_workers=2)
-        cls.server = Server(code_loader=False)
-        cls.server_future = executor.submit(cls.server.start)
-        # give the server time to start
-        time.sleep(1)
-
-        # start the client
-        cls.client = protocol.Client("client", "client")
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.stop()
-        shutil.rmtree(cls._tempdir)
+class testRestServer(ServerTest):
+    def __init__(self, methodName='runTest'):
+        super().__init__(methodName)
+        self.client = None
 
     def setUp(self):
-        # clear the mongodb database
-        self.__class__.server._db.drop_database("unittest")
+        ServerTest.setUp(self)
+        # start the client
+        self.client = protocol.Client("client", "client")
 
     def tearDown(self):
-        # clear the mongodb database
-        self.__class__.server._db.drop_database("unittest")
+        ServerTest.tearDown(self)
 
     def test_project_api(self):
-        result = self.__class__.client.create_project("project-test")
+        result = self.client.create_project("project-test")
         assert_equal(result.code, 200)
-        assert_true("id" in result.result)
+        assert_in("project", result.result)
+        assert_in("id", result.result["project"])
 
-        project_id = result.result["id"]
+        project_id = result.result["project"]["id"]
 
-        result = self.__class__.client.create_project("project-test")
+        result = self.client.create_project("project-test")
         assert_equal(result.code, 500)
 
-        result = self.__class__.client.list_projects()
+        result = self.client.list_projects()
         assert_equal(result.code, 200)
-        assert_equal(len(result.result), 1)
+        assert_in("projects", result.result)
+        assert_equal(len(result.result["projects"]), 1)
 
-        assert_equal(result.result[0]['id'], project_id)
+        assert_equal(result.result["projects"][0]['id'], project_id)
 
-        result = self.__class__.client.get_project(id=project_id)
+        result = self.client.get_project(id=project_id)
         assert_equal(result.code, 200)
-        assert_equal(result.result['id'], project_id)
-        assert_equal(result.result['name'], "project-test")
+        assert_in("project", result.result)
+        assert_equal(result.result["project"]['id'], project_id)
+        assert_equal(result.result["project"]['name'], "project-test")
 
-        result = self.__class__.client.modify_project(id=project_id, name="project-test2")
+        result = self.client.modify_project(id=project_id, name="project-test2")
         assert_equal(result.code, 200)
-        assert_equal(result.result['id'], project_id)
-        assert_equal(result.result['name'], "project-test2")
+        assert_in("project", result.result)
+        assert_equal(result.result["project"]['id'], project_id)
+        assert_equal(result.result["project"]['name'], "project-test2")
 
-        result = self.__class__.client.get_project(id=project_id)
+        result = self.client.get_project(id=project_id)
         assert_equal(result.code, 200)
-        assert_equal(result.result['id'], project_id)
-        assert_equal(result.result['name'], "project-test2")
+        assert_in("project", result.result)
+        assert_equal(result.result["project"]['id'], project_id)
+        assert_equal(result.result["project"]['name'], "project-test2")
 
-        result = self.__class__.client.delete_project(id=project_id)
+        result = self.client.delete_project(id=project_id)
         assert_equal(result.code, 200)
 
-        result = self.__class__.client.list_projects()
+        result = self.client.list_projects()
         assert_equal(result.code, 200)
-        assert_equal(len(result.result), 0)
+        assert_in("projects", result.result)
+        assert_equal(len(result.result["projects"]), 0)
 
     def test_env_api(self):
-        result = self.__class__.client.create_project("env-test")
+        result = self.client.create_project("env-test")
         assert_equal(result.code, 200)
-        assert_true("id" in result.result)
-        project_id = result.result["id"]
+        assert_in("project", result.result)
+        assert_in("id", result.result["project"])
+        project_id = result.result["project"]["id"]
 
-        result = self.__class__.client.create_environment(project_id=project_id, name="dev")
+        result = self.client.create_environment(project_id=project_id, name="dev")
         assert_equal(result.code, 200)
-        assert_true("id" in result.result)
-        assert_true("project" in result.result)
-        assert_equal(project_id, result.result["project"])
-        assert_equal("dev", result.result["name"])
+        assert_in("environment", result.result)
+        assert_in("id", result.result["environment"])
+        assert_in("project", result.result["environment"])
+        assert_equal(project_id, result.result["environment"]["project"])
+        assert_equal("dev", result.result["environment"]["name"])
 
-        env_id = result.result["id"]
+        env_id = result.result["environment"]["id"]
 
-        result = self.__class__.client.modify_environment(id=env_id, name="dev2")
+        result = self.client.modify_environment(id=env_id, name="dev2")
         assert_equal(result.code, 200)
-        assert_equal(result.result['id'], env_id)
-        assert_equal(result.result['name'], "dev2")
+        assert_in("environment", result.result)
+        assert_equal(result.result["environment"]['id'], env_id)
+        assert_equal(result.result["environment"]['name'], "dev2")
 
-        result = self.__class__.client.get_environment(id=env_id)
+        result = self.client.get_environment(id=env_id)
         assert_equal(result.code, 200)
-        assert_equal(result.result['id'], env_id)
-        assert_equal(result.result['project'], project_id)
-        assert_equal(result.result['name'], "dev2")
+        assert_in("environment", result.result)
+        assert_equal(result.result["environment"]['id'], env_id)
+        assert_equal(result.result["environment"]['project'], project_id)
+        assert_equal(result.result["environment"]['name'], "dev2")
 
-        project_result = self.__class__.client.get_project(id=project_id)
+        project_result = self.client.get_project(id=project_id)
         assert_equal(project_result.code, 200)
-        assert_true(env_id in project_result.result['environments'])
+        assert_in("project", project_result.result)
+        assert_in(env_id, project_result.result["project"]["environments"])
 
-        result = self.__class__.client.list_environments()
+        result = self.client.list_environments()
         assert_equal(result.code, 200)
         assert_equal(len(result.result), 1)
 
-        result = self.__class__.client.delete_environment(id=env_id)
+        result = self.client.delete_environment(id=env_id)
         assert_equal(result.code, 200)
 
-        result = self.__class__.client.list_environments()
+        result = self.client.list_environments()
         assert_equal(result.code, 200)
-        assert_equal(len(result.result), 0)
+        assert_in("environments", result.result)
+        assert_equal(len(result.result["environments"]), 0)
 
     def test_project_cascade(self):
-        result = self.__class__.client.create_project("env-test")
-        project_id = result.result["id"]
+        result = self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
 
-        result = self.__class__.client.create_environment(project_id=project_id, name="dev")
-        result = self.__class__.client.create_environment(project_id=project_id, name="prod")
+        result = self.client.create_environment(project_id=project_id, name="dev")
+        result = self.client.create_environment(project_id=project_id, name="prod")
 
-        result = self.__class__.client.delete_project(project_id)
+        result = self.client.delete_project(project_id)
         assert_equal(result.code, 200)
 
-        result = self.__class__.client.list_environments()
-        assert_equal(len(result.result), 0)
+        result = self.client.list_environments()
+        assert_equal(len(result.result["environments"]), 0)

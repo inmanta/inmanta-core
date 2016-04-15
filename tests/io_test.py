@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: bart@inmanta.com
 """
 
 import tempfile
@@ -41,7 +41,7 @@ def check_read(io, testdir):
     with open(filename, "wb+") as fd:
         fd.write(test_str.encode())
 
-    assert(io.read(filename) == test_str)
+    assert_equal(io.read(filename), test_str)
 
 
 def check_read_binary(io, testdir):
@@ -153,12 +153,10 @@ def check_chown(io, testdir):
 
 def check_put(io, testdir):
     path = os.path.join(testdir, "put" + str(io))
-    io.put(path, "hello")
+    io.put(path, b"hello")
 
-    with open(path, "r") as fd:
-        assert("hello" == fd.read())
-
-#     io.put(path, b'\0\1\2\3\4\5')
+    with open(path, "rb") as fd:
+        assert(b"hello" == fd.read())
 
 
 def check_chmod(io, testdir):
@@ -189,4 +187,3 @@ def test_io():
             yield test_fn, cls, testdir
 
     shutil.rmtree(testdir)
-
