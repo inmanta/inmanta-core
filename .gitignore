@@ -38,3 +38,5 @@ junit*.xml
 
 build-result
 /env/
+.cache
+.coverage
