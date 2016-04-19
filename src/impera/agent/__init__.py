@@ -235,7 +235,7 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True):
-        super().__init__("agent", io_loop, heartbeat_interval=10)
+        super().__init__("agent", io_loop, heartbeat_interval=int(Config.get("config", "heartbeat-interval", 10)))
 
         if agent_map is None:
             agent_map = Config.get("config", "agent-map", None)
@@ -321,7 +321,7 @@ class Agent(AgentEndPoint):
         """
             Get the latest version of managed resources for all agents
         """
-        for agent in self._client.end_point_names:
+        for agent in self.end_point_names:
             self.get_latest_version_for_agent(agent)
 
     @gen.coroutine
@@ -344,6 +344,7 @@ class Agent(AgentEndPoint):
         """
             Trigger an update
         """
+        print("Got trigger for %s %s %s" % (tid, agent, id))
         future = self.get_latest_version_for_agent(agent)
         self.add_future(future)
         return 200
@@ -676,17 +677,6 @@ class Agent(AgentEndPoint):
             self._queue.remove(resource)
 
         return
-
-    def get_file(self, hash_id):
-        """
-            Retrieve a file from the fileserver identified with the given hash
-        """
-        result = self._client.get_file(hash_id)
-
-        if result.code == 404:
-            return None
-        else:
-            return base64.b64decode(result.result["content"])
 
     @gen.coroutine
     def resource_updated(self, resource, reload_requires=False, changes={}, status="", log_msg=""):

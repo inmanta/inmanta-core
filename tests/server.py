@@ -20,7 +20,7 @@ import time
 
 from impera import protocol
 from server_test import ServerTest
-from nose.tools import assert_equal, assert_less_equal
+from nose.tools import assert_equal, assert_less_equal, assert_true
 from tornado.testing import gen_test
 
 
@@ -60,3 +60,93 @@ class testRestServer(ServerTest):
 
             versions = yield self.client.list_versions(tid=env_id)
             assert_less_equal(versions.result["count"], 2 + 1)
+
+    @gen_test
+    def test_get_resource_for_agent(self):
+        """
+            Test auto removal of older deploy model versions
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        version = int(time.time())
+
+        resources = [{'group': 'root',
+                      'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                      'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=1460983366',
+                      'owner': 'root',
+                      'path': '/etc/sysconfig/network',
+                      'permissions': 644,
+                      'purged': False,
+                      'reload': False,
+                      'requires': [],
+                      'version': version},
+                     {'group': 'root',
+                      'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
+                      'id': 'std::File[vm2.dev.inmanta.com,path=/etc/motd],v=1460983366',
+                      'owner': 'root',
+                      'path': '/etc/motd',
+                      'permissions': 644,
+                      'purged': False,
+                      'reload': False,
+                      'requires': [],
+                      'version': version},
+                     {'group': 'root',
+                      'hash': '3bfcdad9ab7f9d916a954f1a96b28d31d95593e4',
+                      'id': 'std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=1460983366',
+                      'owner': 'root',
+                      'path': '/etc/hostname',
+                      'permissions': 644,
+                      'purged': False,
+                      'reload': False,
+                      'requires': [],
+                      'version': version},
+                     {'id': 'std::Service[vm1.dev.inmanta.com,name=network],v=1460983366',
+                      'name': 'network',
+                      'onboot': True,
+                      'requires': ['std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=1460983366'],
+                      'state': 'running',
+                      'version': version}]
+
+        res = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert_equal(res.code, 200)
+
+        result = yield self.client.list_versions(env_id)
+        assert_equal(result.code, 200)
+        assert_equal(result.result["count"], 1)
+
+        result = yield self.client.release_version(env_id, version, push=False)
+        assert_equal(result.code, 200)
+
+        result = yield self.client.get_version(env_id, version)
+        assert_equal(result.code, 200)
+        assert_equal(result.result["model"]["version"], version)
+        assert_equal(result.result["model"]["total"], len(resources))
+        assert_true(result.result["model"]["released"])
+        assert_equal(result.result["model"]["result"], "deploying")
+
+        result = yield self.client.get_resources_for_agent(env_id, "vm1.dev.inmanta.com")
+        assert_equal(result.code, 200)
+        assert_equal(len(result.result["resources"]), 3)
+
+        result = yield self.client.resource_updated(env_id,
+                                                    "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=1460983366",
+                                                    "INFO", "deploy", "", "deployed", {})
+        assert_equal(result.code, 200)
+
+        result = yield self.client.get_version(env_id, version)
+        assert_equal(result.code, 200)
+        assert_equal(result.result["model"]["done"], 1)
+
+        result = yield self.client.resource_updated(env_id,
+                                                    "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=1460983366",
+                                                    "INFO", "deploy", "", "deployed", {})
+        assert_equal(result.code, 200)
+
+        result = yield self.client.get_version(env_id, version)
+        assert_equal(result.code, 200)
+        assert_equal(result.result["model"]["done"], 2)
+

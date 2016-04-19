@@ -20,8 +20,11 @@ from collections import defaultdict
 import hashlib
 import inspect
 import logging
+import base64
 
 from impera.agent.io import get_io
+from impera import protocol
+from tornado import ioloop
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +60,14 @@ class ResourceHandler(object):
             self._io = get_io(self._agent.remote)
         else:
             self._io = io
+
+        self._client = None
+        self._ioloop = ioloop.IOLoop()
+
+    def get_client(self):
+        if self._client is None:
+            self._client = protocol.Client("agent", self._ioloop)
+        return self._client
 
     def pre(self, resource):
         """
@@ -200,6 +211,41 @@ class ResourceHandler(object):
             Restore a resource from a snapshot
         """
         raise NotImplementedError()
+
+    def get_file(self, hash_id):
+        """
+            Retrieve a file from the fileserver identified with the given hash
+        """
+        def call():
+            return self.get_client().get_file(hash_id)
+
+        result = self._ioloop.run_sync(call)
+        if result.code == 404:
+            return None
+        else:
+            return base64.b64decode(result.result["content"])
+
+    def stat_file(self, hash_id):
+        """
+            Check if a file exists on the server
+        """
+        def call():
+            return self.get_client().stat_file(hash_id)
+
+        result = self._ioloop.run_sync(call)
+        return result.code == 200
+
+    def upload_file(self, hash_id, content):
+        """
+            Upload a file to the server
+        """
+        def call():
+            return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
+
+        try:
+            self._ioloop.run_sync(call)
+        except Exception:
+            raise Exception("Unable to upload file to the server.")
 
 
 class Commander(object):

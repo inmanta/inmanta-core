@@ -28,6 +28,7 @@ from impera.server import Server
 from tornado.testing import AsyncTestCase
 
 LOGGER = logging.getLogger(__name__)
+PORT = "45678"
 
 
 class ServerTest(MongoTestCase, AsyncTestCase):
@@ -45,6 +46,11 @@ class ServerTest(MongoTestCase, AsyncTestCase):
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
+        config.Config.set("server_rest_transport", "port", PORT)
+        config.Config.set("agent_rest_transport", "port", PORT)
+        config.Config.set("compiler_rest_transport", "port", PORT)
+        config.Config.set("client_rest_transport", "port", PORT)
+        config.Config.set("cmdline_rest_transport", "port", PORT)
 
         LOGGER.info("Starting server")
         mongo_port = os.getenv('MONGOBOX_PORT')

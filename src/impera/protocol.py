@@ -239,7 +239,8 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed))
+            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" %
+                                             (http_method, allowed))
             return
 
         return self._config[http_method]
@@ -256,7 +257,7 @@ class RESTHandler(tornado.web.RequestHandler):
                 message = {}
         except ValueError:
             LOGGER.exception("An exception occured")
-            self.return_error_msg(500, "Unable to decode request body")
+            self._transport.return_error_msg(500, "Unable to decode request body")
 
         for key, value in self.request.query_arguments.items():
             if len(value) == 1:
@@ -307,6 +308,12 @@ class RESTHandler(tornado.web.RequestHandler):
                         IMPERA_MT_HEADER)
 
         self.set_status(200)
+
+
+def sh(msg, max_len=10):
+    if len(msg) < max_len:
+        return msg
+    return msg[0:max_len - 3] + "..."
 
 
 class RESTTransport(Transport):
@@ -436,7 +443,8 @@ class RESTTransport(Transport):
                 return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
                                              "that are not declared in method and no kwargs argument is provided.", headers)
 
-            LOGGER.debug("Calling method %s on %s" % config[1])
+            LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
+                                                                           for name, value in message.items()]))
             method_call = getattr(config[1][0], config[1][1])
 
             result = yield method_call(**message)
@@ -455,6 +463,7 @@ class RESTTransport(Transport):
 
             if reply is not None:
                 if "reply" in config[0] and config[0]:
+                    LOGGER.debug("%s returned %d: %s", config[1][1], code, sh(str(reply), 70))
                     return reply, headers, code
 
                 else:
@@ -740,8 +749,9 @@ class Endpoint(object):
     node_name = property(get_node_name)
 
 
-def _set_timeout(io_loop, future, timeout):
+def _set_timeout(io_loop, future, timeout, log_message):
     def on_timeout():
+        LOGGER.warning(log_message)
         future.set_exception(gen.TimeoutError())
     timeout_handle = io_loop.add_timeout(io_loop.time() + timeout, on_timeout)
     future.add_done_callback(lambda _: io_loop.remove_timeout(timeout_handle))
@@ -758,7 +768,11 @@ class Environment(object):
         self._node_queues = defaultdict(lambda: queues.Queue())
         self._io_loop = io_loop
         self._replies = {}
+        self.check_expire()
+
+    def check_expire(self):
         # TODO: add expire
+        self._io_loop.call_later(1, self.check_expire)
 
     def get_id(self):
         return self._env_id
@@ -786,7 +800,8 @@ class Environment(object):
             call_spec["agent"] = agent
             q.put(call_spec)
 
-            _set_timeout(self._io_loop, future, int(Config.get("config", "timeout", 5)))
+            _set_timeout(self._io_loop, future, int(Config.get("config", "timeout", 5)),
+                         "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], agent))
             self._replies[call_spec["reply_id"]] = future
         else:
             LOGGER.warning("Call for agent %s ignore because it is not known to the server.", agent)
@@ -917,7 +932,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
         call_list = yield env.get_calls(nodename, interval)
         if call_list is not None:
-            LOGGER.debug("Pusing %d method calls to node %s", len(call_list), nodename)
+            LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}
         else:
             LOGGER.debug("Heartbeat wait expired for %s, returning. (long poll)", nodename)
@@ -987,6 +1002,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                         transport = self._transport(self)
 
                         for method_call in method_calls:
+                            LOGGER.debug("Received call through heartbeat: %s %s", method_call["method"], method_call["url"])
                             kwargs, config = transport.match_call(method_call["url"], method_call["method"])
                             body = {}
                             if "body" in method_call and method_call["body"] is not None:
@@ -1034,8 +1050,10 @@ class Client(Endpoint, metaclass=ClientMeta):
     """
         A client that communicates with end-point based on its configuration
     """
-    def __init__(self, name, transport=RESTTransport):
-        Endpoint.__init__(self, IOLoop.current(), name)
+    def __init__(self, name, ioloop=None, transport=RESTTransport):
+        if ioloop is None:
+            ioloop = IOLoop.current()
+        Endpoint.__init__(self, ioloop, name)
         self._transport = transport
         self._transport_instance = None
 

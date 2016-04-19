@@ -447,10 +447,9 @@ class ResourceVersion(Document):
 
     @gen.coroutine
     def delete_cascade(self):
-        futures = []
-        futures += ResourceAction.objects.filter(resource_version=self).find_all().delete()
-        futures += self.delete(self)
-        yield futures
+        resource_actions = yield ResourceAction.objects.filter(resource_version=self).find_all()
+        yield [r.delete() for r in resource_actions]
+        yield self.delete(self)
 
 
 class ConfigurationModel(Document):
@@ -503,6 +502,7 @@ class ConfigurationModel(Document):
 
     @gen.coroutine
     def delete_cascade(self):
+        yield self.load_references()
         futures = []
         f1 = ResourceVersion.objects.filter(model=self).find_all()
         f2 = Snapshot.objects.filter(model=self).find_all()
@@ -512,12 +512,17 @@ class ConfigurationModel(Document):
         futures += [resv.delete_cascade() for resv in res_versions]
         futures += [snapshot.delete_cascade() for snapshot in snapshots]
 
-        futures += UnknownParameter.objects.filter(environment=self.environment, version=self.version).find_all().delete()
-        futures += Code.objects.filter(environment=self.environment, version=self.version).find_all().delete()
-        futures += DryRun.objects.filter(model=self).find_all().delete()
-        futures += self.delete(self)
+        unknowns = yield UnknownParameter.objects.filter(environment=self.environment, version=self.version).find_all()
+        futures += [u.delete() for u in unknowns]
+
+        code = yield Code.objects.filter(environment=self.environment, version=self.version).find_all()
+        futures += [c.delete() for c in code]
+
+        drs = yield DryRun.objects.filter(model=self).find_all()
+        futures += [d.delete() for d in drs]
 
         yield futures
+        yield self.delete(self)
 
 
 class Code(Document):

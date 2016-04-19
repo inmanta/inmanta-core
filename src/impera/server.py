@@ -30,7 +30,7 @@ import glob
 import time
 import base64
 
-from motorengine import connect, errors, ASCENDING
+from motorengine import connect, errors, ASCENDING, DESCENDING
 from motorengine.connection import disconnect
 from impera import methods
 from impera import protocol
@@ -42,9 +42,11 @@ from impera.agent.io.remote import RemoteIO
 from impera.ast import type
 from tornado import gen
 from tornado import process
+from tornado import locks
 
 
 LOGGER = logging.getLogger(__name__)
+LOCK = locks.Lock()
 
 
 class Server(protocol.ServerEndpoint):
@@ -185,7 +187,7 @@ class Server(protocol.ServerEndpoint):
         if resource_id is not None and resource_id != "":
             # get the latest version
             versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                              order_by("-version").limit(1).find_all())  # @UndefinedVariable
+                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
             if len(versions) == 0:
                 return 404, {"message": "The environment associated with this parameter does not have any releases."}
@@ -253,7 +255,7 @@ class Server(protocol.ServerEndpoint):
             if resource_id is not None and resource_id != "":
                 # get the latest version
                 versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                                  order_by("-version").limit(1).find_all())  # @UndefinedVariable
+                                  order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
                 if len(versions) == 0:
                     return 404, {"message": "The parameter does not exist."}
@@ -592,6 +594,7 @@ class Server(protocol.ServerEndpoint):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             LOGGER.warning("The given environment id %s does not exist!", tid)
+            return
 
         now = datetime.datetime.now()
         LOGGER.debug("Seen node %s" % nodename)
@@ -659,7 +662,7 @@ class Server(protocol.ServerEndpoint):
             node_dict["agents"] = []
             for agent in agents:
                 agent_dict = yield agent.to_dict()  # do this first, because it also loads all lazy references
-                if environment is None or str(agent.environment.id) == environment:
+                if environment is None or str(agent.environment.uuid) == environment:
                     node_dict["agents"].append(agent_dict)
 
             if len(node_dict["agents"]) > 0:
@@ -699,7 +702,7 @@ class Server(protocol.ServerEndpoint):
 
         if version is None:
             versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                              order_by("-version").limit(1).find_all())  # @UndefinedVariable
+                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
             if len(versions) == 0:
                 return 404
@@ -744,7 +747,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         models = yield (data.ConfigurationModel.objects.filter(environment=env).  # @UndefinedVariable
-                        order_by("version", direction=ASCENDING).find_all())  # @UndefinedVariable
+                        order_by("version", direction=DESCENDING).find_all())  # @UndefinedVariable
         count = len(models)
 
         if start is not None:
@@ -785,11 +788,12 @@ class Server(protocol.ServerEndpoint):
 
             if bool(include_logs):
                 if log_filter is not None:
-                    actions = data.ResourceAction.objects(resource_version=res, action=log_filter)  # @UndefinedVariable
+                    actions = yield (data.ResourceAction.objects.filter(resource_version=res,  # @UndefinedVariable
+                                                                        action=log_filter)
+                                     .order_by("timestamp", direction=DESCENDING).find_all())  # @UndefinedVariable
                 else:
-                    actions = data.ResourceAction.objects(resource_version=res)  # @UndefinedVariable
-
-                actions = yield actions.order_by("timestamp", direction=ASCENDING).find_all()
+                    actions = yield (data.ResourceAction.objects.filter(resource_version=res)  # @UndefinedVariable
+                                     .order_by("timestamp", direction=DESCENDING).find_all())  # @UndefinedVariable
 
                 if limit is not None:
                     actions = actions[0:int(limit)]
@@ -878,7 +882,7 @@ class Server(protocol.ServerEndpoint):
         for res in env_resources:
             if res.version_latest < version:
                 rv = yield (data.ResourceVersion.objects.filter(environment=env, resource=res).  # @UndefinedVariable
-                            order_by("rid", direction=ASCENDING).limit(1).find_all())  # @UndefinedVariable
+                            order_by("rid", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
                 if len(rv) > 0:
                     rv = rv[0]
                     if "purge_on_delete" in rv.attributes and rv.attributes["purge_on_delete"]:
@@ -1015,6 +1019,8 @@ host = localhost
             rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
             agents = set()
             for rv in rvs:
+                yield rv.load_references()
+                yield rv.resource.load_references()
                 agents.add(rv.resource.agent)
 
             for agent in agents:
@@ -1023,6 +1029,8 @@ host = localhost
                 if client is not None:
                     future = client.trigger_agent(tid, agent, id)
                     self.add_future(future)
+                else:
+                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, id, tid)
 
         model_dict = yield model.to_dict()
         return 200, {"model": model_dict}
@@ -1064,6 +1072,8 @@ host = localhost
             if client is not None:
                 future = client.do_dryrun(tid, dryrun_id, agent, id)
                 self.add_future(future)
+            else:
+                LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, id, tid)
 
         yield dryrun.save()
 
@@ -1185,19 +1195,20 @@ host = localhost
         now = datetime.datetime.now()
         ra = data.ResourceAction(resource_version=resv, action=action, message=message, data=extra_data, level=level,
                                  timestamp=now, status=status)
-        yield ra.save(), resv.load_references()
+        yield ra.save()
 
-        model = resv.model
-        rid = resv.rid
-        if rid not in model.status:
-            model.resources_done += 1
+        with (yield LOCK.acquire()):
+            yield resv.load_references()
+            model = resv.model
+            rid = resv.rid
+            if rid not in model.status:
+                model.resources_done += 1
 
-        model.status[rid] = status
-        yield model.save()
+            model.status[rid] = status
+            yield model.save()
 
         resv.resource.version_deployed = model.version
         resv.resource.last_deploy = now
-        resv.resource.status = status
         yield resv.resource.save()
 
         if model.resources_done == model.resources_total:
@@ -1337,7 +1348,7 @@ host = localhost
 
         if versions > 0:
             v = yield (data.ConfigurationModel.objects.filter(environment=env).  # @UndefinedVariable
-                       order_by("date", direction=ASCENDING).limit(versions).find_all())  # @UndefinedVariable
+                       order_by("date", direction=DESCENDING).limit(versions).find_all())  # @UndefinedVariable
             env_dict["versions"] = []
             for model in v:
                 model_dict = yield model.to_dict()
@@ -1541,7 +1552,7 @@ host = localhost
             models.reverse()
         else:
             models = yield (data.Compile.objects.filter(**queryparts).  # @UndefinedVariable
-                            order_by("started", direction=ASCENDING).find_all())  # @UndefinedVariable
+                            order_by("started", direction=DESCENDING).find_all())  # @UndefinedVariable
             if limit is not None:
                 models = models[:int(limit)]
 
@@ -1591,7 +1602,7 @@ host = localhost
 
         # get the latest deployed configuration model
         versions = yield (data.ConfigurationModel.objects.filter(environment=env, deployed=True).  # @UndefinedVariable
-                          order_by("version", direction=ASCENDING).limit(1).find_all())  # @UndefinedVariable
+                          order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
         if len(versions) == 0:
             return 500, {"message": "There is no deployed configuration model to create a snapshot."}
@@ -1704,7 +1715,7 @@ host = localhost
 
         # get all resource that support state in the current environment
         env_versions = yield (data.ConfigurationModel.objects(environment=env, deployed=True).  # @UndefinedVariable
-                              order_by("version", direction=ASCENDING).limit(1).find_all())  # @UndefinedVariable
+                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
         if len(env_versions) == 0:
             return 500, {"message": "There is no deployed configuration model in this environment."}
@@ -1832,15 +1843,32 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        models = data.ConfigurationModel.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        futures = [model.delete_cascade() for model in models]
+        agents = yield data.Agent.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for agent in agents:
+            yield agent.delete()
 
-        futures.append(data.Resource.objects.filter(environment=env).find_all().delete())  # @UndefinedVariable
-        futures.append(data.Parameter.objects(environment=env).delete())  # @UndefinedVariable
-        futures.append(data.Agent.objects(environment=env).delete())  # @UndefinedVariable
-        futures.append(data.Form.objects(environment=env).delete())  # @UndefinedVariable
-        futures.append(data.FormRecord.objects(environment=env).delete())  # @UndefinedVariable
-        futures.append(data.Compile.objects(environment=env).delete())  # @UndefinedVariable
+        models = yield data.ConfigurationModel.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for model in models:
+            yield model.delete_cascade()
 
-        yield futures
+        resources = data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for resource in resources:
+            yield resource.delete()
+
+        parameters = data.Parameter.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for parameter in parameters:
+            yield parameter.delete()
+
+        forms = data.Form.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for form in forms:
+            yield form.delete()
+
+        records = data.FormRecord.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for record in records:
+            yield record.delete()
+
+        compiles = data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for compile in compiles:
+            yield compile.delete()
+
         return 200
