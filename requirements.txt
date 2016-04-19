@@ -5,8 +5,6 @@ colorlog
 pyyaml
 urllib3
 six
-pymongo
-motor
 sphinx-argparse
 sphinx
 cliff
