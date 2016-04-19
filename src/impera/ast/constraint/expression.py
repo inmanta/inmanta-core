@@ -19,10 +19,7 @@
 from abc import ABCMeta, abstractmethod
 import re
 
-from impera.ast.variables import Variable, Reference, AttributeVariable
-from impera.ast.statements import CallStatement
-from impera.ast.statements.call import FunctionCall
-from impera.execute.proxy import DynamicProxy
+from impera.ast.statements import ReferenceStatement, Literal
 
 
 def create_function(expression):
@@ -35,7 +32,10 @@ def create_function(expression):
         """
             A function that evaluates the expression
         """
-        return expression.eval(kwargs, args)
+        if len(args) != 1:
+            raise NotImplementedError()
+
+        return expression.execute({'self': args[0]}, None, None)
 
     return function
 
@@ -45,6 +45,7 @@ class InvalidNumberOfArgumentsException(Exception):
         This exception is raised if an invalid amount of arguments is passed
         to an operator.
     """
+
     def __init__(self, msg):
         Exception.__init__(self, msg)
 
@@ -54,6 +55,7 @@ class UnboundVariableException(Exception):
         This execption is raised if an expression is evaluated when not all
         variables have been resolved
     """
+
     def __init__(self, msg):
         Exception.__init__(self, msg)
 
@@ -64,6 +66,7 @@ class OpMetaClass(ABCMeta):
         a string that specifies the op it is able to handle. This metaclass
         only makes sense for subclasses of the Operator class.
     """
+
     def __init__(self, name, bases, attr_dict):
         attribute = "_%s__op" % name
         if attribute in attr_dict:
@@ -71,7 +74,7 @@ class OpMetaClass(ABCMeta):
         super(OpMetaClass, self).__init__(name, bases, attr_dict)
 
 
-class Operator(CallStatement, metaclass=OpMetaClass):
+class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
         This class is an abstract base class for all operators that can be used in expressions
     """
@@ -95,162 +98,14 @@ class Operator(CallStatement, metaclass=OpMetaClass):
 
         return None
 
-    def __init__(self, name, num):
-        CallStatement.__init__(self)
-
-        self.__number_arguments = num
+    def __init__(self, name, children):
+        self.__number_arguments = len(children)
+        self._arguments = children
+        ReferenceStatement.__init__(self, self._arguments)
         self.__name = name
-        # pylint: disable-msg=W0612
-        self._arguments = [None for _x in range(self.__number_arguments)]
-        # pylint: enable-msg=W0612
 
-    def _add_operand(self, index, value):
-        """
-            Add an operand to this operator
-        """
-        if (index < self.__number_arguments):
-            self._arguments[index] = value
-        else:
-            raise InvalidNumberOfArgumentsException(
-                "The %s operator requires %d arguments" %
-                (self.__name, self.__number_arguments))
-
-    def types(self):
-        """
-            @see DynamicStatement#types
-        """
-        types = []
-        for arg in self._arguments:
-            if hasattr(arg, "types"):
-                # it is an operator
-                types.extend(arg.types())
-
-        return types
-
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        refs = []
-        for i in range(len(self._arguments)):
-            refs.append(("arg %d" % i, self._arguments[i]))
-
-        return refs
-
-    def actions(self, state):
-        """
-            What does this operation do
-        """
-        result = state.get_result_reference()
-        actions = [("set", result)]
-
-        for i in range(len(self._arguments)):
-            value = state.get_ref("arg %d" % i)
-            actions.append(("get", value))
-
-        return actions
-
-    def evaluate(self, state, _local_scope):
-        """
-            Evaluate this operator
-        """
-        arguments = []
-        for i in range(len(self._arguments)):
-            value = state.get_ref("arg %d" % i)
-            arguments.append((value.value, value.value.__class__))
-
-        return self._op(arguments)
-
-    def get_variables(self):
-        """
-            Get the variables that need a value. If one of the operand is an operator itself, its variables will be merged.
-        """
-        variables = set()
-        for arg in self._arguments:
-            if hasattr(arg, "eval"):
-                # it is an operator
-                variables = variables.union(arg.get_variables())
-            elif hasattr(arg, "arguments"):
-                for fn_arg in arg.arguments:
-                    if isinstance(fn_arg, Reference):
-                        variables.add(fn_arg)
-                    elif isinstance(fn_arg, AttributeVariable):
-                        variables.add(fn_arg)
-
-            elif isinstance(arg, Reference):
-                variables.add(arg)
-            elif isinstance(arg, AttributeVariable):
-                variables.add(arg)
-
-        return variables
-
-    def eval(self, variables=None, var_list=None, state=None):
-        """
-            The call method implements the operator and returns the result of the operator
-
-            @param variables: A dictionary that contains the values for the unresolved variables.
-            @param var_list: An optional positional list of variables
-        """
-        positional = False
-        if variables is None:
-            variables = {}
-
-        if var_list is not None:
-            positional_list = list(var_list)
-            positional = True
-
-        if len(self._arguments) != self.__number_arguments:
-            raise InvalidNumberOfArgumentsException(
-                "The %s operator requires %d arguments" %
-                (self.__name, self.__number_arguments))
-
-        # unbox variables if required
-        arg_list = []
-
-        for arg in self._arguments:
-            if hasattr(arg, "eval"):  # we have an operator
-                value = arg.eval(variables, var_list, state)
-                arg_list.append((value, value.__class__))
-            else:
-                if isinstance(arg, Reference) or isinstance(arg, AttributeVariable):
-                    if positional and len(positional_list) > 0:
-                        arg = positional_list.pop(0)
-                    else:
-                        if not hasattr(arg, "name") or arg.name not in variables:
-                            raise UnboundVariableException("Unbound variable")
-                        else:
-                            arg = variables[arg.name]
-
-                if hasattr(arg, "value"):
-                    if hasattr(arg.type, "cast"):
-                        arg_list.append((arg.type.cast(arg.value), arg.type))
-                    else:
-                        arg_list.append((arg.value, arg.type))
-
-                elif isinstance(arg, FunctionCall):
-                    if state is None:
-                        raise Exception("The current state is required to evaluate %s in %s" % (arg, self))
-
-                    fnc_arglist = []
-                    for fn_arg in arg.arguments:
-                        if str(fn_arg) in variables:
-                            fnc_arglist.append(DynamicProxy.return_value(variables[str(fn_arg)].value))
-                        elif isinstance(fn_arg, str):
-                            fnc_arglist.append(fn_arg)
-                        else:
-                            raise UnboundVariableException("Unable to find %s for %s in expression %s" % (fn_arg, arg, self))
-
-                    # get the object to call the function on
-                    function = state.get_type("function_%d" % id(arg))
-                    function.check_args(fnc_arglist)
-                    result = function(*fnc_arglist)
-
-                    arg_list.append((result, result.__class__))
-
-                else:
-                    arg_list.append((arg, arg.__class__))
-
-        return self._op(arg_list)
+    def execute(self, requires, resolver, queue):
+        return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
     @abstractmethod
     def _op(self, args):
@@ -278,8 +133,9 @@ class BinaryOperator(Operator):
     """
         This class represents a binary operator.
     """
-    def __init__(self, name):
-        Operator.__init__(self, name, 2)
+
+    def __init__(self, name, op1, op2):
+        Operator.__init__(self, name, [op1, op2])
 
     def _op(self, args):
         """
@@ -299,8 +155,9 @@ class UnaryOperator(Operator):
     """
         This class represents a unary operator
     """
-    def __init__(self, name):
-        Operator.__init__(self, name, 1)
+
+    def __init__(self, name, op1):
+        Operator.__init__(self, name, [op1])
 
     def _op(self, args):
         """
@@ -323,8 +180,7 @@ class Not(UnaryOperator):
     __op = "not"
 
     def __init__(self, arg):
-        UnaryOperator.__init__(self, "negation")
-        self._add_operand(0, arg)
+        UnaryOperator.__init__(self, "negation", arg)
 
     def _un_op(self, arg):
         """
@@ -332,31 +188,26 @@ class Not(UnaryOperator):
 
             @see Operator#_op
         """
-        if arg[1] != bool:
-            raise Exception("Unable to invert %s, a boolean argument is required." % arg[0])
-
-        return (not arg[0])
+        return not arg
 
 
 class Regex(BinaryOperator):
     """
         An operator that does regex matching
     """
-    def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "regex")
-        self._add_operand(0, op1)
 
+    def __init__(self, op1, op2):
         regex = re.compile(op2)
-        self._add_operand(1, Variable(regex))
+        BinaryOperator.__init__(self, "regex", op1, Literal(regex))
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], str):
+        if not isinstance(arg1, str):
             raise Exception("Regex can only be match with strings. %s is of type %s" % arg1)
 
-        return arg2[0].match(arg1[0]) is not None
+        return arg2.match(arg1) is not None
 
     def __repr__(self):
         """
@@ -373,15 +224,13 @@ class Equals(BinaryOperator):
     __op = "=="
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "equality")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "equality", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        return arg1[0] == arg2[0]
+        return arg1 == arg2
 
 
 class LessThan(BinaryOperator):
@@ -391,17 +240,15 @@ class LessThan(BinaryOperator):
     __op = "<"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "less than")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "less than", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], (int, float)) or not isinstance(arg2[0], (int, float)):
+        if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise Exception("Can only compare numbers.")
-        return arg1[0] < arg2[0]
+        return arg1 < arg2
 
 
 class GreaterThan(BinaryOperator):
@@ -411,17 +258,15 @@ class GreaterThan(BinaryOperator):
     __op = ">"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "greater than")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "greater than", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], (int, float)) or not isinstance(arg2[0], (int, float)):
+        if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise Exception("Can only compare numbers.")
-        return arg1[0] > arg2[0]
+        return arg1 > arg2
 
 
 class LessThanOrEqual(BinaryOperator):
@@ -431,17 +276,15 @@ class LessThanOrEqual(BinaryOperator):
     __op = "<="
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "less than or equal")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "less than or equal", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], (int, float)) or not isinstance(arg2[0], (int, float)):
+        if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise Exception("Can only compare numbers.")
-        return arg1[0] <= arg2[0]
+        return arg1 <= arg2
 
 
 class GreaterThanOrEqual(BinaryOperator):
@@ -451,17 +294,15 @@ class GreaterThanOrEqual(BinaryOperator):
     __op = ">="
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "greater than or equal")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "greater than or equal", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], (int, float)) or not isinstance(arg2[0], (int, float)):
+        if not isinstance(arg1, (int, float)) or not isinstance(arg2, (int, float)):
             raise Exception("Can only compare numbers.")
-        return arg1[0] >= arg2[0]
+        return arg1 >= arg2
 
 
 class NotEqual(BinaryOperator):
@@ -471,15 +312,13 @@ class NotEqual(BinaryOperator):
     __op = "!="
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "not equal")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "not equal", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        return arg1[0] != arg2[0]
+        return arg1 != arg2
 
 
 class And(BinaryOperator):
@@ -489,18 +328,16 @@ class And(BinaryOperator):
     __op = "and"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "and")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "and", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], bool) or not isinstance(arg2[0], bool):
+        if not isinstance(arg1, bool) or not isinstance(arg2, bool):
             raise Exception("Unable to 'and' two types that are not bool.")
 
-        return arg1[0] and arg2[0]
+        return arg1 and arg2
 
 
 class Or(BinaryOperator):
@@ -510,18 +347,16 @@ class Or(BinaryOperator):
     __op = "or"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "or")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "or", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not isinstance(arg1[0], bool) or not isinstance(arg2[0], bool):
+        if not isinstance(arg1, bool) or not isinstance(arg2, bool):
             raise Exception("Unable to 'or' two types that are not bool.")
 
-        return arg1[0] or arg2[0]
+        return arg1 or arg2
 
 
 class In(BinaryOperator):
@@ -531,19 +366,17 @@ class In(BinaryOperator):
     __op = "in"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "in")
-        self._add_operand(0, op1)
-        self._add_operand(1, op2)
+        BinaryOperator.__init__(self, "in", op1, op2)
 
     def _bin_op(self, arg1, arg2):
         """
             @see Operator#_op
         """
-        if not (isinstance(arg2[0], list) or (hasattr(arg2[0], "type") and arg2[0].type() == list)):
+        if not (isinstance(arg2, list) or (hasattr(arg2, "type") and arg2.type() == list)):
             raise Exception("Operand two of 'in' can only be a list (%s)" % arg2[0])
 
-        for arg in arg2[0]:
-            if arg == arg1[0]:
+        for arg in arg2:
+            if arg == arg1:
                 return True
 
         return False

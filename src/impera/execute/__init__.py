@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,29 +13,5 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
-
-import logging
-
-
-LOGGER = logging.getLogger(__name__)
-
-
-class DuplicateVariableException(Exception):
-    """
-        This exception thrown when a variable is declared twice in the same
-        scope.
-    """
-
-
-class DuplicateScopeException(Exception):
-    """
-        This exception is raised when a scope with a duplicate name is created.
-    """
-
-
-class NotFoundException(Exception):
-    """
-        This exception is thrown when a variable is not found
-    """

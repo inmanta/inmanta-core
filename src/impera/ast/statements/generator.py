@@ -19,152 +19,40 @@
 # pylint: disable-msg=W0613,R0201
 
 from . import GeneratorStatement
-from impera.ast import Namespace
-from impera.ast.entity import Default
-from impera.ast.statements.assign import SetAttribute
-from impera.ast.variables import AttributeVariable, Reference, Variable
-from impera.execute import DuplicateVariableException, NotFoundException
-from impera.execute.scope import Scope
-from impera.execute.state import DynamicState
 from impera.stats import Stats
 from impera.execute.util import Unknown
+from impera.execute.runtime import ExecutionContext
+from impera.ast import RuntimeException, TypingException
 
 
-class Import(GeneratorStatement):
-    """
-        This class models importing statements from a module
-
-        @param name: The name of the statement to include
-    """
-    def __init__(self, name):
-        GeneratorStatement.__init__(self)
-        self.name = name
-        self.child_namespace = True
-
-    def types(self, recursive=False):
-        """
-            A list of types this statement requires
-
-            @see State#types
-        """
-        return [("module", self.name)]
-
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        refs = []
-
-        return refs
-
-    def __repr__(self):
-        """
-            The representation of this object
-        """
-        return "Import(%s)" % self.name
-
-    def evaluate(self, state, local_scope):
-        """
-            Evaluate the module by clone the statements and inserting them
-            in the namespace of this statement
-        """
-        module = state.get_type("module")
-
-        for statement in module.statements:
-            state.add_statement(statement, self.child_namespace)
-
-
-class Implement(GeneratorStatement):
+class SubConstructor(GeneratorStatement):
     """
         This statement selects an implementation for a given object and
         imports the statements
     """
-    def __init__(self, instance_type, instance):
+
+    def __init__(self, instance_type):
         GeneratorStatement.__init__(self)
-        self.instance_type = instance_type
-        self.instance = instance
+        self.type = instance_type
 
-    def _get_required_variables(self):
-        """
-            Get a dictionary of all variables that the combined expressions
-            require.
-        """
-        required = {}
-        for impl in self.instance_type.implementations:
-            if impl.constraint is not None:
-                variables = impl.constraint.get_variables()
-                for var in variables:
-                    required[var.name] = var
+    def normalize(self, resolver):
+        # done in define type
+        pass
 
-        return required
+    def requires_emit(self, resolver, queue):
+        out = {rk: rv for i in self.type.implements for (
+            rk, rv) in i.constraint.requires_emit(resolver, queue).items()}
+        return out
 
-    def types(self, recursive=False):
-        """
-            @see DynamicStatement#types
-        """
-        types = []
-        for implementation in self.instance_type.implementations:
-            if implementation.constraint is not None:
-                types.extend(implementation.constraint.types())
-
-        return types
-
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        refs = []
-
-        for var_name, value in self._get_required_variables().items():
-            refs.append((var_name, value))
-
-        return refs
-
-    def get_implementation(self, state, local_scope):
-        """
-            Search in the list of implementation for an implementation that
-            matches the select clause. If no select clause matches and a default
-            implementation exists, this is chosen.
-
-            If more then one select clause matches an exception will be thrown.
-        """
-        defaults = []
-        select_list = []
-
-        for implementation in self.instance_type.implementations:
-            if implementation.constraint is None:
-                defaults.append(implementation)
-
-            else:  # evaluate the expression
-                expr = implementation.constraint
-                variables = expr.get_variables()
-                parameters = {}
-
-                for var in variables:
-                    ref = state.get_ref(var.name)
-                    parameters[var.name] = ref
-
-                try:
-                    if expr.eval(variables=parameters, state=state):
-                        select_list.append(implementation)
-                except Exception:
-                    pass
-
-        implementations = []
-        implementations.extend(select_list)
-        implementations.extend(defaults)
-
-        return implementations
-
-    def evaluate(self, state, local_scope):
+    def execute(self, requires, resolver, queue):
         """
             Evaluate this statement
         """
-        implement_list = self.get_implementation(state, local_scope)
+        implement_list = self.get_implementation(requires, resolver, queue)
 
         if len(implement_list) == 0:
-            raise Exception("Unable to select implementation for entity %s" %
-                            self.instance_type.name)
+            raise RuntimeException(resolver, "Unable to select implementation for entity %s" %
+                                   self.type.name)
 
         implementations = []
         for impl in implement_list:
@@ -172,82 +60,77 @@ class Implement(GeneratorStatement):
 
         for impl in implementations:
             # generate a subscope/namespace for each loop
-            object_id = Scope.object_to_name(impl)
-            namespace = Namespace(object_id, state.namespace)
-
-            # create the scope and restrict it to the entity we implement
-            Scope.get_or_create_scope(state.graph, namespace.to_path(), restrict_to_parent=True)
-
-            for stmt in impl.statements:
-                child_state = DynamicState(state.compiler, namespace, stmt)
-                child_state.add_to_graph(state.graph)
-                state._child_statements[stmt] = child_state
+            xc = ExecutionContext(impl.statements, resolver)
+            xc.emit(queue)
 
         Stats.get("refine").increment(len(implementations))
+        return "X-I"
+
+    def get_implementation(self, requires, resolver, queue):
+        """
+            Search in the list of implementation for an implementation that
+            matches the select clause. If no select clause matches and a default
+            implementation exists, this is chosen.
+
+            If more then one select clause matches an exception will be thrown.
+        """
+
+        select_list = []
+
+        for implementation in self.type.implements:
+            expr = implementation.constraint
+            if expr.execute(requires, resolver, queue):
+                select_list.append(implementation)
+
+        return select_list
 
     def __repr__(self):
-        return "EntityImplement(%s)" % self.instance
+        return "EntityImplement(%s)" % self.type
 
 
 class For(GeneratorStatement):
     """
         A for loop
     """
-    def __init__(self, variable, loop_var, module_name):
+
+    def __init__(self, variable, loop_var, module):
         GeneratorStatement.__init__(self)
-        self.variable = variable
+        self.base = variable
         self.loop_var = loop_var
-        self.module_name = module_name
+        self.module = module
 
     def __repr__(self):
         return "For(%s)" % self.variable
 
-    def references(self):
-        """
-            @see DynamicStatement#references
-        """
-        return [("variable", self.variable)]
+    def normalize(self, resolver):
+        self.base.normalize(resolver)
+        # self.loop_var.normalize(resolver)
+        self.module.normalize(resolver)
 
-    def actions(self, state):
-        """
-            @see DynamicStatement#actions
-        """
-        actions = []
-        instance = state.get_ref("variable")
-        actions.append(("get", instance))
-        return actions
+    def requires(self):
+        base = self.base.requires()
+        var = self.loop_var
+        ext = self.module.requires
+        self.module.add_var(var)
+        return list(set(base).union(ext) - set(var))
 
-    def evaluate(self, state, local_scope):
+    def requires_emit(self, resolver, queue):
+        return self.base.requires_emit(resolver, queue)
+
+    def execute(self, requires, resolver, queue):
         """
             Evaluate this statement.
         """
-        var = state.get_ref("variable").value
+        var = self.base.execute(requires, resolver, queue)
 
         if isinstance(var, Unknown):
             return
 
         for loop_var in var:
             # generate a subscope/namespace for each loop
-            object_id = Scope.object_to_name(loop_var)
-            namespace = Namespace(object_id, state.namespace)
-
-            sub_scope = Scope.get_or_create_scope(state.graph,
-                                                  namespace.to_path())
-
-            # add the loop variable to the scope
-            if not isinstance(loop_var, Variable):
-                loop_var = Variable(loop_var)
-
-            sub_scope.add_variable(self.loop_var, loop_var)
-
-            # generate the import statement
-            import_stmt = Import(self.module_name)
-            import_stmt.namespace = namespace
-            import_stmt.child_namespace = False
-
-            child_state = DynamicState(state.compiler, namespace, import_stmt)
-            child_state.add_to_graph(state.graph)
-            state._child_statements[import_stmt] = child_state
+            xc = ExecutionContext(self.module, resolver)
+            xc.lookup(self.loop_var).set_value(loop_var)
+            xc.emit(queue)
 
 
 class Constructor(GeneratorStatement):
@@ -257,163 +140,71 @@ class Constructor(GeneratorStatement):
         @param class_type: The type of the object that is created by this
             constructor call.
     """
-    def __init__(self, class_type):
+
+    def __init__(self, class_type, attributes, location, namespace):
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}
         self.implemented = False
         self.register = False
+        self.location = location
+        self.namespace = namespace
+        for a in attributes:
+            self.add_attribute(a[0], a[1])
 
-    def add_attribute(self, name, value):
-        """
-            Add an attribute to this constructor call
-        """
-        if name not in self.__attributes:
-            self.__attributes[name] = value
-        else:
-            raise DuplicateVariableException("The attribute %s in the constructor call of %s is already set."
-                                             % (name, self.class_type))
-
-    def get_attributes(self):
-        """
-            Get the attribtues that are set for this constructor call
-        """
-        return self.__attributes
-
-    attributes = property(get_attributes)
-
-    def types(self, recursive=False):
-        """
-            @see Statement#types()
-        """
-        return [("classtype", self.class_type)]
-
-    def actions(self, state):
-        """
-            @see DynamicStatement#actions
-        """
-        type_class = state.get_type("classtype")
-        object_ref = state.get_result_reference()
-        actions = [("add", Variable(type_class)), ("set", object_ref)]
-
-        if isinstance(type_class, Default):
-            type_class = type_class.get_entity()
-
-        attribute_statements = {}
-        if state.has_attribute("new_statements"):
-            attribute_statements = state.get_attribute("new_statements")
-
-        local_scope = state.get_local_scope()
-
-        for attribute_name in type_class.get_all_attribute_names():
-            # Set a attributes with low multiplicity == 0 -> set []
-            attribute_obj = type_class.get_attribute(attribute_name)
-            if hasattr(attribute_obj, "low") and attribute_obj.low == 0:
-                actions.append(("add", AttributeVariable.create(object_ref, attribute_name)))
-
-            if state.get_ref(attribute_name) is not None and attribute_name in attribute_statements:
-                stmt = attribute_statements[attribute_name]
-                value_ref = state.get_ref(attribute_name)
-                actions.extend(stmt.build_action_list(local_scope, value_ref, object_ref,
-                                                      instance_type=type_class.get_class_type()))
-
-        return actions
-
-    def new_statements(self, state):
-        """
-            Add any arguments that need to be validated to the graph
-        """
-        set_attribute_stmts = {}
-        attributes = set()
-
-        # Set the value from the constructor
-        object_ref = state.get_result_reference()
-        for name, value in self.__attributes.items():
-            # set the attributes passed with the constructor
-            stmt = SetAttribute(object_ref, name, value)
-
-            attributes.add(name)
-            state.add_ref(name, value)
-            set_attribute_stmts[name] = stmt
-
-        # Set values defined in default constructors
-        type_class = state.get_type("classtype")
-        if isinstance(type_class, Default):
-            default = type_class
-            type_class = type_class.get_entity()
-
-            # set default values
-            for attribute_name in type_class.get_all_attribute_names():
-                attribute = type_class.get_attribute(attribute_name)
-
-                if attribute.name not in attributes:
-                    try:
-                        value = default.get_default(attribute.name)
-                        stmt = SetAttribute(object_ref, attribute.name, value)
-
-                        attributes.add(attribute.name)
-                        state.add_ref(attribute.name, value)
-                        set_attribute_stmts[attribute.name] = stmt
-                    except AttributeError:
-                        pass
-
-        # Set default values if they have not been set yet
-        for name, value in type_class.get_default_values().items():
-            if name not in attributes and value is not None:
-                stmt = SetAttribute(object_ref, name, value)
-                state.add_ref(name, value)
-                set_attribute_stmts[name] = stmt
-
-        state.set_attribute("new_statements", set_attribute_stmts)
-
-        # Make values of attributes available in subscopes by defining
-        # variables with matching names in the subscope
-        object_id = Scope.object_to_name(state)
-        namespace = Namespace(object_id, state.namespace)
-        scope = Scope.get_or_create_scope(state.graph, namespace.to_path())
-
-        added_variables = set()
-        for attribute in type_class.get_all_attribute_names():
-            if attribute in added_variables:
-                continue
-
-            var = AttributeVariable.create(object_ref, attribute)
-            self.copy_location(var)
-            added_variables.add(attribute)
-            scope.add_variable(attribute, var)
-
-        # set the self variable
-        scope.add_variable("self", object_ref)
+    def normalize(self, resolver):
+        self.type = resolver.get_type(self.class_type)
+        for (k, v) in self.__attributes.items():
+            v.normalize(resolver)
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
-        for index in type_class._index_def:
+        for index in self.type.get_entity().get_indices():
             for attr in index:
-                if attr not in attributes:
-                    raise Exception("%s is part of an index and should be set in the constructor." % attr)
+                if attr not in self.attributes:
+                    raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
 
-    def evaluate(self, state, local_scope):
+    def requires(self):
+        out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
+        out.extend([req for (k, v) in self.type.get_defaults().items() for req in v.requires()])
+        out.extend([req for (k, v) in self.type.get_entity().get_default_values().items() for req in v.requires()])
+
+        return out
+
+    def requires_emit(self, resolver, queue):
+        preout = [x for x in self.__attributes.items()]
+        preout.extend([x for x in self.type.get_entity().get_default_values().items()])
+
+        out2 = {rk: rv for (k, v) in self.type.get_defaults().items()
+                for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_containing_namespace()), queue).items()}
+
+        out = {rk: rv for (k, v) in preout for (rk, rv) in v.requires_emit(resolver, queue).items()}
+        out.update(out2)
+        return out
+
+    def execute(self, requires, resolver, queue):
         """
             Evaluate this statement.
         """
-        ctor_id = Scope.object_to_name(state)
-
         # the type to construct
-        type_class = state.get_type("classtype")
-        if isinstance(type_class, Default):
-            type_class = type_class.get_entity()
+        type_class = self.type.get_entity()
 
-        # the attribute that we need to set at construction time
-        attribute_statements = {}
-        if state.has_attribute("new_statements"):
-            attribute_statements = state.get_attribute("new_statements")
+        # the attributes
+        attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self.__attributes.items()}
+
+        for (k, v) in self.type.get_defaults().items():
+            attributes[k] = v.execute(requires, resolver, queue)
+
+        for (k, v) in type_class.get_default_values().items():
+            if(k not in attributes):
+                attributes[k] = v.execute(requires, resolver, queue)
 
         # check if the instance already exists in the index (if there is one)
         instances = []
         for index in type_class._index_def:
             params = []
             for attr in index:
-                params.append((attr, state.get_ref(attr).value))
+                params.append((attr, attributes[attr]))
 
             obj = type_class.lookup_index(params)
             if obj is not None:
@@ -429,53 +220,44 @@ class Constructor(GeneratorStatement):
             object_instance = first
         else:
             # create the instance
-            object_instance = type_class.get_instance(ctor_id, local_scope)
-            object_instance.__statement__ = state
-
-            try:
-                local_scope.get_variable("self").value.add_child(object_instance)
-            except NotFoundException:
-                pass
-
-        # set attributes
-        for attribute_name in type_class.get_all_attribute_names():
-            if state.get_ref(attribute_name) is not None and attribute_name in attribute_statements:
-                stmt = attribute_statements[attribute_name]
-                value_ref = state.get_ref(attribute_name)
-                stmt.set_value(state, object_instance, value_ref)
+            object_instance = type_class.get_instance(attributes, resolver, queue)
+            self.copy_location(object_instance)
 
         # add anonymous implementations
         if self.implemented:
             # generate an import for the module
-            name = Reference(hex(id(self)))
-            stmt = Import(name)
-            stmt.namespace = self.namespace
-            self.copy_location(stmt)
-            stmt.child_namespace = False
-
-            state.add_statement(stmt, child_ns=True)
+            raise "don't know this feature"
 
         else:
             # generate an implementation
-            stmt = Implement(type_class, object_instance)
-            self.copy_location(stmt)
-            stmt.namespace = self.namespace
-            state.add_statement(stmt, child_ns=True)
+            stmt = type_class.get_sub_constructor()
+            stmt.emit(object_instance, queue)
 
         if self.register:
-            object_name = str(hex(id(object_instance)))
-            local_scope.add_variable(object_name, Variable(object_instance))
+            raise "don't know this feature"
 
         return object_instance
+
+    def add_attribute(self, name, value):
+        """
+            Add an attribute to this constructor call
+        """
+        if name not in self.__attributes:
+            self.__attributes[name] = value
+        else:
+            raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
+                                   % (name, self.class_type))
+
+    def get_attributes(self):
+        """
+            Get the attribtues that are set for this constructor call
+        """
+        return self.__attributes
+
+    attributes = property(get_attributes)
 
     def __repr__(self):
         """
             The representation of the this statement
         """
         return "Construct(%s)" % (self.class_type)
-
-    def can_evaluate(self, state):
-        """
-            A constructor can always be evaluated
-        """
-        return True

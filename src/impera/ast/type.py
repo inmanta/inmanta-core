@@ -17,7 +17,60 @@
 """
 
 from impera.ast.constraint.expression import create_function
-from impera.ast.variables import Variable
+from impera.ast import Namespace, TypeNotFoundException, RuntimeException
+from impera.execute.util import Unknown
+
+
+class BasicResolver(object):
+
+    def __init__(self, types):
+        self.types = types
+
+    def get_type(self, namespace, name):
+        if not isinstance(name, str):
+            raise Exception("Should Not Occur, bad AST construction")
+        if "::" in name:
+            if name in self.types:
+                return self.types[name]
+            else:
+                raise TypeNotFoundException(name, namespace)
+        elif name in TYPES:
+            return self.types[name]
+        else:
+            cns = namespace
+            while cns is not None:
+                full_name = "%s::%s" % (cns.get_full_name(), name)
+                if full_name in self.types:
+                    return self.types[full_name]
+                cns = cns.get_parent()
+                raise TypeNotFoundException(name, namespace)
+
+
+class NameSpacedResolver(object):
+
+    def __init__(self, types, ns):
+        self.types = types
+        self.ns = ns
+
+    def get_type(self, name):
+        if "::" in name:
+            if name in self.types:
+                return self.types[name]
+            else:
+                raise TypeNotFoundException(name, self.ns)
+        elif name in TYPES:
+            return TYPES[name]
+        else:
+            cns = self.ns
+            while cns is not None:
+                full_name = "%s::%s" % (cns.get_full_name(), name)
+                if full_name in self.types:
+                    return self.types[full_name]
+                cns = cns.get_parent()
+            raise TypeNotFoundException(name, self.ns)
+
+    def get_resolver_for(self, namespace: Namespace):
+        return NameSpacedResolver(self.types, namespace)
 
 
 class CastException(Exception):
@@ -32,6 +85,7 @@ class Type(object):
         This class is the base class for all types that represent basic data.
         These are types that are not relations.
     """
+
     def __init__(self):
         pass
 
@@ -56,6 +110,9 @@ class Type(object):
     def __str__(self):
         return str(self.__class__)
 
+    def normalize(self, resolver):
+        pass
+
 
 class Number(Type):
     """
@@ -64,6 +121,7 @@ class Number(Type):
 
         +, -, /, *
     """
+
     def __init__(self):
         Type.__init__(self)
 
@@ -76,9 +134,9 @@ class Number(Type):
         try:
             float(value)
         except TypeError:
-            raise ValueError("Invalid value '%s'" % value)
+            raise RuntimeException(None, "Invalid value '%s'expected Number" % value)
         except ValueError:
-            raise ValueError("Invalid value '%s'" % value)
+            raise RuntimeException(None, "Invalid value '%s'expected Number" % value)
 
         return True  # allow this function to be called from a lambda function
 
@@ -115,6 +173,7 @@ class Bool(Type):
     """
         This class represents a simple boolean that can hold true or false.
     """
+
     def __init__(self):
         Type.__init__(self)
 
@@ -145,42 +204,11 @@ class Bool(Type):
         return "bool"
 
 
-class NoneType(Type):
-    """
-        This class represents an undefined value in the configuration model.
-    """
-    def __init__(self):
-        Type.__init__(self)
-
-    @classmethod
-    def validate(cls, value):
-        """
-            Validate the value
-
-            @see Type#validate
-        """
-        if value is not None:
-            raise ValueError("Invalid value '%s'" % value)
-
-        return True
-
-    @classmethod
-    def cast(cls, value):
-        """
-            Convert the given value to value that can be used by the operators
-            defined on this type.
-        """
-        return None
-
-    @classmethod
-    def __str__(cls):
-        return "none"
-
-
 class String(Type, str):
     """
         This class represents a string type in the configuration model.
     """
+
     def __init__(self):
         Type.__init__(self)
         str.__init__(self)
@@ -200,10 +228,10 @@ class String(Type, str):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        if value is None:
+        if isinstance(value, Unknown):
             return True
         if not isinstance(value, str):
-            raise ValueError("Invalid value '%s'" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected String" % value)
 
         return True
 
@@ -216,6 +244,7 @@ class List(Type, list):
     """
         This class represents a string type in the configuration model.
     """
+
     def __init__(self):
         Type.__init__(self)
         list.__init__(self)
@@ -239,7 +268,7 @@ class List(Type, list):
             return True
 
         if not isinstance(value, list):
-            raise ValueError("Invalid value '%s'" % value)
+            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
 
         return True
 
@@ -255,22 +284,14 @@ class ConstraintType(Type):
 
         The constraint on this type is defined by a regular expression.
     """
-    def __init__(self, base_type, namespace, name):
+
+    def __init__(self, name):
         Type.__init__(self)
 
-        self.__base_type = base_type  # : ConstrainableType
+        self.basetype = None  # : ConstrainableType
         self._constraint = None
         self.name = name
-        self.namespace = namespace
-
-    def get_base_type(self):
-        """
-            Returns the base that which is constraint by the constraint in this
-            type.
-        """
-        return self.__base_type
-
-    base_type = property(get_base_type)
+        self.namespace = None
 
     def set_constraint(self, expression):
         """
@@ -278,6 +299,7 @@ class ConstraintType(Type):
             types requires the constraint to be set as a regex that can be
             compiled.
         """
+        self.expression = expression
         self._constraint = create_function(expression)
 
     def get_constaint(self):
@@ -299,11 +321,13 @@ class ConstraintType(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        # throws an exception
-        self.__base_type.validate(value)
+        if isinstance(value, Unknown):
+            return True
 
-        if not self._constraint(Variable(value)):
-            raise ValueError("Invalid value '%s'" % value)
+        self.basetype.validate(value)
+
+        if not self._constraint(value):
+            raise RuntimeException(None, "Invalid value '%s', constraint does not match" % value)
 
         return True
 

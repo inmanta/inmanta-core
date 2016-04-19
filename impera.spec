@@ -20,15 +20,15 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
+BuildRequires:  python3-ply
 BuildRequires:  systemd
 
 Requires:       python3
-Requires:       python3-amqp
 Requires:       python3-tornado
 Requires:       python3-dateutil
 Requires:       python3-execnet
 Requires:       python3-colorlog
-Requires:       python3-antlr3
+Requires:       python3-ply
 Requires:       python3-PyYAML
 Requires:       python-virtualenv
 Requires:       python3-urllib3
@@ -55,6 +55,7 @@ Requires:       python3-impera
 %setup -q -n impera-%{sourceversion}
 
 %build
+PYTHONPATH=src %{__python3} src/impera/parser/plyInmantaParser.py
 %{__python3} setup.py build
 
 

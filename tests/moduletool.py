@@ -25,7 +25,6 @@ import shutil
 import tempfile
 import subprocess
 
-from impera import app  # NOQA
 from impera import module
 from nose.tools import raises, assert_equal, assert_true
 from impera.module import ModuleTool, InvalidModuleException, Project

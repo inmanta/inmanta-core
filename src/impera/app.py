@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,12 +13,13 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 from argparse import ArgumentParser
 import logging
 import sys
+import time
 
 import colorlog
 from impera.command import command, Commander
@@ -70,8 +71,9 @@ def compile_project(options):
         p = pstats.Stats('run.profile')
         p.strip_dirs().sort_stats("time").print_stats(20)
     else:
+        t1 = time.time()
         result = do_compile()
-
+        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
     return result
 
 
@@ -116,9 +118,9 @@ def export(options):
         Config.set("compiler_rest_transport", "port", options.port)
 
     from impera.export import Exporter
-    result = do_compile()
+    (types, scopes) = do_compile()
     export = Exporter(options)
-    export.run(result)
+    export.run(types, scopes)
 
 
 def deploy_parser_config(parser):

@@ -33,10 +33,9 @@ import yaml
 import impera
 from impera import env
 from impera.config import Config
-from impera import parser
-from impera.execute import scheduler
 from impera.ast import Namespace
-from impera.plugins.base import PluginMeta
+from impera import plugins
+from impera.parser.plyInmantaParser import parse
 
 
 LOGGER = logging.getLogger(__name__)
@@ -257,7 +256,7 @@ class Project(GitVersioned):
             Get the instance of the project
         """
         cls._project = project
-        PluginMeta.clear()
+        plugins.PluginMeta.clear()
 
     def _load_freeze(self, freeze_file: str) -> {}:
         """
@@ -980,6 +979,7 @@ class ModuleTool(object):
         """
             Validate the module we are currently in
         """
+        parse_only = "-s" in options
         valid = True
         module = Module(None, os.path.realpath(os.curdir))
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
@@ -989,7 +989,6 @@ class ModuleTool(object):
             valid = False
 
         # compile the source files in the module
-        model_parser = parser.Parser()
         ns_root = Namespace("__root__")
         ns_mod = Namespace(module.name, ns_root)
         for model_file in module.get_module_files():
@@ -999,12 +998,16 @@ class ModuleTool(object):
                     part_name = model_file.split("/")[-1][:-3]
                     ns = Namespace(part_name, ns_mod)
 
-                model_parser.parse(ns, model_file)
+                parse(ns, model_file)
                 LOGGER.info("Successfully parsed %s" % model_file)
             except Exception:
                 valid = False
                 LOGGER.exception("Unable to parse %s, validation will fail" % model_file)
 
+        if parse_only:
+            if not valid:
+                sys.exit(1)
+            sys.exit(0)
         # create a test project
         LOGGER.info("Creating a new project to test the module")
         project_dir = tempfile.mkdtemp()
@@ -1045,12 +1048,9 @@ requires:
             LOGGER.info("Loading all plugins")
             project.load_plugins()
 
-            compiler = impera.compiler.main.Compiler(main_cf)
-            statements = compiler.compile()
-            sched = scheduler.Scheduler(compiler.graph)
-            success = sched.run(compiler, statements)
+            values = impera.compiler.do_compile()
 
-            if success:
+            if values is not None:
                 LOGGER.info("Successfully compiled module and its dependencies.")
             else:
                 LOGGER.error("Unable to compile module and its dependencies, validation will fail")

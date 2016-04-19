@@ -23,35 +23,22 @@ import logging
 import os
 import time
 import glob
-import uuid
 import base64
+import uuid
 
 from impera import protocol
 from impera.agent.handler import Commander
-from impera.execute import NotFoundException
 from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
+from impera.execute.proxy import DynamicProxy
+from impera.ast import RuntimeException
 from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
-
-
-def classes(t):
-    if t.__name__ == "EntityType" and t.__module__.startswith("impera"):
-        return []
-
-    cls_name = t.__name__
-    nm_name = t.__module__.replace(".", "::")
-    clslist = ["%s::%s" % (nm_name, cls_name)]
-
-    for nt in t.__bases__:
-        clslist += classes(nt)
-
-    return clslist
 
 
 class Exporter(object):
@@ -81,7 +68,8 @@ class Exporter(object):
         """
             Get an id using a registered id conversion function
         """
-        for cls_name in classes(resource.type()):
+
+        for cls_name in resource.type().get_all_parent_names() + [str(resource.type())]:
             if cls_name in cls.__id_conversion:
                 function = cls.__id_conversion[cls_name]
 
@@ -117,28 +105,21 @@ class Exporter(object):
         self._file_store = {}
         self._io_loop = IOLoop.current()
 
-    def _get_instances_of_types(self, types):
+    def _get_instance_proxies_of_types(self, types):
         """
             Returns a dict of instances for the given types
         """
-        values = {}
-        for t in types:
-            variable = self.get_variable(t)
+        return {t: [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()] for t in types}
 
-            if variable is not None:
-                values[t] = set([x for x in variable.get_all_instances()])
-
-        return values
-
-    def _load_resources(self, scope):
+    def _load_resources(self, types):
         """
             Load all registered resources
         """
         entities = resource.get_entity_resources()
         for entity in entities:
-            instances = self._get_instances_of_types([entity])
+            instances = types[entity].get_all_instances()
             if len(instances) > 0:
-                for instance in instances[entity]:
+                for instance in instances:
                     self.add_resource(Resource.create_from_model(self, entity, instance))
 
         Resource.convert_requires()
@@ -161,16 +142,16 @@ class Exporter(object):
             types, function = self.__class__.__export_functions[name]
 
             if len(types) > 0:
-                function(self, types=self._get_instances_of_types(types))
+                function(self, types=self._get_instance_proxies_of_types(types))
             else:
                 function(self)
 
-    def _call_dep_manager(self, scope):
+    def _call_dep_manager(self, types):
         """
             Call all dep managers and let them add dependencies
         """
         for fnc in self.__class__.__dep_manager:
-            fnc(scope, self._resources)
+            fnc(types, self._resources)
 
         # TODO: check for cycles
 
@@ -242,23 +223,24 @@ class Exporter(object):
             for host in hosts:
                 LOGGER.info(" - %s" % host)
 
-    def run(self, scope):
+    def run(self, types, scopes):
         """
         Run the export functions
         """
-        self._scope = scope
+        self.types = types
+        self.scopes = scopes
         self._version = int(time.time())
         Resource.clear_cache()
 
         # first run other export plugins
         self._run_export_plugins()
 
-        if scope is not None:
+        if types is not None:
             # then process the configuration model to submit it to the mgmt server
-            self._load_resources(scope)
+            self._load_resources(types)
 
             # call dependency managers
-            self._call_dep_manager(scope)
+            self._call_dep_manager(types)
 
         # filter out any resource that belong to hosts that have unknown values
         self._filter_unknowns()
@@ -291,7 +273,7 @@ class Exporter(object):
 
         try:
             variable = self._scope.get_variable(variable_name, namespace).value
-        except NotFoundException:
+        except RuntimeException:
             return None
 
         return variable
@@ -474,6 +456,7 @@ class dependency_manager(object):
     """
     Register a function that manages dependencies in the configuration model that will be deployed.
     """
+
     def __init__(self, function):
         Exporter.add_dependency_manager(function)
 
@@ -482,6 +465,7 @@ class export(object):
     """
         A decorator that registers an export function
     """
+
     def __init__(self, name, *args):
         self.name = name
         self.types = args
@@ -498,6 +482,7 @@ class resource_to_id(object):
     """
         Register a function to convert a resource to an id
     """
+
     def __init__(self, type_id):
         self.type_id = type_id
 
@@ -512,45 +497,6 @@ class resource_to_id(object):
 @export("none")
 def export_none(options, scope, config):
     pass
-
-
-@export("report", "std::File", "std::Host", "drm::Logconfig")
-def export_report(options, types):
-    # prefix = types["drm::Logconfig"][0].prefix
-    prefix = "report"
-
-    with open(prefix + "_host.csv", "w+") as fd:
-        # first, generate stats about each host
-        fd.write("hostname, files, services, packages, directories\n")
-        for host in types["std::Host"]:
-            fd.write("%s,%d,%d,%d,%d\n" % (host.name, len(host.files),
-                                           len(host.services), len(host.packages), len(host.directories)))
-
-    report = defaultdict(int)
-    with open(prefix + "_parameters.csv", "w+") as fd:
-        # print out template stats
-        fd.write("hostname, template, filename, name, value, type, index\n")
-        for host in types["std::Host"]:
-            for file in host.files:
-                if hasattr(file.content, "stats"):
-                    stats = file.content.stats
-                    row = "%s,%s,%s" % (host.name, file.content.template, file.path)
-
-                    for stat in stats:
-                        fd.write("%s,%s,%s,%s,%s\n" % (row, stat[0], stat[1], stat[3], stat[2]))
-                        report[stat[3]] += 1
-
-    with open(prefix + "_param_summary.csv", "w+") as fd:
-        for t, value in report.items():
-            fd.write("%s,%s\n" % (t, value))
-
-    if not os.path.exists(prefix):
-        os.mkdir(prefix)
-
-    for file in types["std::File"]:
-        path = os.path.join(prefix, file.host.name + file.path.replace("/", "+"))
-        with open(path, "w+") as fd:
-            fd.write(file.content)
 
 
 @export("dump", "std::File", "std::Service", "std::Package")

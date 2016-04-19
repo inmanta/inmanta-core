@@ -1,5 +1,5 @@
 """
-    Copyright 2015 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,29 +13,132 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
-# pylint: disable-msg=R0201
-
-import glob
 import os
+import sys
+import logging
+import glob
 import imp
+from builtins import isinstance
 
+from impera.parser import plyInmantaParser
+from impera.execute import scheduler
 from impera.ast import Namespace
-from impera.ast.statements.builtin import BuiltinCompileUnit
-from impera.ast.statements.define import DefineEntity, DefineRelation
-from impera.ast.variables import Reference
-from impera.compiler.unit import FileCompileUnit
+from impera.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from impera.module import Project, Module
-from impera.parser import Parser
-from impera.plugins import PluginCompileUnit
-from . import graph
+from impera.ast.blocks import BasicBlock
+from impera.ast.statements import DefinitionStatement
+from impera.plugins import PluginMeta
+
+LOGGER = logging.getLogger(__name__)
+
+
+def do_compile():
+    """
+        Run run run
+    """
+    # module.Project.get().verify()
+    compiler = Compiler(os.path.join(Project.get().project_path, "main.cf"))
+
+    LOGGER.debug("Starting compile")
+
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    success = sched.run(compiler, statements, blocks)
+
+    LOGGER.debug("Compile done")
+
+    if not success:
+        sys.stderr.write("Unable to execute all statements.\n")
+    return (sched.get_types(), sched.get_scopes())
+
+
+class CompileUnit(object):
+    """
+        This class represents a module containing configuration statements
+    """
+    def __init__(self, compiler, namespace):
+        self._compiler = compiler
+        self._namespace = namespace
+
+    def compile(self):
+        """
+            Compile the configuration file for this compile unit
+        """
+        raise NotImplementedError()
+
+
+class FileCompileUnit(CompileUnit):
+    """
+        A compile unit based on a parsed file.
+    """
+    def __init__(self, compiler, path, namespace):
+        CompileUnit.__init__(self, compiler, namespace)
+        self.__statements = {}
+        self.__requires = {}
+        self.__provides = {}
+        self.__path = path
+        self.__ast = None
+
+    def compile(self):
+        """
+            Compile the configuration file for this compile unit
+        """
+        # compile the data
+        self.__ast = plyInmantaParser.parse(self._namespace, self.__path)
+        return self.__ast
+
+    def is_compiled(self):
+        """
+            Is this already compiled?
+        """
+        return self.__ast is not None
+
+
+class PluginCompileUnit(CompileUnit):
+    """
+        A compile unit that contains all embeded types
+    """
+    def __init__(self, compiler, namespace):
+        CompileUnit.__init__(self, compiler, namespace)
+
+    def compile(self):
+        """
+            Compile the configuration file for this compile unit
+        """
+        statements = []
+        for name, cls in PluginMeta.get_functions().items():
+            ns_root = self._namespace.get_root()
+
+            mod_ns = cls.__module__.split(".")
+            if mod_ns[0] != "impera_plugins":
+                raise Exception("All plugin modules should be loaded in the impera_plugins package")
+
+            mod_ns = mod_ns[1:]
+
+            ns = ns_root
+            for part in mod_ns:
+                if ns is None:
+                    break
+                ns = ns.get_child(part)
+
+            if ns is None:
+                raise Exception("Unable to find namespace for plugin module %s" % (cls.__module__))
+
+            cls.namespace = ns
+
+            name = name.split("::")[-1]
+            statement = PluginStatement(ns, name, cls)
+            statements.append(statement)
+
+        return statements
 
 
 class Compiler(object):
     """
-        This class represents a Westmalle compiler.
+        An inmanta compiler
 
         @param options: Options passed to the application
         @param config: The parsed configuration file
@@ -44,20 +147,14 @@ class Compiler(object):
         self.__init_cf = "_init.cf"
 
         self.__cf_file = cf_file
-        self.__parser = Parser()
-
         self.__root_ns = None
-
-        self.graph = graph.Graph()
 
         self.loaded_modules = {}  # a map of the paths of all loaded modules
         self._units = []
+        self.types = {}
 
-    def get_parser(self):
-        """
-            Get an instace of the compiler to parse an input string
-        """
-        return self.__parser
+    def get_plugins(self):
+        return self.plugins
 
     def load(self):
         """
@@ -67,11 +164,8 @@ class Compiler(object):
         main_ns = Namespace("__config__")
         main_ns.parent = root_ns
 
-        # add namespaces to the graph
-        self.graph.add_namespace(root_ns)
         self._units.append(root_ns)
 
-        self.graph.add_namespace(main_ns, root_ns)
         self._units.append(main_ns)
 
         self._add_other_ns(root_ns)
@@ -120,13 +214,8 @@ class Compiler(object):
         type_ns.parent = root_ns
         plugin_ns.parent = root_ns
 
-        type_ns.unit = BuiltinCompileUnit(self, type_ns)
         plugin_ns.unit = PluginCompileUnit(self, plugin_ns)
 
-        self.graph.add_namespace(type_ns, root_ns)
-        self._units.append(type_ns)
-
-        self.graph.add_namespace(plugin_ns, root_ns)
         self._units.append(plugin_ns)
 
     def _load_dir(self, cf_dir, namespace):
@@ -154,7 +243,6 @@ class Compiler(object):
                     new_ns = Namespace(file_name[:-3])
                     new_ns.parent = namespace
 
-                    self.graph.add_namespace(new_ns, namespace)
                     self._units.append(new_ns)
                     new_ns.unit = FileCompileUnit(self, cf_file, new_ns)
 
@@ -181,7 +269,7 @@ class Compiler(object):
                 # load the python file
                 imp.load_source(sub_mod, py_file)
 
-    def load_module(self, module: Module, root_ns):
+    def load_module(self, module: Module, root_ns: Namespace):
         """
             Load all libraries located in a directory.
 
@@ -192,7 +280,6 @@ class Compiler(object):
         namespace = Namespace(name)
         namespace.parent = root_ns
 
-        self.graph.add_namespace(namespace, root_ns)
         self._units.append(namespace)
 
         self._load_dir(module._path, namespace)
@@ -212,20 +299,28 @@ class Compiler(object):
         """
         self.load()
         statements = []
+        blocks = []
         for unit in self._units:
             if unit.unit is not None:
-                statements.extend(unit.unit.compile())
+                block = BasicBlock(unit)
+                stmts = unit.unit.compile()
+                for s in stmts:
+                    if isinstance(s, DefinitionStatement):
+                        statements.append(s)
+                    elif isinstance(s, str):
+                        pass
+                    else:
+                        block.add(s)
+                blocks.append(block)
 
         # add the entity type (hack?)
-        entity = DefineEntity("Entity", "The entity all other entities inherit from.")
-        entity.namespace = Namespace("std", self.__root_ns)
+        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.", [], [])
 
-        requires_rel = DefineRelation([Reference("Entity", ["std"]), "requires", [0, None], False],
-                                      [Reference("Entity", ["std"]), "provides", [0, None], False])
-        requires_rel.requires = ">"
+        requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
+                                      ("std::Entity", "provides", [0, None], False))
         requires_rel.namespace = Namespace("std", self.__root_ns)
 
         statements.append(entity)
         statements.append(requires_rel)
 
-        return statements
+        return (statements, blocks)

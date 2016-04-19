@@ -22,6 +22,7 @@ import logging
 import re
 
 from impera.execute import util
+from impera.execute.proxy import DynamicProxy, UnknownException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -113,18 +114,7 @@ class Resource(object):
         Convert all requires
         """
         for res in cls.__create_cache.values():
-            # replace requires with the correct resources
-            new_requires = set()
-            for require in res.requires:
-                if not isinstance(require, Id):
-                    o = cls.get_resource(require)
-                    if o is None:
-                        raise Exception(("Dependency %s of resource %s is not converted to a valid resource. " +
-                                         "Unable to create a deployment model.") % (require, res))
-
-                    new_requires.add(o.id)
-
-            res.requires = new_requires
+            res.requires = set([cls.__create_cache[r] for r in res.requires])
 
     @classmethod
     def get_resource(cls, model_object):
@@ -134,6 +124,7 @@ class Resource(object):
         @param model_object:
         @return:
         """
+        model_object = model_object._get_instance()
         if model_object in cls.__create_cache:
             return cls.__create_cache[model_object]
 
@@ -158,19 +149,15 @@ class Resource(object):
                 if isinstance(agent_value, list):
                     agent_value = agent_value[0]
 
-                agent_value = getattr(agent_value, el)
+                agent_value = agent_value.get_attribute(el).get_value()
 
-            except AttributeError:
+            except Exception:
                 raise Exception("Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
                                 % (model_object, agent_attribute, el))
 
-        # get the value of the name attribute
-        if not hasattr(model_object, attribute_name):
-            raise Exception("Attribute %s does not exist for %s" % (attribute_name, model_object))
+        attribute_value = DynamicProxy.return_value(model_object.get_attribute(attribute_name).get_value())
 
-        attribute_value = getattr(model_object, attribute_name)
-
-        return Id(entity_name, agent_value, attribute_name, attribute_value)
+        return Id(entity_name, DynamicProxy.return_value(agent_value), attribute_name, attribute_value)
 
     @classmethod
     def create_from_model(cls, exporter, entity_name, model_object):
@@ -190,17 +177,23 @@ class Resource(object):
         for field in cls.fields:
             try:
                 if hasattr(cls, "map") and field in cls.map:
-                    value = cls.map[field](exporter, model_object)
-                    setattr(obj, field, value)
+                    try:
+                        value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
+                        setattr(obj, field, value)
+                    except UnknownException as e:
+                        setattr(obj, field, e.unknown)
 
                 else:
-                    setattr(obj, field, getattr(model_object, field))
+                    try:
+                        setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
+                    except UnknownException as e:
+                        setattr(obj, field, e.unknown)
 
             except AttributeError:
                 raise AttributeError("Attribute %s does not exist on entity of type %s" % (field, entity_name))
 
-        obj.requires = model_object.requires
-        obj.model = model_object
+        obj.requires = model_object.get_attribute("requires").get_value()
+        obj.model = DynamicProxy.return_value(model_object)
 
         cls.__create_cache[model_object] = obj
         return obj
@@ -301,17 +294,21 @@ class Resource(object):
         for field in self.__class__.fields:
             dictionary[field] = getattr(self, field)
 
-        dictionary["requires"] = [str(x) for x in self.requires]
+        dictionary["requires"] = [str(x.id) for x in self.requires]
         dictionary["version"] = self.version
         dictionary["id"] = str(self.id)
 
         return dictionary
+
+    def is_type(self, type: str):
+        return str(self.model._get_instance().get_type()) == type
 
 
 class Id(object):
     """
         A unique id that idenfies a resource that is managed by an agent
     """
+
     def __init__(self, entity_type, agent_name, attribute, attribute_value, version=0):
         self._entity_type = entity_type
         self._agent_name = agent_name
@@ -426,6 +423,7 @@ class HostNotFoundException(Exception):
     """
         This exception is raise when the deployment agent cannot access a host to manage a resource (Use mainly with remote io)
     """
+
     def __init__(self, hostname, user, error):
         self.hostname = hostname
         self.user = user

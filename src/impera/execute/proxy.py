@@ -18,18 +18,24 @@
 
 from copy import copy
 
-from .util import Optional, Unset
 from impera.execute.util import Unknown
+from impera.ast import RuntimeException
 
 
-class UnsetException(Exception):
+class UnsetException(RuntimeException):
     """
         This exception is thrown when an attribute is read that was not yet
         available.
     """
-    def __init__(self, instance=None, attribute=None):
+
+    def __init__(self, msg, instance=None, attribute=None):
+        RuntimeException.__init__(self, None, msg)
         self.instance = instance
         self.attribute = attribute
+        self.msg = msg
+
+    def get_result_variable(self):
+        return self.instance
 
 
 class UnknownException(Exception):
@@ -39,6 +45,7 @@ class UnknownException(Exception):
         receiving this exception is responsible for invalidating any results
         depending on this value by return an instance of Unknown as well.
     """
+
     def __init__(self, unknown):
         self.unknown = unknown
 
@@ -48,6 +55,7 @@ class DynamicProxy(object):
         This class wraps an object and makes sure that a model is never modified
         by native code.
     """
+
     def __init__(self, instance):
         object.__setattr__(self, "__instance", instance)
 
@@ -58,13 +66,6 @@ class DynamicProxy(object):
     def return_value(cls, value):
         if value is None:
             return None
-
-        if isinstance(value, Optional):
-            return None
-
-        if isinstance(value, Unset):
-            # suspend
-            raise UnsetException()
 
         if isinstance(value, Unknown):
             raise UnknownException(value)
@@ -85,15 +86,11 @@ class DynamicProxy(object):
 
     def __getattr__(self, attribute):
         instance = self._get_instance()
-        value = getattr(self._get_instance(), attribute)
+        if isinstance(instance, list):
+            print("KAK")
+        value = instance.get_attribute(attribute).get_value()
 
-        try:
-            return DynamicProxy.return_value(value)
-        except UnsetException as exp:
-            exp.instance = instance
-            exp.attribute = attribute
-
-            raise exp
+        return DynamicProxy.return_value(value)
 
     def __setattr__(self, attribute, value):
         raise Exception("Readonly object")
@@ -102,13 +99,7 @@ class DynamicProxy(object):
         """
             Return the type of the proxied instance
         """
-        return type(self._get_instance())
-
-    def entity(self):
-        """
-            Return the Impera entity of the proxied instance
-        """
-        return self._get_instance().__class__.__entity__
+        return self._get_instance().type
 
     def is_unknown(self):
         """
@@ -139,6 +130,7 @@ class DynamicProxy(object):
 
 
 class SequenceProxy(DynamicProxy):
+
     def __init__(self, iterator):
         DynamicProxy.__init__(self, iterator)
 
@@ -160,6 +152,7 @@ class CallProxy(DynamicProxy):
     """
         Proxy a value that implements a __call__ function
     """
+
     def __init__(self, instance):
         DynamicProxy.__init__(self, instance)
 
@@ -173,6 +166,7 @@ class IteratorProxy(DynamicProxy):
     """
         Proxy an iterator call
     """
+
     def __init__(self, iterator):
         DynamicProxy.__init__(self, iterator)
 
