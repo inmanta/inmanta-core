@@ -20,8 +20,9 @@ from collections import defaultdict
 import logging
 import os
 import time
-import threading
 import datetime
+import hashlib
+import base64
 
 from impera import env
 from impera import protocol
@@ -31,8 +32,6 @@ from impera.config import Config
 from impera.loader import CodeLoader
 from impera.protocol import Scheduler, AgentEndPoint
 from impera.resources import Resource, Id
-import hashlib
-import base64
 from tornado import gen
 
 

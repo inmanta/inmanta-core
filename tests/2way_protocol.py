@@ -18,9 +18,9 @@
 
 import logging
 import sys
-import colorlog
 import uuid
 
+import colorlog
 from impera import methods
 from impera.config import Config
 from tornado import gen

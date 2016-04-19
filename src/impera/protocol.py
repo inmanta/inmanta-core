@@ -703,7 +703,7 @@ class Endpoint(object):
         def handle_result(f):
             try:
                 f.result()
-            except:
+            except Exception:
                 pass
 
         self._io_loop.add_future(future, handle_result)

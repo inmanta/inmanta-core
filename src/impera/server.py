@@ -30,7 +30,7 @@ import glob
 import time
 import base64
 
-from motorengine import connect, errors, ASCENDING, DESCENDING
+from motorengine import connect, errors, DESCENDING
 from motorengine.connection import disconnect
 from impera import methods
 from impera import protocol
@@ -993,7 +993,8 @@ host = localhost
                 LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
                 agent_data["process"].terminate()
 
-            threading.Thread(target=proc.communicate).start()
+            # FIXME: include agent
+            # threading.Thread(target=proc.communicate).start()
             agent_data["process"] = proc
             self._requires_agents[environment_id] = agent_data["process"]
 

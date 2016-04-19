@@ -24,6 +24,7 @@ import os
 import time
 import glob
 import uuid
+import base64
 
 from impera import protocol
 from impera.agent.handler import Commander
@@ -32,7 +33,6 @@ from impera.execute.util import Unknown
 from impera.resources import resource, Resource
 from impera.config import Config
 from impera.module import Project, ModuleTool
-import base64
 from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)

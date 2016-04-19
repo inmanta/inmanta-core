@@ -149,4 +149,3 @@ class testRestServer(ServerTest):
         result = yield self.client.get_version(env_id, version)
         assert_equal(result.code, 200)
         assert_equal(result.result["model"]["done"], 2)
-
