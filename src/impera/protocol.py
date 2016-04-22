@@ -335,7 +335,7 @@ class RESTTransport(Transport):
         url = ""
         if "id" in properties and properties["id"]:
             if msg is None:
-                url = "/%s/(?P<id>.*)" % properties["method_name"]
+                url = "/%s/(?P<id>[^/]+)" % properties["method_name"]
             else:
                 url = "/%s/%s" % (properties["method_name"], urllib.parse.quote(str(msg["id"])))
 
@@ -703,8 +703,8 @@ class Endpoint(object):
         def handle_result(f):
             try:
                 f.result()
-            except Exception:
-                pass
+            except Exception as e:
+                LOGGER.warning("An exception occurred while handling a future: %s", str(e))
 
         self._io_loop.add_future(future, handle_result)
 
@@ -1020,6 +1020,9 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
 
                             def submit_result(future):
                                 result_body, _, status = future.result()
+                                if status == 500:
+                                    LOGGER.error("An error occurred during heartbeat method call (%s %s): %s",
+                                                 method_call["method"], method_call["url"], result_body["message"])
                                 self._client.heartbeat_reply(self._env_id, method_call["reply_id"],
                                                              {"result": result_body, "code": status})
 
