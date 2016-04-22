@@ -996,9 +996,8 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                                                   nodename=self.node_name, interval=self._heart_beat_interval)
             if result.code == 200:
                 if result.result is not None:
-                    body = result.result
-                    if "method_calls" in body:
-                        method_calls = body["method_calls"]
+                    if "method_calls" in result.result:
+                        method_calls = result.result["method_calls"]
                         transport = self._transport(self)
 
                         for method_call in method_calls:
@@ -1015,8 +1014,8 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                                 else:
                                     body[key] = [v.decode("latin-1") for v in value]
 
-                            result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body,
-                                                                         method_call["headers"])
+                            call_result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body,
+                                                                              method_call["headers"])
 
                             def submit_result(future):
                                 result_body, _, status = future.result()
@@ -1026,7 +1025,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                                 self._client.heartbeat_reply(self._env_id, method_call["reply_id"],
                                                              {"result": result_body, "code": status})
 
-                            self._io_loop.add_future(result, submit_result)
+                            self._io_loop.add_future(call_result, submit_result)
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s", result.code, result.result)
 

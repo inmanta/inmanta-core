@@ -16,23 +16,25 @@
     Contact: bart@impera.io
 """
 
+import base64
 from collections import defaultdict
+from concurrent.futures.thread import ThreadPoolExecutor
+import datetime
+import hashlib
 import logging
 import os
 import time
-import datetime
-import hashlib
-import base64
+
+from tornado import gen
 
 from impera import env
-from impera import protocol
 from impera import methods
+from impera import protocol
 from impera.agent.handler import Commander
 from impera.config import Config
 from impera.loader import CodeLoader
 from impera.protocol import Scheduler, AgentEndPoint
 from impera.resources import Resource, Id
-from tornado import gen
 
 
 LOGGER = logging.getLogger(__name__)
@@ -284,6 +286,8 @@ class Agent(AgentEndPoint):
         self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
         self._io_loop.add_callback(self.check_deploy)
 
+        self.thread_pool = ThreadPoolExecutor(4)
+
     @gen.coroutine
     def check_deploy(self):
         while True:
@@ -482,7 +486,7 @@ class Agent(AgentEndPoint):
                     continue
 
                 try:
-                    provider.restore(resource_obj, restore["content_hash"])
+                    yield self.thread_pool.submit(provider.restore, resource_obj, restore["content_hash"])
                     yield self._client.update_restore(tid=tid, id=restore_id,
                                                       resource_id=str(resource_obj.id), success=True, error=False,
                                                       start=start, stop=datetime.datetime.now(), msg="")

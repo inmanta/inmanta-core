@@ -425,7 +425,7 @@ class AgentDryRun(Method):
     """
         Method for requesting a dryrun from an agent
     """
-    __method_name__ = "agent/dryrun"
+    __method_name__ = "agent_dryrun"
 
     @protocol(operation="POST", mt=True, id=True)
     def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
@@ -511,7 +511,7 @@ class AgentParameterMethod(Method):
     """
         Get parameters from the agent
     """
-    __method_name__ = "agent/parameter"
+    __method_name__ = "agent_parameter"
 
     @protocol(operation="POST", mt=True)
     def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
@@ -748,7 +748,7 @@ class AgentSnapshot(Method):
     """
         Snapshot operations performed on the agent
     """
-    __method_name__ = "agent/snapshot"
+    __method_name__ = "agent_snapshot"
 
     @protocol(operation="POST", mt=True)
     def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
@@ -811,7 +811,7 @@ class AgentRestore(Method):
     """
         Snapshot operations performed on the agent
     """
-    __method_name__ = "agent/restore"
+    __method_name__ = "agent_restore"
 
     @protocol(operation="POST", mt=True)
     def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):

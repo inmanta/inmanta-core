@@ -654,7 +654,7 @@ class SnapshotRestore(IdDocument):
 
     @gen.coroutine
     def to_dict(self):
-        self.load_references()
+        yield self.load_references()
         return {"id": self.uuid,
                 "snapshot": self.snapshot.uuid,
                 "started": self.started,
@@ -689,7 +689,8 @@ class Snapshot(IdDocument):
 
     @gen.coroutine
     def to_dict(self):
-        return {"id": self.id,
+        yield self.load_references()
+        return {"id": self.uuid,
                 "model": self.model.version,
                 "name": self.name,
                 "started": self.started,

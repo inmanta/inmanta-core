@@ -17,6 +17,7 @@
 """
 from collections import defaultdict
 import time
+import json
 
 from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
@@ -33,7 +34,7 @@ class Resource(Resource):
     """
         A file on a filesystem
     """
-    fields = ("key", "value", "purged")
+    fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
 
 @provider("test::Resource", name="test_resource")
@@ -65,6 +66,18 @@ class TestProvider(ResourceHandler):
             TestProvider.set(resource.id.get_agent_name(), resource.key, resource.value)
 
         return changes
+
+    def snapshot(self, resource):
+        return json.dumps({"value": TestProvider.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
+
+    def restore(self, resource, snapshot_id):
+        content = self.get_file(snapshot_id)
+        if content is None:
+            return
+
+        data = json.loads(content.decode())
+        if "value" in data:
+            TestProvider.set(resource.id.get_agent_name(), resource.key, data["value"])
 
     _STATE = defaultdict(dict)
 
@@ -128,18 +141,27 @@ class testAgentServer(ServerTest):
                       'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                       'requires': [],
                       'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
                       },
                      {'key': 'key2',
                       'value': 'value2',
                       'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                       'requires': [],
                       'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
                       },
                      {'key': 'key3',
                       'value': None,
                       'id': 'test::Resource[agent1,key=key3],v=%d' % version,
                       'requires': [],
                       'purged': True,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
                       }
                      ]
 
@@ -198,3 +220,84 @@ class testAgentServer(ServerTest):
         assert_equal(TestProvider.get("agent1", "key1"), "value1")
         assert_equal(TestProvider.get("agent1", "key2"), "value2")
         assert_true(not TestProvider.isset("agent1", "key3"))
+
+    @gen_test
+    def test_snapshot_restore(self):
+        """
+            The creating a snapshot and restoring again
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+                                 code_loader=False)
+        self.agent.add_end_point_name("agent1")
+        self.agent.start()
+
+        TestProvider.set("agent1", "key", "value")
+
+        version = int(time.time())
+
+        resources = [{'key': 'key',
+                      'value': 'value',
+                      'id': 'test::Resource[agent1,key=key],v=%d' % version,
+                      'requires': [],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      }]
+
+        result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert_equal(result.code, 200)
+
+        # deploy and wait until done
+        result = yield self.client.release_version(env_id, version, True)
+        assert_equal(result.code, 200)
+
+        result = yield self.client.get_version(env_id, version)
+        assert_equal(result.code, 200)
+        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            result = yield self.client.get_version(env_id, version)
+            yield gen.sleep(0.1)
+
+        assert_equal(result.result["model"]["done"], len(resources))
+
+        # create a snapshot
+        result = yield self.client.create_snapshot(env_id, "snap1")
+        assert_equal(result.code, 200)
+        snapshot_id = result.result["snapshot"]["id"]
+
+        result = yield self.client.list_snapshots(env_id)
+        assert_equal(result.code, 200)
+        assert_equal(len(result.result["snapshots"]), 1)
+        assert_equal(result.result["snapshots"][0]["id"], snapshot_id)
+
+        while result.result["snapshots"][0]["finished"] is None:
+            result = yield self.client.list_snapshots(env_id)
+            assert_equal(result.code, 200)
+            yield gen.sleep(0.1)
+
+        # Change the value of the resource
+        TestProvider.set("agent1", "key", "other")
+
+        # try to do a restore
+        result = yield self.client.restore_snapshot(env_id, snapshot_id)
+        assert_equal(result.code, 200)
+        restore_id = result.result["restore"]["id"]
+
+        result = yield self.client.list_restores(env_id)
+        assert_equal(result.code, 200)
+        assert_equal(len(result.result["restores"]), 1)
+
+        result = yield self.client.get_restore_status(env_id, restore_id)
+        assert_equal(result.code, 200)
+        while result.result["restore"]["finished"] is None:
+            result = yield self.client.get_restore_status(env_id, restore_id)
+            assert_equal(result.code, 200)
+            yield gen.sleep(0.1)
+
+        assert_equal(TestProvider.get("agent1", "key"), "value")

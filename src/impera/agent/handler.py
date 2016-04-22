@@ -222,8 +222,10 @@ class ResourceHandler(object):
         result = self._ioloop.run_sync(call)
         if result.code == 404:
             return None
-        else:
+        elif result.code == 200:
             return base64.b64decode(result.result["content"])
+        else:
+            raise Exception("An error occurred while retrieving file %s" % hash_id)
 
     def stat_file(self, hash_id):
         """

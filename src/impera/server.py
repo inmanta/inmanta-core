@@ -1575,7 +1575,12 @@ host = localhost
             return 404, {"message": "The given environment id does not exist!"}
 
         snapshots = yield data.Snapshot.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        return 200, {"snapshots": [s.to_dict() for s in snapshots]}
+        snap_list = []
+        for s in snapshots:
+            result_dict = yield s.to_dict()
+            snap_list.append(result_dict)
+
+        return 200, {"snapshots": snap_list}
 
     @protocol.handle(methods.Snapshot.get_snapshot)
     @gen.coroutine
@@ -1614,7 +1619,7 @@ host = localhost
 
         # create the snapshot
         snapshot_id = uuid.uuid4()
-        snapshot = data.Snapshot(id=snapshot_id, environment=env, model=version, started=datetime.datetime.now(), name=name)
+        snapshot = data.Snapshot(uuid=snapshot_id, environment=env, model=version, started=datetime.datetime.now(), name=name)
         yield snapshot.save()
 
         # find resources with state
@@ -1623,6 +1628,7 @@ host = localhost
         resource_states = yield (data.ResourceVersion.objects.filter(environment=env, model=version).  # @UndefinedVariable
                                  find_all())  # @UndefinedVariable
         for rs in resource_states:
+            yield rs.load_references()
             if rs.resource.holds_state and "state_id" in rs.attributes:
                 agent = rs.resource.agent
                 resources_to_snapshot[agent].append(rs.to_dict())
@@ -1645,6 +1651,7 @@ host = localhost
                 future = client.do_snapshot(tid, agent, snapshot_id, resources)
                 self.add_future(future)
 
+        snapshot = yield data.Snapshot.get_uuid(snapshot_id)
         value = yield snapshot.to_dict()
         value["resources"] = resource_list
         return 200, {"snapshot": value}
@@ -1656,30 +1663,35 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        snapshot = data.Snapshot.get_uuid(tid)
-        if snapshot is None:
-            return 404, {"message": "Snapshot with id %s does not exist!" % id}
+        with (yield LOCK.acquire()):
+            snapshot = yield data.Snapshot.get_uuid(id)
+            if snapshot is None:
+                return 404, {"message": "Snapshot with id %s does not exist!" % id}
 
-        res = yield (data.ResourceSnapshot.objects.  # @UndefinedVariable
-                     filter(environment=env, snapshot=snapshot, resource_id=resource_id).find_all())  # @UndefinedVariable
+            res = yield (data.ResourceSnapshot.objects.  # @UndefinedVariable
+                         filter(environment=env, snapshot=snapshot, resource_id=resource_id).find_all())  # @UndefinedVariable
 
-        res.content_hash = snapshot_data
-        res.started = start
-        res.finished = stop
-        res.size = size
-        res.success = success
-        res.error = error
-        res.msg = msg
+            if len(res) == 0:
+                return 404, {"message": "Resource not found"}
+            res = res[0]
 
-        yield res.save()
+            res.content_hash = snapshot_data
+            res.started = start
+            res.finished = stop
+            res.size = size
+            res.success = success
+            res.error = error
+            res.msg = msg
 
-        snapshot.resources_todo -= 1
-        snapshot.total_size += size
+            yield res.save()
 
-        if snapshot.resources_todo == 0:
-            snapshot.finished = datetime.datetime.now()
+            snapshot.resources_todo -= 1
+            snapshot.total_size += size
 
-        yield snapshot.save()
+            if snapshot.resources_todo == 0:
+                snapshot.finished = datetime.datetime.now()
+
+            yield snapshot.save()
 
         return 200
 
@@ -1702,8 +1714,8 @@ host = localhost
     @gen.coroutine
     def restore_snapshot(self, tid, snapshot):
         f1 = data.Environment.get_uuid(tid)
-        f2 = data.Snapshot.get_uuid(id)
-        env, snapshot = yield f1, f2
+        f2 = data.Snapshot.get_uuid(snapshot)
+        env, snapshot = yield [f1, f2]
 
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
@@ -1712,10 +1724,10 @@ host = localhost
             return 404, {"message": "Snapshot with id %s does not exist!" % snapshot}
 
         # get all resources in the snapshot
-        snap_resources = yield data.ResourceSnapshot.objects.fitler(snapshot=snapshot).find_all()  # @UndefinedVariable
+        snap_resources = yield data.ResourceSnapshot.objects.filter(snapshot=snapshot).find_all()  # @UndefinedVariable
 
         # get all resource that support state in the current environment
-        env_versions = yield (data.ConfigurationModel.objects(environment=env, deployed=True).  # @UndefinedVariable
+        env_versions = yield (data.ConfigurationModel.objects.filter(environment=env, deployed=True).  # @UndefinedVariable
                               order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
         if len(env_versions) == 0:
@@ -1739,8 +1751,10 @@ host = localhost
         for r in snap_resources:
             if r.state_id in env_states:
                 env_res = env_states[r.state_id]
-                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res.id))
-                restore_list[env_res.resource.agent].append((r.to_dict(), env_res.to_dict()))
+                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res.rid))
+                yield env_res.load_references()
+                r_dict = yield r.to_dict()
+                restore_list[env_res.resource.agent].append((r_dict, env_res.to_dict()))
 
                 rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id, resource_id=env_res.rid,
                                           started=datetime.datetime.now(),)
@@ -1751,11 +1765,13 @@ host = localhost
 
         for agent, resources in restore_list.items():
             client = self.get_agent_client(tid, agent)
-            future = client.do_restore(tid, agent, restore_id, snapshot.id, resources)
-            self.add_future(future)
+            if client is not None:
+                future = client.do_restore(tid, agent, restore_id, snapshot.uuid, resources)
+                self.add_future(future)
 
+        restore = yield data.SnapshotRestore.get_uuid(restore_id)
         restore_dict = yield restore.to_dict()
-        return 200, restore_dict
+        return 200, {"restore": restore_dict}
 
     @protocol.handle(methods.RestoreSnapshot.list_restores)
     @gen.coroutine
@@ -1766,7 +1782,7 @@ host = localhost
 
         restores = yield data.SnapshotRestore.objects.filter(environment=env).find_all()  # @UndefinedVariable
         restore_list = yield [x.to_dict() for x in restores]
-        return 200, restore_list
+        return 200, {"restores": restore_list}
 
     @protocol.handle(methods.RestoreSnapshot.get_restore_status)
     @gen.coroutine
@@ -1775,13 +1791,17 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        restore = data.SnapshotRestore.get_uuid(id)
+        restore = yield data.SnapshotRestore.get_uuid(id)
         if restore is None:
             return 404, {"message": "The given restore id does not exist!"}
 
         restore_dict = yield restore.to_dict()
         resources = yield data.ResourceRestore.objects.filter(restore=restore).find_all()  # @UndefinedVariable
-        restore_dict["resources"] = [x.to_dict() for x in resources]
+        restore_dict["resources"] = []
+        for x in resources:
+            result = yield x.to_dict()
+            restore_dict["resources"].append(result)
+
         return 200, {"restore": restore_dict}
 
     @protocol.handle(methods.RestoreSnapshot.update_restore)
@@ -1791,21 +1811,24 @@ host = localhost
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        rr = yield (data.ResourceRestore.objects.  # @UndefinedVariable
-                    filter(environment=env, restore=id, resource_id=resource_id).find_all())  # @UndefinedVariable
-        if rr is None:
-            return 404, {"message": "Resource restore not found."}
+        with (yield LOCK.acquire()):
+            restore = yield data.SnapshotRestore.get_uuid(id)
+            rr = yield (data.ResourceRestore.objects.  # @UndefinedVariable
+                        filter(environment=env, restore=restore, resource_id=resource_id).find_all())  # @UndefinedVariable
+            if len(rr) == 0:
+                return 404, {"message": "Resource restore not found."}
+            rr = rr[0]
 
-        rr.error = error
-        rr.success = success
-        rr.started = start
-        rr.finished = stop
-        yield rr.save(), rr.load_references()
+            rr.error = error
+            rr.success = success
+            rr.started = start
+            rr.finished = stop
+            yield [rr.save(), rr.load_references()]
 
-        rr.restore.resource_todo -= 1
-        if rr.restore.resource_todo == 0:
-            rr.restore.finished = datetime.datetime.now()
-            yield rr.restore.save()
+            restore.resources_todo -= 1
+            if restore.resources_todo == 0:
+                restore.finished = datetime.datetime.now()
+                yield restore.save()
 
         return 200
 
