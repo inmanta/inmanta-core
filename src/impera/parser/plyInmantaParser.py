@@ -45,15 +45,15 @@ def attach_lnr(p, token=1):
     v.namespace = namespace
 
 
-def attach_lnr_for_parser(p, token=1):
-    v = p[0]
-    v.lineno = p.lineno(token)
+# def attach_lnr_for_parser(p, token=1):
+#     v = p[0]
+#     v.lineno = p.lineno(token)
 
 
 def p_main_collect(p):
     """main : top_stmt main"""
     v = p[2]
-    v.append(p[1])
+    v.insert(0, p[1])
     p[0] = v
 
 
@@ -190,10 +190,10 @@ def p_implementation_def(p):
     attach_lnr(p)
 
 
-def p_implementation_def_2(p):
-    "implementation_def : IMPLEMENTATION ID implementation"
-    p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
-    attach_lnr(p)
+# def p_implementation_def_2(p):
+#     "implementation_def : IMPLEMENTATION ID implementation"
+#     p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
+#     attach_lnr(p)
 
 
 def p_implementation(p):
@@ -360,7 +360,7 @@ def p_constant(p):
 def p_constant_regex(p):
     """ constant : REGEX
     """
-    p[0] = p[0]
+    p[0] = p[1]
     attach_lnr(p)
 
 
@@ -543,6 +543,9 @@ def myparse(ns, tfile, content):
                 lexer.lineno = 1
                 return parser.parse(data, lexer=lexer, debug=False)
         else:
+            data = content
+            if len(data) == 0:
+                return []
             lexer.lineno = 1
             return parser.parse(content, lexer=lexer, debug=False)
     except ParserException as e:
