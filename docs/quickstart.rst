@@ -262,9 +262,7 @@ you can then immediately surf to `http://localhost:2080/ <http://localhost:2080/
 .. note::
 
    Windows users can use PuTTY for SSH access to their servers. PuTTY also
-   allows port forwarding. You can find more information on this topic here:
-   http://the.earth.li/~sgtatham/putty/0.63/htmldoc/Chapter3.html#using-port-forwarding
-
+   allows port forwarding.
 
 Managing multiple machines
 ==========================
