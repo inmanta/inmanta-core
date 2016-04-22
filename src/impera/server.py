@@ -646,7 +646,7 @@ class Server(protocol.ServerEndpoint):
         for agent in agent_env.agents:
             client = self.get_agent_client(tid, agent)
             if client is not None:
-                future = client.trigger_agent(tid, agent, -1)
+                future = client.trigger_agent(tid, agent)
                 self.add_future(future)
 
         return 200
@@ -1028,7 +1028,7 @@ host = localhost
                 self._ensure_agent(tid, agent)
                 client = self.get_agent_client(tid, agent)
                 if client is not None:
-                    future = client.trigger_agent(tid, agent, id)
+                    future = client.trigger_agent(tid, agent)
                     self.add_future(future)
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, id, tid)

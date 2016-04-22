@@ -18,7 +18,7 @@
 from collections import defaultdict
 import time
 
-from nose.tools import assert_equal, assert_less_equal, assert_true, assert_in
+from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
 from tornado import gen
 
@@ -113,7 +113,8 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost")
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+                                 code_loader=False)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 

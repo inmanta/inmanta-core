@@ -64,7 +64,7 @@ class testRestServer(ServerTest):
     @gen_test
     def test_get_resource_for_agent(self):
         """
-            Test auto removal of older deploy model versions
+            Test the server to manage the updates on a model during agent deploy
         """
         result = yield self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
@@ -72,11 +72,11 @@ class testRestServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        version = int(time.time())
+        version = 1
 
         resources = [{'group': 'root',
                       'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                      'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=1460983366',
+                      'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
                       'owner': 'root',
                       'path': '/etc/sysconfig/network',
                       'permissions': 644,
@@ -86,7 +86,7 @@ class testRestServer(ServerTest):
                       'version': version},
                      {'group': 'root',
                       'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
-                      'id': 'std::File[vm2.dev.inmanta.com,path=/etc/motd],v=1460983366',
+                      'id': 'std::File[vm2.dev.inmanta.com,path=/etc/motd],v=%d' % version,
                       'owner': 'root',
                       'path': '/etc/motd',
                       'permissions': 644,
@@ -96,7 +96,7 @@ class testRestServer(ServerTest):
                       'version': version},
                      {'group': 'root',
                       'hash': '3bfcdad9ab7f9d916a954f1a96b28d31d95593e4',
-                      'id': 'std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=1460983366',
+                      'id': 'std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d' % version,
                       'owner': 'root',
                       'path': '/etc/hostname',
                       'permissions': 644,
@@ -104,10 +104,10 @@ class testRestServer(ServerTest):
                       'reload': False,
                       'requires': [],
                       'version': version},
-                     {'id': 'std::Service[vm1.dev.inmanta.com,name=network],v=1460983366',
+                     {'id': 'std::Service[vm1.dev.inmanta.com,name=network],v=%d' % version,
                       'name': 'network',
                       'onboot': True,
-                      'requires': ['std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=1460983366'],
+                      'requires': ['std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version],
                       'state': 'running',
                       'version': version}]
 
@@ -133,7 +133,7 @@ class testRestServer(ServerTest):
         assert_equal(len(result.result["resources"]), 3)
 
         result = yield self.client.resource_updated(env_id,
-                                                    "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=1460983366",
+                                                    "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
                                                     "INFO", "deploy", "", "deployed", {})
         assert_equal(result.code, 200)
 
@@ -142,7 +142,7 @@ class testRestServer(ServerTest):
         assert_equal(result.result["model"]["done"], 1)
 
         result = yield self.client.resource_updated(env_id,
-                                                    "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=1460983366",
+                                                    "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
                                                     "INFO", "deploy", "", "deployed", {})
         assert_equal(result.code, 200)
 

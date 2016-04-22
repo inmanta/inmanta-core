@@ -18,18 +18,18 @@
 
 
 from _io import StringIO
-import os
 import logging
-import unittest
+import os
 import shutil
-import tempfile
 import subprocess
+import tempfile
+import unittest
 
-from impera import module
 from nose.tools import raises, assert_equal, assert_true
-from impera.module import ModuleTool, InvalidModuleException, Project
-from impera.config import Config
 import yaml
+from impera import module
+from impera.config import Config
+from impera.module import ModuleTool, InvalidModuleException, Project
 
 
 def makemodule(reporoot, name, deps, project=False):
