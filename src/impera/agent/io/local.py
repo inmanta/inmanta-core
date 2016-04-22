@@ -20,7 +20,7 @@ import hashlib
 import os
 import pwd
 import subprocess
-import grp
+import grp  # @UnresolvedImport
 import shutil
 
 
