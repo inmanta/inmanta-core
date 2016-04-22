@@ -337,7 +337,7 @@ class RESTTransport(Transport):
             if msg is None:
                 url = "/%s/(?P<id>[^/]+)" % properties["method_name"]
             else:
-                url = "/%s/%s" % (properties["method_name"], urllib.parse.quote(str(msg["id"])))
+                url = "/%s/%s" % (properties["method_name"], urllib.parse.quote(str(msg["id"]), safe=""))
 
         elif "index" in properties and properties["index"]:
             url = "/%s" % properties["method_name"]
