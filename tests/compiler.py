@@ -440,6 +440,15 @@ a=a::b::c.d
     tools.assert_equals(stmt.value.attribute, "d")
 
 
+def test_Lexer():
+    statements = parse_code("""
+#test
+//test2
+a=0.5
+b=""
+""")
+
+
 @raises(ParserException)
 def test_Bad():
     parse_code("""
