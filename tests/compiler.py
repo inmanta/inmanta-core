@@ -441,7 +441,7 @@ a=a::b::c.d
 
 
 def test_Lexer():
-    statements = parse_code("""
+    parse_code("""
 #test
 //test2
 a=0.5
