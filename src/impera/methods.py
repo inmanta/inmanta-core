@@ -462,16 +462,6 @@ class NotifyMethod(Method):
            :param id The environment id
         """
 
-    @protocol(operation="POST", mt=True, id=True)
-    def trigger_agent(self, tid: uuid.UUID, agent: str, id: int):
-        """
-            Trigger a new deploy on the agent
-
-            :param tid The environment id
-            :param agent The agent to trigger
-            :param id The version to trigger
-        """
-
 
 class ParameterMethod(Method):
     """
