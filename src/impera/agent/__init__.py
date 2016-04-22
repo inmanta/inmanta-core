@@ -233,7 +233,7 @@ class Agent(AgentEndPoint):
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True):
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None):
         super().__init__("agent", io_loop, heartbeat_interval=int(Config.get("config", "heartbeat-interval", 10)))
 
         if agent_map is None:
@@ -247,9 +247,10 @@ class Agent(AgentEndPoint):
 
         self._last_update = 0
 
-        env_id = Config.get("config", "environment")
         if env_id is None:
-            raise Exception("The agent requires an environment to be set.")
+            env_id = Config.get("config", "environment")
+            if env_id is None:
+                raise Exception("The agent requires an environment to be set.")
         self.set_environment(env_id)
 
         if code_loader:
@@ -337,14 +338,14 @@ class Agent(AgentEndPoint):
 
                 self.latest_code_version = version
 
-    @protocol.handle(methods.NotifyMethod.trigger_agent)
+    @protocol.handle(methods.NodeMethod.trigger_agent)
     @gen.coroutine
-    def trigger_update(self, tid, agent, id):
+    def trigger_update(self, tid, id):
         """
             Trigger an update
         """
-        print("Got trigger for %s %s %s" % (tid, agent, id))
-        future = self.get_latest_version_for_agent(agent)
+        LOGGER.info("Agent %s got a trigger to update in environment %s", id, tid)
+        future = self.get_latest_version_for_agent(id)
         self.add_future(future)
         return 200
 
@@ -379,6 +380,7 @@ class Agent(AgentEndPoint):
         """
            Run a dryrun of the given version
         """
+        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, id, version, tid)
         assert tid == self._env_id
 
         result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent, version=version)
