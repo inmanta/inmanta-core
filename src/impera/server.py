@@ -110,7 +110,7 @@ class Server(protocol.ServerEndpoint):
         for env_id in self._requires_agents.keys():
             agent = list(self._requires_agents[env_id]["agents"])[0]
             self._requires_agents[env_id]["agents"].remove(agent)
-            self._ensure_agent(env_id, agent)
+            yield self._ensure_agent(env_id, agent)
 
     def stop(self):
         disconnect()
@@ -207,7 +207,7 @@ class Server(protocol.ServerEndpoint):
             if len(rvs) == 0:
                 return 404, {"message": "The parameter does not exist."}
 
-            self._ensure_agent(tid, resource.agent)
+            yield self._ensure_agent(tid, resource.agent)
             client = self.get_agent_client(tid, resource.agent)
             if client is not None:
                 future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
@@ -275,7 +275,7 @@ class Server(protocol.ServerEndpoint):
                 if len(rvs) == 0:
                     return 404, {"message": "The parameter does not exist."}
 
-                self._ensure_agent(tid, resource.agent)
+                yield self._ensure_agent(tid, resource.agent)
                 client = self.get_agent_client(tid, resource.agent)
                 if client is not None:
                     future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
@@ -834,49 +834,50 @@ class Server(protocol.ServerEndpoint):
                                      resources_total=len(resources), version_info=version_info)
         yield cm.save()
 
+        all_resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        resources_dict = {x.resource_id: x for x in all_resources}
+
+        rv_list = []
+        ra_list = []
         for res_dict in resources:
             resource_obj = Id.parse_id(res_dict['id'])
             resource_id = resource_obj.resource_str()
 
-            resources = yield (data.Resource.objects.filter(environment=env, resource_id=resource_id).  # @UndefinedVariable
-                               find_all())  # @UndefinedVariable
-            if len(resources) > 0:
-                if len(resources) == 1:
-                    resource = resources[0]
-                    resource.version_latest = version
-
-                else:
-                    raise Exception("A resource id should be unique in an environment! (env=%s, resource=%s)" %
-                                    (tid, resource_id))
+            if resource_id in resources_dict:
+                res_obj = resources_dict[resource_id]
+                res_obj.version_latest = version
 
             else:
-                resource = data.Resource(environment=env, resource_id=resource_id,
-                                         resource_type=resource_obj.get_entity_type(),
-                                         agent=resource_obj.get_agent_name(),
-                                         attribute_name=resource_obj.get_attribute(),
-                                         attribute_value=resource_obj.get_attribute_value(), version_latest=version)
+                res_obj = data.Resource(environment=env, resource_id=resource_id,
+                                        resource_type=resource_obj.get_entity_type(),
+                                        agent=resource_obj.get_agent_name(),
+                                        attribute_name=resource_obj.get_attribute(),
+                                        attribute_value=resource_obj.get_attribute_value(), version_latest=version)
 
             if "state_id" in res_dict:
-                resource.holds_state = True
                 if res_dict["state_id"] == "":
                     res_dict["state_id"] = resource_id
+                if not res_obj.holds_state:
+                    res_obj.holds_state = True
+
+            yield res_obj.save()
 
             attributes = {}
             for field, value in res_dict.items():
                 if field != "id":
                     attributes[field] = value
 
-            yield resource.save()
-
-            rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=resource, model=cm, attributes=attributes)
-            yield rv.save()
+            rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=res_obj, model=cm, attributes=attributes)
+            rv_list.append(rv)
 
             ra = data.ResourceAction(resource_version=rv, action="store", level="INFO", timestamp=datetime.datetime.now())
-            yield ra.save()
+            ra_list.append(ra)
+
+        yield data.ResourceVersion.objects.bulk_insert(rv_list)  # @UndefinedVariable
+        yield data.ResourceAction.objects.bulk_insert(ra_list)  # @UndefinedVariable
 
         # search for deleted resources
-        env_resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for res in env_resources:
+        for res in all_resources:
             if res.version_latest < version:
                 rv = yield (data.ResourceVersion.objects.filter(environment=env, resource=res).  # @UndefinedVariable
                             order_by("rid", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
@@ -928,6 +929,7 @@ class Server(protocol.ServerEndpoint):
 
         return False
 
+    @gen.coroutine
     def _ensure_agent(self, environment_id, agent_name):
         """
             Ensure that the agent is running if required
@@ -992,6 +994,9 @@ host = localhost
             threading.Thread(target=proc.communicate).start()
             agent_data["process"] = proc
             self._requires_agents[environment_id] = agent_data
+            # wait a bit here to make sure the agents registers with the server
+            # TODO: queue calls in agent work queue even if agent is not available
+            yield gen.sleep(2)
 
             LOGGER.debug("Started new agent with PID %s", proc.pid)
 
@@ -1020,7 +1025,7 @@ host = localhost
                 agents.add(rv.resource.agent)
 
             for agent in agents:
-                self._ensure_agent(tid, agent)
+                yield self._ensure_agent(tid, agent)
                 client = self.get_agent_client(tid, agent)
                 if client is not None:
                     future = client.trigger_agent(tid, agent)
@@ -1059,7 +1064,7 @@ host = localhost
 
         tid = str(tid)
         for agent in agents:
-            self._ensure_agent(tid, agent)
+            yield self._ensure_agent(tid, agent)
             client = self.get_agent_client(tid, agent)
             if client is not None:
                 future = client.do_dryrun(tid, dryrun_id, agent, id)
