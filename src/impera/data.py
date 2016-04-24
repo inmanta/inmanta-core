@@ -121,9 +121,9 @@ class Parameter(Document):
     updated = DateTimeField()
     metadata = JsonField()
 
-#     meta = {
-#         'indexes': ['environment', 'metadata']
-#     }
+    meta = {
+        'indexes': ['environment', 'metadata']
+    }
 
     def to_dict(self):
         return {"name": self.name,

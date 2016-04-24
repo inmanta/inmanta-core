@@ -37,7 +37,6 @@ from motorengine.connection import disconnect
 from tornado import gen
 from tornado import locks
 from tornado import process
-
 from impera import data
 from impera import methods
 from impera import protocol
@@ -873,8 +872,11 @@ class Server(protocol.ServerEndpoint):
             ra = data.ResourceAction(resource_version=rv, action="store", level="INFO", timestamp=datetime.datetime.now())
             ra_list.append(ra)
 
-        yield data.ResourceVersion.objects.bulk_insert(rv_list)  # @UndefinedVariable
-        yield data.ResourceAction.objects.bulk_insert(ra_list)  # @UndefinedVariable
+        if len(rv_list) > 0:
+            yield data.ResourceVersion.objects.bulk_insert(rv_list)  # @UndefinedVariable
+
+        if len(ra_list) > 0:
+            yield data.ResourceAction.objects.bulk_insert(ra_list)  # @UndefinedVariable
 
         # search for deleted resources
         for res in all_resources:

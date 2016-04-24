@@ -26,7 +26,6 @@ import os
 import time
 
 from tornado import gen
-
 from impera import env
 from impera import methods
 from impera import protocol
