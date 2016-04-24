@@ -292,7 +292,7 @@ class Agent(AgentEndPoint):
     def check_deploy(self):
         while True:
             if self._queue.size() > 0:
-                self.deploy_config()
+                yield self.deploy_config()
             else:
                 yield gen.sleep(1)
 
@@ -396,7 +396,7 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
             return 500
 
-        self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
+        yield self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
 
         try:
             for res in result.result["resources"]:
@@ -412,8 +412,7 @@ class Agent(AgentEndPoint):
                     self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
                     continue
 
-                results = provider.execute(resource, dry_run=True)
-
+                results = yield self.thread_pool.submit(provider.execute, resource, dry_run=True)
                 yield self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
                                                  changes=results["changes"], log_msg=results["log_msg"])
 
@@ -531,7 +530,7 @@ class Agent(AgentEndPoint):
                     continue
 
                 try:
-                    result = provider.snapshot(resource_obj)
+                    result = yield self.thread_pool.submit(provider.snapshot, resource_obj)
                     if result is not None:
                         sha1sum = hashlib.sha1()
                         sha1sum.update(result)
@@ -586,7 +585,7 @@ class Agent(AgentEndPoint):
                 return 500
 
             try:
-                result = provider.check_resource(resource)
+                result = yield self.thread_pool.submit(provider.check_resource, resource)
                 return 200, result
             except Exception:
                 LOGGER.exception("Unable to check status of %s" % resource)
@@ -605,7 +604,7 @@ class Agent(AgentEndPoint):
             provider = Commander.get_provider(self, resource_obj)
 
             try:
-                result = provider.check_facts(resource_obj)
+                result = self.thread_pool.submit(provider.check_facts, resource_obj)
                 for param, value in result.items():
                     yield self._client.set_param(tid=tid, resource_id=resource["id"], source="fact", id=param, value=value)
 
@@ -648,6 +647,7 @@ class Agent(AgentEndPoint):
         reload_resource = body["reload"]
         self._dm.resource_update(rid, version, reload_resource)
 
+    @gen.coroutine
     def deploy_config(self):
         """
             Deploy a configuration is there are items in the queue
@@ -670,13 +670,13 @@ class Agent(AgentEndPoint):
                 self._queue.remove(resource)
                 continue
 
-            results = provider.execute(resource)
-            self.resource_updated(resource, reload_requires=results["changed"], changes=results["changes"],
-                                  status=results["status"], log_msg=results["log_msg"])
+            results = yield self.thread_pool.submit(provider.execute, resource)
+            yield self.resource_updated(resource, reload_requires=results["changed"], changes=results["changes"],
+                                        status=results["status"], log_msg=results["log_msg"])
 
             if resource.do_reload and provider.can_reload():
                 LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
-                provider.do_reload(resource)
+                yield self.thread_pool.submit(provider.do_reload, resource)
 
             LOGGER.debug("Finished %s" % resource)
             self._queue.remove(resource)

@@ -120,6 +120,9 @@ class testAgentServer(ServerTest):
     # TOOD: handler requires that is missing
     @gen_test
     def test_dryrun_and_deploy(self):
+        """
+            dryrun and deploy a configuration model
+        """
         result = yield self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
 
@@ -224,7 +227,7 @@ class testAgentServer(ServerTest):
     @gen_test
     def test_snapshot_restore(self):
         """
-            The creating a snapshot and restoring again
+            create a snapshot and restore it again
         """
         result = yield self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
