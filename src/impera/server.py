@@ -16,33 +16,35 @@
     Contact: code@inmanta.com
 """
 
+import base64
+from collections import defaultdict
 import datetime
+import difflib
+import glob
+import json
 import logging
 import os
-import difflib
-import subprocess
 import re
+import subprocess
 import sys
-from collections import defaultdict
-import uuid
-import json
-import glob
+import threading
 import time
-import base64
+import uuid
 
+import dateutil
 from motorengine import connect, errors, DESCENDING
 from motorengine.connection import disconnect
+from tornado import gen
+from tornado import locks
+from tornado import process
+
+from impera import data
 from impera import methods
 from impera import protocol
-from impera import data
-from impera.config import Config
-from impera.resources import Id, HostNotFoundException
-import dateutil
 from impera.agent.io.remote import RemoteIO
 from impera.ast import type
-from tornado import gen
-from tornado import process
-from tornado import locks
+from impera.config import Config
+from impera.resources import Id, HostNotFoundException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -157,11 +159,6 @@ class Server(protocol.ServerEndpoint):
         dir_map["files"] = file_dir
         if not os.path.exists(file_dir):
             os.mkdir(file_dir)
-
-        db_dir = os.path.join(server_state_dir, "database")
-        dir_map["db"] = db_dir
-        if not os.path.exists(db_dir):
-            os.mkdir(db_dir)
 
         environments_dir = os.path.join(server_state_dir, "environments")
         dir_map["environments"] = environments_dir
@@ -935,8 +932,6 @@ class Server(protocol.ServerEndpoint):
         """
             Ensure that the agent is running if required
         """
-        return
-    #    FIXME:
         if self._agent_matches(agent_name):
             LOGGER.debug("%s matches agents managed by server, ensuring it is started.", agent_name)
             agent_data = None
@@ -994,9 +989,9 @@ host = localhost
                 agent_data["process"].terminate()
 
             # FIXME: include agent
-            # threading.Thread(target=proc.communicate).start()
+            threading.Thread(target=proc.communicate).start()
             agent_data["process"] = proc
-            self._requires_agents[environment_id] = agent_data["process"]
+            self._requires_agents[environment_id] = agent_data
 
             LOGGER.debug("Started new agent with PID %s", proc.pid)
 
@@ -1055,10 +1050,6 @@ host = localhost
         rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
         dryrun.resource_total = len(rvs)
         dryrun.resource_todo = dryrun.resource_total
-
-        # FIXME: This gives error on large models, possibly due to many queries at the same time
-        # yield [rv.load_references() for rv in rvs]
-        # yield [rv.resource.load_references() for rv in rvs]
 
         agents = set()
         for rv in rvs:
