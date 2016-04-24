@@ -106,12 +106,12 @@ class For(GeneratorStatement):
         self.base.normalize(resolver)
         # self.loop_var.normalize(resolver)
         self.module.normalize(resolver)
+        self.module.add_var(self.loop_var)
 
     def requires(self):
         base = self.base.requires()
         var = self.loop_var
         ext = self.module.requires
-        self.module.add_var(var)
         return list(set(base).union(ext) - set(var))
 
     def requires_emit(self, resolver, queue):
