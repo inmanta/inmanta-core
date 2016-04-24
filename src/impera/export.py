@@ -322,7 +322,7 @@ class Exporter(object):
         return resources
 
     def run_sync(self, function):
-        return self._io_loop.run_sync(function, 5)
+        return self._io_loop.run_sync(function, 60)
 
     def deploy_code(self, tid, version=None):
         """
