@@ -393,12 +393,14 @@ class Instance(ExecutionContext):
         """
             The object should be complete, freeze all attributes
         """
-        for v in self.slots.values():
+        for k, v in self.slots.items():
             if not v.is_ready():
                 if v.can_get():
                     v.freeze()
                 else:
-                    raise RuntimeException(self, "The object %s is not complete: " % self)
+                    attr = self.type.get_attribute(k)
+                    raise RuntimeException(self, "The object %s is not complete: attribute %s (%s) is not set" %
+                                           (self, k, attr.location))
 
     def dump(self):
         print("------------ ")
