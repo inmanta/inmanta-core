@@ -533,7 +533,7 @@ def p_error(p):
 
 # Build the parser
 lexer = plyInmantaLex.lexer
-parser = yacc.yacc(debug=True)
+parser = yacc.yacc()
 
 
 def myparse(ns, tfile, content):
