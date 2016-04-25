@@ -21,7 +21,8 @@ import logging
 from impera import protocol
 from impera.config import Config
 from impera.execute.util import Unknown
-from impera.export import Exporter, unknown_parameters
+from impera.export import unknown_parameters
+from impera import resources
 from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def get_fact(res, fact_name: str, default_value=None, metadata={}) -> "any":
     """
         Get the fact with the given name from the database
     """
-    resource_id = Exporter.get_id(res)
+    resource_id = resources.to_id(res)
 
     fact_value = None
     try:

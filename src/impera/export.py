@@ -57,27 +57,6 @@ class Exporter(object):
         cls.__export_functions[name] = (types, function)
 
     @classmethod
-    def add_id(cls, type_id, function):
-        """
-            Add a new id conversion function
-        """
-        cls.__id_conversion[type_id] = function
-
-    @classmethod
-    def get_id(cls, resource):
-        """
-            Get an id using a registered id conversion function
-        """
-
-        for cls_name in resource.type().get_all_parent_names() + [str(resource.type())]:
-            if cls_name in cls.__id_conversion:
-                function = cls.__id_conversion[cls_name]
-
-                return function(resource)
-
-        return None
-
-    @classmethod
     def reset(cls):
         """
             Reset the state
@@ -475,22 +454,6 @@ class export(object):
             The wrapping
         """
         Exporter.add(self.name, self.types, function)
-        return function
-
-
-class resource_to_id(object):
-    """
-        Register a function to convert a resource to an id
-    """
-
-    def __init__(self, type_id):
-        self.type_id = type_id
-
-    def __call__(self, function):
-        """
-            The wrapping
-        """
-        Exporter.add_id(self.type_id, function)
         return function
 
 

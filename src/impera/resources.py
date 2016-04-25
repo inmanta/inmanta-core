@@ -96,6 +96,23 @@ class ResourceNotFoundExcpetion(Exception):
     """
 
 
+def to_id(entity):
+    """
+        Convert an entity from the model to its resource id
+    """
+    entity_name = str(entity.type())
+    for cls_name in [entity_name] + entity.type().get_all_parent_names():
+        cls, options = resource.get_class(cls_name)
+
+        if cls is not None:
+            break
+
+    if cls is not None:
+        obj_id = cls.object_to_id(entity._get_instance(), entity_name, options["name"], options["agent"])
+
+    return obj_id
+
+
 class Resource(object):
     """
     A managed resource on a system
