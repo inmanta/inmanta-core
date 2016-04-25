@@ -19,7 +19,6 @@
 # pylint: disable-msg=R0902,R0904
 
 from impera.ast.type import Type, NameSpacedResolver
-from impera import stats
 from impera.ast.blocks import BasicBlock
 from impera.execute.runtime import Instance, ResultVariable
 from impera.ast.statements.generator import SubConstructor
@@ -246,8 +245,6 @@ class Entity(Type):
             out.set_attribute(k, v)
 
         self.add_instance(out)
-
-        stats.Stats.get("construct").increment()
         return out
 
     def is_subclass(self, cls):

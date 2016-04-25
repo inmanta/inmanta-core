@@ -16,7 +16,6 @@
     Contact: bart@impera.io
 """
 
-from impera.stats import Stats
 from impera.ast.statements import ReferenceStatement
 from impera.execute.runtime import ResultVariable, Waiter
 from impera.execute.proxy import UnsetException, UnknownException
@@ -75,11 +74,9 @@ class FunctionCall(ReferenceStatement):
 
         if function.opts["emits_statements"]:
             function(*arguments)
-            Stats.get("function call").increment()
         else:
             try:
                 value = function(*arguments)
-                Stats.get("function call").increment()
                 result.set_value(value)
             except UnknownException as e:
                 result.set_value(e.unknown)

@@ -19,7 +19,6 @@
 # pylint: disable-msg=W0613,R0201
 
 from . import GeneratorStatement
-from impera.stats import Stats
 from impera.execute.util import Unknown
 from impera.execute.runtime import ExecutionContext
 from impera.ast import RuntimeException, TypingException
@@ -63,7 +62,6 @@ class SubConstructor(GeneratorStatement):
             xc = ExecutionContext(impl.statements, resolver)
             xc.emit(queue)
 
-        Stats.get("refine").increment(len(implementations))
         return "X-I"
 
     def get_implementation(self, requires, resolver, queue):

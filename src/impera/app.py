@@ -26,7 +26,6 @@ from impera.command import command, Commander
 from impera.compiler import do_compile
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
-from impera.stats import Stats
 from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger()
@@ -144,8 +143,6 @@ def cmd_parser():
     parser = ArgumentParser()
     parser.add_argument("-p", action="store_true", dest="profile", help='Profile this run of the program')
     parser.add_argument("-c", "--config", dest="config_file", help="Use this config file")
-    parser.add_argument("-s", "--stats", dest="stats", action="store_true",
-                        help="Dump all stats to the stats.json file after running")
     parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
     parser.add_argument("--log-file-level", dest="log_file_level", default=2, type=int,
                         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG")
@@ -238,10 +235,6 @@ def app():
         return
 
     options.func(options)
-
-    if options.stats:
-        # dump stats
-        Stats.dump()
 
 if __name__ == "__main__":
     app()
