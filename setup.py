@@ -1,5 +1,4 @@
 from setuptools import setup, find_packages
-from impera.parser import plyInmantaParser
 
 setup(
     name="impera",
