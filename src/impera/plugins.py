@@ -76,8 +76,11 @@ class Context(object):
         return client
 
     def run_sync(self, function):
-        from tornado.ioloop import IOLoop
-        return IOLoop.current().run_sync(function, 5)
+        from tornado.ioloop import IOLoop, TimeoutError
+        try:
+            return IOLoop.current().run_sync(function, 5)
+        except TimeoutError:
+            raise ConnectionRefusedError()
 
 
 class PluginMeta(type):
