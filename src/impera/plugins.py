@@ -24,8 +24,6 @@ from impera.execute.proxy import DynamicProxy
 from impera.execute.util import Unknown
 from impera.ast import Namespace
 from impera.execute.runtime import ExecutionUnit
-from impera import protocol
-from tornado.ioloop import IOLoop
 
 
 class Context(object):
@@ -73,10 +71,12 @@ class Context(object):
         return data_dir
 
     def get_client(self):
+        from impera import protocol
         client = protocol.Client("compiler")
         return client
 
     def run_sync(self, function):
+        from tornado.ioloop import IOLoop
         return IOLoop.current().run_sync(function, 5)
 
 
