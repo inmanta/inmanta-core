@@ -38,6 +38,13 @@ import re
 file = "NOFILE"
 namespace = None
 
+precedence = (
+    ('left', 'OR'),
+    ('left', 'AND'),
+    ('right', 'NOT'),
+    ('right', 'MLS'),
+)
+
 
 def attach_lnr(p, token=1):
     v = p[0]
@@ -352,7 +359,7 @@ def p_constant(p):
     """ constant : INT
     | FLOAT
     | mls
-    |  """
+    """
     p[0] = Literal(p[1])
     attach_lnr(p)
 
@@ -526,7 +533,7 @@ def p_error(p):
 
 # Build the parser
 lexer = plyInmantaLex.lexer
-parser = yacc.yacc()
+parser = yacc.yacc(debug=True)
 
 
 def myparse(ns, tfile, content):
