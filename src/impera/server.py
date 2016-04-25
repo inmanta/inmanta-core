@@ -92,6 +92,21 @@ class Server(protocol.ServerEndpoint):
             self.add_future(future)
 
         self.add_heartbeat_callback(self.heartbeat_cb)
+        self.setup_dashboard()
+
+    def setup_dashboard(self):
+        """
+            If configured, set up tornado to serve the dashboard
+        """
+        if not Config.getboolean("dashboard", "enabled", False):
+            return
+
+        dashboard_path = Config.get("dashboard", "path")
+        if dashboard_path is None:
+            LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
+            return
+
+        self._transport_instance.add_static_handler("dashboard", dashboard_path, start=True)
 
     @gen.coroutine
     def start_agents(self):

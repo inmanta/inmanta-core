@@ -324,6 +324,7 @@ class RESTTransport(Transport):
     def __init__(self, endpoint):
         super().__init__(endpoint)
         self.set_connected()
+        self._handlers = []
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -472,26 +473,45 @@ class RESTTransport(Transport):
             LOGGER.exception("An exception occured")
             return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
 
+    def add_static_handler(self, location, path, default_filename=None, start=False):
+        """
+            Configure a static handler to serve data from the specified path.
+        """
+        if location[0] != "/":
+            location = "/" + location
+
+        if location[-1] != "/":
+            location = location + "/"
+
+        options = {"path": path}
+        if default_filename is None:
+            options["default_filename"] = "index.html"
+
+        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
+        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
+
+        if start:
+            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
+
     def start_endpoint(self):
         """
             Start the transport
         """
         url_map = self.create_op_mapping()
 
-        handlers = []
         for url, configs in url_map.items():
             handler_config = {}
             for op, cfg in configs.items():
                 handler_config[op] = cfg
 
-            handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
+            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
 
         port = 8888
         if self.id in Config.get() and "port" in Config.get()[self.id]:
             port = Config.get()[self.id]["port"]
 
-        application = tornado.web.Application(handlers)
+        application = tornado.web.Application(self._handlers)
         self.http_server = HTTPServer(application)
         self.http_server.listen(port)
 
@@ -846,7 +866,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     def __init__(self, name, io_loop, transport=RESTTransport):
         super().__init__(io_loop, name)
         self._transport = transport
-        self._transport_instance = None
+        self._transport_instance = Transport.create(self._transport, self)
         self._sched = Scheduler(self._io_loop)
 
         self._heartbeat_cb = None
@@ -865,8 +885,6 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             Start this end-point using the central configuration
         """
         LOGGER.debug("Starting transport for endpoint %s", self.name)
-        self._transport_instance = Transport.create(self._transport, self)
-
         if self._transport_instance is not None:
             self._transport_instance.start_endpoint()
 
