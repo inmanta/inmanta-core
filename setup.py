@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+from impera.parser import plyInmantaParser
 
 setup(
     name="impera",
@@ -6,8 +7,8 @@ setup(
     packages=find_packages("src"),
     version="0.7",
     description="Impera management tool",
-    author="Bart Vanbrabant",
-    author_email="bart@impera.io",
+    author="Inmanta NV",
+    author_email="code@inmanta.com",
     license="LICENSE",
 
     scripts=["bin/impera"],

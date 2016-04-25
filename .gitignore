@@ -32,3 +32,4 @@ build-result
 .cache
 .coverage
 src/*/parser/parser.out
+src/*/parser/parsetab.py
