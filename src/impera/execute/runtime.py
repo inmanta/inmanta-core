@@ -377,7 +377,7 @@ class Instance(ExecutionContext):
 
     def set_attribute(self, name, value, recur=True):
         if name not in self.slots:
-            raise NotFoundException(None, name, "could not find attribute with name: %s in type %s" % (name, repr(self.type)))
+            raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
         self.slots[name].set_value(value, recur)
 
     def get_attribute(self, name):
@@ -399,6 +399,7 @@ class Instance(ExecutionContext):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
+                    print(attr, k)
                     raise RuntimeException(self, "The object %s is not complete: attribute %s (%s) is not set" %
                                            (self, k, attr.location))
 

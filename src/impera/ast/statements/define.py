@@ -31,7 +31,7 @@ from impera.ast import Namespace, TypingException, DuplicateException
 LOGGER = logging.getLogger(__name__)
 
 
-class DefineAttribute(object):
+class DefineAttribute(TypeDefinitionStatement):
 
     def __init__(self, attr_type, name, default_value=None):
         self.type = attr_type
@@ -86,7 +86,8 @@ class DefineEntity(TypeDefinitionStatement):
                 raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
             add_attributes.add(attribute.name)
-            Attribute(entity_type, attr_type, attribute.name)
+            attr_obj = Attribute(entity_type, attr_type, attribute.name)
+            attribute.copy_location(attr_obj)
 
             entity_type.add_default_value(attribute.name, attribute.default)
 

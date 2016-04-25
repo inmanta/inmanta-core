@@ -258,7 +258,7 @@ class Entity(Type):
             Validate the given value
         """
         if not isinstance(value, Instance):
-            raise RuntimeException(None, "Invalid class type for %s, should be %s" % (value, self))
+            raise RuntimeException(None, "Invalid type for value '%s', should be type %s" % (value, self))
 
         value_definition = value.type
         if not (value_definition is self or self.is_subclass(value_definition)):
