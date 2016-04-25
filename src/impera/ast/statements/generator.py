@@ -62,8 +62,6 @@ class SubConstructor(GeneratorStatement):
             xc = ExecutionContext(impl.statements, resolver)
             xc.emit(queue)
 
-        return "X-I"
-
     def get_implementation(self, requires, resolver, queue):
         """
             Search in the list of implementation for an implementation that
