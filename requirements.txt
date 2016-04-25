@@ -10,4 +10,4 @@ cliff
 blessings
 python-dateutil
 ply
-motorengine
+-e git://github.com/heynemann/motorengine.git#egg=motorengine

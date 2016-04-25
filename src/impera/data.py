@@ -115,15 +115,11 @@ class Parameter(Document):
     """
     name = StringField(required=True)
     value = StringField(default="", required=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
     source = StringField(required=True)
     resource_id = StringField(default="")
     updated = DateTimeField()
-    metadata = JsonField()
-
-    meta = {
-        'indexes': ['environment', 'metadata']
-    }
+    metadata = JsonField(sparse=True)
 
     def to_dict(self):
         return {"name": self.name,
@@ -147,16 +143,12 @@ class UnknownParameter(Document):
         :param version The version id of the configuration model on which this parameter was reported
     """
     name = StringField(required=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
     source = StringField(required=True)
     resource_id = StringField(default="")
     version = IntField(required=True)
-    metadata = JsonField()
+    metadata = JsonField(sparse=True)
     resolved = BooleanField(default=False)
-
-    meta = {
-        'indexes': ['environment', 'metadata']
-    }
 
     def to_dict(self):
         return {"name": self.name,
@@ -279,16 +271,12 @@ class Form(IdDocument):
     """
         A form in the dashboard defined by the configuration model
     """
-    environment = ReferenceField(reference_document_type=Environment, required=True)
-    form_type = StringField(required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
+    form_type = StringField(required=True, sparse=True)
     options = JsonField()
     fields = JsonField()
     defaults = JsonField()
     field_options = JsonField()
-
-#     meta = {
-#         'indexes': ['environment', 'form_type']
-#     }
 
     def to_dict(self):
         return {"form_id": self.uuid,
@@ -346,8 +334,8 @@ class Resource(Document):
         :param attribute_value The value of the identifying attribute
         :param last_deploy When was the last deploy this resource
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    resource_id = StringField(required=True)
+    environment = ReferenceField(reference_document_type=Environment, sparse=True)
+    resource_id = StringField(required=True, sparse=True)
 
     resource_type = StringField(required=True)
     agent = StringField(required=True)
@@ -359,10 +347,6 @@ class Resource(Document):
     version_latest = IntField(default=0)
     version_deployed = IntField(default=0)
     last_deploy = DateTimeField()
-
-    meta = {
-        'indexes': ['environment', 'resource_id']
-    }
 
     def to_dict(self):
         return {"id": self.resource_id,
@@ -393,17 +377,13 @@ class ResourceAction(Document):
         :param level The "urgency" of this action
         :param data A python dictionary that can be serialized to json with additional data
     """
-    resource_version = ReferenceField(reference_document_type="impera.data.ResourceVersion")
-    action = StringField(required=True)
+    resource_version = ReferenceField(reference_document_type="impera.data.ResourceVersion", sparse=True)
+    action = StringField(required=True, sparse=True)
     timestamp = DateTimeField(required=True)
     message = StringField()
     level = StringField(default="INFO")
     data = StringField()
     status = StringField()
-
-    meta = {
-        'indexes': ['resource_version', 'action']
-    }
 
     def to_dict(self):
         return {"action": self.action,
@@ -425,16 +405,12 @@ class ResourceVersion(Document):
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
     """
-    environment = ReferenceField(reference_document_type=Environment, required=True)
-    rid = StringField(required=True)
-    resource = ReferenceField(reference_document_type=Resource, required=True)
+    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
+    rid = StringField(required=True, sparse=True)
+    resource = ReferenceField(reference_document_type=Resource, required=True, sparse=True)
     model = ReferenceField(reference_document_type="impera.data.ConfigurationModel", required=True)
     attributes = JsonField()
     status = StringField(default="")
-
-    meta = {
-        'indexes': ['resource', 'environment', 'rid']
-    }
 
     def to_dict(self):
         data = {}

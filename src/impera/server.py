@@ -833,6 +833,12 @@ class Server(protocol.ServerEndpoint):
                                      resources_total=len(resources), version_info=version_info)
         yield cm.save()
 
+        # Force motorengine to create the indexes required to speed up this operation
+        yield data.ResourceVersion.objects.ensure_index()  # @UndefinedVariable
+        yield data.Resource.objects.ensure_index()  # @UndefinedVariable
+        yield data.ResourceAction.objects.ensure_index()  # @UndefinedVariable
+        yield data.UnknownParameter.objects.ensure_index()  # @UndefinedVariable
+
         all_resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
         resources_dict = {x.resource_id: x for x in all_resources}
 
