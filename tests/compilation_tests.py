@@ -19,6 +19,7 @@
 import unittest
 import tempfile
 import shutil
+import os
 
 from nose.tools import assert_equal
 from impera.module import Project
@@ -28,11 +29,13 @@ from impera import config
 
 class CompilerBaseTest(object):
 
-    def __init__(self, file):
-        self.file = file
+    def __init__(self, name):
+        self.project_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", name)
+        if not os.path.isdir(self.project_dir):
+            raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
 
     def setUp(self):
-        Project.set(Project(self.file))
+        Project.set(Project(self.project_dir))
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
@@ -45,7 +48,7 @@ class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
     def __init__(self, methodName='runTest'):
         unittest.TestCase.__init__(self, methodName)
-        CompilerBaseTest.__init__(self, "tests/data/compile_test_1")
+        CompilerBaseTest.__init__(self, "compile_test_1")
 
     def test_compile(self):
         (types, scopes) = compiler.do_compile()
@@ -60,7 +63,7 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
 
     def __init__(self, methodName='runTest'):
         unittest.TestCase.__init__(self, methodName)
-        CompilerBaseTest.__init__(self, "tests/data/compile_test_2")
+        CompilerBaseTest.__init__(self, "compile_test_2")
 
     def test_compile(self):
         (types, scopes) = compiler.do_compile()

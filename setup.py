@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="impera",
-    package_dir={"" : "src" },
+    package_dir={"" : "src"},
     packages=find_packages("src"),
     version="0.7",
     description="Impera management tool",
