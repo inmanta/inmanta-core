@@ -1,0 +1,50 @@
+implementation none for std::Entity:
+
+end
+
+unix = OS(name = "unix")
+windows = OS(name = "windows")
+
+linux = OS(name = "linux", family = unix)
+solaris = OS(name = "solaris", family = unix)
+freebsd = OS(name = "freebsd", family = unix)
+openbsd = OS(name = "openbsd", family = unix)
+macos = OS(name = "macos", family = unix)
+
+entity OS:
+    """
+        Defines an operating system
+    """
+    string name
+    number version = 0
+end
+
+implement OS using none
+
+OS os [1] -- [0:] Host host
+OS member [0:] -- [0:1] OS family
+
+entity ManagedDevice:
+    """
+        This interface represents all devices that can be managed
+    """
+    hoststring  name
+end
+
+entity Host extends ManagedDevice:
+    """
+        A host models a server of computer in the managed infrastructure
+    """
+end
+
+implement Host using myHost
+
+index Host(name)
+
+typedef hoststring as string matching /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/
+
+implementation myHost for Host:
+ self.os = __config__::linux
+end
+
+Host(name="test1")
