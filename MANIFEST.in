@@ -2,5 +2,10 @@ include LICENSE
 graft docs
 include tox.ini
 include setup.py
+
 recursive-include docs *
 recursive-include misc *
+recursive-include tests *
+
+global-exclude *.pyc
+global-exclude */__pycache__/*

@@ -1,0 +1,18 @@
+values = [1, 2, 3, 4, 5]
+
+entity ManagedDevice:
+    """
+        This interface represents all devices that can be managed
+    """
+    number  name
+end
+
+implementation none for std::Entity:
+
+end
+
+implement ManagedDevice using none
+
+for i in values:
+ ManagedDevice(name = i)
+end
