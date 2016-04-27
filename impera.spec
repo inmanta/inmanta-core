@@ -1,9 +1,8 @@
-# Use release 0 for prerelease version. This also assumes that the source version has an alpha1
-# status
+# Use release 0 for prerelease version.
 %define release 0
-%define version 0.7
+%define version 2016.2
 
-%define sourceversion %{version}
+%define sourceversion %{version}%{?buildid}
 
 Name:           python3-impera
 Version:        %{version}
@@ -33,7 +32,7 @@ Requires:       python3-PyYAML
 Requires:       python-virtualenv
 Requires:       python3-urllib3
 Requires:       python3-pymongo
-Requires:       python3-mongoengine
+Requires:       python3-motorengine
 Requires:       git
 Requires(pre):  shadow-utils
 
