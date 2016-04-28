@@ -20,12 +20,12 @@ import unittest
 import tempfile
 import shutil
 import os
+from itertools import groupby
 
 from nose.tools import assert_equal
 from impera.module import Project
 import impera.compiler as compiler
 from impera import config
-from itertools import groupby
 from impera.ast import RuntimeException
 from nose.tools.nontrivial import raises
 
@@ -79,10 +79,11 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
     def __init__(self, methodName='runTest'):
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index_collission")
-   
-    @raises(RuntimeException)    
+
+    @raises(RuntimeException)
     def test_compile(self):
         compiler.do_compile()
+
 
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
@@ -102,13 +103,15 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
         groups = groupby(sorted(items, key=lambda x: x[0]), lambda x: x[0])
         firsts = []
         for k, v in groups:
-            v=list(v)
+            v = list(v)
             first = v[0]
             firsts.append(first)
             for other in v[1:]:
-                assert_equal(first[2], other[2],"Variable %s%s should be equal to %s%s"%(first[0],first[1],other[0],other[1]))
-        
+                assert_equal(first[2], other[2], "Variable %s%s should be equal to %s%s" %
+                             (first[0], first[1], other[0], other[1]))
+
         for i in range(len(firsts)):
             for j in range(len(firsts)):
                 if not i == j:
-                    self.assertNotEqual(firsts[i][2],firsts[j][2],"Variable %s%s should not be equal to %s%s"%(firsts[i][0],firsts[i][1],firsts[j][0],firsts[j][1]))
+                    self.assertNotEqual(firsts[i][2], firsts[j][2], "Variable %s%s should not be equal to %s%s" % (
+                        firsts[i][0], firsts[i][1], firsts[j][0], firsts[j][1]))
