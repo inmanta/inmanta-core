@@ -1,0 +1,41 @@
+implementation none for std::Entity:
+
+end
+
+entity Host:
+    string name
+    string blurp
+end
+
+entity File:
+    string name
+end
+
+implement Host using none
+implement File using none
+
+Host host [1] -- [0:] File files
+
+index Host(name)
+index File(host, name)
+
+h1 = Host(name="h1", blurp="blurp1")
+h1a1 = Host(name="h1", blurp="blurp1")
+
+
+h2 = Host(name="h2", blurp="blurp1")
+h2a1 = Host(name="h2", blurp="blurp1")
+
+
+f1h1=File(host=h1,name="f1")
+f1h1a1=File(host=h1a1,name="f1")
+f1h1a2=File[host=h1,name="f1"]
+
+f1h2=File(host=h2,name="f1")
+f1h2a1=File(host=h2a1,name="f1")
+f1h2a2=File[host=h2,name="f1"]
+
+f2h1=File(host=h1,name="f2")
+f2h1a1=File(host=h1a1,name="f2")
+f2h1a2=File[host=h1,name="f2"]
+

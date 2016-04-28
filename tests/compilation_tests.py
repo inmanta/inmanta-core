@@ -20,11 +20,14 @@ import unittest
 import tempfile
 import shutil
 import os
+from itertools import groupby
 
 from nose.tools import assert_equal
 from impera.module import Project
 import impera.compiler as compiler
 from impera import config
+from impera.ast import RuntimeException
+from nose.tools.nontrivial import raises
 
 
 class CompilerBaseTest(object):
@@ -69,3 +72,46 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
         (types, scopes) = compiler.do_compile()
         instances = types["__config__::ManagedDevice"].get_all_instances()
         assert_equal(sorted([i.get_attribute("name").get_value() for i in instances]), [1, 2, 3, 4, 5])
+
+
+class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_test_index_collission")
+
+    @raises(RuntimeException)
+    def test_compile(self):
+        compiler.do_compile()
+
+
+class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_test_index")
+
+    def test_compile(self):
+        (types, scopes) = compiler.do_compile()
+        variables = {k: x.get_value() for k, x in scopes["__config__"].slots.items()}
+
+        import re
+        p = re.compile(r'(f\d+h\d+)(a\d+)?')
+
+        items = [(m.groups()[0], m.groups()[1], v)
+                 for m, v in [(re.search(p, k), v)for k, v in variables.items()] if m is not None]
+        groups = groupby(sorted(items, key=lambda x: x[0]), lambda x: x[0])
+        firsts = []
+        for k, v in groups:
+            v = list(v)
+            first = v[0]
+            firsts.append(first)
+            for other in v[1:]:
+                assert_equal(first[2], other[2], "Variable %s%s should be equal to %s%s" %
+                             (first[0], first[1], other[0], other[1]))
+
+        for i in range(len(firsts)):
+            for j in range(len(firsts)):
+                if not i == j:
+                    self.assertNotEqual(firsts[i][2], firsts[j][2], "Variable %s%s should not be equal to %s%s" % (
+                        firsts[i][0], firsts[i][1], firsts[j][0], firsts[j][1]))
