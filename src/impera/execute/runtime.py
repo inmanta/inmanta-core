@@ -47,7 +47,8 @@ class ResultVariable(object):
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise RuntimeException(None, "Value set twice")
+            if self.value != value:
+                raise RuntimeException(None, "Value set twice new: %s, old:%s" % (value, self.value))
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
@@ -77,7 +78,8 @@ class AttributeVariable(ResultVariable):
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise RuntimeException(None, "Value set twice")
+            if self.value != value:
+                raise RuntimeException(None, "Value set twice new: %s, old:%s" % (value, self.value))
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
@@ -131,6 +133,9 @@ class ListVariable(DelayedResultVariable):
         if self.type is not None:
             self.type.validate(value)
 
+        if value in self.value:
+            return
+
         self.value.append(value)
 
         # set counterpart
@@ -163,8 +168,9 @@ class OptionVariable(DelayedResultVariable):
 
     def set_value(self, value, recur=True):
         if self.hasValue:
-            raise RuntimeException(None, "Option set after freeze %s.%s = %s / %s " %
-                                   (self.myself, self.attribute, value, self.value))
+            if self.value != value:
+                raise RuntimeException(None, "Option set after freeze %s.%s = %s / %s " %
+                                       (self.myself, self.attribute, value, self.value))
 
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
@@ -291,6 +297,7 @@ class WaitUnit(Waiter):
     """
         Wait for either a single requirement or a map of requirements, call the resume method on the resumer
     """
+
     def __init__(self, queue_scheduler, resolver, require, resumer):
         Waiter.__init__(self, queue_scheduler)
         self.queue_scheduler = queue_scheduler

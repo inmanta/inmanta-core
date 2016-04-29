@@ -214,6 +214,9 @@ class Constructor(GeneratorStatement):
                     raise Exception("Inconsistent indexes detected!")
 
             object_instance = first
+            for k, v in attributes.items():
+                object_instance.set_attribute(k, v)
+
         else:
             # create the instance
             object_instance = type_class.get_instance(attributes, resolver, queue)
