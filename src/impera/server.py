@@ -1522,7 +1522,8 @@ host = localhost
                 result = yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                 stages.append(result)
                 LOGGER.info("Installing and updating modules")
-                result = yield self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir)
+                result = yield self._run_compile_stage("Installing modules", impera_path + ["modules", "install"], project_dir,
+                                                       env=os.environ.copy())
                 stages.append(result)
                 result = yield self._run_compile_stage("Updating modules", impera_path + ["modules", "update"], project_dir,
                                                        env=os.environ.copy())
