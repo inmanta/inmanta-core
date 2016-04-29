@@ -329,7 +329,7 @@ class Server(protocol.ServerEndpoint):
             param.source = source
             param.value = value
             param.updated = datetime.datetime.now()
-            param.metadate = metadata
+            param.metadata = metadata
 
         futures = [param.save()]
 
