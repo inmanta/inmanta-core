@@ -29,7 +29,7 @@ import uuid
 from impera import protocol
 from impera.agent.handler import Commander
 from impera.execute.util import Unknown
-from impera.resources import resource, Resource
+from impera.resources import resource, Resource, to_id
 from impera.config import Config
 from impera.module import Project, ModuleTool
 from impera.execute.proxy import DynamicProxy
@@ -279,7 +279,7 @@ class Exporter(object):
             value = getattr(resource, unknown)
             self._unknown_hosts.add(resource.id.agent_name)
             if value.source is not None and hasattr(value.source, "type"):
-                self._unknown_objects.add(Exporter.get_id(value.source))
+                self._unknown_objects.add(to_id(value.source))
 
             self._unknown_per_host[resource.id.agent_name].add(str(resource.id))
             LOGGER.debug("Host %s has unknown values (in resource %s)" % (resource.id.agent_name, resource.id))
