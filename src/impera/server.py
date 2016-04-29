@@ -334,8 +334,9 @@ class Server(protocol.ServerEndpoint):
         futures = [param.save()]
 
         # check if the parameter is an unknown
-        params = data.UnknownParameter.objects(environment=env, name=id, resource_id=resource_id,  # @UndefinedVariable
-                                               resolved=False)
+        params = yield data.UnknownParameter.objects.filter(environment=env, name=id,  # @UndefinedVariable
+                                                            resource_id=resource_id,
+                                                            resolved=False).find_all()  # @UndefinedVariable
         if len(params) > 0:
             LOGGER.info("Received values for unknown parameters %s, triggering a recompile",
                         ", ".join([x.name for x in params]))
@@ -1319,17 +1320,19 @@ host = localhost
         if project is None:
             return 500, {"message": "The project id for the environment does not exist."}
 
-        try:
-            env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)
-            env.repo_url = repository
-            env.repo_branch = branch
-            yield env.save()
-
-            env_dict = env.to_dict()
-            return 200, {"environment": env_dict}
-        except errors.UniqueKeyViolationError:
+        # check if an environment with this name is already defined in this project
+        envs = yield data.Environment.objects.filter(project_id=project_id, name=name).find_all()  # @UndefinedVariable
+        if len(envs) > 0:
             return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
-                         (project.name, project.id, name)}
+                         (project.name, project.uuid, name)}
+
+        env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)
+        env.repo_url = repository
+        env.repo_branch = branch
+        yield env.save()
+
+        env_dict = env.to_dict()
+        return 200, {"environment": env_dict}
 
     @protocol.handle(methods.Environment.modify_environment)
     @gen.coroutine

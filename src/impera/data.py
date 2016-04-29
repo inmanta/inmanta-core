@@ -76,7 +76,7 @@ class Environment(IdDocument):
         :param repo_url The repository url that contains the configuration model code for this environment
         :param repo_url The repository branch that contains the configuration model code for this environment
     """
-    name = StringField(required=True, unique=True)
+    name = StringField(required=True)
     project_id = UUIDField(required=True)
     repo_url = StringField()
     repo_branch = StringField()
