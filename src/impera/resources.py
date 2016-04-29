@@ -110,7 +110,7 @@ def to_id(entity):
     if cls is not None:
         obj_id = cls.object_to_id(entity._get_instance(), entity_name, options["name"], options["agent"])
 
-    return obj_id
+    return str(obj_id)
 
 
 class Resource(object):
