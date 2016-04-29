@@ -86,8 +86,6 @@ class DynamicProxy(object):
 
     def __getattr__(self, attribute):
         instance = self._get_instance()
-        if isinstance(instance, list):
-            print("KAK")
         value = instance.get_attribute(attribute).get_value()
 
         return DynamicProxy.return_value(value)
