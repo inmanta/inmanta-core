@@ -227,8 +227,8 @@ class Report(Document):
     completed = DateTimeField(required=True)
     command = StringField(required=True)
     name = StringField(required=True)
-    errstream = StringField(required=True)
-    outstream = StringField(required=True)
+    errstream = StringField(default="")
+    outstream = StringField(default="")
     returncode = IntField()
     # compile = ReferenceField(reference_document_type="impera.data.Compile")
 
