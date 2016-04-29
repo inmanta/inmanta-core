@@ -250,7 +250,7 @@ class Server(protocol.ServerEndpoint):
         for u in unknown_parameters:
             yield u.load_references()
             LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
-                         u.environment.id)
+                         u.environment.uuid)
             self._request_parameter(u)
 
     @protocol.handle(methods.ParameterMethod.get_param)
