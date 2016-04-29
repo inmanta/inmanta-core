@@ -802,7 +802,7 @@ class Environment(object):
 
     def add_agent(self, node, agent, interval):
         if agent in self._agent_node_map and self._agent_node_map[agent] != node:
-            LOGGER.info("Agent %s moved from node %s to node %s", self._agent_node_map[agent], node)
+            LOGGER.info("Agent %s moved from node %s to node %s", agent, self._agent_node_map[agent], node)
 
         self._agent_node_map[agent] = node
         self._agents.add(agent)
