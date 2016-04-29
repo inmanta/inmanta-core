@@ -99,7 +99,7 @@ class Exporter(object):
             instances = types[entity].get_all_instances()
             if len(instances) > 0:
                 for instance in instances:
-                    self.add_resource(Resource.create_from_model(self, entity, instance))
+                    self.add_resource(Resource.create_from_model(self, entity, DynamicProxy.return_value(instance)))
 
         Resource.convert_requires()
 
