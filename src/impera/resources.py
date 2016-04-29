@@ -22,7 +22,7 @@ import logging
 import re
 
 from impera.execute import util
-from impera.execute.proxy import DynamicProxy, UnknownException
+from impera.execute.proxy import DynamicProxy, UnknownException, UnsetException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def to_id(entity):
             break
 
     if cls is not None:
-        obj_id = cls.object_to_id(entity._get_instance(), entity_name, options["name"], options["agent"])
+        obj_id = cls.object_to_id(entity, entity_name, options["name"], options["agent"])
 
     return str(obj_id)
 
@@ -166,15 +166,17 @@ class Resource(object):
                 if isinstance(agent_value, list):
                     agent_value = agent_value[0]
 
-                agent_value = agent_value.get_attribute(el).get_value()
+                agent_value = getattr(agent_value, el)
 
+            except UnsetException as e:
+                raise e
             except Exception:
                 raise Exception("Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
                                 % (model_object, agent_attribute, el))
 
-        attribute_value = DynamicProxy.return_value(model_object.get_attribute(attribute_name).get_value())
+        attribute_value = getattr(model_object, attribute_name)
 
-        return Id(entity_name, DynamicProxy.return_value(agent_value), attribute_name, attribute_value)
+        return Id(entity_name, agent_value, attribute_name, attribute_value)
 
     @classmethod
     def create_from_model(cls, exporter, entity_name, model_object):
@@ -202,15 +204,16 @@ class Resource(object):
 
                 else:
                     try:
-                        setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
+                        # setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
+                        setattr(obj, field, getattr(model_object, field))
                     except UnknownException as e:
                         setattr(obj, field, e.unknown)
 
             except AttributeError:
                 raise AttributeError("Attribute %s does not exist on entity of type %s" % (field, entity_name))
 
-        obj.requires = model_object.get_attribute("requires").get_value()
-        obj.model = DynamicProxy.return_value(model_object)
+        obj.requires = getattr(model_object, "requires")
+        obj.model = model_object
 
         cls.__create_cache[model_object] = obj
         return obj
