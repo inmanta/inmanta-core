@@ -248,6 +248,7 @@ class Server(protocol.ServerEndpoint):
 
         unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
         for u in unknown_parameters:
+            yield u.load_references()
             LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
                          u.environment.id)
             self._request_parameter(u)
