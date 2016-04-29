@@ -242,8 +242,9 @@ class Server(protocol.ServerEndpoint):
         expired_params = yield data.Parameter.objects.filter(updated__lt=updated_before).find_all()  # @UndefinedVariable
 
         for param in expired_params:
+            yield param.load_references()
             LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
-                         param.environment.id)
+                         param.environment.uuid)
             self._request_parameter(param)
 
         unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
