@@ -192,7 +192,7 @@ class Server(protocol.ServerEndpoint):
             Request the value of a parameter from an agent
         """
         resource_id = param.resource_id
-        tid = str(param.environment.id)
+        tid = str(param.environment.uuid)
         env = param.environment
 
         if resource_id is not None and resource_id != "":
@@ -1343,19 +1343,21 @@ host = localhost
         if env is None:
             return 404, {"message": "The environment id does not exist."}
 
-        try:
-            env.name = name
-            if repository is not None:
-                env.repo_url = repository
+        yield env.load_references()
 
-            if branch is not None:
-                env.repo_branch = branch
+        # check if an environment with this name is already defined in this project
+        envs = yield data.Environment.objects.filter(project_id=env.project_id, name=name).find_all()  # @UndefinedVariable
+        if len(envs) > 0:
+            return 500, {"message": "Project with id=%s already has an environment with name %s" % (env.project_id, name)}
 
-            yield env.save()
-        except errors.UniqueKeyViolationError:
-            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
-                         (env.project.name, env.project.id, name)}
+        env.name = name
+        if repository is not None:
+            env.repo_url = repository
 
+        if branch is not None:
+            env.repo_branch = branch
+
+        yield env.save()
         return 200, {"environment": env.to_dict()}
 
     @protocol.handle(methods.Environment.get_environment)
