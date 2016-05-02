@@ -18,7 +18,7 @@ fedora-rpm:
         - docker
     image: fedora-python3
     script:
-        - python3 setup.py egg_info sdist
+        - python3 setup.py egg_info -RDb "" sdist
         - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" -bb impera.spec
     artifacts:
         paths:
