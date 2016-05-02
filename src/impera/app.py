@@ -27,6 +27,7 @@ from impera.compiler import do_compile
 from impera.config import Config
 from impera.module import ModuleTool, Project, ProjectNotFoundExcpetion
 from tornado.ioloop import IOLoop
+from impera.ast import CompilerException
 
 LOGGER = logging.getLogger()
 
@@ -117,7 +118,12 @@ def export(options):
         Config.set("compiler_rest_transport", "port", options.port)
 
     from impera.export import Exporter
-    (types, scopes) = do_compile()
+    try:
+        (types, scopes) = do_compile()
+    except CompilerException:
+        types = None
+        scopes = None
+
     export = Exporter(options)
     export.run(types, scopes)
 
