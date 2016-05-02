@@ -24,6 +24,9 @@ fedora-rpm:
         paths:
             - dist/
             - rpms/
+    only:
+        - /^stable/.*$/
+        - master
 
 publish-rpm:
     stage: deploy
@@ -33,3 +36,6 @@ publish-rpm:
         - fedora-rpm
     script:
         - for f in rpms/noarch/*; do RPM=$(basename $f); ssh reposhell@packages.inmanta.com "put rpms/inmanta/$CI_BUILD_REF_NAME/fedora/$RPM" < rpms/noarch/$RPM; done
+    only:
+        - /^stable/.*$/
+        - master

@@ -79,6 +79,9 @@ class TestProvider(ResourceHandler):
         if "value" in data:
             TestProvider.set(resource.id.get_agent_name(), resource.key, data["value"])
 
+    def facts(self, resource):
+        return {"length": len(TestProvider.get(resource.id.get_agent_name(), resource.key))}
+
     _STATE = defaultdict(dict)
 
     @classmethod
