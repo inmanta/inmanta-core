@@ -18,8 +18,8 @@ fedora-rpm:
         - docker
     image: fedora-python3
     script:
-        - python3 setup.py egg_info -RDb "b$(date +%Y%m%d%H%M)" sdist
-        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid b$(date +%Y%m%d%H%M)" -bb impera.spec
+        - python3 setup.py egg_info sdist
+        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" -bb impera.spec
     artifacts:
         paths:
             - dist/
