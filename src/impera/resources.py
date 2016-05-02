@@ -108,9 +108,10 @@ def to_id(entity):
             break
 
     if cls is not None:
-        obj_id = cls.object_to_id(entity, entity_name, options["name"], options["agent"])
+        obj_id = cls.object_to_id(entity, cls_name, options["name"], options["agent"])
+        return str(obj_id)
 
-    return str(obj_id)
+    return None
 
 
 class Resource(object):

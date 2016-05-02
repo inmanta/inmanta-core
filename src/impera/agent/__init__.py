@@ -603,9 +603,10 @@ class Agent(AgentEndPoint):
             provider = Commander.get_provider(self, resource_obj)
 
             try:
-                result = self.thread_pool.submit(provider.check_facts, resource_obj)
+                result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
                 for param, value in result.items():
-                    yield self._client.set_param(tid=tid, resource_id=resource["id"], source="fact", id=param, value=value)
+                    yield self._client.set_param(tid=tid, resource_id=resource_obj.id.resource_str(), source="fact", id=param,
+                                                 value=value)
 
             except Exception:
                 LOGGER.exception("Unable to retrieve fact")

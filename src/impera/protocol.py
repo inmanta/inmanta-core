@@ -721,7 +721,7 @@ class Endpoint(object):
             try:
                 f.result()
             except Exception as e:
-                LOGGER.warning("An exception occurred while handling a future: %s", str(e))
+                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
         self._io_loop.add_future(future, handle_result)
 
@@ -766,12 +766,15 @@ class Endpoint(object):
     node_name = property(get_node_name)
 
 
-def _set_timeout(io_loop, future, timeout, log_message):
+def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message):
     def on_timeout():
         LOGGER.warning(log_message)
         future.set_exception(gen.TimeoutError())
     timeout_handle = io_loop.add_timeout(io_loop.time() + timeout, on_timeout)
     future.add_done_callback(lambda _: io_loop.remove_timeout(timeout_handle))
+
+    if future_key in future_list:
+        del future_list[future_key]
 
 
 class Environment(object):
@@ -817,7 +820,7 @@ class Environment(object):
             call_spec["agent"] = agent
             q.put(call_spec)
 
-            _set_timeout(self._io_loop, future, int(Config.get("config", "timeout", 5)),
+            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, int(Config.get("config", "timeout", 2)),
                          "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], agent))
             self._replies[call_spec["reply_id"]] = future
         else:
@@ -1033,6 +1036,9 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                                                                               method_call["headers"])
 
                             def submit_result(future):
+                                if future is None:
+                                    return
+
                                 result_body, _, status = future.result()
                                 if status == 500:
                                     LOGGER.error("An error occurred during heartbeat method call (%s %s): %s",

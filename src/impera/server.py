@@ -271,7 +271,7 @@ class Server(protocol.ServerEndpoint):
                                   order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
 
                 if len(versions) == 0:
-                    return 404, {"message": "The parameter does not exist."}
+                    return 404, {"message": "The parameter does not exist (no versions available)."}
 
                 version = versions[0]
 
@@ -280,7 +280,7 @@ class Server(protocol.ServerEndpoint):
                                                                resource_id=resource_id).find_all()  # @UndefinedVariable
 
                 if len(resources) == 0:
-                    return 404, {"message": "The parameter does not exist."}
+                    return 404, {"message": "The parameter does not exist (no resources available)."}
 
                 resource = resources[0]
 
@@ -289,7 +289,7 @@ class Server(protocol.ServerEndpoint):
                              filter(environment=env, model=version, resource=resource).find_all())  # @UndefinedVariable
 
                 if len(rvs) == 0:
-                    return 404, {"message": "The parameter does not exist."}
+                    return 404, {"message": "The parameter does not exist (no versions of this resource available)."}
 
                 yield self._ensure_agent(tid, resource.agent)
                 client = self.get_agent_client(tid, resource.agent)
@@ -307,6 +307,7 @@ class Server(protocol.ServerEndpoint):
         if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0].to_dict()}
 
+        LOGGER.info("Parameter %s of resource %s expired.", id, resource_id)
         return self._request_parameter(param)
 
     @protocol.handle(methods.ParameterMethod.set_param)
@@ -333,7 +334,7 @@ class Server(protocol.ServerEndpoint):
             param.updated = datetime.datetime.now()
             param.metadata = metadata
 
-        futures = [param.save()]
+        yield param.save()
 
         # check if the parameter is an unknown
         params = yield data.UnknownParameter.objects.filter(environment=env, name=id,  # @UndefinedVariable
@@ -344,11 +345,10 @@ class Server(protocol.ServerEndpoint):
                         ", ".join([x.name for x in params]))
             for p in params:
                 p.resolved = True
-                futures.append(p.save())
+                yield p.save()
 
             self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
 
-        yield futures
         return 200, {"parameter": param.to_dict()}
 
     @protocol.handle(methods.ParameterMethod.list_params)
