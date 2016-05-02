@@ -1125,7 +1125,7 @@ class ReturnClient(Client, metaclass=ClientMeta):
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
         try:
             return_value = yield self._server.put_call(self._tid, self._agent, call_spec)
-        except:
+        except gen.TimeoutError:
             pass
 
         return Result(code=return_value["code"], result=return_value["result"])
