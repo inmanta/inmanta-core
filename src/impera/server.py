@@ -192,6 +192,7 @@ class Server(protocol.ServerEndpoint):
             Request the value of a parameter from an agent
         """
         resource_id = param.resource_id
+        yield param.load_references()
         tid = str(param.environment.uuid)
         env = param.environment
 

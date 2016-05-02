@@ -770,6 +770,7 @@ def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message)
     def on_timeout():
         LOGGER.warning(log_message)
         future.set_exception(gen.TimeoutError())
+
     timeout_handle = io_loop.add_timeout(io_loop.time() + timeout, on_timeout)
     future.add_done_callback(lambda _: io_loop.remove_timeout(timeout_handle))
 
@@ -1122,6 +1123,9 @@ class ReturnClient(Client, metaclass=ClientMeta):
         url, method, headers, body = self._transport_instance.build_call(protocol_properties, args, kwargs)
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
-        return_value = yield self._server.put_call(self._tid, self._agent, call_spec)
+        try:
+            return_value = yield self._server.put_call(self._tid, self._agent, call_spec)
+        except:
+            pass
 
         return Result(code=return_value["code"], result=return_value["result"])
