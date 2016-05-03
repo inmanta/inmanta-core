@@ -598,7 +598,7 @@ class RESTTransport(Transport):
                 except ValueError:
                     result = {}
                 return Result(code=e.code, result=result)
-            return Result(code=e.code, result={"message": e.message})
+            return Result(code=e.code, result={"message": str(e)})
         except Exception as e:
             return Result(code=500, result={"message": str(e)})
 
@@ -1126,6 +1126,6 @@ class ReturnClient(Client, metaclass=ClientMeta):
         try:
             return_value = yield self._server.put_call(self._tid, self._agent, call_spec)
         except gen.TimeoutError:
-            pass
+            return Result(code=500, result="")
 
         return Result(code=return_value["code"], result=return_value["result"])
