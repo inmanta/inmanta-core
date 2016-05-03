@@ -150,6 +150,7 @@ class testAgentServer(ServerTest):
                       'state_id': '',
                       'allow_restore': True,
                       'allow_snapshot': True,
+                      'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                       },
                      {'key': 'key2',
                       'value': 'value2',
