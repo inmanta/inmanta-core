@@ -1901,23 +1901,23 @@ host = localhost
         for model in models:
             yield model.delete_cascade()
 
-        resources = data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for resource in resources:
             yield resource.delete()
 
-        parameters = data.Parameter.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        parameters = yield data.Parameter.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for parameter in parameters:
             yield parameter.delete()
 
-        forms = data.Form.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        forms = yield data.Form.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for form in forms:
             yield form.delete()
 
-        records = data.FormRecord.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        records = yield data.FormRecord.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for record in records:
             yield record.delete()
 
-        compiles = data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        compiles = yield data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
         for compile in compiles:
             yield compile.delete()
 
