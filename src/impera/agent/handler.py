@@ -81,6 +81,7 @@ class ResourceHandler(object):
 
     def close(self):
         self._io.close()
+        self._ioloop.close(all_fds=True)
 
     @classmethod
     def is_available(self, io):
