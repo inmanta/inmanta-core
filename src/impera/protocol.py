@@ -588,7 +588,7 @@ class RESTTransport(Transport):
         try:
             if body is not None:
                 body = json_encode(body)
-            request = HTTPRequest(url=url, method=method, headers=headers, body=body)
+            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=120, request_timeout=120)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
         except HTTPError as e:
