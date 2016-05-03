@@ -315,7 +315,7 @@ class Resource(object):
         for field in self.__class__.fields:
             dictionary[field] = getattr(self, field)
 
-        dictionary["requires"] = [str(x.id) for x in self.requires]
+        dictionary["requires"] = [str(x) for x in self.requires]
         dictionary["version"] = self.version
         dictionary["id"] = str(self.id)
 
