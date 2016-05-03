@@ -187,14 +187,12 @@ class Server(protocol.ServerEndpoint):
         return dir_map
 
     @gen.coroutine
-    def _request_parameter(self, param):
+    def _request_parameter(self, env, param):
         """
             Request the value of a parameter from an agent
         """
         resource_id = param.resource_id
-        yield param.load_references()
-        tid = str(param.environment.uuid)
-        env = param.environment
+        tid = str(env.uuid)
 
         if resource_id is not None and resource_id != "":
             # get the latest version
@@ -246,14 +244,14 @@ class Server(protocol.ServerEndpoint):
             yield param.load_references()
             LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
                          param.environment.uuid)
-            self._request_parameter(param)
+            self._request_parameter(param.environment, param)
 
         unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
         for u in unknown_parameters:
             yield u.load_references()
             LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
                          u.environment.uuid)
-            self._request_parameter(u)
+            self._request_parameter(u.environment, u)
 
     @protocol.handle(methods.ParameterMethod.get_param)
     @gen.coroutine
@@ -309,7 +307,7 @@ class Server(protocol.ServerEndpoint):
             return 200, {"parameter": params[0].to_dict()}
 
         LOGGER.info("Parameter %s of resource %s expired.", id, resource_id)
-        return self._request_parameter(param)
+        return self._request_parameter(env, param)
 
     @protocol.handle(methods.ParameterMethod.set_param)
     @gen.coroutine
