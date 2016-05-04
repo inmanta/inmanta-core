@@ -1,6 +1,6 @@
 # Use release 0 for prerelease version.
 %define release 1
-%define version 2016.2
+%define version 2016.2.1
 
 %define sourceversion %{version}%{?buildid}
 
@@ -116,6 +116,8 @@ getent passwd impera >/dev/null || \
 exit
 
 %changelog
+* Wed May 04 2016 Bart Vanbrabant <bart.vanbrabant@inmanta.com> - 2016.2.1
+- New bugfix release
 * Thu Jan 08 2015 Bart Vanbrabant <bart@impera.io> - 0.1
 - Initial release
 
