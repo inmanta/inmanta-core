@@ -268,13 +268,7 @@ class Commander(object):
 
     @classmethod
     def _get_instance(cls, handler_class: type, agent, io) -> ResourceHandler:
-        if (handler_class, io) in cls.__handler_cache:
-            return cls.__handler_cache[(handler_class, io)]
-
         new_instance = handler_class(agent, io)
-        cls.__handler_cache[handler_class] = new_instance
-        cls.__handlers.append(new_instance)
-
         return new_instance
 
     @classmethod
@@ -296,8 +290,12 @@ class Commander(object):
                 h = cls._get_instance(handlr, agent, io)
                 if h.available(resource):
                     available.append(h)
+                else:
+                    h.close()
 
         if len(available) > 1:
+            for h in available:
+                h.close()
             raise Exception("More than one handler selected for resource %s" % resource.id)
 
         elif len(available) == 1:
