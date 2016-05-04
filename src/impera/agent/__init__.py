@@ -285,7 +285,7 @@ class Agent(AgentEndPoint):
         self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
         self._io_loop.add_callback(self.check_deploy)
 
-        self.thread_pool = ThreadPoolExecutor(4)
+        self.thread_pool = ThreadPoolExecutor(1)
 
     @gen.coroutine
     def check_deploy(self):
@@ -397,6 +397,7 @@ class Agent(AgentEndPoint):
 
         yield self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
 
+        provider = None
         try:
             for res in result.result["resources"]:
                 data = res["fields"]
@@ -418,6 +419,9 @@ class Agent(AgentEndPoint):
         except TypeError:
             LOGGER.exception("Unable to process resource for dryrun.")
             return 500
+        finally:
+            if provider is not None:
+                provider.close()
 
         return 200
 
@@ -471,6 +475,7 @@ class Agent(AgentEndPoint):
 
         for restore, resource in resources:
             start = datetime.datetime.now()
+            provider = None
             try:
                 data = resource["fields"]
                 data["id"] = resource["id"]
@@ -501,6 +506,9 @@ class Agent(AgentEndPoint):
                                                   success=False, error=False, start=start, stop=datetime.datetime.now(),
                                                   msg="Unable to find a handler to restore a snapshot of resource %s" %
                                                   resource["id"])
+            finally:
+                if provider is not None:
+                    provider.close()
 
         return 200
 
@@ -514,6 +522,7 @@ class Agent(AgentEndPoint):
 
         for resource in resources:
             start = datetime.datetime.now()
+            provider = None
             try:
                 data = resource["fields"]
                 data["id"] = resource["id"]
@@ -564,7 +573,9 @@ class Agent(AgentEndPoint):
                                                    resource_id=resource_obj.id.resource_str(), error=False,
                                                    start=start, stop=datetime.datetime.now(), size=0, success=False,
                                                    msg="Unable to find a handler for %s" % resource["id"])
-
+            finally:
+                if provider is not None:
+                    provider.close()
         return 200
 
     def status(self, operation, body):
@@ -596,6 +607,7 @@ class Agent(AgentEndPoint):
     @protocol.handle(methods.AgentParameterMethod.get_parameter)
     @gen.coroutine
     def get_facts(self, tid, agent, resource):
+        provider = None
         try:
             data = resource["fields"]
             data["id"] = resource["id"]
@@ -614,7 +626,9 @@ class Agent(AgentEndPoint):
         except Exception:
             LOGGER.exception("Unable to find a handler for %s", resource["id"])
             return 500
-
+        finally:
+            if provider is not None:
+                provider.close()
         return 200
 
     def queue(self, operation, body):
@@ -662,9 +676,11 @@ class Agent(AgentEndPoint):
                 break
 
             LOGGER.debug("Start deploy of resource %s" % resource)
+            provider = None
             try:
                 provider = Commander.get_provider(self, resource)
             except Exception:
+                provider.close()
                 LOGGER.exception("Unable to find a handler for %s" % resource.id)
                 self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
                 self._queue.remove(resource)
@@ -678,6 +694,7 @@ class Agent(AgentEndPoint):
                 LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
                 yield self.thread_pool.submit(provider.do_reload, resource)
 
+            provider.close()
             LOGGER.debug("Finished %s" % resource)
             self._queue.remove(resource)
 
