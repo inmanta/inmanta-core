@@ -33,6 +33,7 @@ Requires:       python-virtualenv
 Requires:       python3-urllib3
 Requires:       python3-pymongo
 Requires:       python3-motorengine
+Requires:       python3-devel
 Requires:       git
 Requires(pre):  shadow-utils
 
