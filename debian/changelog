@@ -1,6 +1,30 @@
-impera (2016.2.1) UNRELEASED; urgency=medium
+impera (0.6) trusty; urgency=medium
 
-  * New ubuntu package
+  * New release with various bugfixes and improvements
 
- -- Bart Vanbrabant <bart.vanbrabant@inmanta.com>  Mon, 09 May 2016 20:08:33 +0200
+ -- Bart Vanbrabant <bart@impera.io>  Fri, 06 Feb 2015 13:10:43 +0100
 
+
+impera (0.5) trusty; urgency=medium
+
+  * New release with various bugfixes and improvements
+
+ -- Bart Vanbrabant <bart@impera.io>  Fri, 30 Jan 2015 13:10:43 +0100
+
+impera (0.4) trusty; urgency=medium
+
+  * A new release
+
+ -- Bart Vanbrabant <bart@impera.io>  Wed, 28 Jan 2015 13:36:21 +0100
+
+impera (0.2-1) trusty; urgency=low
+
+  * Bug fix release
+
+ -- Bart Vanbrabant <bart@impera.io>  Thu, 22 Jan 2015 13:19:16 +0000
+
+impera (0.1-1) trusty; urgency=low
+
+  * first release
+
+ -- Bart Vanbrabant <bart@impera.io>  Thu, 08 Jan 2015 13:19:16 +0000

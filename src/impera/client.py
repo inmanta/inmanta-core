@@ -617,7 +617,7 @@ class RecordCreate(ImperaCommand, ShowOne):
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
-        parser.add_argument("-p", "--field", help="Field values", action="append", default=[])
+        parser.add_argument("-p", "--field", help="Field values", action="append")
         return parser
 
     def run_action(self, parsed_args):
@@ -630,12 +630,6 @@ class RecordCreate(ImperaCommand, ShowOne):
                 raise Exception("Argument %s should be in the key=value form." % field)
 
             fields[parts[0].strip()] = parts[1].strip()
-
-        try:
-            uuid.UUID(parsed_args.form)
-            raise Exception("Form type should be the type string, not the uuid.")
-        except ValueError:
-            pass
 
         result = self.do_request("create_record", "record", arguments=dict(tid=tid, form_type=parsed_args.form, form=fields))
 
