@@ -29,7 +29,7 @@ from nose.tools import raises, assert_equal, assert_true
 import yaml
 from impera import module
 from impera.config import Config
-from impera.module import ModuleTool, InvalidModuleException, Project
+from impera.module import ModuleTool, InvalidModuleException, Project, LocalFileRepo, RemoteRepo
 
 
 def makemodule(reporoot, name, deps, project=False):
@@ -115,6 +115,7 @@ class testModuleTool(unittest.TestCase):
         cls.tempdir = tempfile.mkdtemp()
 
         reporoot = os.path.join(cls.tempdir, "repos")
+        cls.reporoot = reporoot
         os.makedirs(reporoot)
 
         mod1 = makemodule(reporoot, "mod1", [("mod3", "")])
@@ -168,6 +169,27 @@ class testModuleTool(unittest.TestCase):
         self.log.addHandler(self.handler)
 
         Project._project = None
+
+    def test_localRepo_good(self):
+        repo = LocalFileRepo(testModuleTool.reporoot)
+        coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
+        result = repo.clone("mod1", coroot)
+        assert_true(result,"checkout failed")
+        assert_true(os.path.exists(os.path.join(coroot,"mod1","module.yml")),"module.yml not found")
+        
+    def test_remoteRepo_good(self):
+        repo = RemoteRepo("https://github.com/rmccue/")
+        coroot = os.path.join(testModuleTool.tempdir, "clone_remote_good")
+        result = repo.clone("test-repository", coroot)
+        assert_true(result,"checkout failed")
+        assert_true(os.path.exists(os.path.join(coroot,"test-repository","README")),"test-repository not found")
+
+    def test_localRepo_bad(self):
+        repo = LocalFileRepo(testModuleTool.reporoot)
+        coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
+        result = repo.clone("thatotherthing", coroot)
+        assert_true(not result,"checkout should have failed")
+        
 
     @raises(InvalidModuleException)
     def test_BadCheckout(self):

@@ -1067,3 +1067,63 @@ requires:
             sys.exit(1)
 
         sys.exit(0)
+
+
+class GitProvider:
+
+    def clone(self, src, dest):
+        pass
+
+
+class CLIGitProvider(GitProvider):
+
+    def clone(self, src, dest):
+        subprocess.check_call(["git", "clone", src, dest])
+
+gitprovider = CLIGitProvider()
+
+
+class ModuleRepo:
+
+    def clone(self, name: str, dest: str) -> bool:
+        raise NotImplementedError("Abstract method")
+
+
+class CompositeModuleRepo(ModuleRepo):
+
+    def __init__(self, children):
+        self.children = children
+
+    def clone(self, name: str, dest: str) -> bool:
+        for child in self.children:
+            if child.clone(name, dest):
+                return True
+        return False
+
+
+class LocalFileRepo(ModuleRepo):
+
+    def __init__(self, root):
+        self.root = root
+
+    def clone(self, name: str, dest: str) -> bool:
+        try:
+            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
+            return True
+        except:
+            LOGGER.debug("could not clone repo", exc_info=True)
+            return False
+
+
+class RemoteRepo(ModuleRepo):
+
+    def __init__(self, baseurl):
+        self.baseurl = baseurl
+
+    def clone(self, name: str, dest: str) -> bool:
+        try:
+            gitprovider.clone(self.baseurl + name, os.path.join(dest, name))
+            return True
+        except:
+            LOGGER.debug("could not clone repo", exc_info=True)
+            return False
