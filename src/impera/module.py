@@ -29,6 +29,8 @@ from urllib3 import util, exceptions
 import tempfile
 import shutil
 
+from pkg_resources import parse_version, parse_requirements, Requirement
+
 import yaml
 import impera
 from impera import env
@@ -57,6 +59,109 @@ class ProjectNotFoundExcpetion(Exception):
     """
         This exception is raised when Impera is unable to find a valid project
     """
+
+
+class GitProvider:
+
+    def clone(self, src, dest):
+        pass
+
+    def fetch(self, repo):
+        pass
+
+    def get_all_tags(self, repo):
+        pass
+
+
+class CLIGitProvider(GitProvider):
+
+    def clone(self, src, dest):
+        subprocess.check_call(["git", "clone", src, dest])
+
+    def fetch(self, repo):
+        subprocess.check_call(["git", "fetch"], cwd=repo)
+
+    def get_all_tags(self, repo):
+        return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
+
+    def checkout_tag(self, repo, tag):
+        subprocess.check_call(["git", "checkout", tag], cwd=repo)
+
+
+gitprovider = CLIGitProvider()
+
+
+class ModuleRepo:
+
+    def clone(self, name: str, dest: str) -> bool:
+        raise NotImplementedError("Abstract method")
+
+    def path_for(self, name: str):
+        # same class is used for search parh and remote repos, perhaps not optimal
+        raise NotImplementedError("Abstract method")
+
+
+class CompositeModuleRepo(ModuleRepo):
+
+    def __init__(self, children):
+        self.children = children
+
+    def clone(self, name: str, dest: str) -> bool:
+        for child in self.children:
+            if child.clone(name, dest):
+                return True
+        return False
+
+    def path_for(self, name: str):
+        for child in self.children:
+            result = child.path_for(name)
+            if result is not None:
+                return result
+        return None
+
+
+class LocalFileRepo(ModuleRepo):
+
+    def __init__(self, root):
+        self.root = os.path.abspath(root)
+
+    def clone(self, name: str, dest: str) -> bool:
+        try:
+            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
+            return True
+        except:
+            LOGGER.debug("could not clone repo", exc_info=True)
+            return False
+
+    def path_for(self, name: str):
+        path = os.path.join(self.root, name)
+        if os.path.exists(path):
+            return path
+        return None
+
+
+class RemoteRepo(ModuleRepo):
+
+    def __init__(self, baseurl):
+        self.baseurl = baseurl
+
+    def clone(self, name: str, dest: str) -> bool:
+        try:
+            gitprovider.clone(self.baseurl + name, os.path.join(dest, name))
+            return True
+        except:
+            LOGGER.debug("could not clone repo", exc_info=True)
+            return False
+
+    def path_for(self, name: str):
+        raise NotImplementedError("Should only be called on local repos")
+
+
+def makeRepo(path):
+    if ":" in path:
+        return RemoteRepo(path)
+    else:
+        return LocalFileRepo(path)
 
 
 class GitVersioned:
@@ -170,6 +275,14 @@ class GitVersioned:
         return {"source": spec, "version": "master"}
 
 
+def merge_specs(mainspec, new):
+    for key, req in new.items():
+        if key not in mainspec:
+            mainspec[key] = req
+        else:
+            mainspec[key] = mainspec[key] + req
+
+
 class Project(GitVersioned):
     """
         An Impera project
@@ -207,13 +320,23 @@ class Project(GitVersioned):
         if "modulepath" not in self._project_data:
             raise Exception("modulepath is required in the project(.yml) file")
 
-        self.modulepath = [os.path.join(
-            path, x) for x in self._project_data["modulepath"].split(os.path.pathsep)]
+        modulepath = self._project_data["modulepath"]
+        if not isinstance(modulepath, list):
+            modulepath = [modulepath]
+        self.modulepath = [os.path.abspath(os.path.join(path, x)) for x in modulepath]
+        self.resolver = CompositeModuleRepo([makeRepo(x) for x in self.modulepath])
+
+        if "repo" not in self._project_data:
+            raise Exception("repo is required in the project(.yml) file")
+
+        repo = self._project_data["repo"]
+        self.repolist = [x for x in repo]
+        self.externalResolver = CompositeModuleRepo([makeRepo(x) for x in self.repolist])
 
         self.downloadpath = None
         if "downloadpath" in self._project_data:
-            self.downloadpath = os.path.join(
-                path, self._project_data["downloadpath"])
+            self.downloadpath = os.path.abspath(os.path.join(
+                path, self._project_data["downloadpath"]))
 
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
@@ -342,7 +465,7 @@ class Project(GitVersioned):
         req = {}
         if "requires" in self._project_data and self._project_data["requires"] is not None:
             for name, spec in self._project_data["requires"].items():
-                req[name] = self.parse_version(spec)
+                req[name] = [x for x in parse_requirements(spec)]
 
         return req
 
@@ -382,14 +505,12 @@ class Module(GitVersioned):
     """
     requires_fields = ["name", "license"]
 
-    def __init__(self, project: Project, path: str, load: bool=True, **kwmeta: dict):
+    def __init__(self, project: Project, path: str, **kwmeta: dict):
         """
             Create a new configuration module
 
             :param project: A reference to the project this module belongs to.
             :param path: Where is the module stored
-            :param load: Try to load the module. Use false if the module does not exist yet and
-                needs to be installed.
             :param kwmeta: Meta-data
         """
         super().__init__(path)
@@ -397,13 +518,12 @@ class Module(GitVersioned):
         self._meta = kwmeta
         self._plugin_namespaces = []
 
-        if load:
-            if not Module.is_valid_module(self._path):
-                raise InvalidModuleException(("Module %s is not a valid Impera configuration module. Make sure that a " +
-                                              "model/_init.cf file exists and a module.yml definition file.") % self._path)
+        if not Module.is_valid_module(self._path):
+            raise InvalidModuleException(("Module %s is not a valid Impera configuration module. Make sure that a " +
+                                          "model/_init.cf file exists and a module.yml definition file.") % self._path)
 
-            self.load_module_file()
-            self.is_versioned()
+        self.load_module_file()
+        self.is_versioned()
 
     def get_name(self):
         """
@@ -473,8 +593,8 @@ class Module(GitVersioned):
             return {}
 
         req = {}
-        for require, defs in self._meta["requires"].items():
-            req[require] = self.parse_version(defs)
+        for name, spec in self._meta["requires"].items():
+            req[name] = [x for x in parse_requirements(spec)]
         return req
 
     def is_versioned(self):
@@ -488,42 +608,42 @@ class Module(GitVersioned):
                            % self._meta["name"])
             return False
 
-        if "version" in self._meta:
-            version_str = str(self._meta["version"])
-            version = StrictVersion(version_str)
-            higher = "a" in version_str or "b" in version_str
-
-            proc = subprocess.Popen(
-                ["git", "show-ref", "--head"], cwd=self._path, stdout=subprocess.PIPE)
-            refs = {}
-            for line in proc.communicate()[0].decode().split("\n"):
-                items = line.split(" ")
-                if len(items) > 1:
-                    ref_id = items[0]
-                    ref = items[1]
-
-                    refs[ref] = ref_id
-
-            ref_spec = "refs/tags/%s" % version
-            if not higher:
-                if ref_spec not in refs:
-                    LOGGER.warning(("Version %s defined in module %s is not available as tag. Use a or b followed by a number" +
-                                    " to indicate a pre release (i.e. 0.2b1 for dev of 0.2)") % (version, self._meta["name"]))
-                    return False
-
-                else:
-                    # check that the id of HEAD matches the id of the version
-                    # tag
-                    if refs["HEAD"] != refs[ref_spec]:
-                        LOGGER.warning(("Module %s is set to version %s, but current revision (%s) does not match version " +
-                                        "tag (%s).") % (self._meta["name"], version, refs["HEAD"], refs[ref_spec]))
-                        return False
-
-            else:
-                if ref_spec[:-1] in refs:
-                    LOGGER.warning(("Module %s defines this is a development version (a or b appended to version) of %s, but " +
-                                    "the release version is already available as tag.") % (self._meta["name"], str(version)))
-                    return False
+#         if "version" in self._meta:
+#             version_str = str(self._meta["version"])
+#             version = StrictVersion(version_str)
+#             higher = "a" in version_str or "b" in version_str
+#
+#             proc = subprocess.Popen(
+#                 ["git", "show-ref", "--head"], cwd=self._path, stdout=subprocess.PIPE)
+#             refs = {}
+#             for line in proc.communicate()[0].decode().split("\n"):
+#                 items = line.split(" ")
+#                 if len(items) > 1:
+#                     ref_id = items[0]
+#                     ref = items[1]
+#
+#                     refs[ref] = ref_id
+#
+#             ref_spec = "refs/tags/%s" % version
+#             if not higher:
+#                 if ref_spec not in refs:
+#                     LOGGER.warning(("Version %s defined in module %s is not available as tag. Use a or b followed by a number" +
+#                                     " to indicate a pre release (i.e. 0.2b1 for dev of 0.2)") % (version, self._meta["name"]))
+#                     return False
+#
+#                 else:
+#                     # check that the id of HEAD matches the id of the version
+#                     # tag
+#                     if refs["HEAD"] != refs[ref_spec]:
+#                         LOGGER.warning(("Module %s is set to version %s, but current revision (%s) does not match version " +
+#                                         "tag (%s).") % (self._meta["name"], version, refs["HEAD"], refs[ref_spec]))
+#                         return False
+#
+#             else:
+#                 if ref_spec[:-1] in refs:
+#                     LOGGER.warning(("Module %s defines this is a development version (a or b appended to version) of %s, but " +
+#                                     "the release version is already available as tag.") % (self._meta["name"], str(version)))
+#                     return False
 
         return True
 
@@ -754,12 +874,16 @@ class Module(GitVersioned):
 
         print("done")
 
-    def python_install(self):
+    def get_python_requirements(self):
         """
             Install python requirements with pip in a virtual environment
         """
-        self._project.virtualenv.install_from_file(
-            os.path.join(self._path, "requirements.txt"))
+        file = os.path.join(self._path, "requirements.txt")
+        if os.path.exists(file):
+            with open(file, 'r') as fd:
+                return fd.read()
+        else:
+            return None
 
     def get_requirements(self):
         """
@@ -837,72 +961,78 @@ class ModuleTool(object):
         for mod in Project.get().sorted_modules():
             mod.update()
 
-    def _install(self, project, module_path, module):
+    def _install(self, project, modulename, requirements):
         """
             Do a recursive install
         """
-        name, spec = module
+        # verify pressence in module path
+        path = project.resolver.path_for(modulename)
+        if path is not None:
+            # if exists, report
+            LOGGER.info("module %s already found at %s", modulename, path)
+            gitprovider.fetch(path)
+        else:
+            # otherwise install
+            path = os.path.join(project.downloadpath, modulename)
+            result = project.externalResolver.clone(modulename, project.downloadpath)
+            if not result:
+                raise InvalidModuleException("could not locat module with name: %s", modulename)
 
-        mod_path = os.path.join(module_path, name)
-        if mod_path not in self._mod_handled_list:
-            module = Module(project, mod_path, load=False, source=spec["source"],
-                            version=spec["version"].strip("\""), name=name)
-            new_mod = module.install(module_path)
+        versions = gitprovider.get_all_tags(path)
 
-            if not new_mod.get_name() == name:
-                raise InvalidModuleException(
-                    "Module with name %s was requested, but a module with name %s was installed from %s" % (
-                        name, new_mod.get_name(), spec["source"]))
+        def try_parse(x):
+            try:
+                return parse_version(x)
+            except:
+                return None
 
-            new_mod.python_install()
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
 
-            new_mod.checkout_branch(module.version)
+        for r in requirements:
+            versions = [x for x in r.specifier.filter(versions)]
 
-            self._mod_handled_list.add(mod_path)
+        if len(versions) == 0:
+            print("no suitable version found for module %s" % modulename)
+        else:
+            gitprovider.checkout_tag(path, str(versions[0]))
 
-            return new_mod.requires().items()
+        return Module(project, path)
 
-        return []
-
-    def install(self, branch=None):
+    def install(self, project=Project.get()):
         """
             Install all modules the project requires
         """
-        project = Project.get()
-        projectfile = os.path.join(project._path, "project.yml")
-
-        if not os.path.exists(projectfile):
-            raise Exception("Project file (project.yml) not found")
-
-        with open(projectfile, "r") as fd:
-            project_data = yaml.load(fd)
-
-        if "downloadpath" not in project_data:
-            raise Exception(
-                "downloadpath is required in the project file to install modules.")
-
-        module_path = os.path.join(project._path, project_data["downloadpath"])
-
+        specs = project.requires().copy()
         worklist = []
-        worklist.extend(project.requires().items())
+        worklist.extend(specs.keys())
+        modules = {}
 
         while len(worklist) != 0:
             work = worklist.pop(0)
             LOGGER.info("requesting install for: %s", work)
-            worklist.extend(self._install(project, module_path, work))
+            module = self._install(project, work, specs[work])
+            modules[work] = module
+            reqs = module.requires()
+            merge_specs(specs, reqs)
+            for name in reqs.keys():
+                if name not in modules:
+                    worklist.append(name)
 
-        install_set = [os.path.realpath(path)
-                       for path in self._mod_handled_list]
-        not_listed = []
-        for mod in project.modules.values():
-            if os.path.realpath(mod._path) not in install_set:
-                not_listed.append(mod)
+        # verify if installed versions are consistent with all rules
+        for name, spec in specs.items():
+            module = modules[name]
+            version = parse_version(str(module.version))
+            for r in spec:
+                if version not in r:
+                    LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
 
-        if len(not_listed) > 0:
-            print("WARNING: The following modules are loaded by Impera but are not listed in the project file or in " +
-                  "the dependencies of other modules:")
-            for mod in not_listed:
-                print("\t%s (%s)" % (mod._meta["name"], mod._path))
+        # do python install
+        pyreq = [x.strip() for x in [module.get_python_requirements() for module in modules.values()] if x is not None]
+        pyreq = '\n'.join(pyreq).split("\n")
+
+        project.virtualenv.install_from_list(pyreq)
+
         project.reloadModules()
 
     def status(self):
@@ -1067,63 +1197,3 @@ requires:
             sys.exit(1)
 
         sys.exit(0)
-
-
-class GitProvider:
-
-    def clone(self, src, dest):
-        pass
-
-
-class CLIGitProvider(GitProvider):
-
-    def clone(self, src, dest):
-        subprocess.check_call(["git", "clone", src, dest])
-
-gitprovider = CLIGitProvider()
-
-
-class ModuleRepo:
-
-    def clone(self, name: str, dest: str) -> bool:
-        raise NotImplementedError("Abstract method")
-
-
-class CompositeModuleRepo(ModuleRepo):
-
-    def __init__(self, children):
-        self.children = children
-
-    def clone(self, name: str, dest: str) -> bool:
-        for child in self.children:
-            if child.clone(name, dest):
-                return True
-        return False
-
-
-class LocalFileRepo(ModuleRepo):
-
-    def __init__(self, root):
-        self.root = root
-
-    def clone(self, name: str, dest: str) -> bool:
-        try:
-            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
-            return True
-        except:
-            LOGGER.debug("could not clone repo", exc_info=True)
-            return False
-
-
-class RemoteRepo(ModuleRepo):
-
-    def __init__(self, baseurl):
-        self.baseurl = baseurl
-
-    def clone(self, name: str, dest: str) -> bool:
-        try:
-            gitprovider.clone(self.baseurl + name, os.path.join(dest, name))
-            return True
-        except:
-            LOGGER.debug("could not clone repo", exc_info=True)
-            return False
