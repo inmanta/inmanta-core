@@ -168,6 +168,15 @@ def makeRepo(path):
         return LocalFileRepo(path)
 
 
+def merge_specs(mainspec, new):
+    """ merge two maps str->[T] by concatting their lists"""
+    for key, req in new.items():
+        if key not in mainspec:
+            mainspec[key] = req
+        else:
+            mainspec[key] = mainspec[key] + req
+
+
 class ModuleLike:
     """
         Commons superclass for projects and modules, which are both versioned by git
@@ -184,40 +193,17 @@ class ModuleLike:
 
     name = property(get_name)
 
-    def get_scm_url(self):
-        try:
-            return subprocess.check_output(["git", "config", "--get", "remote.origin.url"],
-                                           cwd=self._path).decode("utf-8") .strip()
-        except Exception:
-            return None
+    def requires(self) -> dict:
+        """
+            Get the requires for this module
+        """
+        if "requires" not in self._meta or self._meta["requires"] is None:
+            return {}
 
-    def get_scm_version(self):
-        try:
-            return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self._path).decode("utf-8") .strip()
-        except Exception:
-            return None
-
-    def get_scm_branch(self):
-        try:
-            return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                                           cwd=self._path).decode("utf-8") .strip()
-        except Exception:
-            return None
-
-    def get_scm_resolve(self, refspec):
-        try:
-            return subprocess.check_output(["git", "rev-parse", refspec],
-                                           cwd=self._path, stderr=subprocess.DEVNULL).decode("utf-8") .strip()
-        except Exception:
-            return None
-
-    def get_scm_is_ancestor(self, refspec):
-        try:
-            return subprocess.call(["git", "merge-base", "--is-ancestor", refspec, "HEAD"],
-                                   cwd=self._path) == 0
-        except Exception as e:
-            print(e)
-            return None
+        req = {}
+        for name, spec in self._meta["requires"].items():
+            req[name] = [x for x in parse_requirements(spec)]
+        return req
 
     def verify_requires(self, module_map: dict) -> bool:
         """
@@ -239,14 +225,6 @@ class ModuleLike:
         return True
 
 
-def merge_specs(mainspec, new):
-    for key, req in new.items():
-        if key not in mainspec:
-            mainspec[key] = req
-        else:
-            mainspec[key] = mainspec[key] + req
-
-
 class Project(ModuleLike):
     """
         An Impera project
@@ -257,7 +235,7 @@ class Project(ModuleLike):
     def __init__(self, path):
         """
             Initialize the project, this includes
-             * Loading the project.yaml (into self._project_data)
+             * Loading the project.yaml (into self._meta)
              * Setting paths from project.yaml
              * Loading all modules in the module path (into self.modules)
             It does not include
@@ -279,28 +257,28 @@ class Project(ModuleLike):
                 "Project directory does not contain a project file")
 
         with open(project_file, "r") as fd:
-            self._project_data = yaml.load(fd)
+            self._meta = yaml.load(fd)
 
-        if "modulepath" not in self._project_data:
+        if "modulepath" not in self._meta:
             raise Exception("modulepath is required in the project(.yml) file")
 
-        modulepath = self._project_data["modulepath"]
+        modulepath = self._meta["modulepath"]
         if not isinstance(modulepath, list):
             modulepath = [modulepath]
         self.modulepath = [os.path.abspath(os.path.join(path, x)) for x in modulepath]
         self.resolver = CompositeModuleRepo([makeRepo(x) for x in self.modulepath])
 
-        if "repo" not in self._project_data:
+        if "repo" not in self._meta:
             raise Exception("repo is required in the project(.yml) file")
 
-        repo = self._project_data["repo"]
+        repo = self._meta["repo"]
         self.repolist = [x for x in repo]
         self.externalResolver = CompositeModuleRepo([makeRepo(x) for x in self.repolist])
 
         self.downloadpath = None
-        if "downloadpath" in self._project_data:
+        if "downloadpath" in self._meta:
             self.downloadpath = os.path.abspath(os.path.join(
-                path, self._project_data["downloadpath"]))
+                path, self._meta["downloadpath"]))
 
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
@@ -422,17 +400,6 @@ class Project(ModuleLike):
         """
         self.virtualenv.use_virtual_env()
 
-    def requires(self) -> dict:
-        """
-            Return the requires of this project
-        """
-        req = {}
-        if "requires" in self._project_data and self._project_data["requires"] is not None:
-            for name, spec in self._project_data["requires"].items():
-                req[name] = [x for x in parse_requirements(spec)]
-
-        return req
-
     def sorted_modules(self) -> list:
         """
             Return a list of all modules, sorted on their name
@@ -466,7 +433,7 @@ class Module(ModuleLike):
     """
         This class models an Impera configuration module
     """
-    requires_fields = ["name", "license"]
+    requires_fields = ["name", "license", "version"]
 
     def __init__(self, project: Project, path: str, **kwmeta: dict):
         """
@@ -562,55 +529,6 @@ class Module(ModuleLike):
 
         return Module(project, path)
 
-    def _force_http(self, source_string):
-        """
-            Force the given string to http
-        """
-        new_source = source_string
-        try:
-            result = util.parse_url(source_string)
-            if result.scheme is None:
-                return new_source
-
-            if result.scheme != "http" and result.scheme != "https":
-                # try to convert it to an anonymous https url
-                new_source = source_string.replace(result.scheme, "http")
-
-        except exceptions.LocationParseError:
-            # probably in git@host:repo format
-            m = re.search("^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source_string)
-            if m is not None:
-                new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
-
-        if new_source != source_string:
-            LOGGER.info("Reformated source from %s to %s" % (source_string, new_source))
-
-        return new_source
-
-    def get_source(self) -> str:
-        """
-            Get the source url of this module. If git-http-only is true, we try to convert the all urls that are not valid
-            http urls.
-        """
-        source = self._meta["source"]
-        if not Config.getboolean("config", "git-http-only", False):
-            return source
-
-        return self._force_http(source)
-
-    source = property(get_source)
-
-    def requires(self) -> dict:
-        """
-            Get the requires for this module
-        """
-        if "requires" not in self._meta or self._meta["requires"] is None:
-            return {}
-
-        req = {}
-        for name, spec in self._meta["requires"].items():
-            req[name] = [x for x in parse_requirements(spec)]
-        return req
 
     def is_versioned(self):
         """
@@ -622,44 +540,6 @@ class Module(ModuleLike):
             LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible."
                            % self._meta["name"])
             return False
-
-#         if "version" in self._meta:
-#             version_str = str(self._meta["version"])
-#             version = StrictVersion(version_str)
-#             higher = "a" in version_str or "b" in version_str
-#
-#             proc = subprocess.Popen(
-#                 ["git", "show-ref", "--head"], cwd=self._path, stdout=subprocess.PIPE)
-#             refs = {}
-#             for line in proc.communicate()[0].decode().split("\n"):
-#                 items = line.split(" ")
-#                 if len(items) > 1:
-#                     ref_id = items[0]
-#                     ref = items[1]
-#
-#                     refs[ref] = ref_id
-#
-#             ref_spec = "refs/tags/%s" % version
-#             if not higher:
-#                 if ref_spec not in refs:
-#                     LOGGER.warning(("Version %s defined in module %s is not available as tag. Use a or b followed by a number" +
-#                                     " to indicate a pre release (i.e. 0.2b1 for dev of 0.2)") % (version, self._meta["name"]))
-#                     return False
-#
-#                 else:
-#                     # check that the id of HEAD matches the id of the version
-#                     # tag
-#                     if refs["HEAD"] != refs[ref_spec]:
-#                         LOGGER.warning(("Module %s is set to version %s, but current revision (%s) does not match version " +
-#                                         "tag (%s).") % (self._meta["name"], version, refs["HEAD"], refs[ref_spec]))
-#                         return False
-#
-#             else:
-#                 if ref_spec[:-1] in refs:
-#                     LOGGER.warning(("Module %s defines this is a development version (a or b appended to version) of %s, but " +
-#                                     "the release version is already available as tag.") % (self._meta["name"], str(version)))
-#                     return False
-
         return True
 
     @classmethod
@@ -675,7 +555,7 @@ class Module(ModuleLike):
 
     def load_module_file(self):
         """
-            Load the imp module definition file
+            Load the module definition file
         """
         with open(os.path.join(self._path, "module.yml"), "r") as fd:
             mod_def = yaml.load(fd)
@@ -738,65 +618,22 @@ class Module(ModuleLike):
             LOGGER.exception(
                 "Unable to load all plug-ins for module %s" % self._meta["name"])
 
-    def checkout_version(self, version: Version):
-        """
-            Checkout the given version
-        """
-        # versions = self.versions()
-
-        # if version in versions:
-        #    print(version)
-        raise NotImplementedError()
-
-    def checkout_branch(self, branch):
-        """
-            Checkout the given branch
-        """
-
-        self._call(["git", "checkout", branch], self._path, "git checkout ")
-
     def versions(self):
         """
             Provide a list of all versions available in the repository
         """
-        output = self._call(
-            ["git", "show-ref", "--head"], self._path, "git qshow-ref")
-        lines = output.decode().split("\n")
+        versions = gitprovider.get_all_tags(self._path)
 
-        version_list = []
-        for line in lines:
-            obj = re.search(
-                "^(?P<hash>[a-f0-9]{40}) refs/tags/(?P<version>.+)$", line)
+        def try_parse(x):
+            try:
+                return parse_version(x)
+            except:
+                return None
 
-            if obj:
-                try:
-                    version_list.append(StrictVersion(obj.group("version")))
-                except Exception:
-                    pass
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
 
-        return version_list
-
-    def _call(self, cmd: list, path: str, cmd_name: str) -> str:
-        proc = subprocess.Popen(
-            cmd, cwd=path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            output = proc.communicate(timeout=60)
-        except TimeoutExpired:
-            print("Unable to %(cmd_name)s module %(name)s, %(cmd_name)s timed out" %
-                  {"name": self._meta["name"], "cmd_name": cmd_name})
-
-            return None
-
-        if proc.returncode is None or proc.returncode > 0:
-            print("")
-            print("Unable to %(cmd_name)s %(name)s, %(cmd_name)s provided this output:" %
-                  {"name": self._meta["name"], "cmd_name": cmd_name})
-            print(output[0].decode())
-            print(output[1].decode())
-
-            return None
-
-        return output[0]
+        return versions
 
     def status(self):
         """
@@ -923,10 +760,12 @@ class ModuleTool(object):
         for name, spec in specs.items():
             Module.update(project, name, spec)
 
-    def install(self, project=Project.get()):
+    def install(self, project=None):
         """
             Install all modules the project requires
         """
+        if project is None:
+            project = Project.get()
         specs = project.requires().copy()
         worklist = []
         worklist.extend(specs.keys())
@@ -1070,25 +909,24 @@ class ModuleTool(object):
             os.mkdir(lib_dir)
 
             LOGGER.info("Cloning %s module" % module.name)
-            proc = subprocess.Popen(
-                ["git", "clone", module._path], cwd=lib_dir)
-            proc.wait()
+            gitprovider.clone(module._path, lib_dir)
 
             LOGGER.info("Setting up project")
             with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
                 fd.write("""name: test
 description: Project to validate module %(name)s
+repo: [%(repo)s]
 modulepath: libs
 downloadpath: libs
 requires:
-    %(name)s: %(source)s, "%(version)s"
-""" % {"name": module.name, "version": module.get_scm_version(), "source": module._path})
+    %(name)s: %(name)s == %(version)s
+""" % {"name": module.name, "version": str(module.versions()[0]), "repo": os.path.split(module._path)[0]})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
             test_project.use_virtual_env()
             Project.set(test_project)
-            self.install()
+            self.install(test_project)
 
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
@@ -1097,7 +935,7 @@ requires:
 
             project = Project(project_dir)
             Project._project = project
-            LOGGER.info("Verifying module set")
+            LOGGER.info("Verifying modules")
             project.verify()
             LOGGER.info("Loading all plugins")
             project.load_plugins()
