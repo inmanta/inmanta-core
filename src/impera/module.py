@@ -82,6 +82,9 @@ class CLIGitProvider(GitProvider):
     def fetch(self, repo):
         subprocess.check_call(["git", "fetch", "--tags"], cwd=repo)
 
+    def status(self, repo):
+        return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
+
     def get_all_tags(self, repo):
         return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
 
@@ -165,7 +168,7 @@ def makeRepo(path):
         return LocalFileRepo(path)
 
 
-class GitVersioned:
+class ModuleLike:
     """
         Commons superclass for projects and modules, which are both versioned by git
     """
@@ -220,60 +223,20 @@ class GitVersioned:
         """
             Check if all the required modules for this module have been loaded
         """
-
-        for require, defs in self.requires().items():
+        LOGGER.info("verifying module %s", self.get_name())
+        for require, spec in self.requires().items():
             if require not in module_map:
                 print("Module %s requires the %s module that has not been loaded" % (
                     self._path, require))
                 return False
 
-            source = defs["source"]
-            version = defs["version"]
-
             module = module_map[require]
-            if not module.verify_require(source, version):
-                print("Module %s requires module %s with version %s which is not loaded" %
-                      (self.name, require, version.strip()))
-                return False
-
+            version = parse_version(str(module.version))
+            for r in spec:
+                if version not in r:
+                    LOGGER.warning("module %s requires %s but %s is at version %s" % (self.name, r, require, version))
+                    return False
         return True
-
-    def verify_require(self, source_spec: str, version_spec: str) -> bool:
-        """
-            Verify if this module satisfies the given source and version spec
-        """
-        # TODO: verify source
-        version_spec = version_spec.strip("\"")
-
-        gte = version_spec.startswith(">=")
-
-        if gte:
-            version_spec = version_spec[2:]
-
-        return self.compare_version(version_spec.strip(), gte)
-
-    def compare_version(self, version_spec: str, gte: bool) -> bool:
-        version = self.get_scm_resolve(version_spec)
-
-        if version is None:
-            LOGGER.warning("Module %s does not have version %s"
-                           % (self._path, version_spec))
-            return False
-        if gte:
-            return self.get_scm_is_ancestor(version)
-        else:
-            return self.get_scm_version() == version
-
-    def parse_version(self, spec: str) -> {}:
-        if ',' in spec:
-            source, version = spec.split(",")
-            version = version.strip()
-            if len(version) != 0:
-                return {"source": source.strip(), "version": version.strip()}
-
-            return {"source": source, "version": "master"}
-
-        return {"source": spec, "version": "master"}
 
 
 def merge_specs(mainspec, new):
@@ -284,7 +247,7 @@ def merge_specs(mainspec, new):
             mainspec[key] = mainspec[key] + req
 
 
-class Project(GitVersioned):
+class Project(ModuleLike):
     """
         An Impera project
     """
@@ -499,7 +462,7 @@ class Project(GitVersioned):
     name = property(get_name)
 
 
-class Module(GitVersioned):
+class Module(ModuleLike):
     """
         This class models an Impera configuration module
     """
@@ -839,8 +802,7 @@ class Module(GitVersioned):
         """
             Run a git status on this module
         """
-        cmd = ["git", "status", "--porcelain"]
-        output = self._call(cmd, self._path, "git status").decode()
+        output = gitprovider.status(self._path)
 
         files = [x.strip() for x in output.split("\n") if x != ""]
 
