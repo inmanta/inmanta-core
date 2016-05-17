@@ -79,7 +79,7 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "clone", src, dest])
 
     def fetch(self, repo):
-        subprocess.check_call(["git", "fetch"], cwd=repo)
+        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo)
 
     def get_all_tags(self, repo):
         return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
