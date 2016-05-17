@@ -38,6 +38,7 @@ from impera.config import Config
 from impera.ast import Namespace
 from impera import plugins
 from impera.parser.plyInmantaParser import parse
+from mongoengine.queryset.transform import update
 
 
 LOGGER = logging.getLogger(__name__)
@@ -486,12 +487,11 @@ class Project(GitVersioned):
         """
             Collect the list of all requirements of all modules in the project.
         """
-        all_reqs = set()
-
-        for mod in self.modules.values():
-            all_reqs.update(mod.get_requirements())
-
-        return all_reqs
+        specs = self.requires().copy()
+        for module in self.modules.values():
+            reqs = module.requires()
+            merge_specs(specs, reqs)
+        return specs
 
     def get_name(self):
         return "project.yml"
@@ -546,6 +546,58 @@ class Module(GitVersioned):
         return None
 
     version = property(get_version)
+
+    @classmethod
+    def install(cls, project, modulename, requirements, install=True):
+        """
+           Install a module, return module object
+        """
+        # verify pressence in module path
+        path = project.resolver.path_for(modulename)
+        if path is not None:
+            # if exists, report
+            LOGGER.info("module %s already found at %s", modulename, path)
+            gitprovider.fetch(path)
+        else:
+            # otherwise install
+            path = os.path.join(project.downloadpath, modulename)
+            result = project.externalResolver.clone(modulename, project.downloadpath)
+            if not result:
+                raise InvalidModuleException("could not locat module with name: %s", modulename)
+
+        return cls.update(project, modulename, requirements, path, False)
+
+    @classmethod
+    def update(cls, project, modulename, requirements, path=None, fetch=True):
+        """
+           Update a module, return module object
+        """
+        if path is None:
+            path = project.resolver.path_for(modulename)
+
+        if fetch:
+            gitprovider.fetch(path)
+
+        versions = gitprovider.get_all_tags(path)
+
+        def try_parse(x):
+            try:
+                return parse_version(x)
+            except:
+                return None
+
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
+
+        for r in requirements:
+            versions = [x for x in r.specifier.filter(versions)]
+
+        if len(versions) == 0:
+            print("no suitable version found for module %s" % modulename)
+        else:
+            gitprovider.checkout_tag(path, str(versions[0]))
+
+        return Module(project, path)
 
     def _force_http(self, source_string):
         """
@@ -722,60 +774,6 @@ class Module(GitVersioned):
         except ImportError:
             LOGGER.exception(
                 "Unable to load all plug-ins for module %s" % self._meta["name"])
-
-    def update(self):
-        """
-            Update the module by doing a git pull
-        """
-        sys.stdout.write("Updating %s " % self._meta["name"])
-        sys.stdout.flush()
-
-        output = self._call(["git", "pull"], self._path, "git pull")
-
-        if output is not None:
-            sys.stdout.write("branches ")
-            sys.stdout.flush()
-
-        output = self._call(
-            ["git", "pull", "--tags"], self._path, "git pull --tags")
-
-        if output is not None:
-            sys.stdout.write("tags ")
-            sys.stdout.flush()
-
-        print("done")
-
-    def install(self, modulepath):
-        """
-            Install this module if it has not been installed yet, and install its dependencies.
-        """
-        if not os.path.exists(self._path):
-            # check if source and version are available
-            if "source" not in self._meta or "version" not in self._meta:
-                raise Exception(
-                    "Source and version are required to install a configuration module.")
-
-            LOGGER.info(
-                "Cloning module %s from %s", self._meta["name"], self.source)
-            cmd = ["git", "clone", self.source, self._meta["name"]]
-            output = self._call(cmd, modulepath, "git clone")
-
-            if output is None:
-                new_source = self._force_http(self.source)
-                LOGGER.info(
-                    "Cloning module %s from %s", self._meta["name"], new_source)
-                cmd = ["git", "clone", new_source, self._meta["name"]]
-                output = self._call(cmd, modulepath, "git clone")
-
-                if output is None:
-                    LOGGER.critical("Unable to get module %s" %
-                                    self._meta["name"])
-                    return None
-
-        # reload the module
-        module = Module(self._project, self._path)
-
-        return module
 
     def checkout_version(self, version: Version):
         """
@@ -954,50 +952,14 @@ class ModuleTool(object):
 
         print("+" + "-" * (name_length + version_length + 5) + "+")
 
-    def update(self):
+    def update(self,  project=Project.get()):
         """
             Update all modules from their source
         """
-        for mod in Project.get().sorted_modules():
-            mod.update()
+        specs = project.collect_requirements()
 
-    def _install(self, project, modulename, requirements):
-        """
-            Do a recursive install
-        """
-        # verify pressence in module path
-        path = project.resolver.path_for(modulename)
-        if path is not None:
-            # if exists, report
-            LOGGER.info("module %s already found at %s", modulename, path)
-            gitprovider.fetch(path)
-        else:
-            # otherwise install
-            path = os.path.join(project.downloadpath, modulename)
-            result = project.externalResolver.clone(modulename, project.downloadpath)
-            if not result:
-                raise InvalidModuleException("could not locat module with name: %s", modulename)
-
-        versions = gitprovider.get_all_tags(path)
-
-        def try_parse(x):
-            try:
-                return parse_version(x)
-            except:
-                return None
-
-        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
-        versions = sorted(versions, reverse=True)
-
-        for r in requirements:
-            versions = [x for x in r.specifier.filter(versions)]
-
-        if len(versions) == 0:
-            print("no suitable version found for module %s" % modulename)
-        else:
-            gitprovider.checkout_tag(path, str(versions[0]))
-
-        return Module(project, path)
+        for name, spec in specs.items():
+            Module.update(project, name, spec)
 
     def install(self, project=Project.get()):
         """
@@ -1011,7 +973,7 @@ class ModuleTool(object):
         while len(worklist) != 0:
             work = worklist.pop(0)
             LOGGER.info("requesting install for: %s", work)
-            module = self._install(project, work, specs[work])
+            module = Module.install(project, work, specs[work])
             modules[work] = module
             reqs = module.requires()
             merge_specs(specs, reqs)
