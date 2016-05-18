@@ -39,6 +39,10 @@ from impera.ast import Namespace
 from impera import plugins
 from impera.parser.plyInmantaParser import parse
 from mongoengine.queryset.transform import update
+from argparse import ArgumentParser
+import inspect
+import ruamel.yaml
+import time
 
 
 LOGGER = logging.getLogger(__name__)
@@ -91,6 +95,16 @@ class CLIGitProvider(GitProvider):
     def checkout_tag(self, repo, tag):
         subprocess.check_call(["git", "checkout", tag], cwd=repo)
 
+    def commit(self, repo, message, commit_all, add=[]):
+        for file in add:
+            subprocess.check_call(["git", "add", file], cwd=repo)
+        if not commit_all:
+            subprocess.check_call(["git", "commit", "-m", message], cwd=repo)
+        else:
+            subprocess.check_call(["git", "commit", "-a", "-m", message], cwd=repo)
+
+    def tag(self, repo, tag):
+        subprocess.check_call(["git", "tag", tag], cwd=repo)
 
 gitprovider = CLIGitProvider()
 
@@ -192,6 +206,14 @@ class ModuleLike:
         raise NotImplemented()
 
     name = property(get_name)
+
+    def get_config_for_rewrite(self):
+        with open(self.get_config_file_name(), "r") as fd:
+            return ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
+
+    def rewrite_config(self, data):
+        with open(self.get_config_file_name(), "w") as fd:
+            fd.write(ruamel.yaml.dump(data, Dumper=ruamel.yaml.RoundTripDumper))
 
     def requires(self) -> dict:
         """
@@ -428,6 +450,9 @@ class Project(ModuleLike):
 
     name = property(get_name)
 
+    def get_config_file_name(self):
+        return os.path.join(self._path, "project.yml")
+
 
 class Module(ModuleLike):
     """
@@ -529,7 +554,6 @@ class Module(ModuleLike):
 
         return Module(project, path)
 
-
     def is_versioned(self):
         """
             Check if this module is versioned, and if so the version number in the module file should
@@ -557,7 +581,7 @@ class Module(ModuleLike):
         """
             Load the module definition file
         """
-        with open(os.path.join(self._path, "module.yml"), "r") as fd:
+        with open(self.get_config_file_name(), "r") as fd:
             mod_def = yaml.load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
@@ -575,6 +599,9 @@ class Module(ModuleLike):
         if self._meta["name"] != os.path.basename(self._path):
             LOGGER.warning("The name in the module file (%s) does not match the directory name (%s)"
                            % (self._meta["name"], os.path.basename(self._path)))
+
+    def get_config_file_name(self):
+        return os.path.join(self._path, "module.yml")
 
     def get_module_files(self):
         """
@@ -701,14 +728,33 @@ class ModuleTool(object):
     def __init__(self):
         self._mod_handled_list = set()
 
+    @classmethod
+    def modules_parser_config(cls, parser: ArgumentParser):
+        subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+        subparser.add_parser("list", help="List all modules in a table")
+        subparser.add_parser("update", help="Update all modules from their source")
+        subparser.add_parser("install", help="List all modules in a table")
+        subparser.add_parser("status", help="Run a git status on all modules and report")
+        subparser.add_parser("push", help="Run a git push on all modules and report")
+        subparser.add_parser("freeze", help="Freeze the version of all modules")
+        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+        subparser.add_parser("validate", help="Validate the module we are currently in")
+        commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
+        commit.add_argument("-m", "--message", help="Commit message", required=True)
+        commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
+        commit.add_argument("-v", "--version", help="Version to use on tag")
+        commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+
     def execute(self, cmd, args):
         """
             Execute the given command
         """
         if hasattr(self, cmd):
             method = getattr(self, cmd)
-            method(*args)
-
+            margs = inspect.getfullargspec(method).args
+            margs.remove("self")
+            outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
+            method(**outargs)
         else:
             raise Exception("%s not implemented" % cmd)
 
@@ -862,11 +908,47 @@ class ModuleTool(object):
         """
         Project.get().verify()
 
-    def commit(self, version=None):
+    def _find_module(self):
+        module = Module(None, os.path.realpath(os.curdir))
+        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
+        return module
+
+    def commit(self, message, version=None, dev=True, commit_all=False):
         """
             Commit all current changes.
         """
-        subprocess.call(["git", "commit", "-a"])
+        # find module
+        module = self._find_module()
+        # get version
+        old_version = parse_version(module.version)
+        # determine new version
+        if version is not None:
+            baseversion = version
+        else:
+            if old_version.is_prerelease:
+                baseversion = old_version.base_version
+            else:
+                baseversion = old_version.base_version
+                parts = baseversion.split('.')
+                parts[-1] = str(int(parts[-1]) + 1)
+                baseversion = '.'.join(parts)
+
+        if dev:
+            baseversion = "%s.dev%d" % (baseversion, time.time())
+
+        baseversion = parse_version(baseversion)
+        if baseversion <= old_version:
+            print("new versions (%s) is not larger then old version (%s), aborting" % (baseversion, old_version))
+            return
+
+        cfg = module.get_config_for_rewrite()
+        cfg["version"] = str(baseversion)
+        module.rewrite_config(cfg)
+        print("set version to: " + str(baseversion))
+        # commit
+        gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
+        # tag
+        gitprovider.tag(module._path, str(baseversion))
 
     def validate(self, options=""):
         """
@@ -874,9 +956,7 @@ class ModuleTool(object):
         """
         parse_only = "-s" in options
         valid = True
-        module = Module(None, os.path.realpath(os.curdir))
-        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
-
+        module = self._find_module()
         if not module.is_versioned():
             LOGGER.error("Module is not versioned correctly, validation will fail")
             valid = False
