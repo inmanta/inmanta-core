@@ -25,7 +25,7 @@ from impera.ast.attribute import Attribute, RelationAttribute
 from impera.ast.entity import Implementation, Entity, Default, Implement
 from impera.ast.constraint.expression import Equals
 from impera.ast.statements import TypeDefinitionStatement
-from impera.ast import Namespace, TypingException, DuplicateException
+from impera.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -167,12 +167,17 @@ class DefineImplement(DefinitionStatement):
 
         implement = Implement()
         implement.constraint = self.select
+        implement.location = self.location
 
         i = 0
         for _impl in self.implementations:
             i += 1
-            # check if the implementation has the correct type
-            impl_obj = resolver.get_type(self.namespace, _impl)
+            try:
+                # check if the implementation has the correct type
+                impl_obj = resolver.get_type(self.namespace, _impl)
+            except TypeNotFoundException as e:
+                e.set_location(self.location)
+                raise e
 
             if impl_obj.entity is not None and not (entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)):
                 raise Exception("Type mismatch: cannot use %s as implementation for %s because its implementing type is %s" %
@@ -367,6 +372,7 @@ class PluginStatement(TypeDefinitionStatement):
     """
         This statement defines a plugin function
     """
+
     def __init__(self, namespace, name, function_class):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self._name = name
