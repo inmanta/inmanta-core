@@ -16,33 +16,27 @@
     Contact: code@inmanta.com
 """
 
-from distutils.version import StrictVersion, Version
 import glob
 import imp
 import logging
 import os
 from os.path import sys
 import re
-from subprocess import TimeoutExpired
 import subprocess
-from urllib3 import util, exceptions
 import tempfile
 import shutil
-
-from pkg_resources import parse_version, parse_requirements, Requirement
+from argparse import ArgumentParser
+import inspect
+from pkg_resources import parse_version, parse_requirements
+import time
 
 import yaml
 import impera
 from impera import env
-from impera.config import Config
 from impera.ast import Namespace
 from impera import plugins
 from impera.parser.plyInmantaParser import parse
-from mongoengine.queryset.transform import update
-from argparse import ArgumentParser
-import inspect
 import ruamel.yaml
-import time
 
 
 LOGGER = logging.getLogger(__name__)
@@ -161,7 +155,7 @@ try:
 
             author = pygit2.Signature(username, email)
 
-            oid = repoh.create_commit("HEAD", author, author, message, tree, [repoh.head.get_object().hex])
+            return repoh.create_commit("HEAD", author, author, message, tree, [repoh.head.get_object().hex])
 
         def tag(self, repo, tag):
             repoh = pygit2.Repository(repo)
@@ -219,14 +213,17 @@ class CompositeModuleRepo(ModuleRepo):
 
 class LocalFileRepo(ModuleRepo):
 
-    def __init__(self, root):
-        self.root = os.path.abspath(root)
+    def __init__(self, root, parent_root=None):
+        if parent_root is None:
+            self.root = os.path.abspath(root)
+        else:
+            self.root = os.path.join(parent_root)
 
     def clone(self, name: str, dest: str) -> bool:
         try:
             gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
             return True
-        except:
+        except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)
             return False
 
@@ -246,7 +243,7 @@ class RemoteRepo(ModuleRepo):
         try:
             gitprovider.clone(self.baseurl + name, os.path.join(dest, name))
             return True
-        except:
+        except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)
             return False
 
@@ -254,15 +251,15 @@ class RemoteRepo(ModuleRepo):
         raise NotImplementedError("Should only be called on local repos")
 
 
-def makeRepo(path):
+def makeRepo(path, root=None):
     if ":" in path:
         return RemoteRepo(path)
     else:
-        return LocalFileRepo(path)
+        return LocalFileRepo(path, parent_root=root)
 
 
 def merge_specs(mainspec, new):
-    """ merge two maps str->[T] by concatting their lists"""
+    """Merge two maps str->[T] by concatting their lists."""
     for key, req in new.items():
         if key not in mainspec:
             mainspec[key] = req
@@ -373,8 +370,10 @@ class Project(ModuleLike):
             raise Exception("repo is required in the project(.yml) file")
 
         repo = self._meta["repo"]
+        if not isinstance(repo, list):
+            repo = [repo]
         self.repolist = [x for x in repo]
-        self.externalResolver = CompositeModuleRepo([makeRepo(x) for x in self.repolist])
+        self.externalResolver = CompositeModuleRepo([makeRepo(x, root=path) for x in self.repolist])
 
         self.downloadpath = None
         if "downloadpath" in self._meta:
@@ -422,6 +421,7 @@ class Project(ModuleLike):
             Get the instance of the project
         """
         cls._project = project
+        os.chdir(project._path)
         plugins.PluginMeta.clear()
 
     def _load_freeze(self, freeze_file: str) -> {}:
@@ -617,7 +617,7 @@ class Module(ModuleLike):
         def try_parse(x):
             try:
                 return parse_version(x)
-            except:
+            except Exception:
                 return None
 
         versions = [x for x in [try_parse(v) for v in versions] if x is not None]
@@ -733,7 +733,7 @@ class Module(ModuleLike):
         def try_parse(x):
             try:
                 return parse_version(x)
-            except:
+            except Exception:
                 return None
 
         versions = [x for x in [try_parse(v) for v in versions] if x is not None]
@@ -876,10 +876,12 @@ class ModuleTool(object):
 
         print("+" + "-" * (name_length + version_length + 5) + "+")
 
-    def update(self,  project=Project.get()):
+    def update(self, project=None):
         """
             Update all modules from their source
         """
+        if project is None:
+            project = Project.get()
         specs = project.collect_requirements()
 
         for name, spec in specs.items():
@@ -916,10 +918,11 @@ class ModuleTool(object):
                     LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
 
         # do python install
-        pyreq = [x.strip() for x in [module.get_python_requirements() for module in modules.values()] if x is not None]
+        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in modules.values()] if x is not None]
         pyreq = '\n'.join(pyreq).split("\n")
-
-        project.virtualenv.install_from_list(pyreq)
+        pyreq = [x for x in pyreq if len(x.strip()) > 0]
+        if len(pyreq) > 0:
+            project.virtualenv.install_from_list(pyreq)
 
         project.reloadModules()
 
