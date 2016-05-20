@@ -21,7 +21,7 @@
 from . import GeneratorStatement
 from impera.execute.util import Unknown
 from impera.execute.runtime import ExecutionContext
-from impera.ast import RuntimeException, TypingException
+from impera.ast import RuntimeException, TypingException, NotFoundException
 
 
 class SubConstructor(GeneratorStatement):
@@ -39,8 +39,15 @@ class SubConstructor(GeneratorStatement):
         pass
 
     def requires_emit(self, resolver, queue):
-        out = {rk: rv for i in self.type.implements for (
-            rk, rv) in i.constraint.requires_emit(resolver, queue).items()}
+        out = {}
+
+        for i in self.type.implements:
+            try:
+                for (rk, rv) in i.constraint.requires_emit(resolver, queue).items():
+                    out[rk] = rv
+            except NotFoundException as e:
+                e.set_statement(i)
+                raise e
         return out
 
     def execute(self, requires, resolver, queue):
