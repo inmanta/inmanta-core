@@ -33,10 +33,15 @@ import time
 import yaml
 import impera
 from impera import env
-from impera.ast import Namespace
+from impera.ast import Namespace, CompilerException
 from impera import plugins
 from impera.parser.plyInmantaParser import parse
 import ruamel.yaml
+from impera.ast.statements.define import DefineImport
+from impera.parser import plyInmantaParser
+from impera.ast.blocks import BasicBlock
+from impera.ast.statements import DefinitionStatement
+from impera.util import memoize
 
 
 LOGGER = logging.getLogger(__name__)
@@ -217,7 +222,7 @@ class LocalFileRepo(ModuleRepo):
         if parent_root is None:
             self.root = os.path.abspath(root)
         else:
-            self.root = os.path.join(parent_root)
+            self.root = os.path.join(parent_root, root)
 
     def clone(self, name: str, dest: str) -> bool:
         try:
@@ -295,13 +300,22 @@ class ModuleLike:
         """
             Get the requires for this module
         """
-        if "requires" not in self._meta or self._meta["requires"] is None:
-            return {}
+        try:
+            imports = [x for x in self.get_ast()[0] if isinstance(x, DefineImport)]
 
-        req = {}
-        for name, spec in self._meta["requires"].items():
-            req[name] = [x for x in parse_requirements(spec)]
-        return req
+            req = {}
+
+            for i in imports:
+                try:
+                    req[i.name] = [x for x in parse_requirements("%s %s" % (i.name, i.versionspec))]
+                except Exception:
+                    ex = CompilerException()
+                    ex.set_location(i.location)
+                    raise ex
+
+            return req
+        except Exception as e:
+            raise InvalidModuleException(e, "failure in module %s", self.get_name())
 
     def verify_requires(self, module_map: dict) -> bool:
         """
@@ -321,6 +335,18 @@ class ModuleLike:
                     LOGGER.warning("module %s requires %s but %s is at version %s" % (self.name, r, require, version))
                     return False
         return True
+
+    def _load_file(self, ns, file, statements, blocks):
+        stmts = plyInmantaParser.parse(ns, file)
+        block = BasicBlock(ns)
+        for s in stmts:
+            if isinstance(s, DefinitionStatement):
+                statements.append(s)
+            elif isinstance(s, str):
+                pass
+            else:
+                block.add(s)
+        blocks.append(block)
 
 
 class Project(ModuleLike):
@@ -385,6 +411,8 @@ class Project(ModuleLike):
 
         self.freeze_file = os.path.join(path, "module.version")
         self._freeze_versions = self._load_freeze(self.freeze_file)
+
+        self.ns = Namespace("__root__")
 
         self.virtualenv = env.VirtualEnv(os.path.join(path, "env"))
         self.reloadModules()
@@ -532,6 +560,28 @@ class Project(ModuleLike):
     def get_config_file_name(self):
         return os.path.join(self._path, "project.yml")
 
+    @memoize
+    def get_ast(self):
+        """return (DefinitionStmt,[BasicBlock)]."""
+        main_ns = Namespace("__config__")
+        main_ns.parent = self.ns
+
+        stmts = []
+        blocks = []
+        # load main file
+        self._load_file(main_ns, "main.cf", stmts, blocks)
+        return (stmts, blocks)
+
+    def get_complete_ast(self):
+        all = [x for x in self.modules.values()]
+        all.append(self)
+
+        combos = [x.get_ast() for x in all]
+        ostmts = [s for stmts in combos for s in stmts[0]]
+        oblocks = [s for stmts in combos for s in stmts[1]]
+
+        return [ostmts, oblocks]
+
 
 class Module(ModuleLike):
     """
@@ -558,6 +608,10 @@ class Module(ModuleLike):
 
         self.load_module_file()
         self.is_versioned()
+
+        if self._project is not None:
+            self.ns = Namespace(self.get_name())
+            self.ns.parent = self._project.ns
 
     def get_name(self):
         """
@@ -624,7 +678,8 @@ class Module(ModuleLike):
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions)]
+            # TODO make force pre relase configurable
+            versions = [x for x in r.specifier.filter(versions, True)]
 
         if len(versions) == 0:
             print("no suitable version found for module %s" % modulename)
@@ -788,15 +843,36 @@ class Module(ModuleLike):
         else:
             return None
 
-    def get_requirements(self):
-        """
-            Returns an array of requirements of this module
-        """
-        if not os.path.exists(os.path.join(self._path, "requirements.txt")):
-            return set()
+    @memoize
+    def get_ast(self):
+        """return (DefinitionStmt,[BasicBlock)]."""
+        stmts = []
+        blocks = []
+        self._load_dir(self._path, self.ns, stmts, blocks)
+        return (stmts, blocks)
 
-        with open(os.path.join(self._path, "requirements.txt"), "r") as fd:
-            return set([l.strip() for l in fd.readlines()])
+    def _load_dir(self, cf_dir, namespace, stmts, blocks):
+        """
+            Create a list of compile units for the given directory
+
+            @param cf_dir: The directory to get all files from
+            @param namespace: The namespace the files need to be added to
+        """
+        for cf_file in glob.glob(os.path.join(cf_dir, "model", '*')):
+            file_name = os.path.basename(cf_file)
+            if os.path.isdir(cf_file):
+                # create a new namespace
+                new_ns = Namespace(file_name)
+                new_ns.parent = namespace
+
+                self._load_dir(cf_file, new_ns, stmts, blocks)
+            elif file_name[-3:] == ".cf":
+                if file_name == "_init.cf":
+                    self._load_file(namespace, cf_file, stmts, blocks)
+                else:
+                    new_ns = Namespace(file_name[:-3])
+                    new_ns.parent = namespace
+                    self._load_file(new_ns, cf_file, stmts, blocks)
 
 
 class ModuleTool(object):

@@ -367,6 +367,7 @@ class PluginStatement(TypeDefinitionStatement):
     """
         This statement defines a plugin function
     """
+
     def __init__(self, namespace, name, function_class):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self._name = name
@@ -378,6 +379,19 @@ class PluginStatement(TypeDefinitionStatement):
             The representation of this function
         """
         return "Function(%s)" % self._name
+
+    def evaluate(self, resolver):
+        """
+            Evaluate this plugin
+        """
+
+
+class DefineImport(DefinitionStatement):
+
+    def __init__(self, name, versionspec):
+        DefinitionStatement.__init__(self)
+        self.name = name
+        self.versionspec = versionspec
 
     def evaluate(self, resolver):
         """

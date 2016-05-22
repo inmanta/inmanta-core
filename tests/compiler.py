@@ -24,7 +24,7 @@ from impera.ast.statements import define, Literal
 from impera.parser.plyInmantaParser import parse
 from impera.parser import ParserException
 from nose.tools.nontrivial import raises
-from impera.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex
+from impera.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
 from impera.ast.constraint.expression import GreaterThan, Regex, Not, And
 from impera.ast.statements.generator import Constructor
 from impera.ast.statements.call import FunctionCall
@@ -438,6 +438,41 @@ a=a::b::c.d
     tools.assert_is_instance(stmt.value.instance, Reference)
     tools.assert_equals(stmt.value.instance.full_name, "a::b::c")
     tools.assert_equals(stmt.value.attribute, "d")
+
+
+def test_import():
+    statements = parse_code("""
+import std
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineImport)
+    tools.assert_equals(stmt.name, "std")
+
+
+def test_import2():
+    statements = parse_code("""
+import std "2"
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineImport)
+    tools.assert_equals(stmt.name, "std")
+    tools.assert_equals(stmt.versionspec, "2")
+
+
+def test_import3():
+    statements = parse_code("""
+import std ">2.0"
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineImport)
+    tools.assert_equals(stmt.name, "std")
+    tools.assert_equals(stmt.versionspec, ">2.0")
 
 
 def test_Lexer():
