@@ -30,7 +30,6 @@ Requires:       python3-colorlog
 Requires:       python3-ply
 Requires:       python3-PyYAML
 Requires:       python-virtualenv
-Requires:       python3-urllib3
 Requires:       python3-pymongo
 Requires:       python3-motorengine
 Requires:       git

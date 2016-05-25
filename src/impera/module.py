@@ -25,7 +25,7 @@ from os.path import sys
 import re
 from subprocess import TimeoutExpired
 import subprocess
-from urllib3 import util, exceptions
+import urllib
 import tempfile
 import shutil
 
@@ -432,20 +432,16 @@ class Module(GitVersioned):
             Force the given string to http
         """
         new_source = source_string
-        try:
-            result = util.parse_url(source_string)
-            if result.scheme is None:
-                return new_source
-
-            if result.scheme != "http" and result.scheme != "https":
-                # try to convert it to an anonymous https url
-                new_source = source_string.replace(result.scheme, "http")
-
-        except exceptions.LocationParseError:
+        result = urllib.parse.urlparse(source_string)
+        if result.scheme is None:
             # probably in git@host:repo format
             m = re.search("^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source_string)
             if m is not None:
                 new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
+
+        elif result.scheme != "http" and result.scheme != "https":
+            # try to convert it to an anonymous https url
+            new_source = source_string.replace(result.scheme, "http")
 
         if new_source != source_string:
             LOGGER.info("Reformated source from %s to %s" % (source_string, new_source))
