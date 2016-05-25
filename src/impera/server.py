@@ -484,6 +484,9 @@ class Server(protocol.ServerEndpoint):
 
         form_obj = yield data.Form.get_form(environment=env, form_type=form_type)
 
+        if form_obj is None:
+            return 404, {"message": "The form %s does not exist in env %" % (tid, form_type)}
+
         record_id = uuid.uuid4()
         record = data.FormRecord(uuid=record_id, environment=env, form=form_obj, fields={})
         record.changed = datetime.datetime.now()
