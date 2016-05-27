@@ -260,11 +260,12 @@ def makeRepo(path, root=None):
 
 def merge_specs(mainspec, new):
     """Merge two maps str->[T] by concatting their lists."""
-    for key, req in new.items():
+    for req in new:
+        key = req.project_name
         if key not in mainspec:
-            mainspec[key] = req
+            mainspec[key] = [req]
         else:
-            mainspec[key] = mainspec[key] + req
+            mainspec[key] = mainspec[key] + [req]
 
 
 class ModuleLike:
@@ -298,28 +299,33 @@ class ModuleLike:
         if "requires" not in self._meta or self._meta["requires"] is None:
             return {}
 
-        req = {}
-        for name, spec in self._meta["requires"].items():
-            req[name] = [x for x in parse_requirements(spec)]
-        return req
+        reqs = []
+        for spec in self._meta["requires"]:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            req = req[0]
+            reqs.append(req)
+        return reqs
 
     def verify_requires(self, module_map: dict) -> bool:
         """
             Check if all the required modules for this module have been loaded
         """
         LOGGER.info("verifying module %s", self.get_name())
-        for require, spec in self.requires().items():
-            if require not in module_map:
+        for require in self.requires():
+            if require.project_name not in module_map:
                 print("Module %s requires the %s module that has not been loaded" % (
                     self._path, require))
                 return False
 
-            module = module_map[require]
+            module = module_map[require.project_name]
             version = parse_version(str(module.version))
-            for r in spec:
-                if version not in r:
-                    LOGGER.warning("module %s requires %s but %s is at version %s" % (self.name, r, require, version))
-                    return False
+
+            if version not in require:
+                LOGGER.warning("module %s requires %s but %s is at version %s" %
+                               (self.name, require, require.project_name, version))
+                return False
         return True
 
 
@@ -518,7 +524,8 @@ class Project(ModuleLike):
         """
             Collect the list of all requirements of all modules in the project.
         """
-        specs = self.requires().copy()
+        specs = {}
+        merge_specs(specs, self.requires())
         for module in self.modules.values():
             reqs = module.requires()
             merge_specs(specs, reqs)
@@ -893,9 +900,11 @@ class ModuleTool(object):
         """
         if project is None:
             project = Project.get()
-        specs = project.requires().copy()
+        specs = {}
+        pspec = project.requires()
+        merge_specs(specs, pspec)
         worklist = []
-        worklist.extend(specs.keys())
+        worklist.extend([n.project_name for n in pspec])
         modules = {}
 
         while len(worklist) != 0:
@@ -905,7 +914,7 @@ class ModuleTool(object):
             modules[work] = module
             reqs = module.requires()
             merge_specs(specs, reqs)
-            for name in reqs.keys():
+            for name in [x.project_name for x in reqs]:
                 if name not in modules:
                     worklist.append(name)
 
