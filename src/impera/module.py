@@ -385,6 +385,8 @@ class Project(ModuleLike):
         if "downloadpath" in self._meta:
             self.downloadpath = os.path.abspath(os.path.join(
                 path, self._meta["downloadpath"]))
+            if self.downloadpath not in self.modulepath:
+                LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
@@ -877,16 +879,18 @@ class ModuleTool(object):
                 reqv = str(versions[0])
 
             table.append((name, version, reqv))
-        print("+" + "-" * (name_length + version_length*2 + 8) + "+")
+        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
         print("| Name%s | Version%s | Expected%s |" % (
-            " " * (name_length - len("Name")), " " * (version_length - len("Version"))," " * (version_length - len("Expected"))))
-        print("+" + "-" * (name_length + version_length*2 + 8) + "+")
+            " " * (name_length - len("Name")),
+            " " * (version_length - len("Version")),
+            " " * (version_length - len("Expected"))))
+        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
         for name, version, reqv in table:
             print("| %s | %s | %s |" % (name + " " * (name_length - len(name)),
-                                   version + " " * (version_length - len(version)),
-                                   reqv + " " * (version_length - len(reqv))))
+                                        version + " " * (version_length - len(version)),
+                                        reqv + " " * (version_length - len(reqv))))
 
-        print("+" + "-" * (name_length + version_length*2 + 8) + "+")
+        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
 
     def update(self, project=None):
         """
@@ -898,19 +902,6 @@ class ModuleTool(object):
 
         for name, spec in specs.items():
             Module.update(project, name, spec)
-
-    def printVersionTable(self, project=None):
-        """
-            Update all modules from their source
-        """
-        if project is None:
-            project = Project.get()
-        specs = project.collect_requirements()
-
-        for name, spec in specs.items():
-            module = project.modules(name)
-            current = module.version()
-            path = module._path
 
     def install(self, project=None):
         """
