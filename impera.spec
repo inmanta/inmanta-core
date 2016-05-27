@@ -1,10 +1,18 @@
 # Use release 0 for prerelease version.
+<<<<<<< Updated upstream
 %define release 0
 %define version 2016.2
+=======
+%define release 2
+%define version 2016.2.2
+>>>>>>> Stashed changes
 
 %define sourceversion %{version}%{?buildid}
 
-Name:           python3-impera
+%{?scl:%scl_package python-colorlog}
+%{!?scl:%global pkg_name %{name}}
+
+Name:           %{?scl_prefix}python%{?!scl:3}-impera
 Version:        %{version}
 
 Release:        %{release}%{?buildid}%{?tag}%{?dist}
@@ -17,10 +25,28 @@ Source0:        https://github.com/impera-io/impera/archive/%{sourceversion}.tar
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildArch:      noarch
+%{?scl:Requires: %scl_runtime}
+
+%if 0%{?scl:1}
+BuildRequires:  scl-utils-build
+BuildRequires:  %scl_require_package rh-python34 python-devel
+BuildRequires:  %scl_require_package rh-python34 python-setuptools
+BuildRequires:  %scl_require_package rh-python34 python-ply
+
+Requires:       %scl_require_package rh-python34 runtime
+Requires:       %scl_require_package rh-python34 python-tornado
+Requires:       %scl_require_package rh-python34 python-dateutil
+Requires:       %scl_require_package rh-python34 python-execnet
+Requires:       %scl_require_package rh-python34 python-colorlog
+Requires:       %scl_require_package rh-python34 python-ply
+Requires:       %scl_require_package rh-python34 python-PyYAML
+Requires:       %scl_require_package rh-python34 python-virtualenv
+Requires:       %scl_require_package rh-python34 python-pymongo
+Requires:       %scl_require_package rh-python34 python-motorengine
+%else
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  python3-ply
-BuildRequires:  systemd
 
 Requires:       python3
 Requires:       python3-tornado
@@ -32,8 +58,15 @@ Requires:       python3-PyYAML
 Requires:       python-virtualenv
 Requires:       python3-pymongo
 Requires:       python3-motorengine
+<<<<<<< Updated upstream
 Requires:       python3-devel
 Requires:       python3-cliff
+=======
+>>>>>>> Stashed changes
+%endif
+
+BuildRequires:  systemd
+
 Requires:       git
 Requires(pre):  shadow-utils
 
@@ -55,21 +88,29 @@ Requires:       python3-impera
 %setup -q -n impera-%{sourceversion}
 
 %build
+%{?scl:scl enable %{scl} "}
 PYTHONPATH=src %{__python3} src/impera/parser/plyInmantaParser.py
 %{__python3} setup.py build
-
+%{?scl:"}
 
 %install
 rm -rf %{buildroot}
+%{?scl:scl enable %{scl} "}
 %{__python3} setup.py install -O1 --skip-build --root %{buildroot}
+%{?scl:"}
 chmod -x LICENSE
 mkdir -p %{buildroot}%{_localstatedir}/lib/impera
 mkdir -p %{buildroot}/etc/impera
 install -p -m 644 misc/impera.cfg %{buildroot}/etc/impera.cfg
 
 mkdir -p %{buildroot}%{_unitdir}
+%if 0%{?scl:1}
+install -p -m 644 misc/impera-agent-scl.service $RPM_BUILD_ROOT%{_unitdir}/impera-agent.service
+install -p -m 644 misc/impera-server-scl.service $RPM_BUILD_ROOT%{_unitdir}/impera-server.service
+%else
 install -p -m 644 misc/impera-agent.service $RPM_BUILD_ROOT%{_unitdir}/impera-agent.service
 install -p -m 644 misc/impera-server.service $RPM_BUILD_ROOT%{_unitdir}/impera-server.service
+%endif
 
 %clean
 rm -rf %{buildroot}
