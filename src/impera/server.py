@@ -738,17 +738,11 @@ class Server(protocol.ServerEndpoint):
 
         for rv in resources:
             yield rv.load_references()
-            yield rv.resource.load_references()
-
-        futures = []
-        for rv in resources:
             if rv.resource.agent == agent:
                 deploy_model.append(rv.to_dict())
                 ra = data.ResourceAction(resource_version=rv, action="pull", level="INFO", timestamp=datetime.datetime.now(),
                                          message="Resource version pulled by client for agent %s state" % agent)
-                futures.append(ra.save())
-
-        yield futures
+                yield ra.save()
 
         return 200, {"environment": tid, "agent": agent, "version": cm.version, "resources": deploy_model}
 
@@ -930,7 +924,6 @@ class Server(protocol.ServerEndpoint):
                         cm.resources_total += 1
                         yield cm.save()
 
-        futures = []
         for uk in unknowns:
             if "resource" not in uk:
                 uk["resource"] = ""
@@ -940,9 +933,7 @@ class Server(protocol.ServerEndpoint):
 
             up = data.UnknownParameter(resource_id=uk["resource"], name=uk["parameter"], source=uk["source"], environment=env,
                                        version=version, metadata=uk["metadata"])
-            futures.append(up.save())
-
-        yield futures
+            yield up.save()
 
         LOGGER.debug("Successfully stored version %d" % version)
 
@@ -1124,8 +1115,8 @@ host = localhost
 
         dryruns = yield data.DryRun.objects.filter(**query_args).find_all()  # @UndefinedVariable
 
-        dryrun_futures = [x.load_references() for x in dryruns]
-        yield dryrun_futures
+        for x in dryruns:
+            yield x.load_references()
 
         return 200, {"dryruns": [{"id": x.uuid, "version": x.model.version,
                                   "date": x.date.isoformat(), "total": x.resource_total,
