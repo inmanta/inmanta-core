@@ -619,6 +619,17 @@ class Module(ModuleLike):
         if fetch:
             gitprovider.fetch(path)
 
+        versions = cls.get_suitable_versions_for(modulename, requirements, path)
+
+        if len(versions) == 0:
+            print("no suitable version found for module %s" % modulename)
+        else:
+            gitprovider.checkout_tag(path, str(versions[0]))
+
+        return Module(project, path)
+
+    @classmethod
+    def get_suitable_versions_for(cls, modulename, requirements, path):
         versions = gitprovider.get_all_tags(path)
 
         def try_parse(x):
@@ -633,12 +644,7 @@ class Module(ModuleLike):
         for r in requirements:
             versions = [x for x in r.specifier.filter(versions)]
 
-        if len(versions) == 0:
-            print("no suitable version found for module %s" % modulename)
-        else:
-            gitprovider.checkout_tag(path, str(versions[0]))
-
-        return Module(project, path)
+        return versions
 
     def is_versioned(self):
         """
@@ -855,33 +861,32 @@ class ModuleTool(object):
             List all modules in a table
         """
         table = []
-        name_length = len("Name") + 5
-        version_length = 7
-        names = sorted(Project.get().modules.keys())
+        name_length = 10
+        version_length = 10
+
+        project = Project.get()
+        names = sorted(project.modules.keys())
+        specs = project.collect_requirements()
         for name in names:
             mod = Project.get().modules[name]
-            if "version" in mod._meta:
-                version = str(mod._meta["version"])
-                table.append((name, version))
-
-                if len(name) > name_length:
-                    name_length = len(name)
-
-                if len(version) > version_length:
-                    version_length = len(version)
+            version = str(mod.version)
+            versions = Module.get_suitable_versions_for(name, specs[name], mod._path)
+            if len(versions) == 0:
+                reqv = "None"
             else:
-                print(
-                    "Module %s does not contain a version, invalid module" % name)
+                reqv = str(versions[0])
 
-        print("+" + "-" * (name_length + version_length + 5) + "+")
-        print("| Name%s | Version%s |" % (
-            " " * (name_length - len("Name")), " " * (version_length - len("Version"))))
-        print("+" + "-" * (name_length + version_length + 5) + "+")
-        for name, version in table:
-            print("| %s | %s |" % (name + " " * (name_length - len(name)),
-                                   version + " " * (version_length - len(version))))
+            table.append((name, version, reqv))
+        print("+" + "-" * (name_length + version_length*2 + 8) + "+")
+        print("| Name%s | Version%s | Expected%s |" % (
+            " " * (name_length - len("Name")), " " * (version_length - len("Version"))," " * (version_length - len("Expected"))))
+        print("+" + "-" * (name_length + version_length*2 + 8) + "+")
+        for name, version, reqv in table:
+            print("| %s | %s | %s |" % (name + " " * (name_length - len(name)),
+                                   version + " " * (version_length - len(version)),
+                                   reqv + " " * (version_length - len(reqv))))
 
-        print("+" + "-" * (name_length + version_length + 5) + "+")
+        print("+" + "-" * (name_length + version_length*2 + 8) + "+")
 
     def update(self, project=None):
         """
@@ -893,6 +898,19 @@ class ModuleTool(object):
 
         for name, spec in specs.items():
             Module.update(project, name, spec)
+
+    def printVersionTable(self, project=None):
+        """
+            Update all modules from their source
+        """
+        if project is None:
+            project = Project.get()
+        specs = project.collect_requirements()
+
+        for name, spec in specs.items():
+            module = project.modules(name)
+            current = module.version()
+            path = module._path
 
     def install(self, project=None):
         """
