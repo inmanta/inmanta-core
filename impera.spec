@@ -1,11 +1,6 @@
 # Use release 0 for prerelease version.
-<<<<<<< Updated upstream
 %define release 0
-%define version 2016.2
-=======
-%define release 2
-%define version 2016.2.2
->>>>>>> Stashed changes
+%define version 2016.3
 
 %define sourceversion %{version}%{?buildid}
 
@@ -58,11 +53,8 @@ Requires:       python3-PyYAML
 Requires:       python-virtualenv
 Requires:       python3-pymongo
 Requires:       python3-motorengine
-<<<<<<< Updated upstream
 Requires:       python3-devel
 Requires:       python3-cliff
-=======
->>>>>>> Stashed changes
 %endif
 
 BuildRequires:  systemd
