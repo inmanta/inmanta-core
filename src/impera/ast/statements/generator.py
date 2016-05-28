@@ -34,7 +34,7 @@ class SubConstructor(GeneratorStatement):
         GeneratorStatement.__init__(self)
         self.type = instance_type
 
-    def normalize(self, resolver):
+    def normalize(self):
         # done in define type
         pass
 
@@ -105,10 +105,10 @@ class For(GeneratorStatement):
     def __repr__(self):
         return "For(%s)" % self.variable
 
-    def normalize(self, resolver):
-        self.base.normalize(resolver)
+    def normalize(self):
+        self.base.normalize()
         # self.loop_var.normalize(resolver)
-        self.module.normalize(resolver)
+        self.module.normalize()
         self.module.add_var(self.loop_var)
 
     def requires(self):
@@ -155,10 +155,10 @@ class Constructor(GeneratorStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
-    def normalize(self, resolver):
-        self.type = resolver.get_type(self.class_type)
+    def normalize(self):
+        self.type = self.namespace.get_type(self.class_type)
         for (k, v) in self.__attributes.items():
-            v.normalize(resolver)
+            v.normalize()
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index

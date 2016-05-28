@@ -93,7 +93,7 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
     def test_compile(self):
         (types, scopes) = compiler.do_compile()
-        variables = {k: x.get_value() for k, x in scopes["__config__"].slots.items()}
+        variables = {k: x.get_value() for k, x in scopes.get_child("__config__").scope.slots.items()}
 
         import re
         p = re.compile(r'(f\d+h\d+)(a\d+)?')

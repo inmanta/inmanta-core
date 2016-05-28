@@ -24,14 +24,14 @@ from impera.ast.type import ConstraintType, Type
 from impera.ast.attribute import Attribute, RelationAttribute
 from impera.ast.entity import Implementation, Entity, Default, Implement
 from impera.ast.constraint.expression import Equals
-from impera.ast.statements import TypeDefinitionStatement
+from impera.ast.statements import TypeDefinitionStatement, Statement
 from impera.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-class DefineAttribute(TypeDefinitionStatement):
+class DefineAttribute(Statement):
 
     def __init__(self, attr_type, name, default_value=None):
         self.type = attr_type
@@ -57,9 +57,6 @@ class DefineEntity(TypeDefinitionStatement):
 
         self.type = Entity(self.name, namespace)
 
-    def get_type(self):
-        return (self.fullName, self.type)
-
     def add_attribute(self, attr_type, name, default_value=None):
         """
             Add an attribute to this entity
@@ -72,7 +69,7 @@ class DefineEntity(TypeDefinitionStatement):
         """
         return "Entity(%s)" % self.name
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Evaluate this statement.
         """
@@ -81,7 +78,7 @@ class DefineEntity(TypeDefinitionStatement):
 
         add_attributes = set()
         for attribute in self.attributes:
-            attr_type = resolver.get_type(self.namespace, attribute.type)
+            attr_type = self.namespace.get_type(attribute.type)
             if not isinstance(attr_type, (Type, type)):
                 raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
@@ -92,7 +89,7 @@ class DefineEntity(TypeDefinitionStatement):
             entity_type.add_default_value(attribute.name, attribute.default)
 
         for parent in self.parents:
-            parent_type = resolver.get_type(self.namespace, str(parent))
+            parent_type = self.namespace.get_type(str(parent))
             if not isinstance(parent_type, Entity):
                 raise TypingException(self, "Parents of an entity need to be entities. "
                                       "Default constructors are not supported. %s is not an entity" % parent)
@@ -128,11 +125,11 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         return "Implementation(%s)" % self.name
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Evaluate this statement in the given scope
         """
-        cls = resolver.get_type(self.namespace, self.entity)
+        cls = self.namespace.get_type(self.entity)
         self.type.set_type(cls)
 
 
@@ -157,11 +154,11 @@ class DefineImplement(DefinitionStatement):
         """
         return "Implement(%s)" % (self.entity)
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Evaluate this statement.
         """
-        entity_type = resolver.get_type(self.namespace, self.entity)
+        entity_type = self.namespace.get_type(self.entity)
 
         entity_type = entity_type.get_entity()
 
@@ -174,7 +171,7 @@ class DefineImplement(DefinitionStatement):
             i += 1
             try:
                 # check if the implementation has the correct type
-                impl_obj = resolver.get_type(self.namespace, _impl)
+            impl_obj = self.namespace.get_type(_impl)
             except TypeNotFoundException as e:
                 e.set_location(self.location)
                 raise e
@@ -240,11 +237,11 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         """
         return "Type(%s)" % self.name
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Evaluate this statement.
         """
-        basetype = resolver.get_type(self.namespace, self.basetype)
+        basetype = self.namespace.get_type(self.basetype)
         constraint_type = self.type
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
@@ -269,12 +266,12 @@ class DefineTypeDefault(TypeDefinitionStatement):
         """
         return "Constructor(%s, %s)" % (self.name, self.ctor)
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Evaluate this statement.
         """
         # the base class
-        type_class = resolver.get_type(self.namespace, self.ctor.class_type)
+        type_class = self.namespace.get_type(self.ctor.class_type)
 
         default = self.type
         default.set_entity(type_class)
@@ -302,11 +299,11 @@ class DefineRelation(DefinitionStatement):
         """
         return "Relation(%s, %s)" % (self.left[0], self.right[0])
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Add this relation to the participating ends
         """
-        left = resolver.get_type(self.namespace, self.left[0])
+        left = self.namespace.get_type(self.left[0])
         if isinstance(left, Default):
             left = left.get_entity()
 
@@ -315,7 +312,7 @@ class DefineRelation(DefinitionStatement):
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.right[1], left.name))
 
-        right = resolver.get_type(self.namespace, self.right[0])
+        right = self.namespace.get_type(self.right[0])
         if isinstance(right, Default):
             right = right.get_entity()
 
@@ -360,11 +357,11 @@ class DefineIndex(DefinitionStatement):
     def __repr__(self):
         return "index<%s>(%s)" % (self.type, "")
 
-    def evaluate(self, resolver):
+    def evaluate(self):
         """
             Add the index to the entity
         """
-        entity_type = resolver.get_type(self.namespace, self.type)
+        entity_type = self.namespace.get_type(self.type)
         entity_type.add_index(self.attributes)
 
 
@@ -385,7 +382,24 @@ class PluginStatement(TypeDefinitionStatement):
         """
         return "Function(%s)" % self._name
 
-    def evaluate(self, resolver):
+    def evaluate(self):
+        """
+            Evaluate this plugin
+        """
+
+
+class DefineImport(TypeDefinitionStatement):
+
+    def __init__(self, name, toname):
+        DefinitionStatement.__init__(self)
+        self.name = name
+        self.toname = toname
+
+    def register_types(self):
+        self.target = self.namespace.get_ns_from_string(self.name)
+        self.namespace.import_ns(self.toname, self)
+
+    def evaluate(self):
         """
             Evaluate this plugin
         """

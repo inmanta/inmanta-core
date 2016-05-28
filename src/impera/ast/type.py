@@ -48,29 +48,14 @@ class BasicResolver(object):
 
 class NameSpacedResolver(object):
 
-    def __init__(self, types, ns):
-        self.types = types
+    def __init__(self, ns):
         self.ns = ns
 
     def get_type(self, name):
-        if "::" in name:
-            if name in self.types:
-                return self.types[name]
-            else:
-                raise TypeNotFoundException(name, self.ns)
-        elif name in TYPES:
-            return TYPES[name]
-        else:
-            cns = self.ns
-            while cns is not None:
-                full_name = "%s::%s" % (cns.get_full_name(), name)
-                if full_name in self.types:
-                    return self.types[full_name]
-                cns = cns.get_parent()
-            raise TypeNotFoundException(name, self.ns)
+        return self.ns.get_type(name)
 
     def get_resolver_for(self, namespace: Namespace):
-        return NameSpacedResolver(self.types, namespace)
+        return NameSpacedResolver(namespace)
 
 
 class CastException(Exception):
@@ -110,7 +95,7 @@ class Type(object):
     def __str__(self):
         return str(self.__class__)
 
-    def normalize(self, resolver):
+    def normalize(self):
         pass
 
 

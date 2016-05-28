@@ -18,7 +18,7 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from impera.ast.type import Type, NameSpacedResolver
+from impera.ast.type import Type
 from impera.ast.blocks import BasicBlock
 from impera.execute.runtime import Instance, ResultVariable
 from impera.ast.statements.generator import SubConstructor
@@ -64,15 +64,15 @@ class Entity(Type):
 
         self.comment = ""
 
-    def normalize(self, resolver: NameSpacedResolver):
+    def normalize(self):
         for d in self.implementations:
-            d.normalize(resolver)
+            d.normalize()
 
         for i in self.implements:
-            i.normalize(resolver)
+            i.normalize()
 
         self.subc = SubConstructor(self)
-        self.subc.normalize(resolver)
+        self.subc.normalize()
 
     def get_sub_constructor(self):
         return self.subc
@@ -398,8 +398,8 @@ class Implementation(object):
     def __repr__(self):
         return "Implementation(name = %s)" % self.name
 
-    def normalize(self, resolver: NameSpacedResolver):
-        self.statements.normalize(resolver)
+    def normalize(self):
+        self.statements.normalize()
 
 
 class Implement(object):
@@ -411,8 +411,8 @@ class Implement(object):
         self.constraint = None
         self.implementations = []
 
-    def normalize(self, resolver: NameSpacedResolver):
-        self.constraint.normalize(resolver)
+    def normalize(self):
+        self.constraint.normalize()
 
 
 class Default(Type):

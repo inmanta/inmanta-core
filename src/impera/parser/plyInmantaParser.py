@@ -26,7 +26,7 @@ from impera.ast.statements import Literal
 from impera.ast import Location
 from impera.ast.statements.generator import For, Constructor
 from impera.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
-    DefineTypeConstraint, DefineTypeDefault, DefineIndex
+    DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
 from impera.ast.constraint.expression import Operator, Not
 from impera.ast.statements.call import FunctionCall
 from impera.ast.statements.assign import CreateList, IndexLookup, StringFormat
@@ -77,9 +77,25 @@ def p_top_stmt(p):
                 | relation
                 | statement
                 | typedef
-                | index '''
+                | index
+                | import '''
     p[0] = p[1]
 
+
+#######################
+# IMPORT
+#######################
+
+def p_import(p):
+    '''import : IMPORT ns_ref'''
+    p[0] = DefineImport(p[2], p[2])
+    attach_lnr(p, 1)
+
+
+def p_import_1(p):
+    '''import : IMPORT ns_ref AS ID'''
+    p[0] = DefineImport(p[2], p[4])
+    attach_lnr(p, 1)
 #######################
 # STMTS
 #######################

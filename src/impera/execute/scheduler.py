@@ -22,7 +22,7 @@ import time
 from impera.ast.statements import DefinitionStatement, TypeDefinitionStatement
 from impera.execute.proxy import UnsetException
 from impera import plugins
-from impera.ast.type import TYPES, BasicResolver, Type, NameSpacedResolver
+from impera.ast.type import TYPES, Type
 
 from impera.ast.statements.define import DefineEntity, DefineImplement
 from impera.execute.runtime import Resolver, ExecutionContext, QueueScheduler
@@ -87,17 +87,15 @@ class Scheduler(object):
         # collect all  types and impls
         types_and_impl = {}
 
-        # primitive types
-        for name, type_symbol in TYPES.items():
-            types_and_impl[name] = type_symbol
+        # set primitive types
+        compiler.get_ns().set_primitives(TYPES)
 
         # all stmts contributing types and impls
-        newtypes = [t.get_type() for t in definitions if isinstance(t, TypeDefinitionStatement)]
+        newtypes = [k for k in [t.register_types()
+                                for t in definitions if isinstance(t, TypeDefinitionStatement)] if k is not None]
 
         for (name, type_symbol) in newtypes:
             types_and_impl[name] = type_symbol
-
-        resolver = BasicResolver(types_and_impl)
 
         # now that we have objects for all types, popuate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
@@ -107,27 +105,25 @@ class Scheduler(object):
 
         # first entities, so we have inheritance
         for d in entities:
-            d.evaluate(resolver)
+            d.evaluate()
 
         for d in others:
-            d.evaluate(resolver)
+            d.evaluate()
 
         # lastly the implements, as they require implementations
         for d in implements:
-            d.evaluate(resolver)
+            d.evaluate()
 
         types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, plugins.Plugin)}
         compiler.plugins = {k: v for k, v in types.items() if isinstance(v, plugins.Plugin)}
 
-        resolver = NameSpacedResolver(types, None)
-
         # give type info to all types, to normalize blocks inside them
         for t in types.values():
-            t.normalize(resolver)
+            t.normalize()
 
         # normalize other blocks
         for block in blocks:
-            block.normalize(resolver)
+            block.normalize()
 
         self.types = types
 
@@ -140,16 +136,14 @@ class Scheduler(object):
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
 
-        self.scopes = {}
-        rootresolver = Resolver(self.scopes)
-
         # give all loose blocks an empty XC
         # register the XC's as scopes
         # All named scopes are now present
         for block in blocks:
-            xc = ExecutionContext(block, rootresolver)
-            self.scopes[block.namespace.get_full_name()] = xc
+            res = Resolver(block.namespace)
+            xc = ExecutionContext(block, res)
             block.context = xc
+            block.namespace.scope = xc
 
         # setup queues
         # queue for runnable items
