@@ -18,7 +18,7 @@
 
 from impera.execute.util import Unknown
 from impera.execute.proxy import UnsetException
-from impera.ast import Namespace, RuntimeException, NotFoundException
+from impera.ast import RuntimeException, NotFoundException
 
 
 class ResultVariable(object):
@@ -230,8 +230,8 @@ class QueueScheduler(object):
 
 class Resolver(object):
 
-    def __init__(self, scopes):
-        self.scopes = scopes
+    def __init__(self, namespace):
+        self.namespace = namespace
 
     def lookup(self, name):
         if "::" not in name:
@@ -239,32 +239,33 @@ class Resolver(object):
 
         parts = name.rsplit("::", 1)
 
-        if parts[0] not in self.scopes:
+        if parts[0] not in self.namespace.visible_namespaces:
             raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
 
-        return self.scopes[parts[0]].lookup(parts[1])
+        return self.namespace.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
 
     def get_root_resolver(self):
         return self
 
     def for_namespace(self, namespace):
-        return NamespaceResolver(self.scopes, namespace)
+        return NamespaceResolver(namespace)
 
 
 class NamespaceResolver(Resolver):
 
-    def __init__(self, scopes, namespace):
-        self.scopes = scopes
-        # FIXME clean this up
-        if isinstance(namespace, Namespace):
-            namespace = namespace.get_full_name()
-        self.scope = scopes[namespace]
-
     def lookup(self, name):
-        return self.scope.lookup(name)
+        if "::" not in name:
+            return self.namesapce.scope.lookup(name)
+
+        parts = name.rsplit("::", 1)
+
+        if parts[0] not in self.namespace.visible_namespaces:
+            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
+
+        return self.namespace.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
 
     def for_namespace(self, namespace):
-        return NamespaceResolver(self.scopes, namespace)
+        return NamespaceResolver(namespace)
 
 
 class ExecutionContext(object):

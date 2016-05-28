@@ -52,13 +52,14 @@ def do_compile():
 
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
-    return (sched.get_types(), sched.get_scopes())
+    return (sched.get_types(), compiler.get_ns())
 
 
 class CompileUnit(object):
     """
         This class represents a module containing configuration statements
     """
+
     def __init__(self, compiler, namespace):
         self._compiler = compiler
         self._namespace = namespace
@@ -74,6 +75,7 @@ class FileCompileUnit(CompileUnit):
     """
         A compile unit based on a parsed file.
     """
+
     def __init__(self, compiler, path, namespace):
         CompileUnit.__init__(self, compiler, namespace)
         self.__statements = {}
@@ -101,6 +103,7 @@ class PluginCompileUnit(CompileUnit):
     """
         A compile unit that contains all embeded types
     """
+
     def __init__(self, compiler, namespace):
         CompileUnit.__init__(self, compiler, namespace)
 
@@ -143,6 +146,7 @@ class Compiler(object):
         @param options: Options passed to the application
         @param config: The parsed configuration file
     """
+
     def __init__(self, cf_file="main.cf"):
         self.__init_cf = "_init.cf"
 
@@ -314,11 +318,12 @@ class Compiler(object):
                 blocks.append(block)
 
         # add the entity type (hack?)
-        entity = DefineEntity(Namespace("std", self.__root_ns), "Entity", "The entity all other entities inherit from.", [], [])
+        entity = DefineEntity(self.__root_ns.get_child_or_create(
+            "std"), "Entity", "The entity all other entities inherit from.", [], [])
 
         requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
                                       ("std::Entity", "provides", [0, None], False))
-        requires_rel.namespace = Namespace("std", self.__root_ns)
+        requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
         statements.append(entity)
         statements.append(requires_rel)

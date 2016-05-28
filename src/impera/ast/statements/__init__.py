@@ -46,7 +46,7 @@ class DynamicStatement(Statement):
     def __init__(self):
         Statement.__init__(self)
 
-    def normalize(self, resolver):
+    def normalize(self):
         raise Exception("Not Implemented" + str(type(self)))
 
     def requires(self):
@@ -85,8 +85,8 @@ class AssignStatement(DynamicStatement):
         self.lhs = lhs
         self.rhs = rhs
 
-    def normalize(self, resolver):
-        self.rhs.normalize(resolver)
+    def normalize(self):
+        self.rhs.normalize()
 
     def requires(self):
         out = self.lhs.requires()
@@ -103,9 +103,9 @@ class ReferenceStatement(ExpressionStatement):
         ExpressionStatement.__init__(self)
         self.children = children
 
-    def normalize(self, resolver):
+    def normalize(self):
         for c in self.children:
-            c.normalize(resolver)
+            c.normalize()
 
     def requires(self):
         return [req for v in self.children for req in v.requires()]
@@ -131,8 +131,13 @@ class TypeDefinitionStatement(DefinitionStatement):
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + name
 
-    def get_type(self):
+    def register_types(self):
+        self.copy_location(self.type)
+        self.namespace.define_type(self.name, self.type)
         return (self.fullName, self.type)
+
+    def evaluate(self):
+        pass
 
 
 class GeneratorStatement(ExpressionStatement):
@@ -150,7 +155,7 @@ class Literal(ExpressionStatement):
         Statement.__init__(self)
         self.value = value
 
-    def normalize(self, resolver):
+    def normalize(self):
         pass
 
     def __repr__(self):
