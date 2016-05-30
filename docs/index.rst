@@ -24,6 +24,7 @@ Contents
     quickstart
     language
     commands
+    versioning
 
 Additional resources
 --------------------
