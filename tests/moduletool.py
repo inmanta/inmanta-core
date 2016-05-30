@@ -25,11 +25,11 @@ import subprocess
 import tempfile
 import unittest
 
-from nose.tools import raises, assert_equal, assert_true
-import yaml
+from nose.tools import raises, assert_true, assert_equal
 from impera import module
 from impera.config import Config
-from impera.module import ModuleTool, InvalidModuleException, Project
+from impera.module import ModuleTool, InvalidModuleException, Project, LocalFileRepo, RemoteRepo
+import yaml
 
 
 def makemodule(reporoot, name, deps, project=False):
@@ -48,19 +48,16 @@ def makemodule(reporoot, name, deps, project=False):
         if project:
             projectfile.write("""
 modulepath: libs
-downloadpath: libs""")
+downloadpath: libs
+repo: %s""" % reporoot)
 
         if len(deps) != 0:
             projectfile.write("\nrequires:")
             for req in deps:
-                if len(req) == 2:
-                    mypath = os.path.join(reporoot, req[0])
-                else:
-                    mypath = os.path.join(reporoot, req[2])
                 if req[1] is not None:
-                    projectfile.write("\n    {}: {}, {}".format(req[0], mypath, req[1]))
+                    projectfile.write("\n    {}: {} {}".format(req[0], req[0], req[1]))
                 else:
-                    projectfile.write("\n    {}: {}".format(req[0], mypath, req[1]))
+                    projectfile.write("\n    {}: {}".format(req[0], req[0]))
 
         projectfile.write("\n")
 
@@ -70,9 +67,9 @@ downloadpath: libs""")
     with open(os.path.join(model, "_init.cf"), "w") as projectfile:
         pass
 
-    subprocess.check_output(["git", "init"], cwd=path)
-    subprocess.check_output(["git", "config", "user.email", '"test@test.example"'], cwd=path)
-    subprocess.check_output(["git", "config", "user.name", 'Tester test'], cwd=path)
+    subprocess.check_output(["git", "init"], cwd=path, stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "config", "user.email", '"test@test.example"'], cwd=path, stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "config", "user.name", 'Tester test'], cwd=path, stderr=subprocess.STDOUT)
 
     return path
 
@@ -84,9 +81,9 @@ def addFile(modpath, file, content, msg):
 
 
 def commitmodule(modpath, mesg):
-    subprocess.check_output(["git", "add", "*"], cwd=modpath)
-    subprocess.check_output(["git", "commit", "-a", "-m", mesg], cwd=modpath)
-    rev = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=modpath).decode("utf-8") .strip()
+    subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "commit", "-a", "-m", mesg], cwd=modpath, stderr=subprocess.STDOUT)
+    rev = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=modpath, stderr=subprocess.STDOUT).decode("utf-8") .strip()
     return rev
 
 
@@ -95,7 +92,7 @@ def startbranch(modpath, branch):
 
 
 def addTag(modpath, tag):
-    subprocess.check_output(["git", "tag", tag], cwd=modpath)
+    subprocess.check_output(["git", "tag", tag], cwd=modpath, stderr=subprocess.STDOUT)
 
 
 class testModuleTool(unittest.TestCase):
@@ -115,6 +112,7 @@ class testModuleTool(unittest.TestCase):
         cls.tempdir = tempfile.mkdtemp()
 
         reporoot = os.path.join(cls.tempdir, "repos")
+        cls.reporoot = reporoot
         os.makedirs(reporoot)
 
         mod1 = makemodule(reporoot, "mod1", [("mod3", "")])
@@ -149,7 +147,7 @@ class testModuleTool(unittest.TestCase):
                           [("mod1", None), ("mod2", "rc1"), ("mod3", "0.1"), ("mod4", m4tag), ("mod5", "0.1")], True)
         commitmodule(proj, "first commit")
 
-        badproject = makemodule(reporoot, "badproject", [("mod1", "", "mod2")], True)
+        badproject = makemodule(reporoot, "badproject", [("mod15", None)], True)
         commitmodule(badproject, "first commit")
 
     @classmethod
@@ -168,6 +166,26 @@ class testModuleTool(unittest.TestCase):
         self.log.addHandler(self.handler)
 
         Project._project = None
+
+    def test_localRepo_good(self):
+        repo = LocalFileRepo(testModuleTool.reporoot)
+        coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
+        result = repo.clone("mod1", coroot)
+        assert_true(result, "checkout failed")
+        assert_true(os.path.exists(os.path.join(coroot, "mod1", "module.yml")), "module.yml not found")
+
+    def test_remoteRepo_good(self):
+        repo = RemoteRepo("https://github.com/rmccue/")
+        coroot = os.path.join(testModuleTool.tempdir, "clone_remote_good")
+        result = repo.clone("test-repository", coroot)
+        assert_true(result, "checkout failed")
+        assert_true(os.path.exists(os.path.join(coroot, "test-repository", "README")), "test-repository not found")
+
+    def test_localRepo_bad(self):
+        repo = LocalFileRepo(testModuleTool.reporoot)
+        coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
+        result = repo.clone("thatotherthing", coroot)
+        assert_true(not result, "checkout should have failed")
 
     @raises(InvalidModuleException)
     def test_BadCheckout(self):
@@ -196,6 +214,7 @@ class testModuleTool(unittest.TestCase):
 
         ModuleTool().execute("verify", [])
 
+    @unittest.skip("Not yet implemented in current version")
     def test_complexCheckoutAndFreeze(self):
         coroot = os.path.join(testModuleTool.tempdir, "testproject")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject")],

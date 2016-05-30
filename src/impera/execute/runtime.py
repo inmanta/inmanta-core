@@ -406,7 +406,6 @@ class Instance(ExecutionContext):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
-                    print(attr, k)
                     raise RuntimeException(self, "The object %s is not complete: attribute %s (%s) is not set" %
                                            (self, k, attr.location))
 
