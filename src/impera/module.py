@@ -16,26 +16,27 @@
     Contact: code@inmanta.com
 """
 
-from distutils.version import StrictVersion, Version
 import glob
 import imp
 import logging
 import os
 from os.path import sys
 import re
-from subprocess import TimeoutExpired
 import subprocess
-import urllib
 import tempfile
 import shutil
+from argparse import ArgumentParser
+import inspect
+from pkg_resources import parse_version, parse_requirements
+import time
 
 import yaml
 import impera
 from impera import env
-from impera.config import Config
 from impera.ast import Namespace
 from impera import plugins
 from impera.parser.plyInmantaParser import parse
+import ruamel.yaml
 
 
 LOGGER = logging.getLogger(__name__)
@@ -59,7 +60,215 @@ class ProjectNotFoundExcpetion(Exception):
     """
 
 
-class GitVersioned:
+class GitProvider:
+
+    def clone(self, src, dest):
+        pass
+
+    def fetch(self, repo):
+        pass
+
+    def get_all_tags(self, repo):
+        pass
+
+
+class CLIGitProvider(GitProvider):
+
+    def clone(self, src, dest):
+        subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def fetch(self, repo):
+        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo)
+
+    def status(self, repo):
+        return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
+
+    def get_all_tags(self, repo):
+        return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
+
+    def checkout_tag(self, repo, tag):
+        subprocess.check_call(["git", "checkout", tag], cwd=repo)
+
+    def commit(self, repo, message, commit_all, add=[]):
+        for file in add:
+            subprocess.check_call(["git", "add", file], cwd=repo)
+        if not commit_all:
+            subprocess.check_call(["git", "commit", "-m", message], cwd=repo)
+        else:
+            subprocess.check_call(["git", "commit", "-a", "-m", message], cwd=repo)
+
+    def tag(self, repo, tag):
+        subprocess.check_call(["git", "tag", tag], cwd=repo)
+
+
+try:
+    import pygit2
+
+    class LibGitProvider(GitProvider):
+
+        def clone(self, src, dest):
+            pygit2.clone_repository(src, dest)
+
+        def fetch(self, repo):
+            repoh = pygit2.Repository(repo)
+            repoh.remotes["origin"].fetch()
+
+        def status(self, repo):
+            # todo
+            return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
+
+        def get_all_tags(self, repo):
+            repoh = pygit2.Repository(repo)
+            regex = re.compile('^refs/tags/(.*)')
+            return [m.group(1) for m in [regex.match(t) for t in repoh.listall_references()] if m]
+
+        def checkout_tag(self, repo, tag):
+            repoh = pygit2.Repository(repo)
+            repoh.checkout("refs/tags/" + tag)
+
+        def commit(self, repo, message, commit_all, add=[]):
+            repoh = pygit2.Repository(repo)
+            index = repoh.index
+            index.read()
+
+            for file in add:
+                index.add(os.path.relpath(file, repo))
+
+            if commit_all:
+                index.add_all()
+
+            index.write()
+            tree = index.write_tree()
+
+            config = pygit2.Config.get_global_config()
+            try:
+                email = config["user.email"]
+            except KeyError:
+                email = "inmanta@example.com"
+                LOGGER.warn("user.email not set in git config")
+
+            try:
+                username = config["user.name"]
+            except KeyError:
+                username = "Inmanta Moduletool"
+                LOGGER.warn("user.name not set in git config")
+
+            author = pygit2.Signature(username, email)
+
+            return repoh.create_commit("HEAD", author, author, message, tree, [repoh.head.get_object().hex])
+
+        def tag(self, repo, tag):
+            repoh = pygit2.Repository(repo)
+
+            config = pygit2.Config.get_global_config()
+            try:
+                email = config["user.email"]
+            except KeyError:
+                email = "inmanta@example.com"
+                LOGGER.warn("user.email not set in git config")
+
+            try:
+                username = config["user.name"]
+            except KeyError:
+                username = "Inmanta Moduletool"
+                LOGGER.warn("user.name not set in git config")
+
+            author = pygit2.Signature(username, email)
+
+            repoh.create_tag(tag, repoh.head.target, pygit2.GIT_OBJ_COMMIT, author, "auto tag by module tool")
+
+    gitprovider = LibGitProvider()
+except ImportError as e:
+    gitprovider = CLIGitProvider()
+
+
+class ModuleRepo:
+
+    def clone(self, name: str, dest: str) -> bool:
+        raise NotImplementedError("Abstract method")
+
+    def path_for(self, name: str):
+        # same class is used for search parh and remote repos, perhaps not optimal
+        raise NotImplementedError("Abstract method")
+
+
+class CompositeModuleRepo(ModuleRepo):
+
+    def __init__(self, children):
+        self.children = children
+
+    def clone(self, name: str, dest: str) -> bool:
+        for child in self.children:
+            if child.clone(name, dest):
+                return True
+        return False
+
+    def path_for(self, name: str):
+        for child in self.children:
+            result = child.path_for(name)
+            if result is not None:
+                return result
+        return None
+
+
+class LocalFileRepo(ModuleRepo):
+
+    def __init__(self, root, parent_root=None):
+        if parent_root is None:
+            self.root = os.path.abspath(root)
+        else:
+            self.root = os.path.join(parent_root)
+
+    def clone(self, name: str, dest: str) -> bool:
+        try:
+            gitprovider.clone(os.path.join(self.root, name), os.path.join(dest, name))
+            return True
+        except Exception:
+            LOGGER.debug("could not clone repo", exc_info=True)
+            return False
+
+    def path_for(self, name: str):
+        path = os.path.join(self.root, name)
+        if os.path.exists(path):
+            return path
+        return None
+
+
+class RemoteRepo(ModuleRepo):
+
+    def __init__(self, baseurl):
+        self.baseurl = baseurl
+
+    def clone(self, name: str, dest: str) -> bool:
+        try:
+            gitprovider.clone(self.baseurl + name, os.path.join(dest, name))
+            return True
+        except Exception:
+            LOGGER.debug("could not clone repo", exc_info=True)
+            return False
+
+    def path_for(self, name: str):
+        raise NotImplementedError("Should only be called on local repos")
+
+
+def makeRepo(path, root=None):
+    if ":" in path:
+        return RemoteRepo(path)
+    else:
+        return LocalFileRepo(path, parent_root=root)
+
+
+def merge_specs(mainspec, new):
+    """Merge two maps str->[T] by concatting their lists."""
+    for req in new:
+        key = req.project_name
+        if key not in mainspec:
+            mainspec[key] = [req]
+        else:
+            mainspec[key] = mainspec[key] + [req]
+
+
+class ModuleLike:
     """
         Commons superclass for projects and modules, which are both versioned by git
     """
@@ -75,102 +284,52 @@ class GitVersioned:
 
     name = property(get_name)
 
-    def get_scm_url(self):
-        try:
-            return subprocess.check_output(["git", "config", "--get", "remote.origin.url"],
-                                           cwd=self._path).decode("utf-8") .strip()
-        except Exception:
-            return None
+    def get_config_for_rewrite(self):
+        with open(self.get_config_file_name(), "r") as fd:
+            return ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
 
-    def get_scm_version(self):
-        try:
-            return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self._path).decode("utf-8") .strip()
-        except Exception:
-            return None
+    def rewrite_config(self, data):
+        with open(self.get_config_file_name(), "w") as fd:
+            fd.write(ruamel.yaml.dump(data, Dumper=ruamel.yaml.RoundTripDumper))
 
-    def get_scm_branch(self):
-        try:
-            return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                                           cwd=self._path).decode("utf-8") .strip()
-        except Exception:
-            return None
+    def requires(self) -> dict:
+        """
+            Get the requires for this module
+        """
+        if "requires" not in self._meta or self._meta["requires"] is None:
+            return {}
 
-    def get_scm_resolve(self, refspec):
-        try:
-            return subprocess.check_output(["git", "rev-parse", refspec],
-                                           cwd=self._path, stderr=subprocess.DEVNULL).decode("utf-8") .strip()
-        except Exception:
-            return None
-
-    def get_scm_is_ancestor(self, refspec):
-        try:
-            return subprocess.call(["git", "merge-base", "--is-ancestor", refspec, "HEAD"],
-                                   cwd=self._path) == 0
-        except Exception as e:
-            print(e)
-            return None
+        reqs = []
+        for spec in self._meta["requires"]:
+            req = [x for x in parse_requirements(spec)]
+            if len(req) > 1:
+                print("Module file for %s has bad line in requirements specification %s" % (self._path, spec))
+            req = req[0]
+            reqs.append(req)
+        return reqs
 
     def verify_requires(self, module_map: dict) -> bool:
         """
             Check if all the required modules for this module have been loaded
         """
-
-        for require, defs in self.requires().items():
-            if require not in module_map:
+        LOGGER.info("verifying module %s", self.get_name())
+        for require in self.requires():
+            if require.project_name not in module_map:
                 print("Module %s requires the %s module that has not been loaded" % (
                     self._path, require))
                 return False
 
-            source = defs["source"]
-            version = defs["version"]
+            module = module_map[require.project_name]
+            version = parse_version(str(module.version))
 
-            module = module_map[require]
-            if not module.verify_require(source, version):
-                print("Module %s requires module %s with version %s which is not loaded" %
-                      (self.name, require, version.strip()))
+            if version not in require:
+                LOGGER.warning("module %s requires %s but %s is at version %s" %
+                               (self.name, require, require.project_name, version))
                 return False
-
         return True
 
-    def verify_require(self, source_spec: str, version_spec: str) -> bool:
-        """
-            Verify if this module satisfies the given source and version spec
-        """
-        # TODO: verify source
-        version_spec = version_spec.strip("\"")
 
-        gte = version_spec.startswith(">=")
-
-        if gte:
-            version_spec = version_spec[2:]
-
-        return self.compare_version(version_spec.strip(), gte)
-
-    def compare_version(self, version_spec: str, gte: bool) -> bool:
-        version = self.get_scm_resolve(version_spec)
-
-        if version is None:
-            LOGGER.warning("Module %s does not have version %s"
-                           % (self._path, version_spec))
-            return False
-        if gte:
-            return self.get_scm_is_ancestor(version)
-        else:
-            return self.get_scm_version() == version
-
-    def parse_version(self, spec: str) -> {}:
-        if ',' in spec:
-            source, version = spec.split(",")
-            version = version.strip()
-            if len(version) != 0:
-                return {"source": source.strip(), "version": version.strip()}
-
-            return {"source": source, "version": "master"}
-
-        return {"source": spec, "version": "master"}
-
-
-class Project(GitVersioned):
+class Project(ModuleLike):
     """
         An Impera project
     """
@@ -180,7 +339,7 @@ class Project(GitVersioned):
     def __init__(self, path):
         """
             Initialize the project, this includes
-             * Loading the project.yaml (into self._project_data)
+             * Loading the project.yaml (into self._meta)
              * Setting paths from project.yaml
              * Loading all modules in the module path (into self.modules)
             It does not include
@@ -202,18 +361,32 @@ class Project(GitVersioned):
                 "Project directory does not contain a project file")
 
         with open(project_file, "r") as fd:
-            self._project_data = yaml.load(fd)
+            self._meta = yaml.load(fd)
 
-        if "modulepath" not in self._project_data:
+        if "modulepath" not in self._meta:
             raise Exception("modulepath is required in the project(.yml) file")
 
-        self.modulepath = [os.path.join(
-            path, x) for x in self._project_data["modulepath"].split(os.path.pathsep)]
+        modulepath = self._meta["modulepath"]
+        if not isinstance(modulepath, list):
+            modulepath = [modulepath]
+        self.modulepath = [os.path.abspath(os.path.join(path, x)) for x in modulepath]
+        self.resolver = CompositeModuleRepo([makeRepo(x) for x in self.modulepath])
+
+        if "repo" not in self._meta:
+            raise Exception("repo is required in the project(.yml) file")
+
+        repo = self._meta["repo"]
+        if not isinstance(repo, list):
+            repo = [repo]
+        self.repolist = [x for x in repo]
+        self.externalResolver = CompositeModuleRepo([makeRepo(x, root=path) for x in self.repolist])
 
         self.downloadpath = None
-        if "downloadpath" in self._project_data:
-            self.downloadpath = os.path.join(
-                path, self._project_data["downloadpath"])
+        if "downloadpath" in self._meta:
+            self.downloadpath = os.path.abspath(os.path.join(
+                path, self._meta["downloadpath"]))
+            if self.downloadpath not in self.modulepath:
+                LOGGER.warning("Downloadpath is not in module path! Module install will not work as expected")
 
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
@@ -256,6 +429,7 @@ class Project(GitVersioned):
             Get the instance of the project
         """
         cls._project = project
+        os.chdir(project._path)
         plugins.PluginMeta.clear()
 
     def _load_freeze(self, freeze_file: str) -> {}:
@@ -335,17 +509,6 @@ class Project(GitVersioned):
         """
         self.virtualenv.use_virtual_env()
 
-    def requires(self) -> dict:
-        """
-            Return the requires of this project
-        """
-        req = {}
-        if "requires" in self._project_data and self._project_data["requires"] is not None:
-            for name, spec in self._project_data["requires"].items():
-                req[name] = self.parse_version(spec)
-
-        return req
-
     def sorted_modules(self) -> list:
         """
             Return a list of all modules, sorted on their name
@@ -363,33 +526,34 @@ class Project(GitVersioned):
         """
             Collect the list of all requirements of all modules in the project.
         """
-        all_reqs = set()
-
-        for mod in self.modules.values():
-            all_reqs.update(mod.get_requirements())
-
-        return all_reqs
+        specs = {}
+        merge_specs(specs, self.requires())
+        for module in self.modules.values():
+            reqs = module.requires()
+            merge_specs(specs, reqs)
+        return specs
 
     def get_name(self):
         return "project.yml"
 
     name = property(get_name)
 
+    def get_config_file_name(self):
+        return os.path.join(self._path, "project.yml")
 
-class Module(GitVersioned):
+
+class Module(ModuleLike):
     """
         This class models an Impera configuration module
     """
-    requires_fields = ["name", "license"]
+    requires_fields = ["name", "license", "version"]
 
-    def __init__(self, project: Project, path: str, load: bool=True, **kwmeta: dict):
+    def __init__(self, project: Project, path: str, **kwmeta: dict):
         """
             Create a new configuration module
 
             :param project: A reference to the project this module belongs to.
             :param path: Where is the module stored
-            :param load: Try to load the module. Use false if the module does not exist yet and
-                needs to be installed.
             :param kwmeta: Meta-data
         """
         super().__init__(path)
@@ -397,13 +561,12 @@ class Module(GitVersioned):
         self._meta = kwmeta
         self._plugin_namespaces = []
 
-        if load:
-            if not Module.is_valid_module(self._path):
-                raise InvalidModuleException(("Module %s is not a valid Impera configuration module. Make sure that a " +
-                                              "model/_init.cf file exists and a module.yml definition file.") % self._path)
+        if not Module.is_valid_module(self._path):
+            raise InvalidModuleException(("Module %s is not a valid Impera configuration module. Make sure that a " +
+                                          "model/_init.cf file exists and a module.yml definition file.") % self._path)
 
-            self.load_module_file()
-            self.is_versioned()
+        self.load_module_file()
+        self.is_versioned()
 
     def get_name(self):
         """
@@ -427,51 +590,63 @@ class Module(GitVersioned):
 
     version = property(get_version)
 
-    def _force_http(self, source_string):
+    @classmethod
+    def install(cls, project, modulename, requirements, install=True):
         """
-            Force the given string to http
+           Install a module, return module object
         """
-        new_source = source_string
-        result = urllib.parse.urlparse(source_string)
-        if result.scheme is None:
-            # probably in git@host:repo format
-            m = re.search("^(?P<user>[^@]+)@(?P<host>[^:]+):(?P<repo>.+)$", source_string)
-            if m is not None:
-                new_source = "http://%(user)s@%(host)s/%(repo)s" % m.groupdict()
+        # verify pressence in module path
+        path = project.resolver.path_for(modulename)
+        if path is not None:
+            # if exists, report
+            LOGGER.info("module %s already found at %s", modulename, path)
+            gitprovider.fetch(path)
+        else:
+            # otherwise install
+            path = os.path.join(project.downloadpath, modulename)
+            result = project.externalResolver.clone(modulename, project.downloadpath)
+            if not result:
+                raise InvalidModuleException("could not locat module with name: %s", modulename)
 
-        elif result.scheme != "http" and result.scheme != "https":
-            # try to convert it to an anonymous https url
-            new_source = source_string.replace(result.scheme, "http")
+        return cls.update(project, modulename, requirements, path, False)
 
-        if new_source != source_string:
-            LOGGER.info("Reformated source from %s to %s" % (source_string, new_source))
-
-        return new_source
-
-    def get_source(self) -> str:
+    @classmethod
+    def update(cls, project, modulename, requirements, path=None, fetch=True):
         """
-            Get the source url of this module. If git-http-only is true, we try to convert the all urls that are not valid
-            http urls.
+           Update a module, return module object
         """
-        source = self._meta["source"]
-        if not Config.getboolean("config", "git-http-only", False):
-            return source
+        if path is None:
+            path = project.resolver.path_for(modulename)
 
-        return self._force_http(source)
+        if fetch:
+            gitprovider.fetch(path)
 
-    source = property(get_source)
+        versions = cls.get_suitable_versions_for(modulename, requirements, path)
 
-    def requires(self) -> dict:
-        """
-            Get the requires for this module
-        """
-        if "requires" not in self._meta or self._meta["requires"] is None:
-            return {}
+        if len(versions) == 0:
+            print("no suitable version found for module %s" % modulename)
+        else:
+            gitprovider.checkout_tag(path, str(versions[0]))
 
-        req = {}
-        for require, defs in self._meta["requires"].items():
-            req[require] = self.parse_version(defs)
-        return req
+        return Module(project, path)
+
+    @classmethod
+    def get_suitable_versions_for(cls, modulename, requirements, path):
+        versions = gitprovider.get_all_tags(path)
+
+        def try_parse(x):
+            try:
+                return parse_version(x)
+            except Exception:
+                return None
+
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
+
+        for r in requirements:
+            versions = [x for x in r.specifier.filter(versions)]
+
+        return versions
 
     def is_versioned(self):
         """
@@ -483,44 +658,6 @@ class Module(GitVersioned):
             LOGGER.warning("Module %s is not version controlled, we recommend you do this as soon as possible."
                            % self._meta["name"])
             return False
-
-        if "version" in self._meta:
-            version_str = str(self._meta["version"])
-            version = StrictVersion(version_str)
-            higher = "a" in version_str or "b" in version_str
-
-            proc = subprocess.Popen(
-                ["git", "show-ref", "--head"], cwd=self._path, stdout=subprocess.PIPE)
-            refs = {}
-            for line in proc.communicate()[0].decode().split("\n"):
-                items = line.split(" ")
-                if len(items) > 1:
-                    ref_id = items[0]
-                    ref = items[1]
-
-                    refs[ref] = ref_id
-
-            ref_spec = "refs/tags/%s" % version
-            if not higher:
-                if ref_spec not in refs:
-                    LOGGER.warning(("Version %s defined in module %s is not available as tag. Use a or b followed by a number" +
-                                    " to indicate a pre release (i.e. 0.2b1 for dev of 0.2)") % (version, self._meta["name"]))
-                    return False
-
-                else:
-                    # check that the id of HEAD matches the id of the version
-                    # tag
-                    if refs["HEAD"] != refs[ref_spec]:
-                        LOGGER.warning(("Module %s is set to version %s, but current revision (%s) does not match version " +
-                                        "tag (%s).") % (self._meta["name"], version, refs["HEAD"], refs[ref_spec]))
-                        return False
-
-            else:
-                if ref_spec[:-1] in refs:
-                    LOGGER.warning(("Module %s defines this is a development version (a or b appended to version) of %s, but " +
-                                    "the release version is already available as tag.") % (self._meta["name"], str(version)))
-                    return False
-
         return True
 
     @classmethod
@@ -536,9 +673,9 @@ class Module(GitVersioned):
 
     def load_module_file(self):
         """
-            Load the imp module definition file
+            Load the module definition file
         """
-        with open(os.path.join(self._path, "module.yml"), "r") as fd:
+        with open(self.get_config_file_name(), "r") as fd:
             mod_def = yaml.load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
@@ -556,6 +693,9 @@ class Module(GitVersioned):
         if self._meta["name"] != os.path.basename(self._path):
             LOGGER.warning("The name in the module file (%s) does not match the directory name (%s)"
                            % (self._meta["name"], os.path.basename(self._path)))
+
+    def get_config_file_name(self):
+        return os.path.join(self._path, "module.yml")
 
     def get_module_files(self):
         """
@@ -599,126 +739,28 @@ class Module(GitVersioned):
             LOGGER.exception(
                 "Unable to load all plug-ins for module %s" % self._meta["name"])
 
-    def update(self):
-        """
-            Update the module by doing a git pull
-        """
-        sys.stdout.write("Updating %s " % self._meta["name"])
-        sys.stdout.flush()
-
-        output = self._call(["git", "pull"], self._path, "git pull")
-
-        if output is not None:
-            sys.stdout.write("branches ")
-            sys.stdout.flush()
-
-        output = self._call(
-            ["git", "pull", "--tags"], self._path, "git pull --tags")
-
-        if output is not None:
-            sys.stdout.write("tags ")
-            sys.stdout.flush()
-
-        print("done")
-
-    def install(self, modulepath):
-        """
-            Install this module if it has not been installed yet, and install its dependencies.
-        """
-        if not os.path.exists(self._path):
-            # check if source and version are available
-            if "source" not in self._meta or "version" not in self._meta:
-                raise Exception(
-                    "Source and version are required to install a configuration module.")
-
-            LOGGER.info(
-                "Cloning module %s from %s", self._meta["name"], self.source)
-            cmd = ["git", "clone", self.source, self._meta["name"]]
-            output = self._call(cmd, modulepath, "git clone")
-
-            if output is None:
-                new_source = self._force_http(self.source)
-                LOGGER.info(
-                    "Cloning module %s from %s", self._meta["name"], new_source)
-                cmd = ["git", "clone", new_source, self._meta["name"]]
-                output = self._call(cmd, modulepath, "git clone")
-
-                if output is None:
-                    LOGGER.critical("Unable to get module %s" %
-                                    self._meta["name"])
-                    return None
-
-        # reload the module
-        module = Module(self._project, self._path)
-
-        return module
-
-    def checkout_version(self, version: Version):
-        """
-            Checkout the given version
-        """
-        # versions = self.versions()
-
-        # if version in versions:
-        #    print(version)
-        raise NotImplementedError()
-
-    def checkout_branch(self, branch):
-        """
-            Checkout the given branch
-        """
-
-        self._call(["git", "checkout", branch], self._path, "git checkout ")
-
     def versions(self):
         """
             Provide a list of all versions available in the repository
         """
-        output = self._call(
-            ["git", "show-ref", "--head"], self._path, "git qshow-ref")
-        lines = output.decode().split("\n")
+        versions = gitprovider.get_all_tags(self._path)
 
-        version_list = []
-        for line in lines:
-            obj = re.search(
-                "^(?P<hash>[a-f0-9]{40}) refs/tags/(?P<version>.+)$", line)
+        def try_parse(x):
+            try:
+                return parse_version(x)
+            except Exception:
+                return None
 
-            if obj:
-                try:
-                    version_list.append(StrictVersion(obj.group("version")))
-                except Exception:
-                    pass
+        versions = [x for x in [try_parse(v) for v in versions] if x is not None]
+        versions = sorted(versions, reverse=True)
 
-        return version_list
-
-    def _call(self, cmd: list, path: str, cmd_name: str) -> str:
-        proc = subprocess.Popen(
-            cmd, cwd=path, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            output = proc.communicate(timeout=60)
-        except TimeoutExpired:
-            print("Unable to %(cmd_name)s module %(name)s, %(cmd_name)s timed out" %
-                  {"name": self._meta["name"], "cmd_name": cmd_name})
-
-            return None
-
-        if proc.returncode is None or proc.returncode > 0:
-            print("")
-            print("Unable to %(cmd_name)s %(name)s, %(cmd_name)s provided this output:" %
-                  {"name": self._meta["name"], "cmd_name": cmd_name})
-            print(output[0].decode())
-            print(output[1].decode())
-
-            return None
-
-        return output[0]
+        return versions
 
     def status(self):
         """
             Run a git status on this module
         """
-        cmd = ["git", "status", "--porcelain"]
-        output = self._call(cmd, self._path, "git status").decode()
+        output = gitprovider.status(self._path)
 
         files = [x.strip() for x in output.split("\n") if x != ""]
 
@@ -750,12 +792,16 @@ class Module(GitVersioned):
 
         print("done")
 
-    def python_install(self):
+    def get_python_requirements(self):
         """
             Install python requirements with pip in a virtual environment
         """
-        self._project.virtualenv.install_from_file(
-            os.path.join(self._path, "requirements.txt"))
+        file = os.path.join(self._path, "requirements.txt")
+        if os.path.exists(file):
+            with open(file, 'r') as fd:
+                return fd.read()
+        else:
+            return None
 
     def get_requirements(self):
         """
@@ -776,14 +822,33 @@ class ModuleTool(object):
     def __init__(self):
         self._mod_handled_list = set()
 
+    @classmethod
+    def modules_parser_config(cls, parser: ArgumentParser):
+        subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+        subparser.add_parser("list", help="List all modules in a table")
+        subparser.add_parser("update", help="Update all modules from their source")
+        subparser.add_parser("install", help="List all modules in a table")
+        subparser.add_parser("status", help="Run a git status on all modules and report")
+        subparser.add_parser("push", help="Run a git push on all modules and report")
+        subparser.add_parser("freeze", help="Freeze the version of all modules")
+        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+        subparser.add_parser("validate", help="Validate the module we are currently in")
+        commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
+        commit.add_argument("-m", "--message", help="Commit message", required=True)
+        commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
+        commit.add_argument("-v", "--version", help="Version to use on tag")
+        commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
+
     def execute(self, cmd, args):
         """
             Execute the given command
         """
         if hasattr(self, cmd):
             method = getattr(self, cmd)
-            method(*args)
-
+            margs = inspect.getfullargspec(method).args
+            margs.remove("self")
+            outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
+            method(**outargs)
         else:
             raise Exception("%s not implemented" % cmd)
 
@@ -798,107 +863,85 @@ class ModuleTool(object):
             List all modules in a table
         """
         table = []
-        name_length = len("Name") + 5
-        version_length = 7
-        names = sorted(Project.get().modules.keys())
+        name_length = 10
+        version_length = 10
+
+        project = Project.get()
+        names = sorted(project.modules.keys())
+        specs = project.collect_requirements()
         for name in names:
             mod = Project.get().modules[name]
-            if "version" in mod._meta:
-                version = str(mod._meta["version"])
-                table.append((name, version))
-
-                if len(name) > name_length:
-                    name_length = len(name)
-
-                if len(version) > version_length:
-                    version_length = len(version)
+            version = str(mod.version)
+            versions = Module.get_suitable_versions_for(name, specs[name], mod._path)
+            if len(versions) == 0:
+                reqv = "None"
             else:
-                print(
-                    "Module %s does not contain a version, invalid module" % name)
+                reqv = str(versions[0])
 
-        print("+" + "-" * (name_length + version_length + 5) + "+")
-        print("| Name%s | Version%s |" % (
-            " " * (name_length - len("Name")), " " * (version_length - len("Version"))))
-        print("+" + "-" * (name_length + version_length + 5) + "+")
-        for name, version in table:
-            print("| %s | %s |" % (name + " " * (name_length - len(name)),
-                                   version + " " * (version_length - len(version))))
+            table.append((name, version, reqv))
+        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
+        print("| Name%s | Version%s | Expected%s |" % (
+            " " * (name_length - len("Name")),
+            " " * (version_length - len("Version")),
+            " " * (version_length - len("Expected"))))
+        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
+        for name, version, reqv in table:
+            print("| %s | %s | %s |" % (name + " " * (name_length - len(name)),
+                                        version + " " * (version_length - len(version)),
+                                        reqv + " " * (version_length - len(reqv))))
 
-        print("+" + "-" * (name_length + version_length + 5) + "+")
+        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
 
-    def update(self):
+    def update(self, project=None):
         """
             Update all modules from their source
         """
-        for mod in Project.get().sorted_modules():
-            mod.update()
+        if project is None:
+            project = Project.get()
+        specs = project.collect_requirements()
 
-    def _install(self, project, module_path, module):
-        """
-            Do a recursive install
-        """
-        name, spec = module
+        for name, spec in specs.items():
+            Module.update(project, name, spec)
 
-        mod_path = os.path.join(module_path, name)
-        if mod_path not in self._mod_handled_list:
-            module = Module(project, mod_path, load=False, source=spec["source"],
-                            version=spec["version"].strip("\""), name=name)
-            new_mod = module.install(module_path)
-
-            if not new_mod.get_name() == name:
-                raise InvalidModuleException(
-                    "Module with name %s was requested, but a module with name %s was installed from %s" % (
-                        name, new_mod.get_name(), spec["source"]))
-
-            new_mod.python_install()
-
-            new_mod.checkout_branch(module.version)
-
-            self._mod_handled_list.add(mod_path)
-
-            return new_mod.requires().items()
-
-        return []
-
-    def install(self, branch=None):
+    def install(self, project=None):
         """
             Install all modules the project requires
         """
-        project = Project.get()
-        projectfile = os.path.join(project._path, "project.yml")
-
-        if not os.path.exists(projectfile):
-            raise Exception("Project file (project.yml) not found")
-
-        with open(projectfile, "r") as fd:
-            project_data = yaml.load(fd)
-
-        if "downloadpath" not in project_data:
-            raise Exception(
-                "downloadpath is required in the project file to install modules.")
-
-        module_path = os.path.join(project._path, project_data["downloadpath"])
-
+        if project is None:
+            project = Project.get()
+        specs = {}
+        pspec = project.requires()
+        merge_specs(specs, pspec)
         worklist = []
-        worklist.extend(project.requires().items())
+        worklist.extend([n.project_name for n in pspec])
+        modules = {}
 
         while len(worklist) != 0:
             work = worklist.pop(0)
             LOGGER.info("requesting install for: %s", work)
-            worklist.extend(self._install(project, module_path, work))
+            module = Module.install(project, work, specs[work])
+            modules[work] = module
+            reqs = module.requires()
+            merge_specs(specs, reqs)
+            for name in [x.project_name for x in reqs]:
+                if name not in modules:
+                    worklist.append(name)
 
-        install_set = [os.path.realpath(path)
-                       for path in self._mod_handled_list]
-        not_listed = []
-        for mod in project.modules.values():
-            if os.path.realpath(mod._path) not in install_set:
-                not_listed.append(mod)
+        # verify if installed versions are consistent with all rules
+        for name, spec in specs.items():
+            module = modules[name]
+            version = parse_version(str(module.version))
+            for r in spec:
+                if version not in r:
+                    LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
 
-        if len(not_listed) > 0:
-            print("WARNING: The following modules are loaded by Impera but are not listed in the project file or in " +
-                  "the dependencies of other modules:")
-            for mod in not_listed:
-                print("\t%s (%s)" % (mod._meta["name"], mod._path))
+        # do python install
+        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in modules.values()] if x is not None]
+        pyreq = '\n'.join(pyreq).split("\n")
+        pyreq = [x for x in pyreq if len(x.strip()) > 0]
+        if len(pyreq) > 0:
+            project.virtualenv.install_from_list(pyreq)
+
         project.reloadModules()
 
     def status(self):
@@ -965,11 +1008,47 @@ class ModuleTool(object):
         """
         Project.get().verify()
 
-    def commit(self, version=None):
+    def _find_module(self):
+        module = Module(None, os.path.realpath(os.curdir))
+        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
+        return module
+
+    def commit(self, message, version=None, dev=True, commit_all=False):
         """
             Commit all current changes.
         """
-        subprocess.call(["git", "commit", "-a"])
+        # find module
+        module = self._find_module()
+        # get version
+        old_version = parse_version(module.version)
+        # determine new version
+        if version is not None:
+            baseversion = version
+        else:
+            if old_version.is_prerelease:
+                baseversion = old_version.base_version
+            else:
+                baseversion = old_version.base_version
+                parts = baseversion.split('.')
+                parts[-1] = str(int(parts[-1]) + 1)
+                baseversion = '.'.join(parts)
+
+        if dev:
+            baseversion = "%s.dev%d" % (baseversion, time.time())
+
+        baseversion = parse_version(baseversion)
+        if baseversion <= old_version:
+            print("new versions (%s) is not larger then old version (%s), aborting" % (baseversion, old_version))
+            return
+
+        cfg = module.get_config_for_rewrite()
+        cfg["version"] = str(baseversion)
+        module.rewrite_config(cfg)
+        print("set version to: " + str(baseversion))
+        # commit
+        gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
+        # tag
+        gitprovider.tag(module._path, str(baseversion))
 
     def validate(self, options=""):
         """
@@ -977,9 +1056,7 @@ class ModuleTool(object):
         """
         parse_only = "-s" in options
         valid = True
-        module = Module(None, os.path.realpath(os.curdir))
-        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
-
+        module = self._find_module()
         if not module.is_versioned():
             LOGGER.error("Module is not versioned correctly, validation will fail")
             valid = False
@@ -1012,25 +1089,24 @@ class ModuleTool(object):
             os.mkdir(lib_dir)
 
             LOGGER.info("Cloning %s module" % module.name)
-            proc = subprocess.Popen(
-                ["git", "clone", module._path], cwd=lib_dir)
-            proc.wait()
+            gitprovider.clone(module._path, lib_dir)
 
             LOGGER.info("Setting up project")
             with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
                 fd.write("""name: test
 description: Project to validate module %(name)s
+repo: [%(repo)s]
 modulepath: libs
 downloadpath: libs
 requires:
-    %(name)s: %(source)s, "%(version)s"
-""" % {"name": module.name, "version": module.get_scm_version(), "source": module._path})
+    %(name)s: %(name)s == %(version)s
+""" % {"name": module.name, "version": str(module.versions()[0]), "repo": os.path.split(module._path)[0]})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
             test_project.use_virtual_env()
             Project.set(test_project)
-            self.install()
+            self.install(test_project)
 
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
@@ -1039,7 +1115,7 @@ requires:
 
             project = Project(project_dir)
             Project._project = project
-            LOGGER.info("Verifying module set")
+            LOGGER.info("Verifying modules")
             project.verify()
             LOGGER.info("Loading all plugins")
             project.load_plugins()

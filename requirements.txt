@@ -10,4 +10,5 @@ cliff
 blessings
 python-dateutil
 ply
+ruamel.yaml
 -e git://github.com/heynemann/motorengine.git#egg=motorengine
