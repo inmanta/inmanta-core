@@ -4,7 +4,7 @@ setup(
     name="impera",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2016.2.2",
+    version="2016.2.3",
     description="Impera management tool",
     author="Inmanta NV",
     author_email="code@inmanta.com",
