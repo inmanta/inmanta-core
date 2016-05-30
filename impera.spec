@@ -64,11 +64,11 @@ Requires(pre):  shadow-utils
 
 %package server
 Summary:        The configuration and service files to start the Impera server
-Requires:       python3-impera
+Requires:       %{?scl_prefix}python%{?!scl:3}-impera
 
 %package agent
 Summary:        The configuration and service files to start the Impera agent
-Requires:       python3-impera
+Requires:       %{?scl_prefix}python%{?!scl:3}-impera
 
 %description
 
