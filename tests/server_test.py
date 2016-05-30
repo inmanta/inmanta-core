@@ -46,6 +46,7 @@ class ServerTest(MongoTestCase, AsyncTestCase):
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
+        config.Config.set("config", "log-dir", os.path.join(self.state_dir, "logs"))
         config.Config.set("server_rest_transport", "port", PORT)
         config.Config.set("agent_rest_transport", "port", PORT)
         config.Config.set("compiler_rest_transport", "port", PORT)
