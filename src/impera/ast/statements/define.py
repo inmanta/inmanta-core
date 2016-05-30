@@ -171,7 +171,7 @@ class DefineImplement(DefinitionStatement):
             i += 1
             try:
                 # check if the implementation has the correct type
-            impl_obj = self.namespace.get_type(_impl)
+                impl_obj = self.namespace.get_type(_impl)
             except TypeNotFoundException as e:
                 e.set_location(self.location)
                 raise e
