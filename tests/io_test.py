@@ -22,8 +22,8 @@ import shutil
 import pwd
 import grp
 
-from impera.agent.io.local import LocalIO
-from impera.agent.io.local import BashIO
+from inmanta.agent.io.local import LocalIO
+from inmanta.agent.io.local import BashIO
 from nose.tools import assert_equal
 
 

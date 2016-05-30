@@ -1,9 +1,9 @@
 Language reference
 ******************
 
-This chapter is a reference for the Impera DSL. The Impera language is a declarative
+This chapter is a reference for the Inmanta DSL. The Inmanta language is a declarative
 language to model the configuration of an infrastructure. The evaluation order of statements in the
-Impera modeling language is determined by their dependencies on other statements and not based on
+Inmanta modeling language is determined by their dependencies on other statements and not based on
 the lexical order. The correct evaluation order is determined by the language runtime.
 
 
@@ -11,7 +11,7 @@ Literal values and variables
 ============================
 
 This section first introduces the basics of the DSL: literal values. The values can be of the type
-``string``, ``number`` or ``bool``. Impera also provides lists of values. When a value is assigned to a
+``string``, ``number`` or ``bool``. Inmanta also provides lists of values. When a value is assigned to a
 variable, this variable becomes read-only. Because variables can only be assigned once, it is not
 necessary to declare the type of the variable. The runtime is dynamically typed.
 
@@ -48,10 +48,10 @@ A typedef statement creates a new literal type which is based on one of the basi
 additional constraint. A typedef statement starts with the ``typedef`` keyword, followed by a
 name that identifies the type. This name should start with a lowercase character and is followed by
 uppercase and lowercase characters, numbers, a dash and an underscore. After name an expression
-follows which is started by the ``matching`` keyword. The expression is either an Impera
+follows which is started by the ``matching`` keyword. The expression is either an Inmanta
 expression or a regular expression. A regular expression is demarcated with slashes.
 
-Impera expressions can use logical operators such as greater than, smaller than, equality and
+Inmanta expressions can use logical operators such as greater than, smaller than, equality and
 inclusions together with logical operators. The keyword ``self`` refers to the value that is
 assigned to a variable of the constrained type.
 
@@ -67,7 +67,7 @@ Transformations: string interpolation, templates and plug-ins
 At the lowest level of abstraction the configuration of an infrastructure often consists of
 configuration files or attributes that are set to certain values. These configuration files and
 attribute values are a transformation of one or more parameters that are available in the
-configuration model. In Impera there are three mechanism available to perform such transformation:
+configuration model. In Inmanta there are three mechanism available to perform such transformation:
 string interpolation, templates and plugins. In the next subsection each of these mechanisms are
 explained.
 
@@ -89,7 +89,7 @@ Interpolating strings::
 Templates
 ---------
 
-Impera has a built-in template engine that has been tightly integrated into the platform. Impera
+Inmanta has a built-in template engine that has been tightly integrated into the platform. Inmanta
 integrated the Jinja2 template engine. A template is evaluated in the location and
 scope where the \keyword{template} function is called. This function accepts as an argument the
 location of the template. A template is identified with a path: the first item of the path is
@@ -98,7 +98,7 @@ directory of the module.
 
 The integrated Jinja2 engine is limited to the entire Jinja feature set, except for subtemplates
 which are not supported. During execution Jinja2 has access to all variables and plug-ins that are
-available in the scope where the template is evaluated. Fully qualified names in the Impera model use
+available in the scope where the template is evaluated. Fully qualified names in the Inmanta model use
 ``::`` as a path separator. This syntax is reserved in Jinja2, so ``::`` needs to be replaced with a
 ``.``. The result of the template is returned by the template function.
 
@@ -118,12 +118,12 @@ Transformation plug-ins
 -----------------------
 
 Transformation plug-ins provide an interface to define a transformation in Python. Plugins are
-exposed in the Impera language as function calls, such as the template function call. A template
+exposed in the Inmanta language as function calls, such as the template function call. A template
 accepts parameters and returns a value that it computed out of the variables.
 
-Impera has a list of built-in plug-ins that are accessible without a namespace. Each module that is
+Inmanta has a list of built-in plug-ins that are accessible without a namespace. Each module that is
 included can also provide plug-ins. These plug-ins are accessible within the namespace of the
-module. Each of the Impera native plug-ins and the plug-ins provided by modules are also registered as
+module. Each of the Inmanta native plug-ins and the plug-ins provided by modules are also registered as
 filters in the Jinja2 template engine. Additionally plug-ins can also be called from within
 expressions such as those used for constraining literal types. The validation expression will in
 that case be reduced to a transformation of the value that needs to be validated to a boolean value.
@@ -188,7 +188,7 @@ IMP makes from the relations between entities a first class language construct. 
 properties are modeled as attributes, properties that have an other entity as type are modeled as a
 relation between those entities. Relations are defined by specifying each end of the relation
 together with the multiplicity of each relation end. Each end of the relation is named and is
-maintained as a double binding by the Impera runtime.
+maintained as a double binding by the Inmanta runtime.
 
 Defining relations between entities in the domain model::
 
@@ -263,7 +263,7 @@ Refinements for an entity::
 Indexes and queries
 ===================
 
-One of the key features of Impera is modeling relations in a configuration. To help maintaining these
+One of the key features of Inmanta is modeling relations in a configuration. To help maintaining these
 relations the language provides a query function to lookup the other end of relations. This query
 function can be used to lookup instances of an entity. A query is always expressed in function of
 the properties of an entity. The properties that can be used in a query have to have an index

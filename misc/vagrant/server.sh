@@ -9,37 +9,37 @@ rm -rf dump
 unzip /inmanta/misc/vagrant/mongodb.zip
 mongorestore -h 127.0.0.1 dump
 
-sudo cat >/etc/systemd/system/impera-server.service <<EOF
+sudo cat >/etc/systemd/system/inmanta-server.service <<EOF
 [Unit]
-Description=The server of the Impera platform
+Description=The server of the Inmanta platform
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/opt/impera/server.sh
+ExecStart=/opt/inmanta/server.sh
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-sudo cat >/opt/impera/server.sh <<EOF
+sudo cat >/opt/inmanta/server.sh <<EOF
 #!/bin/bash
 
 export PYTHONPATH=/inmanta/src
-/opt/impera/env/bin/python3 -m impera.app -c /opt/impera/server.cfg -vvv server
+/opt/inmanta/env/bin/python3 -m inmanta.app -c /opt/inmanta/server.cfg -vvv server
 EOF
 
-sudo chmod +x /opt/impera/server.sh
+sudo chmod +x /opt/inmanta/server.sh
 
-sudo cat >/opt/impera/server.cfg <<EOF
+sudo cat >/opt/inmanta/server.cfg <<EOF
 [config]
 heartbeat-interval = 60
-state-dir=/var/lib/impera
+state-dir=/var/lib/inmanta
 
 [database]
 host=localhost
-name=impera
+name=inmanta
 
 [server_rest_transport]
 port = 8888
@@ -52,11 +52,11 @@ auto-recompile-wait = 10
 server_address=172.20.20.10
 EOF
 
-sudo mkdir -p /var/lib/impera
+sudo mkdir -p /var/lib/inmanta
 
 sudo systemctl daemon-reload
-sudo systemctl start impera-server
-sudo systemctl enable impera-server
+sudo systemctl start inmanta-server
+sudo systemctl enable inmanta-server
 
 #sudo dnf install -y npm
 #mkdir -p /home/vagrant/node_modules
@@ -66,32 +66,32 @@ sudo systemctl enable impera-server
 #cd /inmanta-dashboard
 #npm install
 
-#sudo cat >/etc/systemd/system/impera-dashboard.service <<EOF
+#sudo cat >/etc/systemd/system/inmanta-dashboard.service <<EOF
 #[Unit]
-#Description=Impera dashboard
+#Description=Inmanta dashboard
 #After=network.target
 
 #[Service]
 #Type=simple
 #User=vagrant
 #Group=vagrant
-#ExecStart=/opt/impera/dashboard.sh
+#ExecStart=/opt/inmanta/dashboard.sh
 #Restart=on-failure
 
 #[Install]
 #WantedBy=multi-user.target
 #EOF
 
-#sudo cat >/opt/impera/dashboard.sh <<EOF
+#sudo cat >/opt/inmanta/dashboard.sh <<EOF
 ##!/bin/bash
 
 #cd /inmanta-dashboard
 #npm start
 #EOF
 
-#sudo chmod +x /opt/impera/dashboard.sh
+#sudo chmod +x /opt/inmanta/dashboard.sh
 
 #sudo systemctl daemon-reload
-#sudo systemctl start impera-dashboard
-#sudo systemctl enable impera-dashboard
+#sudo systemctl start inmanta-dashboard
+#sudo systemctl enable inmanta-dashboard
 

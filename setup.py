@@ -1,16 +1,16 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="impera",
+    name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
     version="2016.3",
-    description="Impera management tool",
+    description="Inmanta Deployment Platform",
     author="Inmanta",
     author_email="code@inmanta.com",
     license="Apache Software License",
 
-    scripts=["bin/impera"],
+    scripts=["bin/inmanta"],
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
@@ -18,39 +18,39 @@ setup(
 
     entry_points={
     'console_scripts': [
-        'impera-cli = impera.main:main'
+        'inmanta-cli = inmanta.main:main'
     ],
-    'impera': [
-        'project-list = impera.client:ProjectList',
-        'project-create = impera.client:ProjectCreate',
-        'project-delete = impera.client:ProjectDelete',
-        'project-show = impera.client:ProjectShow',
-        'project-modify = impera.client:ProjectModify',
+    'inmanta': [
+        'project-list = inmanta.client:ProjectList',
+        'project-create = inmanta.client:ProjectCreate',
+        'project-delete = inmanta.client:ProjectDelete',
+        'project-show = inmanta.client:ProjectShow',
+        'project-modify = inmanta.client:ProjectModify',
 
-        'environment-create = impera.client:EnvironmentCreate',
-        'environment-list = impera.client:EnvironmentList',
-        'environment-show = impera.client:EnvironmentShow',
-        'environment-modify = impera.client:EnvironmentModify',
-        'environment-delete = impera.client:EnvironmentDelete',
+        'environment-create = inmanta.client:EnvironmentCreate',
+        'environment-list = inmanta.client:EnvironmentList',
+        'environment-show = inmanta.client:EnvironmentShow',
+        'environment-modify = inmanta.client:EnvironmentModify',
+        'environment-delete = inmanta.client:EnvironmentDelete',
 
-        'version-list = impera.client:VersionList',
-        'version-release = impera.client:VersionRelease',
-        'version-report = impera.client:VersionReport',
+        'version-list = inmanta.client:VersionList',
+        'version-release = inmanta.client:VersionRelease',
+        'version-report = inmanta.client:VersionReport',
 
-        'agent-list = impera.client:AgentList',
+        'agent-list = inmanta.client:AgentList',
 
-        'param-list = impera.client:ParamList',
-        'param-set = impera.client:ParamSet',
-        'param-get = impera.client:ParamGet',
+        'param-list = inmanta.client:ParamList',
+        'param-set = inmanta.client:ParamSet',
+        'param-get = inmanta.client:ParamGet',
 
-        'form-list = impera.client:FormList',
-        'form-show = impera.client:FormShow',
+        'form-list = inmanta.client:FormList',
+        'form-show = inmanta.client:FormShow',
 
-        'record-list = impera.client:RecordList',
-        'record-show = impera.client:RecordShow',
-        'record-create = impera.client:RecordCreate',
-        'record-delete = impera.client:RecordDelete',
-        'record-update = impera.client:RecordUpdate',
+        'record-list = inmanta.client:RecordList',
+        'record-show = inmanta.client:RecordShow',
+        'record-create = inmanta.client:RecordCreate',
+        'record-delete = inmanta.client:RecordDelete',
+        'record-update = inmanta.client:RecordUpdate',
     ],
 },
 )

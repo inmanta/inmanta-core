@@ -1,12 +1,12 @@
 .. _index:
 
-Impera's documentation
+Inmanta's documentation
 ======================
 
-Impera is a configuration management tool for managing complex and large-scale distributed systems in
+Inmanta is a configuration management tool for managing complex and large-scale distributed systems in
 an integrated manner. It is based on the `research of iMinds-DistriNet into configuration management
 <https://lirias.kuleuven.be/bitstream/123456789/453199/1/thesis.pdf>`_. The tool and companion
-configuration modules are available on the GitHub project site: https://github.com/impera-io.
+configuration modules are available on the GitHub project site: https://github.com/inmanta-io.
 
 The documentation is work in progress and should grow and improve considerably in a short time
 frame.
@@ -14,7 +14,7 @@ frame.
 Getting Started
 ---------------
 
-If you are new to impera, try our :doc:`Getting Started <quickstart>` guide.
+If you are new to inmanta, try our :doc:`Getting Started <quickstart>` guide.
 
 Contents
 --------
@@ -28,15 +28,15 @@ Contents
 Additional resources
 --------------------
 
-* `Impera issue tracker`_
-* `Impera user mailinglist`_
-* `Impera developer mailinglist`_
-* `Impera Twitter`_
+* `Inmanta issue tracker`_
+* `Inmanta user mailinglist`_
+* `Inmanta developer mailinglist`_
+* `Inmanta Twitter`_
 
-.. _Impera user mailinglist: <https://groups.google.com/forum/#!forum/impera-users>
-.. _Impera developer mailinglist: <https://groups.google.com/forum/#!forum/impera-devel>
-.. _Impera issue tracker: https://github.com/impera-io/impera/issues
-.. _Impera Twitter: https://twitter.com/inmanta_com
+.. _Inmanta user mailinglist: <https://groups.google.com/forum/#!forum/inmanta-users>
+.. _Inmanta developer mailinglist: <https://groups.google.com/forum/#!forum/inmanta-devel>
+.. _Inmanta issue tracker: https://github.com/inmanta-io/inmanta/issues
+.. _Inmanta Twitter: https://twitter.com/inmanta_com
 
 Indices and tables
 ==================

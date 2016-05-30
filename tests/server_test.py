@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Impera
+    Copyright 2016 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: bart@impera.io
+    Contact: code@inmanta.com
 """
 
 import os
@@ -23,8 +23,8 @@ import logging
 
 
 from mongobox.unittest import MongoTestCase
-from impera import config
-from impera.server import Server
+from inmanta import config
+from inmanta.server import Server
 from tornado.testing import AsyncTestCase
 
 LOGGER = logging.getLogger(__name__)

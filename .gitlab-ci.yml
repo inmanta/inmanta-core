@@ -19,7 +19,7 @@ fedora-rpm:
     image: fedora-python3
     script:
         - python3 setup.py egg_info -RDb "b$(date +%Y%m%d%H%M)" sdist
-        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid b$(date +%Y%m%d%H%M)" -bb impera.spec
+        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid b$(date +%Y%m%d%H%M)" -bb inmanta.spec
     artifacts:
         paths:
             - dist/

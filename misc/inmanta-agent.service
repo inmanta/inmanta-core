@@ -1,0 +1,14 @@
+[Unit]
+Description=The agent of the Inmanta platform
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/inmanta -c /etc/inmanta/agent.cfg -vv agent
+Restart=on-failure
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+

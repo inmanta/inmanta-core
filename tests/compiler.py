@@ -19,17 +19,17 @@
 import re
 
 from nose import tools
-from impera.ast import Namespace
-from impera.ast.statements import define, Literal
-from impera.parser.plyInmantaParser import parse
-from impera.parser import ParserException
+from inmanta.ast import Namespace
+from inmanta.ast.statements import define, Literal
+from inmanta.parser.plyInmantaParser import parse
+from inmanta.parser import ParserException
 from nose.tools.nontrivial import raises
-from impera.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex
-from impera.ast.constraint.expression import GreaterThan, Regex, Not, And
-from impera.ast.statements.generator import Constructor
-from impera.ast.statements.call import FunctionCall
-from impera.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
-from impera.ast.variables import Reference, AttributeReference
+from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex
+from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And
+from inmanta.ast.statements.generator import Constructor
+from inmanta.ast.statements.call import FunctionCall
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
+from inmanta.ast.variables import Reference, AttributeReference
 
 
 def parse_code(model_code: str):

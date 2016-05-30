@@ -3,20 +3,20 @@
 Getting started
 ***************
 
-This tutorial gets you started with Impera. You will learn how to:
+This tutorial gets you started with Inmanta. You will learn how to:
 
-   * Install Impera
-   * Create an Impera project
+   * Install Inmanta
+   * Create an Inmanta project
    * Use existing configuration modules
    * Create a configuration model to deploy a LAMP (Linux, Apache, MySQL and PHP) stack
    * Deploy the configuration
 
 
-Impera exists of several components:
+Inmanta exists of several components:
 
    * A compiler that builds the configuration model,
-   * The central Impera server that stores states,
-   * Impera agents on each managed system that deploy configuration changes.
+   * The central Inmanta server that stores states,
+   * Inmanta agents on each managed system that deploy configuration changes.
 
 In the remainder of this chapter we will install the framework but use it without external server and without agents.
 
@@ -26,27 +26,27 @@ In the remainder of this chapter we will install the framework but use it withou
    with host names vm1 and vm2 to be fully compatible with this guide. This guide has been tested on Fedora
    21 and Ubuntu 14.04.
 
-Installing Impera
+Installing Inmanta
 =================
 
 For Ubuntu 14.04 (trusty) and Fedora 21, follow the instructions below. For other distributions,
-install from `source <https://github.com/impera-io/impera>`_. The
-`readme <https://github.com/impera-io/impera/blob/master/Readme.md>`_ contains installation instructions to
-install Impera from source.
+install from `source <https://github.com/inmanta-io/inmanta>`_. The
+`readme <https://github.com/inmanta-io/inmanta/blob/master/Readme.md>`_ contains installation instructions to
+install Inmanta from source.
 
 
 Fedora
 ------
 
-The packages to install Impera are available in a yum/dnf repository. Following
-instructions add the repository and install Impera on vm1:
+The packages to install Inmanta are available in a yum/dnf repository. Following
+instructions add the repository and install Inmanta on vm1:
 
 .. code-block:: sh
 
-    sudo curl -o /etc/yum.repos.d/impera.repo https://impera.io/repo/impera.repo
-    sudo yum install -y python3-impera
+    sudo curl -o /etc/yum.repos.d/inmanta.repo https://inmanta.io/repo/inmanta.repo
+    sudo yum install -y python3-inmanta
 
-On vm2 Impera is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/impera-io/impera/issues/1>`_. To install Python 3 on vm2:
+On vm2 Inmanta is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/inmanta-io/inmanta/issues/1>`_. To install Python 3 on vm2:
 
 .. code-block:: sh
 
@@ -55,14 +55,14 @@ On vm2 Impera is not required, as we will do an agentless install. However, `thi
 Ubuntu
 ------
 
-The packages to install Impera on Ubuntu are available in a ppa. The following instructions add the
-repository and install Impera:
+The packages to install Inmanta on Ubuntu are available in a ppa. The following instructions add the
+repository and install Inmanta:
 
 .. code-block:: sh
 
-    echo "deb https://impera.io/repo/trusty/ /" | sudo su -c "cat > /etc/apt/sources.list.d/impera.list"
+    echo "deb https://inmanta.io/repo/trusty/ /" | sudo su -c "cat > /etc/apt/sources.list.d/inmanta.list"
     sudo apt-get update
-    sudo apt-get install python3-impera
+    sudo apt-get install python3-inmanta
 
 Apt might warn about unauthenticated packages, because the packages in our repository have not been
 signed.
@@ -111,20 +111,20 @@ Or consult the Fedora documentation and change the firewall settings and set the
 booleans.
 
 
-Create an Impera project
+Create an Inmanta project
 ========================
 
-An Impera project bundles modules that contain configuration information. A project is nothing more
-than a directory with an .impera file, which contains parameters such as the location to search for
+An Inmanta project bundles modules that contain configuration information. A project is nothing more
+than a directory with an .inmanta file, which contains parameters such as the location to search for
 modules and where to find the server.
 
-Here we will create an Impera project ``quickstart`` with a basic configuration file.
+Here we will create an Inmanta project ``quickstart`` with a basic configuration file.
 
 .. code-block:: sh
 
     mkdir quickstart
     cd quickstart
-    cat > .impera <<EOF
+    cat > .inmanta <<EOF
     [config]
     export=
     git-http-only=true
@@ -138,7 +138,7 @@ Here we will create an Impera project ``quickstart`` with a basic configuration 
     EOF
 
 
-The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. The Impera compiler looks
+The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. The Inmanta compiler looks
 for a file called ``main.cf`` to start the compilation from.  The last line, creates an empty file.
 
 In the next section we will re-use existing modules to deploy our LAMP stack.
@@ -147,9 +147,9 @@ Re-use existing modules
 =======================
 
 At GitHub, we host already many modules that provide types and refinements for one or more
-operating systems. Our modules are available in the https://github.com/impera-io/ repositories.
+operating systems. Our modules are available in the https://github.com/inmanta-io/ repositories.
 
-Impera downloads these modules and their dependencies. For this tutorial, we need the
+Inmanta downloads these modules and their dependencies. For this tutorial, we need the
 apache and drupal configuration modules, and the redhat and ubuntu modules for the correct refinements.
 We add these requirements in the ``project.yml`` file under the ``requires:`` attribute. Open the ``project.yml``
 file and add the following lines:
@@ -157,21 +157,21 @@ file and add the following lines:
 .. code-block:: yaml
 
     requires:
-        drupal: git@github.com:impera-io/drupal, ">= 0.1"
-        apache: git@github.com:impera-io/apache, ">= 0.1"
-        redhat: git@github.com:impera-io/redhat, ">= 0.1"
-        ubuntu: git@github.com:impera-io/ubuntu, ">= 0.1"
+        drupal: git@github.com:inmanta-io/drupal, ">= 0.1"
+        apache: git@github.com:inmanta-io/apache, ">= 0.1"
+        redhat: git@github.com:inmanta-io/redhat, ">= 0.1"
+        ubuntu: git@github.com:inmanta-io/ubuntu, ">= 0.1"
 
-Each line under the ``requires:`` attribute lists a required Impera module. The key is the name of the
+Each line under the ``requires:`` attribute lists a required Inmanta module. The key is the name of the
 module and the value is the location of the git project, followed by the version identifier (after the comma).
 
-Next, we instruct Impera to download all modules and install the required python modules for the
+Next, we instruct Inmanta to download all modules and install the required python modules for the
 plugins and resource handlers. These modules are installed in a virtualenv. Execute the following
 command in the quickstart directory:
 
 .. code-block:: sh
 
-    impera modules install
+    inmanta modules install
 
 
 The configuration model
@@ -214,7 +214,7 @@ The *os* attribute defines which operating system this server runs. This attribu
 create configuration modules that handle the heterogeneity of different operating systems.
 The current value refers to Fedora. To deploy this on Ubuntu, change this value to
 ubuntu::ubuntu1404. The *ip* attribute is the IP address of this host. In this introduction
-we define this attribute manually, later on we will let Impera manage this automatically.
+we define this attribute manually, later on we will let Inmanta manage this automatically.
 
 Lines 6 and 7 deploy an httpd server and mysql server on our server.
 
@@ -227,22 +227,22 @@ Line 11 defines a database for our Drupal website.
 Deploy the configuration model
 ------------------------------
 
-The normal mode of operation of Impera uses a central server to deploy configurations. Each managed host
+The normal mode of operation of Inmanta uses a central server to deploy configurations. Each managed host
 runs a configuration agent that receives configuration updates from a central server. This setup is
 quite elaborate and in this introduction we will use the single shot *deploy* command. This command
 compiles, exports and enforces the configuration for a single machine.
 
 The configuration we made in the previous section can be deployed by executing the deploy command in
-the Impera project.
+the Inmanta project.
 
 .. code-block:: sh
 
-    impera deploy --dry-run -a vm1 -i IP_OF_VM1
-    impera deploy -a vm1 -i IP_OF_VM1
+    inmanta deploy --dry-run -a vm1 -i IP_OF_VM1
+    inmanta deploy -a vm1 -i IP_OF_VM1
 
 The first command compiles the configuration model and does a dry run of the deployment process and
 lists the changes that should be made. The second command does the actual deployment. We could use
-a local deployment, but that means we should run Impera as root and this would create permission
+a local deployment, but that means we should run Inmanta as root and this would create permission
 problems when we deploy changes on the second VM.
 
 
@@ -267,7 +267,7 @@ you can then immediately surf to `http://localhost:2080/ <http://localhost:2080/
 Managing multiple machines
 ==========================
 
-The real power of Impera appears when you want to manage more than one machine. In this section we will
+The real power of Inmanta appears when you want to manage more than one machine. In this section we will
 move the MySQL server from ``vm1`` to a second virtual machine called ``vm2``. We will still manage this
 additional machine in *single shot mode* using a remote deploy.
 
@@ -311,15 +311,15 @@ to an IP address we provide this address directly with the -i parameter.
 
 .. code-block:: sh
 
-    impera deploy -a vm2 -i IP_OF_VM2
-    impera deploy -a vm1 -i IP_OF_VM1
+    inmanta deploy -a vm2 -i IP_OF_VM2
+    inmanta deploy -a vm1 -i IP_OF_VM1
 
 If you browse to the drupal site again, the database should be empty once more.
 
 Create your own modules
 =======================
 
-Impera enables developers of a configuration model to make it modular and
+Inmanta enables developers of a configuration model to make it modular and
 reusable. In this section we create a configuration module that defines how to
 deploy a LAMP stack with a Drupal site in a two- or three-tiered deployment.
 
@@ -337,7 +337,7 @@ A configuration module requires a specific layout:
     * The templates directory contains templates that use parameters from the
       configuration model to generate configuration files.
     * Python files in the plugins directory are loaded by the platform and can
-      extend it using the Impera API.
+      extend it using the Inmanta API.
 
 
 .. code-block:: sh
@@ -362,7 +362,7 @@ A configuration module requires a specific layout:
 
 We will create our custom module in the ``libs`` directory of the quickstart project. Our new module
 will be called *lamp*, and we require the ``_init.cf`` file (in the ``model`` subdirectory) and
-the ``module.yml`` file to have a valid Impera module.
+the ``module.yml`` file to have a valid Inmanta module.
 The following commands create all directories and files to develop a full-featured module:
 
 .. code-block:: sh
@@ -450,7 +450,7 @@ On lines 14 to 25 an implementation is defined that provides a refinement of the
 It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining
 DrupalStack in function of other entities, which on their turn do the same. The refinement process
 is evaluated by the compiler and continues until all instances are refined into instances of
-entities that Impera knows how to deploy.
+entities that Inmanta knows how to deploy.
 
 Inside the implementation the attributes and relations of the entity are available as variables.
 They can be hidden by new variable definitions, but are also accessible through the ``self``
@@ -484,6 +484,6 @@ configuration.
 
 .. code-block:: sh
 
-    impera deploy -a vm1 -i IP_OF_VM1
-    impera deploy -a vm2 -i IP_OF_VM2
+    inmanta deploy -a vm1 -i IP_OF_VM1
+    inmanta deploy -a vm2 -i IP_OF_VM2
 

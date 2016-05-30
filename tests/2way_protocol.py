@@ -21,8 +21,8 @@ import sys
 import uuid
 
 import colorlog
-from impera import methods
-from impera.config import Config
+from inmanta import methods
+from inmanta.config import Config
 from tornado import gen
 from tornado.ioloop import IOLoop
 from nose.tools import assert_equal, assert_in, assert_true
@@ -43,7 +43,7 @@ class StatusMethod(methods.Method):
 
 
 # Methods need to be defined before the Client class is loaded by Python
-from impera import protocol  # NOQA
+from inmanta import protocol  # NOQA
 
 
 class TestServer(protocol.ServerEndpoint):

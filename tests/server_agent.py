@@ -23,9 +23,9 @@ from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
 from tornado import gen
 
-from impera import protocol, agent
-from impera.agent.handler import provider, ResourceHandler
-from impera.resources import resource, Resource
+from inmanta import protocol, agent
+from inmanta.agent.handler import provider, ResourceHandler
+from inmanta.resources import resource, Resource
 from server_test import ServerTest
 
 

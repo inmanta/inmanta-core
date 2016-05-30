@@ -3,10 +3,10 @@
 Commands
 ********
 
-All impera commands and services are started by the ``impera`` command. This page provides an
+All inmanta commands and services are started by the ``inmanta`` command. This page provides an
 overview of all subcommands available:
 
 .. argparse::
-   :module: impera.app
+   :module: inmanta.app
    :func: cmd_parser
-   :prog: impera
+   :prog: inmanta

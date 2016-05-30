@@ -1,0 +1,13 @@
+[Unit]
+Description=The server of the Inmanta platform
+After=network.target
+
+[Service]
+Type=simple
+User=inmanta
+Group=inmanta
+ExecStart=/usr/bin/inmanta -c /etc/inmanta/server.cfg -vv server
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

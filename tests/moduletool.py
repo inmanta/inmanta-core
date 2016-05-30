@@ -13,7 +13,7 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
-    Contact: wouter@inmanta.com
+    Contact: code@inmanta.com
 """
 
 
@@ -26,9 +26,9 @@ import tempfile
 import unittest
 
 from nose.tools import raises, assert_true, assert_equal
-from impera import module
-from impera.config import Config
-from impera.module import ModuleTool, InvalidModuleException, Project, LocalFileRepo, RemoteRepo
+from inmanta import module
+from inmanta.config import Config
+from inmanta.module import ModuleTool, InvalidModuleException, Project, LocalFileRepo, RemoteRepo
 import yaml
 
 

@@ -23,10 +23,10 @@ import os
 from itertools import groupby
 
 from nose.tools import assert_equal
-from impera.module import Project
-import impera.compiler as compiler
-from impera import config
-from impera.ast import RuntimeException
+from inmanta.module import Project
+import inmanta.compiler as compiler
+from inmanta import config
+from inmanta.ast import RuntimeException
 from nose.tools.nontrivial import raises
 
 

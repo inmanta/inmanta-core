@@ -19,7 +19,7 @@ __pycache__
 
 dist
 build
-src/impera.egg-info
+src/*.egg-info
 MANIFEST
 
 *.log

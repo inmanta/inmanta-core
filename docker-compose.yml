@@ -1,5 +1,5 @@
 dashboard:
-    image: impera-dashboard
+    image: inmanta-dashboard
     links:
         - server
     ports:

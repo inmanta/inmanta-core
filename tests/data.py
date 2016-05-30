@@ -20,7 +20,7 @@ import uuid
 
 from mongobox.unittest import MongoTestCase
 from motorengine.connection import connect, disconnect
-from impera import data
+from inmanta import data
 from tornado.testing import AsyncTestCase, gen_test
 from nose.tools import assert_equal, assert_not_equal
 

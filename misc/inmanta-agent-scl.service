@@ -1,0 +1,16 @@
+[Unit]
+Description=The agent of the Inmanta platform
+After=network.target
+
+[Service]
+Type=simple
+
+Environment=PATH=/opt/rh/rh-python34/root/usr/bin:${PATH}
+Environment=LD_LIBRARY_PATH=/opt/rh/rh-python34/root/usr/lib64${LD_LIBRARY_PATH}
+ExecStart=/opt/rh/rh-python34/root/usr/bin/inmanta -vvv -c /etc/inmanta/agent.cfg agent
+Restart=on-failure
+User=inmanta
+Group=inmanta
+
+[Install]
+WantedBy=multi-user.target
