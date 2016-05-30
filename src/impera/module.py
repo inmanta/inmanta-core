@@ -644,7 +644,7 @@ class Module(ModuleLike):
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions)]
+            versions = [x for x in r.specifier.filter(versions, True)]
 
         return versions
 
@@ -1021,7 +1021,7 @@ class ModuleTool(object):
         # find module
         module = self._find_module()
         # get version
-        old_version = parse_version(module.version)
+        old_version = parse_version(str(module.version))
         # determine new version
         if version is not None:
             baseversion = version
