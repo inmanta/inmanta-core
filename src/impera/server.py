@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 import uuid
+import select
 
 import dateutil
 from motorengine import connect, errors, DESCENDING
@@ -183,6 +184,11 @@ class Server(protocol.ServerEndpoint):
         dir_map["agents"] = env_agent_dir
         if not os.path.exists(env_agent_dir):
             os.mkdir(env_agent_dir)
+
+        log_dir = Config.get("config", "log-dir", "/var/log/impera")
+        if not os.path.isdir(log_dir):
+            os.mkdir(log_dir)
+        dir_map["logs"] = log_dir
 
         return dir_map
 
@@ -957,6 +963,27 @@ class Server(protocol.ServerEndpoint):
 
         return False
 
+    def _log_agent_output(self, environment_id, proc):
+        fds = {proc.stdout: open(os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id), "wb+"),
+               proc.stderr: open(os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id), "wb+")}
+
+        def check_io():
+            ready_to_read = select.select([proc.stdout, proc.stderr], [], [], 1000)[0]
+            for io in ready_to_read:
+                line = io.readline()
+                fds[io].write(line)
+
+        # keep checking stdout/stderr until the child exits
+        while proc.poll() is None:
+            check_io()
+
+        check_io()  # check again to catch anything after the process exits
+
+        for fd in fds.values():
+            fd.close()
+
+        return proc.wait()
+
     @gen.coroutine
     def _ensure_agent(self, environment_id, agent_name):
         """
@@ -1019,7 +1046,7 @@ host = localhost
                 agent_data["process"].terminate()
 
             # FIXME: include agent
-            threading.Thread(target=proc.communicate).start()
+            threading.Thread(target=self._log_agent_output, args=(environment_id, proc)).start()
             agent_data["process"] = proc
             self._requires_agents[environment_id] = agent_data
             # wait a bit here to make sure the agents registers with the server
@@ -1458,7 +1485,6 @@ host = localhost
         impera_path = [sys.executable, os.path.abspath(sys.argv[0])]
         proc = subprocess.Popen(impera_path + args, cwd=cwd, env=os.environ.copy(),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
         return proc
 
     @gen.coroutine
