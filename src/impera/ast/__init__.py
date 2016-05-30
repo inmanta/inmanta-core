@@ -29,6 +29,12 @@ class Location(object):
         return "%s:%d" % (self.file, self.lnr)
 
 
+class MockImport(object):
+
+    def __init__(self, target):
+        self.target = target
+
+
 class Namespace(object):
     """
         This class models a namespace that contains defined types, modules, ...
@@ -37,8 +43,49 @@ class Namespace(object):
     def __init__(self, name, parent=None):
         self.__name = name
         self.__parent = parent
-        self.__children = []
+        self.__children = {}
         self.unit = None
+        self.defines_types = {}
+        self.visible_namespaces = {name: MockImport(self)}
+        self.primitives = None
+
+    def set_primitives(self, primitives):
+        self.primitives = primitives
+        for child in self.children():
+            child.set_primitives(primitives)
+
+        self.visible_namespaces["std"] = MockImport(self.get_ns_from_string("std"))
+
+    def define_type(self, name, type):
+        if name in self.defines_types:
+            raise DuplicateException(type, self.define_types[name], "Entity type already defined")
+        self.defines_types[name] = type
+
+    def import_ns(self, name, ns):
+        if name in self.visible_namespaces and not isinstance(self.visible_namespaces[name], MockImport):
+            raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
+        self.visible_namespaces[name] = ns
+
+    def get_type(self, name):
+        if "::" in name:
+            parts = name.rsplit("::", 1)
+            if parts[0] in self.visible_namespaces:
+                ns = self.visible_namespaces[parts[0]].target
+                if parts[1] in ns.defines_types:
+                    return ns.defines_types[parts[1]]
+                else:
+                    raise TypeNotFoundException(name, ns)
+            else:
+                raise TypeNotFoundException(name, self)
+        elif name in self.primitives:
+            return self.primitives[name]
+        else:
+            cns = self
+            while cns is not None:
+                if name in cns.defines_types:
+                    return cns.defines_types[name]
+                cns = cns.get_parent()
+            raise TypeNotFoundException(name, self)
 
     def get_name(self):
         """
@@ -86,7 +133,7 @@ class Namespace(object):
         """
             Add a child to the namespace.
         """
-        self.__children.append(child_ns)
+        self.__children[child_ns.get_name()] = child_ns
 
     def __repr__(self):
         """
@@ -101,7 +148,7 @@ class Namespace(object):
         """
             Get the children of this namespace
         """
-        return self.__children
+        return self.__children.values()
 
     def to_list(self):
         """
@@ -117,10 +164,20 @@ class Namespace(object):
             Returns the child namespace with the given name or None if it does
             not exist.
         """
-        for item in self.__children:
-            if item.name == name:
-                return item
+        if name in self.__children:
+            return self.__children[name]
         return None
+
+    def get_child_or_create(self, name):
+        """
+            Returns the child namespace with the given name or None if it does
+            not exist.
+        """
+        if name in self.__children:
+            return self.__children[name]
+        out = Namespace(name)
+        out.set_parent(self)
+        return out
 
     def get_ns_from_string(self, fqtn):
         """
@@ -130,13 +187,9 @@ class Namespace(object):
             :param fqtn: The type name
         """
         name_parts = fqtn.split("::")
+        return self.get_root()._get_ns(name_parts)
 
-        # the last item is the name of the resource
-        ns_parts = name_parts[:-1]
-
-        return self.get_ns(ns_parts)
-
-    def get_ns(self, ns_parts):
+    def _get_ns(self, ns_parts):
         """
             Return the namespace indicated by the parts list. Each element of
             the array represents a level in the namespace hierarchy.
@@ -146,7 +199,7 @@ class Namespace(object):
         elif len(ns_parts) == 1:
             return self.get_child(ns_parts[0])
         else:
-            return self.get_ns(ns_parts[1:])
+            return self.get_child(ns_parts[0])._get_ns(ns_parts[1:])
 
     @util.memoize
     def to_path(self):

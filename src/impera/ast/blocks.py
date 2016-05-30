@@ -18,7 +18,6 @@
 
 from impera.ast.statements import Statement
 from impera.ast.statements.assign import Assign
-from impera.ast.type import NameSpacedResolver
 from impera.ast import TypeNotFoundException, RuntimeException
 
 
@@ -44,15 +43,13 @@ class BasicBlock(object):
     def add_var(self, name):
         self.variables.append(name)
 
-    def normalize(self, resolver: NameSpacedResolver):
-        resolver = resolver.get_resolver_for(self.namespace)
-
+    def normalize(self):
         assigns = [s for s in self.__stmts if isinstance(s, Assign)]
         self.variables = [s.name for s in assigns]
 
         for s in self.__stmts:
             try:
-                s.normalize(resolver)
+                s.normalize()
             except TypeNotFoundException as e:
                 e.set_location(s.location)
                 raise e

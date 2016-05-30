@@ -41,9 +41,9 @@ class FunctionCall(ReferenceStatement):
         self.name = name
         self.arguments = arguments
 
-    def normalize(self, resolver):
-        ReferenceStatement.normalize(self, resolver)
-        self.function = resolver.get_type(self.name)
+    def normalize(self):
+        ReferenceStatement.normalize(self)
+        self.function = self.namespace.get_type(self.name)
 
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)

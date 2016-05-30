@@ -217,7 +217,7 @@ class LocalFileRepo(ModuleRepo):
         if parent_root is None:
             self.root = os.path.abspath(root)
         else:
-            self.root = os.path.join(parent_root)
+            self.root = os.path.join(parent_root, root)
 
     def clone(self, name: str, dest: str) -> bool:
         try:
@@ -644,7 +644,7 @@ class Module(ModuleLike):
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions)]
+            versions = [x for x in r.specifier.filter(versions, True)]
 
         return versions
 
@@ -832,7 +832,8 @@ class ModuleTool(object):
         subparser.add_parser("push", help="Run a git push on all modules and report")
         subparser.add_parser("freeze", help="Freeze the version of all modules")
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
-        subparser.add_parser("validate", help="Validate the module we are currently in")
+        validate = subparser.add_parser("validate", help="Validate the module we are currently in")
+        validate.add_argument("-r", "--repo", help="Addtional repo to load modules from")
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
@@ -1020,7 +1021,7 @@ class ModuleTool(object):
         # find module
         module = self._find_module()
         # get version
-        old_version = parse_version(module.version)
+        old_version = parse_version(str(module.version))
         # determine new version
         if version is not None:
             baseversion = version

@@ -108,9 +108,9 @@ class IndexLookup(ReferenceStatement):
         self.index_type = index_type
         self.query = query
 
-    def normalize(self, resolver):
-        ReferenceStatement.normalize(self, resolver)
-        self.type = resolver.get_type(self.index_type)
+    def normalize(self):
+        ReferenceStatement.normalize(self)
+        self.type = self.namespace.get_type(self.index_type)
 
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)

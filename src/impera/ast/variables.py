@@ -34,7 +34,7 @@ class Reference(ExpressionStatement):
         self.name = name
         self.full_name = name
 
-    def normalize(self, resolver):
+    def normalize(self):
         pass
 
     def requires(self):

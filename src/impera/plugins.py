@@ -140,10 +140,10 @@ class Plugin(object, metaclass=PluginMeta):
 
         self.new_statement = None
 
-    def normalize(self, resolver):
-        self.resolver = resolver
-        self.argtypes = [self.to_type(x[1], resolver) for x in self.arguments]
-        self.returntype = self.to_type(self._return, resolver)
+    def normalize(self):
+        self.resolver = self.namespace
+        self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
+        self.returntype = self.to_type(self._return, self.namespace)
 
         # pass
 
