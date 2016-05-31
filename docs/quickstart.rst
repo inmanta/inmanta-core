@@ -30,8 +30,8 @@ Installing Inmanta
 =================
 
 For Ubuntu 14.04 (trusty) and Fedora 21, follow the instructions below. For other distributions,
-install from `source <https://github.com/inmanta-io/inmanta>`_. The
-`readme <https://github.com/inmanta-io/inmanta/blob/master/Readme.md>`_ contains installation instructions to
+install from `source <https://github.com/inmanta>`_. The
+`readme <https://github.com/inmanta>`_ contains installation instructions to
 install Inmanta from source.
 
 
@@ -46,7 +46,7 @@ instructions add the repository and install Inmanta on vm1:
     sudo curl -o /etc/yum.repos.d/inmanta.repo https://inmanta.io/repo/inmanta.repo
     sudo yum install -y python3-inmanta
 
-On vm2 Inmanta is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/inmanta-io/inmanta/issues/1>`_. To install Python 3 on vm2:
+On vm2 Inmanta is not required, as we will do an agentless install. However, `this requires python3 to be installed on all machines <https://github.com/inmanta>`_. To install Python 3 on vm2:
 
 .. code-block:: sh
 
@@ -147,7 +147,7 @@ Re-use existing modules
 =======================
 
 At GitHub, we host already many modules that provide types and refinements for one or more
-operating systems. Our modules are available in the https://github.com/inmanta-io/ repositories.
+operating systems. Our modules are available in the https://github.com/inmanta/ repositories.
 
 Inmanta downloads these modules and their dependencies. For this tutorial, we need the
 apache and drupal configuration modules, and the redhat and ubuntu modules for the correct refinements.
