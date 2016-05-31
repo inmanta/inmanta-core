@@ -52,7 +52,7 @@ This will create a new dev release. To make an actual release::
 
 	inmanta moduletool commit -r -m "First Release" 
 	
-To set a specific version:::
+To set a specific version::
 
 	inmanta moduletool commit -r -m "First Release" -v 1.0.1
 
