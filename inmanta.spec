@@ -55,6 +55,7 @@ Requires:       python3-pymongo
 Requires:       python3-motorengine
 Requires:       python3-devel
 Requires:       python3-cliff
+Requires:       python3-ruamel-yaml
 %endif
 
 BuildRequires:  systemd
