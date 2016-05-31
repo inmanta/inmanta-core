@@ -198,9 +198,11 @@ def app():
     try:
         project = Project.get()
         project.use_virtual_env()
-#        project.load_plugins()
+        project.load_plugins()
     except ProjectNotFoundExcpetion:
         pass
+    except CompilerException as e:
+        LOGGER.exception(e)
 
     parser = cmd_parser()
 

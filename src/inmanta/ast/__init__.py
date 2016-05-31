@@ -214,8 +214,8 @@ class Namespace(object):
 
 class CompilerException(Exception):
 
-    def __init__(self):
-        Exception.__init__(self)
+    def __init__(self, msg=None):
+        Exception.__init__(self, msg)
         self.location = None
 
     def set_location(self, location):

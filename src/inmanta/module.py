@@ -33,7 +33,7 @@ import time
 import yaml
 import inmanta
 from inmanta import env
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, CompilerException
 from inmanta import plugins
 from inmanta.parser.plyInmantaParser import parse
 import ruamel.yaml
@@ -606,7 +606,7 @@ class Module(ModuleLike):
             path = os.path.join(project.downloadpath, modulename)
             result = project.externalResolver.clone(modulename, project.downloadpath)
             if not result:
-                raise InvalidModuleException("could not locat module with name: %s", modulename)
+                raise InvalidModuleException("could not locate module with name: %s", modulename)
 
         return cls.update(project, modulename, requirements, path, False)
 
@@ -717,7 +717,7 @@ class Module(ModuleLike):
             return
 
         if not os.path.exists(os.path.join(plugin_dir, "__init__.py")):
-            raise Exception(
+            raise CompilerException(
                 "The plugin directory %s should be a valid python package with a __init__.py file" % plugin_dir)
 
         try:
@@ -735,9 +735,9 @@ class Module(ModuleLike):
                     # load the python file
                     imp.load_source(sub_mod, py_file)
 
-        except ImportError:
-            LOGGER.exception(
-                "Unable to load all plug-ins for module %s" % self._meta["name"])
+        except ImportError as e:
+            raise CompilerException(
+                "Unable to load all plug-ins for module %s" % self._meta["name"]) from e
 
     def versions(self):
         """
@@ -832,7 +832,7 @@ class ModuleTool(object):
         subparser.add_parser("freeze", help="Freeze the version of all modules")
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
         validate = subparser.add_parser("validate", help="Validate the module we are currently in")
-        validate.add_argument("-r", "--repo", help="Addtional repo to load modules from")
+        validate.add_argument("-r", "--repo", help="Addtional repo to load modules from", action="append")
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
@@ -1050,10 +1050,12 @@ class ModuleTool(object):
         # tag
         gitprovider.tag(module._path, str(baseversion))
 
-    def validate(self, options=""):
+    def validate(self, repo=[], options=""):
         """
             Validate the module we are currently in
         """
+        if repo is None:
+            repo = []
         parse_only = "-s" in options
         valid = True
         module = self._find_module()
@@ -1091,6 +1093,10 @@ class ModuleTool(object):
             LOGGER.info("Cloning %s module" % module.name)
             gitprovider.clone(module._path, lib_dir)
 
+            repo.insert(0, os.path.split(module._path)[0])
+            allrepos = ["'%s'" % x for x in repo]
+            allrepos = ','.join(allrepos)
+
             LOGGER.info("Setting up project")
             with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
                 fd.write("""name: test
@@ -1100,7 +1106,7 @@ modulepath: libs
 downloadpath: libs
 requires:
     %(name)s: %(name)s == %(version)s
-""" % {"name": module.name, "version": str(module.versions()[0]), "repo": os.path.split(module._path)[0]})
+""" % {"name": module.name, "version": str(module.versions()[0]), "repo": allrepos})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
@@ -1127,7 +1133,9 @@ requires:
             else:
                 LOGGER.error("Unable to compile module and its dependencies, validation will fail")
                 valid = False
-
+        except Exception as e:
+            LOGGER.error(e)
+            valid = False
         finally:
             if options == "noclean":
                 LOGGER.info("Project not cleanded, root at %s", project_dir)
