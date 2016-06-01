@@ -818,6 +818,7 @@ class ModuleTool(object):
     """
         A tool to manage configuration modules
     """
+
     def __init__(self):
         self._mod_handled_list = set()
 
@@ -835,6 +836,11 @@ class ModuleTool(object):
         validate.add_argument("-r", "--repo", help="Addtional repo to load modules from", action="append")
         validate.add_argument("-n", "--no-clean", help="Do not clean the validation project when finished", action="store_true")
         validate.add_argument("-s", "--parse-only", help="Only parse the module", action="store_true")
+        validate.add_argument("-i", "--isolate", help="Move module to another directory before cloning."
+                              " I.e. remove all other modules in the current directory from the search path",
+                              action="store_true")
+        validate.add_argument("-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag",
+                              action="store_true")
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
@@ -1053,7 +1059,7 @@ class ModuleTool(object):
         # tag
         gitprovider.tag(module._path, str(baseversion))
 
-    def validate(self, repo=[], no_clean=False, parse_only=False):
+    def validate(self, repo=[], no_clean=False, parse_only=False, isolate=False, workingcopy=False):
         """
             Validate the module we are currently in
         """
@@ -1088,6 +1094,13 @@ class ModuleTool(object):
         # create a test project
         LOGGER.info("Creating a new project to test the module")
         project_dir = tempfile.mkdtemp()
+
+        if isolate:
+            search_root = tempfile.mkdtemp()
+            os.symlink(module._path, os.path.join(search_root, module.name))
+        else:
+            search_root = os.path.split(module._path)[0]
+
         try:
             lib_dir = os.path.join(project_dir, "libs")
             os.mkdir(lib_dir)
@@ -1095,7 +1108,7 @@ class ModuleTool(object):
             LOGGER.info("Cloning %s module" % module.name)
             gitprovider.clone(module._path, lib_dir)
 
-            repo.insert(0, os.path.split(module._path)[0])
+            repo.insert(0, search_root)
             allrepos = ["'%s'" % x for x in repo]
             allrepos = ','.join(allrepos)
 
@@ -1120,6 +1133,12 @@ requires:
             main_cf = os.path.join(project_dir, "main.cf")
             with open(main_cf, "w+") as fd:
                 fd.write("")
+
+            if workingcopy:
+                # overwrite with actual
+                modpath = os.path.join(project_dir, "libs", module.name)
+                shutil.rmtree(modpath)
+                shutil.copytree(module._path, modpath)
 
             project = Project(project_dir)
             project.use_virtual_env()
