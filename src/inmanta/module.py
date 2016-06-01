@@ -833,6 +833,8 @@ class ModuleTool(object):
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
         validate = subparser.add_parser("validate", help="Validate the module we are currently in")
         validate.add_argument("-r", "--repo", help="Addtional repo to load modules from", action="append")
+        validate.add_argument("-n", "--no-clean", help="Do not clean the validation project when finished", action="store_true")
+        validate.add_argument("-s", "--parse-only", help="Only parse the module", action="store_true")
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
@@ -1050,13 +1052,12 @@ class ModuleTool(object):
         # tag
         gitprovider.tag(module._path, str(baseversion))
 
-    def validate(self, repo=[], options=""):
+    def validate(self, repo=[], no_clean=False, parse_only=False):
         """
             Validate the module we are currently in
         """
         if repo is None:
             repo = []
-        parse_only = "-s" in options
         valid = True
         module = self._find_module()
         if not module.is_versioned():
@@ -1133,12 +1134,14 @@ requires:
             else:
                 LOGGER.error("Unable to compile module and its dependencies, validation will fail")
                 valid = False
+
         except Exception as e:
-            LOGGER.error(e)
+            LOGGER.exception("An exception occurred during validation")
             valid = False
+
         finally:
-            if options == "noclean":
-                LOGGER.info("Project not cleanded, root at %s", project_dir)
+            if no_clean:
+                LOGGER.info("Project not cleaned, root at %s", project_dir)
 
             else:
                 shutil.rmtree(project_dir)
