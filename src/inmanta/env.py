@@ -22,8 +22,8 @@ import subprocess
 import tempfile
 import hashlib
 import logging
+
 import pkg_resources
-from pkg_resources import WorkingSet
 
 
 LOGGER = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class VirtualEnv(object):
             raise Exception("Unable to activate virtual environment because %s does not exist." % activate_file)
 
         # patch up pkg
-        pkg_resources.working_set = WorkingSet._build_master()
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     def install(self, requirements):
         """

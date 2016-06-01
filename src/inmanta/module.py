@@ -1137,7 +1137,7 @@ requires:
                 LOGGER.error("Unable to compile module and its dependencies, validation will fail")
                 valid = False
 
-        except Exception as e:
+        except Exception:
             LOGGER.exception("An exception occurred during validation")
             valid = False
 
