@@ -941,6 +941,7 @@ class ModuleTool(object):
         pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in modules.values()] if x is not None]
         pyreq = '\n'.join(pyreq).split("\n")
         pyreq = [x for x in pyreq if len(x.strip()) > 0]
+        pyreq = list(set(pyreq))
         if len(pyreq) > 0:
             project.virtualenv.install_from_list(pyreq)
 
@@ -1121,7 +1122,8 @@ requires:
                 fd.write("")
 
             project = Project(project_dir)
-            Project._project = project
+            project.use_virtual_env()
+            Project.set(project)
             LOGGER.info("Verifying modules")
             project.verify()
             LOGGER.info("Loading all plugins")
