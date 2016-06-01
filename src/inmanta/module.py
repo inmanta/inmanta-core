@@ -1105,9 +1105,6 @@ class ModuleTool(object):
             lib_dir = os.path.join(project_dir, "libs")
             os.mkdir(lib_dir)
 
-            LOGGER.info("Cloning %s module" % module.name)
-            gitprovider.clone(module._path, lib_dir)
-
             repo.insert(0, search_root)
             allrepos = ["'%s'" % x for x in repo]
             allrepos = ','.join(allrepos)
