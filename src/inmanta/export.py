@@ -31,7 +31,7 @@ from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id
 from inmanta.config import Config
-from inmanta.module import Project, ModuleTool
+from inmanta.module import Project
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.ast import RuntimeException
 from tornado.ioloop import IOLoop
@@ -376,7 +376,6 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        project = Project.get()
         version_info = {}
         """
         "modules": ModuleTool().freeze(create_file=False),

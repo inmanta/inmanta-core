@@ -17,9 +17,9 @@
 """
 
 import os
+import subprocess
 
 import ruamel.yaml
-import subprocess
 
 
 def rewrite(out):
