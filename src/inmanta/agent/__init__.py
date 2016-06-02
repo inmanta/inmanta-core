@@ -673,6 +673,7 @@ class Agent(AgentEndPoint):
             resource = self._queue.pop()
             if resource is None:
                 LOGGER.info("No resources ready for deploy.")
+                yield gen.sleep(1)
                 break
 
             LOGGER.debug("Start deploy of resource %s" % resource)
