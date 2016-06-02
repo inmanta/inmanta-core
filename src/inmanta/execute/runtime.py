@@ -233,39 +233,42 @@ class Resolver(object):
     def __init__(self, namespace):
         self.namespace = namespace
 
-    def lookup(self, name):
+    def lookup(self, name, root=None):
+        # override lexial root
+        # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
+        if root is not None:
+            ns = root
+        else:
+            ns = self.namespace
+
         if "::" not in name:
             raise NotFoundException(None, name)
 
         parts = name.rsplit("::", 1)
 
-        if parts[0] not in self.namespace.visible_namespaces:
+        if parts[0] not in ns.visible_namespaces:
             raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
 
-        return self.namespace.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
+        return ns.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
 
     def get_root_resolver(self):
         return self
 
     def for_namespace(self, namespace):
-        return NamespaceResolver(namespace)
+        return NamespaceResolver(self, namespace)
 
 
 class NamespaceResolver(Resolver):
 
-    def lookup(self, name):
-        if "::" not in name:
-            return self.namesapce.scope.lookup(name)
+    def __init__(self, parent, lecial_root):
+        self.parent = parent
+        self.root = lecial_root
 
-        parts = name.rsplit("::", 1)
-
-        if parts[0] not in self.namespace.visible_namespaces:
-            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
-
-        return self.namespace.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
+    def lookup(self, name, root=None):
+        return self.parent.lookup(name, self.root)
 
     def for_namespace(self, namespace):
-        return NamespaceResolver(namespace)
+        return NamespaceResolver(self, namespace)
 
 
 class ExecutionContext(object):
@@ -277,12 +280,12 @@ class ExecutionContext(object):
             s.set_provider(self)
         self.resolver = resolver
 
-    def lookup(self, name):
+    def lookup(self, name, root=None):
         if "::" in name:
-            self.resolver.lookup(name)
+            self.resolver.lookup(name, root)
         if name in self.slots:
             return self.slots[name]
-        return self.resolver.lookup(name)
+        return self.resolver.lookup(name, root)
 
     def emit(self, queue):
         self.block.emit(self, queue)
@@ -291,7 +294,7 @@ class ExecutionContext(object):
         return self.resolver.get_root_resolver()
 
     def for_namespace(self, namespace):
-        return self.resolver.get_root_resolver().for_namespace(namespace)
+        return NamespaceResolver(self, namespace)
 
 
 class WaitUnit(Waiter):

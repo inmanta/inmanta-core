@@ -397,6 +397,8 @@ class DefineImport(TypeDefinitionStatement):
 
     def register_types(self):
         self.target = self.namespace.get_ns_from_string(self.name)
+        if self.target is None:
+            raise TypeNotFoundException(self.name, self.namespace)
         self.namespace.import_ns(self.toname, self)
 
     def evaluate(self):

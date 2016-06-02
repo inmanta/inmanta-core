@@ -66,7 +66,7 @@ class SubConstructor(GeneratorStatement):
 
         for impl in implementations:
             # generate a subscope/namespace for each loop
-            xc = ExecutionContext(impl.statements, resolver)
+            xc = ExecutionContext(impl.statements, resolver.for_namespace(impl.statements.namespace))
             xc.emit(queue)
 
     def get_implementation(self, requires, resolver, queue):
@@ -131,7 +131,7 @@ class For(GeneratorStatement):
 
         for loop_var in var:
             # generate a subscope/namespace for each loop
-            xc = ExecutionContext(self.module, resolver)
+            xc = ExecutionContext(self.module, resolver.for_namespace(self.module.namespace))
             xc.lookup(self.loop_var).set_value(loop_var)
             xc.emit(queue)
 
