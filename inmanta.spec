@@ -95,6 +95,7 @@ rm -rf %{buildroot}
 chmod -x LICENSE
 mkdir -p %{buildroot}%{_localstatedir}/lib/inmanta
 mkdir -p %{buildroot}/etc/inmanta
+mkdir -p %{buildroot}/var/log/inmanta
 install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta.cfg
 
 mkdir -p %{buildroot}%{_unitdir}
@@ -118,6 +119,7 @@ rm -rf %{buildroot}
 %{_bindir}/inmanta-cli
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
 %config %attr(-, root, root) /etc/inmanta.cfg
+%attr(-, inmanta, inmanta) %{_localstatedir}/log/inmanta
 %attr(-, root, root)/etc/inmanta
 
 %files server
