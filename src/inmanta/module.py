@@ -101,85 +101,85 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo)
 
 
-try:
-    import pygit2
-
-    class LibGitProvider(GitProvider):
-
-        def clone(self, src, dest):
-            pygit2.clone_repository(src, dest)
-
-        def fetch(self, repo):
-            repoh = pygit2.Repository(repo)
-            repoh.remotes["origin"].fetch()
-
-        def status(self, repo):
-            # todo
-            return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
-
-        def get_all_tags(self, repo):
-            repoh = pygit2.Repository(repo)
-            regex = re.compile('^refs/tags/(.*)')
-            return [m.group(1) for m in [regex.match(t) for t in repoh.listall_references()] if m]
-
-        def checkout_tag(self, repo, tag):
-            repoh = pygit2.Repository(repo)
-            repoh.checkout("refs/tags/" + tag)
-
-        def commit(self, repo, message, commit_all, add=[]):
-            repoh = pygit2.Repository(repo)
-            index = repoh.index
-            index.read()
-
-            for file in add:
-                index.add(os.path.relpath(file, repo))
-
-            if commit_all:
-                index.add_all()
-
-            index.write()
-            tree = index.write_tree()
-
-            config = pygit2.Config.get_global_config()
-            try:
-                email = config["user.email"]
-            except KeyError:
-                email = "inmanta@example.com"
-                LOGGER.warn("user.email not set in git config")
-
-            try:
-                username = config["user.name"]
-            except KeyError:
-                username = "Inmanta Moduletool"
-                LOGGER.warn("user.name not set in git config")
-
-            author = pygit2.Signature(username, email)
-
-            return repoh.create_commit("HEAD", author, author, message, tree, [repoh.head.get_object().hex])
-
-        def tag(self, repo, tag):
-            repoh = pygit2.Repository(repo)
-
-            config = pygit2.Config.get_global_config()
-            try:
-                email = config["user.email"]
-            except KeyError:
-                email = "inmanta@example.com"
-                LOGGER.warn("user.email not set in git config")
-
-            try:
-                username = config["user.name"]
-            except KeyError:
-                username = "Inmanta Moduletool"
-                LOGGER.warn("user.name not set in git config")
-
-            author = pygit2.Signature(username, email)
-
-            repoh.create_tag(tag, repoh.head.target, pygit2.GIT_OBJ_COMMIT, author, "auto tag by module tool")
-
-    gitprovider = LibGitProvider()
-except ImportError as e:
-    gitprovider = CLIGitProvider()
+# try:
+#     import pygit2
+# 
+#     class LibGitProvider(GitProvider):
+# 
+#         def clone(self, src, dest):
+#             pygit2.clone_repository(src, dest)
+# 
+#         def fetch(self, repo):
+#             repoh = pygit2.Repository(repo)
+#             repoh.remotes["origin"].fetch()
+# 
+#         def status(self, repo):
+#             # todo
+#             return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
+# 
+#         def get_all_tags(self, repo):
+#             repoh = pygit2.Repository(repo)
+#             regex = re.compile('^refs/tags/(.*)')
+#             return [m.group(1) for m in [regex.match(t) for t in repoh.listall_references()] if m]
+# 
+#         def checkout_tag(self, repo, tag):
+#             repoh = pygit2.Repository(repo)
+#             repoh.checkout("refs/tags/" + tag)
+# 
+#         def commit(self, repo, message, commit_all, add=[]):
+#             repoh = pygit2.Repository(repo)
+#             index = repoh.index
+#             index.read()
+# 
+#             for file in add:
+#                 index.add(os.path.relpath(file, repo))
+# 
+#             if commit_all:
+#                 index.add_all()
+# 
+#             index.write()
+#             tree = index.write_tree()
+# 
+#             config = pygit2.Config.get_global_config()
+#             try:
+#                 email = config["user.email"]
+#             except KeyError:
+#                 email = "inmanta@example.com"
+#                 LOGGER.warn("user.email not set in git config")
+# 
+#             try:
+#                 username = config["user.name"]
+#             except KeyError:
+#                 username = "Inmanta Moduletool"
+#                 LOGGER.warn("user.name not set in git config")
+# 
+#             author = pygit2.Signature(username, email)
+# 
+#             return repoh.create_commit("HEAD", author, author, message, tree, [repoh.head.get_object().hex])
+# 
+#         def tag(self, repo, tag):
+#             repoh = pygit2.Repository(repo)
+# 
+#             config = pygit2.Config.get_global_config()
+#             try:
+#                 email = config["user.email"]
+#             except KeyError:
+#                 email = "inmanta@example.com"
+#                 LOGGER.warn("user.email not set in git config")
+# 
+#             try:
+#                 username = config["user.name"]
+#             except KeyError:
+#                 username = "Inmanta Moduletool"
+#                 LOGGER.warn("user.name not set in git config")
+# 
+#             author = pygit2.Signature(username, email)
+# 
+#             repoh.create_tag(tag, repoh.head.target, pygit2.GIT_OBJ_COMMIT, author, "auto tag by module tool")
+# 
+#     gitprovider = LibGitProvider()
+# except ImportError as e:
+gitprovider = CLIGitProvider()
 
 
 class ModuleRepo:
