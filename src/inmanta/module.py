@@ -953,12 +953,12 @@ class ModuleTool(object):
                 if version not in r:
                     LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
 
+        project.reloadModules()
+
         # do python install
         pyreq = project.collect_python_requirements()
         if len(pyreq) > 0:
             project.virtualenv.install_from_list(pyreq)
-
-        project.reloadModules()
 
     def status(self):
         """
