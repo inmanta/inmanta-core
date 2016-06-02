@@ -935,13 +935,14 @@ class ModuleTool(object):
 
         while len(worklist) != 0:
             work = worklist.pop(0)
+            if work in modules:
+                continue
             LOGGER.info("requesting install for: %s", work)
             module = Module.install(project, work, specs[work])
             modules[work] = module
             reqs = module.requires()
             merge_specs(specs, reqs)
             for name in [x.project_name for x in reqs]:
-                if name not in modules:
                     worklist.append(name)
 
         # verify if installed versions are consistent with all rules
