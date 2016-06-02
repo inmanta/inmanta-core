@@ -394,7 +394,7 @@ class Project(ModuleLike):
         self.freeze_file = os.path.join(path, "module.version")
         self._freeze_versions = self._load_freeze(self.freeze_file)
 
-        self.virtualenv = env.VirtualEnv(os.path.join(path, "env"))
+        self.virtualenv = env.VirtualEnv(os.path.join(path, ".env"))
         self.reloadModules()
 
     @classmethod

@@ -158,32 +158,35 @@ class DefineImplement(DefinitionStatement):
         """
             Evaluate this statement.
         """
-        entity_type = self.namespace.get_type(self.entity)
+        try:
+            entity_type = self.namespace.get_type(self.entity)
 
-        entity_type = entity_type.get_entity()
+            entity_type = entity_type.get_entity()
 
-        implement = Implement()
-        implement.constraint = self.select
-        implement.location = self.location
+            implement = Implement()
+            implement.constraint = self.select
+            implement.location = self.location
 
-        i = 0
-        for _impl in self.implementations:
-            i += 1
-            try:
+            i = 0
+            for _impl in self.implementations:
+                i += 1
+
                 # check if the implementation has the correct type
                 impl_obj = self.namespace.get_type(_impl)
-            except TypeNotFoundException as e:
-                e.set_location(self.location)
-                raise e
 
-            if impl_obj.entity is not None and not (entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity)):
-                raise Exception("Type mismatch: cannot use %s as implementation for %s because its implementing type is %s" %
-                                (impl_obj.name, entity_type, impl_obj.entity))
+                if (impl_obj.entity is not None and not
+                        (entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity))):
+                    raise Exception("Type mismatch: cannot use %s as implementation for "
+                                    " %s because its implementing type is %s" %
+                                    (impl_obj.name, entity_type, impl_obj.entity))
 
-            # add it
-            implement.implementations.append(impl_obj)
+                # add it
+                implement.implementations.append(impl_obj)
 
-        entity_type.add_implement(implement)
+            entity_type.add_implement(implement)
+        except TypeNotFoundException as e:
+            e.set_location(self.location)
+            raise e
 
 
 class DefineTypeConstraint(TypeDefinitionStatement):
