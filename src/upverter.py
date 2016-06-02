@@ -19,11 +19,18 @@
 import os
 
 import ruamel.yaml
+import subprocess
 
 
 def rewrite(out):
+    out = out.replace("Copyright 2015 Impera", "Copyright 2016 Inmanta")
+    out = out.replace("    Contact: bart@impera.io", "    Contact: code@inmanta.com")
+    out = out.replace("    Contect: bart@impera.io", "    Contact: code@inmanta.com")
+    out = out.replace("    Contact: bart@inmanta.com", "    Contact: code@inmanta.com")
     out = out.replace("impera.io", "inmanta.com")
     out = out.replace("Impera", "Inmanta")
+    out = out.replace("from impera", "from inmanta")
+    out = out.replace("import impera", "import inmanta")
     return out
 
 
@@ -31,15 +38,18 @@ def run():
     with open("module.yml", "r") as fd:
         data = ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
 
-    if "requires" not in data:
-        return
+    data["author"] = "Inmanta <code@inmanta.com>"
+    data["license"] = "Apache 2.0"
+    if "source" in data:
+        del data["source"]
 
-    requires = data["requires"]
+    if "requires" in data:
+        requires = data["requires"]
 
-    requires = [x for x in requires.keys()]
-    data["requires"] = requires
+        requires = [x for x in requires.keys()]
+        data["requires"] = requires
 
-    impstmt = ''.join(["\nimport %s" % x for x in requires if requires is not "std"])
+        impstmt = ''.join(["\nimport %s" % x for x in requires if x != "std"])
 
     with open("module.yml", "w") as fd:
         out = ruamel.yaml.dump(data, Dumper=ruamel.yaml.RoundTripDumper)
@@ -53,7 +63,11 @@ def run():
                 with open(name, 'r') as original:
                     fdata = original.read()
                 parts = fdata.split("\"\"\"")
-                parts[2] = impstmt + parts[2]
+                if "ip::services" in fdata:
+                    parts[2] = impstmt + "\nimport ip::services" + parts[2]
+                else:
+                    parts[2] = impstmt + parts[2]
+
                 out = "\"\"\"".join(parts)
                 out = rewrite(out)
                 with open(name, 'w') as modified:
@@ -65,9 +79,29 @@ def run():
                 name = os.path.join(dirpath, name)
                 with open(name, 'r') as original:
                     fdata = original.read()
-                out = rewrite(out)
+                out = rewrite(fdata)
                 with open(name, 'w') as modified:
                     modified.write(out)
+
+    if not os.path.exists(".gitignore"):
+        with open(".gitignore", "w+") as fd:
+            fd.write("""*.swp
+*.pyc
+*~
+            """)
+    subprocess.check_call(["git", "add", ".gitignore"])
+
+    with open(".gitlab-ci.yml", "w+") as fd:
+            fd.write("""validate:
+    image: fedora-inmanta
+    tags:
+        - docker
+    script:
+        - inmanta -vvv modules validate -r git@git.inmanta.com:modules/
+    only:
+        - tags
+""")
+    subprocess.check_call(["git", "add", ".gitlab-ci.yml"])
 
 
 if __name__ == '__main__':
