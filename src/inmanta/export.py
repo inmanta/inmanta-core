@@ -314,7 +314,7 @@ class Exporter(object):
         sources = resource.sources()
         sources.update(Commander.sources())
 
-        requires = Project.get().collect_requirements()
+        requires = Project.get().collect_python_requirements()
 
         LOGGER.info("Uploading source files")
 
@@ -377,12 +377,15 @@ class Exporter(object):
 
         # Collecting version information
         project = Project.get()
-        version_info = {"modules": ModuleTool().freeze(create_file=False),
+        version_info = {}
+        """
+        "modules": ModuleTool().freeze(create_file=False),
                         "project": {"repo": project.get_scm_url(),
                                     "branch": project.get_scm_branch(),
                                     "hash": project.get_scm_version()
                                     }
                         }
+        """
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")

@@ -533,6 +533,15 @@ class Project(ModuleLike):
             merge_specs(specs, reqs)
         return specs
 
+    def collect_python_requirements(self):
+        """
+            Collect the list of all python requirements off all modules in this project
+        """
+        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in self.modules.values()] if x is not None]
+        pyreq = '\n'.join(pyreq).split("\n")
+        pyreq = [x for x in pyreq if len(x.strip()) > 0]
+        return list(set(pyreq))
+
     def get_name(self):
         return "project.yml"
 
@@ -944,10 +953,7 @@ class ModuleTool(object):
                     LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
 
         # do python install
-        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in modules.values()] if x is not None]
-        pyreq = '\n'.join(pyreq).split("\n")
-        pyreq = [x for x in pyreq if len(x.strip()) > 0]
-        pyreq = list(set(pyreq))
+        pyreq = project.collect_python_requirements()
         if len(pyreq) > 0:
             project.virtualenv.install_from_list(pyreq)
 
