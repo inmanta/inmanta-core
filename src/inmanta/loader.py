@@ -23,6 +23,8 @@ import hashlib
 import json
 import logging
 
+import pkg_resources
+
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
 PERSIST_FILE = "modules.json"
@@ -129,6 +131,8 @@ class CodeLoader(object):
             if persist:
                 with open(os.path.join(self.__code_dir, PERSIST_FILE), "w+") as fd:
                     json.dump(modules, fd)
+
+            pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     def get_module_payload(self):
         """
