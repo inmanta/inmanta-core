@@ -641,9 +641,9 @@ class SnapshotRestore(IdDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        futures = [ResourceRestore.objects.filter(restore=self).find_all().delete()]
-        futures.append(self.delete())
-        yield futures
+        restores = yield ResourceRestore.objects.filter(restore=self).find_all()
+        for restore in restores:
+            yield restore.delete()
 
 
 class Snapshot(IdDocument):
@@ -678,9 +678,12 @@ class Snapshot(IdDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        futures = []
-        futures.append(ResourceSnapshot.objects.filter(snapshot=self).find_all().delete())
-        futures.append(SnapshotRestore.objects.filter(snapshot=self).find_all().delete())
-        futures.append(self.delete(self))
+        snapshots = yield ResourceSnapshot.objects.filter(snapshot=self).find_all()
+        for snap in snapshots:
+            yield snap.delete()
 
-        yield futures
+        restores = yield SnapshotRestore.objects.filter(snapshot=self).find_all()
+        for restore in restores:
+            yield restore.delete_cascade()
+
+        yield self.delete(self)
