@@ -479,25 +479,26 @@ class ConfigurationModel(Document):
     @gen.coroutine
     def delete_cascade(self):
         yield self.load_references()
-        futures = []
-        f1 = ResourceVersion.objects.filter(model=self).find_all()
-        f2 = Snapshot.objects.filter(model=self).find_all()
+        res_versions = yield ResourceVersion.objects.filter(model=self).find_all()
+        for resv in res_versions:
+            yield resv.delete_cascade()
 
-        res_versions, snapshots = yield [f1, f2]
-
-        futures += [resv.delete_cascade() for resv in res_versions]
-        futures += [snapshot.delete_cascade() for snapshot in snapshots]
+        snapshots = Snapshot.objects.filter(model=self).find_all()
+        for snapshot in snapshots:
+            yield snapshot.delete_cascade()
 
         unknowns = yield UnknownParameter.objects.filter(environment=self.environment, version=self.version).find_all()
-        futures += [u.delete() for u in unknowns]
+        for u in unknowns:
+            yield u.delete()
 
         code = yield Code.objects.filter(environment=self.environment, version=self.version).find_all()
-        futures += [c.delete() for c in code]
+        for c in code:
+            yield c.delete()
 
         drs = yield DryRun.objects.filter(model=self).find_all()
-        futures += [d.delete() for d in drs]
+        for d in drs:
+            yield d.delete()
 
-        yield futures
         yield self.delete(self)
 
 
