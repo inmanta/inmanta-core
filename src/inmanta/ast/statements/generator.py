@@ -132,7 +132,7 @@ class For(GeneratorStatement):
         for loop_var in var:
             # generate a subscope/namespace for each loop
             xc = ExecutionContext(self.module, resolver.for_namespace(self.module.namespace))
-            xc.lookup(self.loop_var).set_value(loop_var)
+            xc.lookup(self.loop_var).set_value(loop_var, self.location)
             xc.emit(queue)
 
 
@@ -222,11 +222,11 @@ class Constructor(GeneratorStatement):
 
             object_instance = first
             for k, v in attributes.items():
-                object_instance.set_attribute(k, v)
+                object_instance.set_attribute(k, v, self.location)
 
         else:
             # create the instance
-            object_instance = type_class.get_instance(attributes, resolver, queue)
+            object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
             self.copy_location(object_instance)
 
         # add anonymous implementations

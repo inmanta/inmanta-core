@@ -275,6 +275,20 @@ class NotFoundException(RuntimeException):
         return "could not find value %s (reported at (%s))" % (self.name, self.location)
 
 
+class DoubleSetException(RuntimeException):
+
+    def __init__(self, stmt, value, location, newvalue, newlocation):
+        RuntimeException.__init__(self, stmt, None)
+        self.value = value
+        self.location = location
+        self.newvalue = newvalue
+        self.newlocation = newlocation
+
+    def __str__(self, *args, **kwargs):
+        return ("Value set twice: old value: %s (set at (%s)), new value: %s (set at (%s)) (reported at (%s))"
+                % (self.value, self.location, self.newvalue, self.newlocation, self.location))
+
+
 class DuplicateException(TypingException):
 
     def __init__(self, stmt, other, msg):

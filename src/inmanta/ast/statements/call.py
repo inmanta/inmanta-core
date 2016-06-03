@@ -66,7 +66,7 @@ class FunctionCall(ReferenceStatement):
         no_unknows = function.check_args(arguments)
 
         if not no_unknows:
-            result.set_value(Unknown(self))
+            result.set_value(Unknown(self), self.location)
             return
 
         if function._context is not -1:
@@ -77,9 +77,9 @@ class FunctionCall(ReferenceStatement):
         else:
             try:
                 value = function(*arguments)
-                result.set_value(value)
+                result.set_value(value, self.location)
             except UnknownException as e:
-                result.set_value(e.unknown)
+                result.set_value(e.unknown, self.location)
 
 
 class FunctionUnit(Waiter):

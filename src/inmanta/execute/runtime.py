@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException
 
 
 class ResultVariable(object):
@@ -45,13 +45,14 @@ class ResultVariable(object):
         else:
             self.waiters.append(waiter)
 
-    def set_value(self, value, recur=True):
+    def set_value(self, value, location, recur=True):
         if self.hasValue:
             if self.value != value:
-                raise RuntimeException(None, "Value set twice new: %s, old:%s" % (value, self.value))
+                raise DoubleSetException(None, self.value, self.location, value, location)
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
+        self.location = location
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
@@ -76,17 +77,18 @@ class AttributeVariable(ResultVariable):
         self.myself = instance
         ResultVariable.__init__(self)
 
-    def set_value(self, value, recur=True):
+    def set_value(self, value, location, recur=True):
         if self.hasValue:
             if self.value != value:
-                raise RuntimeException(None, "Value set twice new: %s, old:%s" % (value, self.value))
+                raise DoubleSetException(None, self.value, self.location, value, location)
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
+        self.location = location
         self.hasValue = True
         # set counterpart
         if self.attribute.end and recur:
-            value.set_attribute(self.attribute.end.name, self.myself, False)
+            value.set_attribute(self.attribute.end.name, self.myself, location, False)
         for waiter in self.waiters:
             waiter.ready(self)
 
@@ -121,13 +123,13 @@ class ListVariable(DelayedResultVariable):
         self.myself = instance
         DelayedResultVariable.__init__(self, queue, [])
 
-    def set_value(self, value, recur=True):
+    def set_value(self, value, location, recur=True):
         if self.hasValue:
             raise RuntimeException(None, "List modified after freeze")
 
         if isinstance(value, list):
             for v in value:
-                self.set_value(v, recur)
+                self.set_value(v, recur, location)
             return
 
         if self.type is not None:
@@ -140,7 +142,7 @@ class ListVariable(DelayedResultVariable):
 
         # set counterpart
         if self.attribute.end and recur:
-            value.set_attribute(self.attribute.end.name, self.myself, False)
+            value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
         if self.attribute.high is not None:
             if self.attribute.high > len(self.value):
@@ -166,11 +168,10 @@ class OptionVariable(DelayedResultVariable):
         self.myself = instance
         self.queue()
 
-    def set_value(self, value, recur=True):
+    def set_value(self, value, location, recur=True):
         if self.hasValue:
             if self.value != value:
-                raise RuntimeException(None, "Option set after freeze %s.%s = %s / %s " %
-                                       (self.myself, self.attribute, value, self.value))
+                raise DoubleSetException(None, self.value, self.location, value, location)
 
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
@@ -180,6 +181,7 @@ class OptionVariable(DelayedResultVariable):
             value.set_attribute(self.attribute.end.name, self.myself, False)
 
         self.value = value
+        self.location = location
         self.freeze()
 
     def can_get(self):
@@ -364,7 +366,7 @@ class ExecutionUnit(Waiter):
         requires = {k: v.get_value() for (k, v) in self.requires.items()}
         try:
             value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
-            self.result.set_value(value)
+            self.result.set_value(value, self.expression.location)
         except RuntimeException as e:
             e.set_statement(self.expression)
             raise e
@@ -380,16 +382,16 @@ class Instance(ExecutionContext):
         self.type = type
         self.slots = {n: type.get_attribute(n).get_new_Result_Variable(self, queue) for n in type.get_all_attribute_names()}
         self.slots["self"] = ResultVariable()
-        self.slots["self"].set_value(self)
+        self.slots["self"].set_value(self, None)
         self.sid = id(self)
 
     def get_type(self):
         return self.type
 
-    def set_attribute(self, name, value, recur=True):
+    def set_attribute(self, name, value, location, recur=True):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
-        self.slots[name].set_value(value, recur)
+        self.slots[name].set_value(value, location, recur)
 
     def get_attribute(self, name):
         try:

@@ -1,0 +1,15 @@
+implementation none for std::Entity:
+
+end
+
+entity Host:
+    string name
+    string blurp
+end
+
+implement Host using none
+
+
+h1 = Host(name="h1", blurp="blurp1")
+
+h1.blurp="Test"

@@ -1,0 +1,5 @@
+name: compile_test_1
+description: Model to test basic compiler functions
+modulepath: libs
+downloadpath: libs
+repo: "."

@@ -79,7 +79,7 @@ class AttributeReferenceHelper(object):
         if attr.is_ready():
             # go ahead
             # i.e. back to the AttributeReference itself
-            self.target.set_value(attr.get_value())
+            self.target.set_value(attr.get_value(), self.location)
         else:
             # reschedule on the attribute, XU will assign it to the target variable
             ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)

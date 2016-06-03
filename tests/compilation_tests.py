@@ -26,7 +26,7 @@ from nose.tools import assert_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException
+from inmanta.ast import RuntimeException, DoubleSetException
 from nose.tools.nontrivial import raises
 
 
@@ -115,3 +115,14 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
                 if not i == j:
                     self.assertNotEqual(firsts[i][2], firsts[j][2], "Variable %s%s should not be equal to %s%s" % (
                         firsts[i][0], firsts[i][1], firsts[j][0], firsts[j][1]))
+
+
+class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_test_double_assign")
+
+    @raises(DoubleSetException)
+    def test_compile(self):
+        compiler.do_compile()

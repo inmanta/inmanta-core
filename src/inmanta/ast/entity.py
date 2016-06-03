@@ -236,13 +236,13 @@ class Entity(Type):
         for parent in self.parent_entities:
             parent.add_instance(obj)
 
-    def get_instance(self, attributes, resolver, queue):
+    def get_instance(self, attributes, resolver, queue, location):
         """
             Return an instance of the class defined in this entity
         """
         out = Instance(self, resolver, queue)
         for k, v in attributes.items():
-            out.set_attribute(k, v)
+            out.set_attribute(k, v, location)
 
         self.add_instance(out)
         return out
@@ -341,7 +341,7 @@ class Entity(Type):
 
                 if key in self.index_queue:
                     for x in self.index_queue[key]:
-                        x.set_value(instance)
+                        x.set_value(instance, None)
                     self.index_queue.pop(key)
 
     def lookup_index(self, params, target: ResultVariable=None):
@@ -366,7 +366,7 @@ class Entity(Type):
             else:
                 return None
         elif key in self._index:
-            target.set_value(self._index[key])
+            target.set_value(self._index[key], None)
         else:
             if key in self.index_queue:
                 self.index_queue[key].append(target)
