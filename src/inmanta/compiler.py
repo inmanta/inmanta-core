@@ -65,10 +65,6 @@ class Compiler(object):
         self.__cf_file = cf_file
         self.__root_ns = None
 
-        self.loaded_modules = {}  # a map of the paths of all loaded modules
-        self._units = []
-        self.types = {}
-
     def get_plugins(self):
         return self.plugins
 
