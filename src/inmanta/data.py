@@ -483,7 +483,7 @@ class ConfigurationModel(Document):
         for resv in res_versions:
             yield resv.delete_cascade()
 
-        snapshots = Snapshot.objects.filter(model=self).find_all()
+        snapshots = yield Snapshot.objects.filter(model=self).find_all()
         for snapshot in snapshots:
             yield snapshot.delete_cascade()
 
