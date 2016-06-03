@@ -475,7 +475,7 @@ class Project(ModuleLike):
             module_name = parts[0]
         #   get module
             if module_name in self.modules:
-                module = module_name
+                module = self.modules[module_name]
             else:
                 module = self.load_module(module_name)
         #   get NS
