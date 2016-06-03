@@ -82,7 +82,7 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def fetch(self, repo):
-        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo)
+        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def status(self, repo):
         return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
@@ -91,18 +91,21 @@ class CLIGitProvider(GitProvider):
         return subprocess.check_output(["git", "tag"], cwd=repo).decode("utf-8").splitlines()
 
     def checkout_tag(self, repo, tag):
-        subprocess.check_call(["git", "checkout", tag], cwd=repo)
+        subprocess.check_call(["git", "checkout", tag], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def commit(self, repo, message, commit_all, add=[]):
         for file in add:
-            subprocess.check_call(["git", "add", file], cwd=repo)
+            subprocess.check_call(["git", "add", file], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if not commit_all:
-            subprocess.check_call(["git", "commit", "-m", message], cwd=repo)
+            subprocess.check_call(["git", "commit", "-m", message], cwd=repo,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.check_call(["git", "commit", "-a", "-m", message], cwd=repo)
+            subprocess.check_call(["git", "commit", "-a", "-m", message], cwd=repo,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def tag(self, repo, tag):
-        subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo)
+        subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo,
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 # try:
