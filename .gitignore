@@ -33,3 +33,4 @@ build-result
 .coverage
 src/*/parser/parser.out
 src/*/parser/parsetab.py
+.env
