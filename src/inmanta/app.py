@@ -25,7 +25,7 @@ import colorlog
 from inmanta.command import command, Commander
 from inmanta.compiler import do_compile
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, ProjectNotFoundExcpetion
+from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
 from inmanta.ast import CompilerException
 
@@ -193,17 +193,6 @@ def app():
     # do an initial load of known config files to build the libdir path
     Config.load_config()
 
-    # move to our virtual environment if there is one and then start loading plug-ins
-    project = None
-    try:
-        project = Project.get()
-        project.use_virtual_env()
-        project.load_plugins()
-    except ProjectNotFoundExcpetion:
-        pass
-    except CompilerException as e:
-        LOGGER.exception(e)
-
     parser = cmd_parser()
 
     options, other = parser.parse_known_args()
@@ -233,10 +222,6 @@ def app():
     if not hasattr(options, "func"):
         # show help
         parser.print_usage()
-        return
-
-    if options.require_project and project is None:
-        print("Unable to find a valid inmanta project.")
         return
 
     options.func(options)

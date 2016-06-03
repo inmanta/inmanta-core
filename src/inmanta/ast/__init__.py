@@ -179,6 +179,18 @@ class Namespace(object):
         out.set_parent(self)
         return out
 
+    def get_ns_or_create(self, name):
+        """
+            Returns the child namespace with the given name or None if it does
+            not exist.
+        """
+        name_parts = name.split("::")
+        if len(name_parts) == 1:
+            parent = self.get_root()
+        else:
+            parent = self.get_root()._get_ns(name_parts[:-1])
+        return parent.get_child_or_create(name_parts[-1])
+
     def get_ns_from_string(self, fqtn):
         """
             Get the namespace that is referenced to in the given fully qualified

@@ -25,14 +25,14 @@ import subprocess
 import tempfile
 import unittest
 
-from nose.tools import raises, assert_true, assert_equal
+from nose.tools import raises, assert_true
 from inmanta import module
 from inmanta.config import Config
 from inmanta.module import ModuleTool, InvalidModuleException, Project, LocalFileRepo, RemoteRepo
-import yaml
+from inmanta.ast import CompilerException
 
 
-def makemodule(reporoot, name, deps, project=False):
+def makemodule(reporoot, name, deps, project=False, imports=None,):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -40,10 +40,13 @@ def makemodule(reporoot, name, deps, project=False):
     if project:
         mainfile = "project.yml"
 
+    if imports is None:
+        imports = [x[0] for x in deps]
+
     with open(os.path.join(path, mainfile), "w") as projectfile:
         projectfile.write("name: " + name)
         projectfile.write("\nlicense: Apache 2.0")
-        projectfile.write("\nversion: 1.0")
+        projectfile.write("\nversion: 0.0.1")
 
         if project:
             projectfile.write("""
@@ -55,17 +58,23 @@ repo: %s""" % reporoot)
             projectfile.write("\nrequires:")
             for req in deps:
                 if req[1] is not None:
-                    projectfile.write("\n    {}: {} {}".format(req[0], req[0], req[1]))
+                    projectfile.write("\n    - {} {}".format(req[0], req[1]))
                 else:
-                    projectfile.write("\n    {}: {}".format(req[0], req[0]))
+                    projectfile.write("\n    - {}".format(req[0]))
 
         projectfile.write("\n")
 
     model = os.path.join(path, "model")
     os.makedirs(model)
 
-    with open(os.path.join(model, "_init.cf"), "w") as projectfile:
-        pass
+    if not project:
+        with open(os.path.join(model, "_init.cf"), "w") as projectfile:
+            for i in imports:
+                projectfile.write("import %s\n" % i)
+    else:
+        with open(os.path.join(path, "main.cf"), "w") as projectfile:
+            for i in imports:
+                projectfile.write("import %s\n" % i)
 
     subprocess.check_output(["git", "init"], cwd=path, stderr=subprocess.STDOUT)
     subprocess.check_output(["git", "config", "user.email", '"test@test.example"'], cwd=path, stderr=subprocess.STDOUT)
@@ -74,10 +83,18 @@ repo: %s""" % reporoot)
     return path
 
 
-def addFile(modpath, file, content, msg):
+def addFile(modpath, file, content, msg, version=None):
     with open(os.path.join(modpath, file), "w") as projectfile:
         projectfile.write(content)
-    return commitmodule(modpath, msg)
+
+    if version is None:
+        return commitmodule(modpath, msg)
+    else:
+        ocd = os.curdir
+        os.curdir = modpath
+        subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
+        ModuleTool().commit(msg, version, False, True)
+        os.curdir = ocd
 
 
 def commitmodule(modpath, mesg):
@@ -97,7 +114,6 @@ def addTag(modpath, tag):
 
 class testModuleTool(unittest.TestCase):
     tempdir = None
-    goodIds = {}
 
     def __init__(self, methodName='runTest'):
         unittest.TestCase.__init__(self, methodName)
@@ -115,40 +131,44 @@ class testModuleTool(unittest.TestCase):
         cls.reporoot = reporoot
         os.makedirs(reporoot)
 
-        mod1 = makemodule(reporoot, "mod1", [("mod3", "")])
+        mod1 = makemodule(reporoot, "mod1", [("mod3", "~=0.1")])
         commitmodule(mod1, "first commit")
-        cls.goodIds["mod1"] = addFile(mod1, "signal", "present", "second commit")
+        addFile(mod1, "signal", "present", "second commit", version="3.2")
 
         mod2 = makemodule(reporoot, "mod2", [])
         commitmodule(mod2, "first commit")
-        startbranch(mod2, "rc1")
-        cls.goodIds["mod2"] = addFile(mod2, "signal", "present", "second commit")
+        addFile(mod2, "signal", "present", "second commit", version="2106.1")
 
         mod3 = makemodule(reporoot, "mod3", [])
         commitmodule(mod3, "first commit")
-        cls.goodIds["mod3"] = addFile(mod3, "signal", "present", "second commit")
-        addTag(mod3, "0.1")
+        addFile(mod3, "signal", "present", "second commit", version="0.1")
         addFile(mod3, "badsignal", "present", "third commit")
 
-        mod4 = makemodule(reporoot, "mod4", [])
+        mod4 = makemodule(reporoot, "badmod", [("mod2", "<2016")])
         commitmodule(mod4, "first commit")
-        m4tag = addFile(mod4, "signal", "present", "second commit")
-        cls.goodIds["mod4"] = m4tag
+        addFile(mod4, "signal", "present", "second commit", version="0.1")
         addFile(mod4, "badsignal", "present", "third commit")
 
         mod5 = makemodule(reporoot, "mod5", [])
         commitmodule(mod5, "first commit")
-        m5tag = addFile(mod5, "signal", "present", "second commit")
-        cls.goodIds["mod5"] = m5tag
-        addTag(mod5, "0.1")
+        addFile(mod5, "signal", "present", "second commit", version="0.1")
         addFile(mod5, "badsignal", "present", "third commit")
 
+        mod6 = makemodule(reporoot, "mod6", [])
+        commitmodule(mod6, "first commit")
+        addFile(mod6, "signal", "present", "second commit", version="3.2")
+        addFile(mod6, "badsignal", "present", "third commit")
+
         proj = makemodule(reporoot, "testproject",
-                          [("mod1", None), ("mod2", "rc1"), ("mod3", "0.1"), ("mod4", m4tag), ("mod5", "0.1")], True)
+                          [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6"])
+        # results in loading of 1,2,3,6
         commitmodule(proj, "first commit")
 
         badproject = makemodule(reporoot, "badproject", [("mod15", None)], True)
         commitmodule(badproject, "first commit")
+
+        baddep = makemodule(reporoot, "baddep", [("badmod", None), ("mod2", ">2016")], True)
+        commitmodule(baddep, "first commit")
 
     @classmethod
     def tearDownClass(cls):
@@ -214,8 +234,7 @@ class testModuleTool(unittest.TestCase):
 
         ModuleTool().execute("verify", [])
 
-    @unittest.skip("Not yet implemented in current version")
-    def test_complexCheckoutAndFreeze(self):
+    def test_complexCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "testproject")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject")],
                                 cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
@@ -224,33 +243,26 @@ class testModuleTool(unittest.TestCase):
         Config.load_config()
 
         ModuleTool().execute("install", [])
-        for i in ["mod1", "mod2", "mod3", "mod4"]:
+        expected = ["mod1", "mod2", "mod3", "mod6"]
+        for i in expected:
             dir = os.path.join(coroot, "libs", i)
             assert_true(os.path.exists(os.path.join(dir, "signal")),
                         "could not find file: " + (os.path.join(dir, "signal")))
             assert_true(not os.path.exists(os.path.join(dir, "badsignal")),
                         "did find file: " + (os.path.join(dir, "badsignal")))
 
-        ModuleTool().execute("freeze", [])
-        assert_true(os.path.exists(os.path.join(coroot, "module.version")),
-                    "could not find file: " + (os.path.join(coroot, "module.version")))
+        assert_true(not os.path.exists(os.path.join(coroot, "libs", "mod5")), "mod5 should not be present!")
 
-        with open(os.path.join(coroot, "module.version"), "r") as fd:
-            locked = yaml.load(fd)
+    @raises(CompilerException)
+    def test_badDepCheckout(self):
+        coroot = os.path.join(testModuleTool.tempdir, "baddep")
+        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "baddep")],
+                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        os.chdir(coroot)
+        os.curdir = coroot
+        Config.load_config()
 
-        reporoot = os.path.join(testModuleTool.tempdir, "repos")
-
-        def checkmodule(name, branch):
-            other = locked[name]
-            assert_equal(other["hash"], testModuleTool.goodIds[name], "bad hash on module " + name)
-            assert_equal(other["version"], "1.0", "bad version on module " + name)
-            assert_equal(other["branch"], branch, "bad branch on module " + name)
-            assert_equal(other["repo"], os.path.join(reporoot, name), "bad repo on module " + name)
-
-        checkmodule("mod1", 'master')
-        checkmodule("mod2", 'rc1')
-        checkmodule("mod3", 'HEAD')
-        checkmodule("mod4", 'HEAD')
+        ModuleTool().execute("install", [])
 
     def tearDown(self):
         self.log.removeHandler(self.handler)

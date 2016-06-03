@@ -36,6 +36,11 @@ from inmanta.ast import Namespace, CompilerException
 from inmanta import plugins
 from inmanta.parser.plyInmantaParser import parse
 import ruamel.yaml
+from inmanta.parser import plyInmantaParser
+from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements import DefinitionStatement
+from inmanta.util import memoize
+from inmanta.ast.statements.define import DefineImport
 
 
 LOGGER = logging.getLogger(__name__)
@@ -292,10 +297,25 @@ class ModuleLike:
         with open(self.get_config_file_name(), "w") as fd:
             fd.write(ruamel.yaml.dump(data, Dumper=ruamel.yaml.RoundTripDumper))
 
+    def _load_file(self, ns, file):
+        statements = []
+        stmts = plyInmantaParser.parse(ns, file)
+        block = BasicBlock(ns)
+        for s in stmts:
+            if isinstance(s, DefinitionStatement):
+                statements.append(s)
+            elif isinstance(s, str):
+                pass
+            else:
+                block.add(s)
+        return (statements, block)
+
     def requires(self) -> dict:
         """
             Get the requires for this module
         """
+        # filter on import stmt
+
         if "requires" not in self._meta or self._meta["requires"] is None:
             return {}
 
@@ -307,26 +327,6 @@ class ModuleLike:
             req = req[0]
             reqs.append(req)
         return reqs
-
-    def verify_requires(self, module_map: dict) -> bool:
-        """
-            Check if all the required modules for this module have been loaded
-        """
-        LOGGER.info("verifying module %s", self.get_name())
-        for require in self.requires():
-            if require.project_name not in module_map:
-                print("Module %s requires the %s module that has not been loaded" % (
-                    self._path, require))
-                return False
-
-            module = module_map[require.project_name]
-            version = parse_version(str(module.version))
-
-            if version not in require:
-                LOGGER.warning("module %s requires %s but %s is at version %s" %
-                               (self.name, require, require.project_name, version))
-                return False
-        return True
 
 
 class Project(ModuleLike):
@@ -395,7 +395,11 @@ class Project(ModuleLike):
         self._freeze_versions = self._load_freeze(self.freeze_file)
 
         self.virtualenv = env.VirtualEnv(os.path.join(path, ".env"))
-        self.reloadModules()
+
+        self.loaded = False
+        self.modules = {}
+
+        self.root_ns = Namespace("__root__")
 
     @classmethod
     def get_project_dir(cls, cur_dir):
@@ -442,66 +446,84 @@ class Project(ModuleLike):
         with open(freeze_file, "r") as fd:
             return yaml.load(fd)
 
-    def reloadModules(self):
-        self.modules = self.discover(self.modulepath)
+    def load(self):
+        if not self.loaded:
+            self.get_complete_ast()
+            self.use_virtual_env()
+            self.loaded = True
+            self.verify()
+            self.load_plugins()
+
+    @memoize
+    def get_complete_ast(self):
+        # load ast
+        (statements, block) = self.__load_ast()
+        blocks = [block]
+        statements = [x for x in statements]
+        # get imports
+        imports = [x.name for x in statements if isinstance(x, DefineImport)]
+        done = set()
+        while len(imports) > 0:
+            ns = imports.pop()
+            if ns in done:
+                continue
+
+            parts = ns.split("::")
+            module_name = parts[0]
+        #   get module
+            if module_name in self.modules:
+                module = module_name
+            else:
+                module = self.load_module(module_name)
+        #   get NS
+            for i in range(1, len(parts) + 1):
+                subs = '::'.join(parts[0:i])
+                if subs in done:
+                    continue
+                (nstmt, nb) = module.get_ast(subs)
+                done.add(subs)
+                statements.extend(nstmt)
+                blocks.append(nb)
+
+        #   get imports and add to list
+                nimp = [x.name for x in nstmt if isinstance(x, DefineImport)]
+                imports.extend(nimp)
+
+        return (statements, blocks)
+
+    def __load_ast(self):
+        main_ns = Namespace("__config__")
+        main_ns.parent = self.root_ns
+        return self._load_file(main_ns, "main.cf")
+
+    def load_module(self, module_name):
+        path = self.resolver.path_for(module_name)
+        if path is not None:
+            module = Module(self, path)
+        else:
+            reqs = self.collect_requirements()
+            if module_name in reqs:
+                module = Module.install(self, module_name, reqs[module_name])
+            else:
+                module = Module.install(self, module_name, parse_requirements(module_name))
+        self.modules[module_name] = module
+        return module
 
     def load_plugins(self) -> None:
         """
             Load all plug-ins
         """
+        if not self.loaded:
+            LOGGER.warn("loading plugins on project that has not been loaded completely")
         for module in self.modules.values():
             module.load_plugins()
-
-    def discover(self, path: str) -> dict:
-        """
-            Discover and load configuration modules in the given path
-
-            @param path: A list of paths to search for modules
-        """
-        module_dirs = {}
-        # generate a module list and take precedence into account
-        for module_dir in path:
-            for sub_dir in glob.glob(os.path.join(module_dir, '*')):
-                if Module.is_valid_module(sub_dir):
-                    mod_name = os.path.basename(sub_dir)
-                    module_dirs[mod_name] = sub_dir
-
-        # create a list of modules
-        modules = {}
-        for name, path in module_dirs.items():
-            mod = Module(self, path)
-            modules[name] = mod
-            if not mod.get_name() == name:
-                raise InvalidModuleException(
-                    "Directory %s expected to contain module %s but contains %s" % (path, name, mod.get_name()))
-
-        return modules
 
     def verify(self) -> None:
         # verify module dependencies
         result = True
-        result &= self.verify_requires(self.modules)
-        for module in self.modules.values():
-            result &= module.verify_requires(self.modules)
-
-            if module._meta["name"] in self._freeze_versions:
-                versioninfo = self._freeze_versions[module._meta["name"]]
-
-                def shouldequal(one, field, thingname):
-                    if field not in versioninfo:
-                        return
-                    other = versioninfo[field]
-                    if one != other:
-                        raise Exception("The installed %s (%s) of module %s, does not match the %s in the module file (%s)."
-                                        % (thingname, one, module._meta["name"], thingname, other))
-
-                shouldequal(str(module._meta["version"]), "version", "version")
-                shouldequal(str(module.get_scm_url()), "repo", "repo url")
-                shouldequal(str(module.get_scm_version()), "hash", "hash")
-                shouldequal(str(module.get_scm_branch()), "branch", "branch")
-
+        result &= self.verify_requires()
         if not result:
-            raise Exception("Not all module dependencies have been met.")
+            raise CompilerException("Not all module dependencies have been met.")
 
     def use_virtual_env(self) -> None:
         """
@@ -526,12 +548,42 @@ class Project(ModuleLike):
         """
             Collect the list of all requirements of all modules in the project.
         """
+        if not self.loaded:
+            LOGGER.warn("collecting reqs on project that has not been loaded completely")
+
         specs = {}
         merge_specs(specs, self.requires())
         for module in self.modules.values():
             reqs = module.requires()
             merge_specs(specs, reqs)
         return specs
+
+    def collect_imported_requirements(self):
+        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
+        specs = {name: spec for name, spec in self.collect_requirements().items() if name in imports}
+        return specs
+
+    def verify_requires(self) -> bool:
+        """
+            Check if all the required modules for this module have been loaded
+        """
+        LOGGER.info("verifying project")
+        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
+        modules = self.modules
+
+        good = True
+
+        for name, spec in self.collect_requirements().items():
+            if name not in imports:
+                continue
+            module = modules[name]
+            version = parse_version(str(module.version))
+            for r in spec:
+                if version not in r:
+                    LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
+                    good = False
+
+        return good
 
     def collect_python_requirements(self):
         """
@@ -549,6 +601,9 @@ class Project(ModuleLike):
 
     def get_config_file_name(self):
         return os.path.join(self._path, "project.yml")
+
+    def get_root_namespace(self):
+        return self.root_ns
 
 
 class Module(ModuleLike):
@@ -715,6 +770,21 @@ class Module(ModuleLike):
             files.append(model_file)
 
         return files
+
+    def get_ast(self, name):
+        if name == self.name:
+            file = os.path.join(self._path, "model/_init.cf")
+        else:
+            parts = name.split("::")
+            parts = parts[1:]
+            if os.path.isdir(os.path.join(self._path, "model/" + "/".join(parts))):
+                file = os.path.join(self._path, "model/" + "/".join(parts) + "/_init.cf")
+            else:
+                file = os.path.join(self._path, "model/" + "/".join(parts) + ".cf")
+
+        ns = self._project.get_root_namespace().get_ns_or_create(name)
+
+        return self._load_file(ns, file)
 
     def load_plugins(self):
         """
@@ -915,7 +985,7 @@ class ModuleTool(object):
         """
         if project is None:
             project = Project.get()
-        specs = project.collect_requirements()
+        specs = project.collect_imported_requirements()
 
         for name, spec in specs.items():
             Module.update(project, name, spec)
@@ -926,37 +996,11 @@ class ModuleTool(object):
         """
         if project is None:
             project = Project.get()
-        specs = {}
-        pspec = project.requires()
-        merge_specs(specs, pspec)
-        worklist = []
-        worklist.extend([n.project_name for n in pspec])
-        modules = {}
 
-        while len(worklist) != 0:
-            work = worklist.pop(0)
-            if work in modules:
-                continue
-            LOGGER.info("requesting install for: %s", work)
-            module = Module.install(project, work, specs[work])
-            modules[work] = module
-            reqs = module.requires()
-            merge_specs(specs, reqs)
-            for name in [x.project_name for x in reqs]:
-                worklist.append(name)
-
-        # verify if installed versions are consistent with all rules
-        for name, spec in specs.items():
-            module = modules[name]
-            version = parse_version(str(module.version))
-            for r in spec:
-                if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
-
-        project.reloadModules()
+        project.load()
 
         # do python install
-        pyreq = project.collect_python_requirements()
+        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in project.modules.values()] if x is not None]
         if len(pyreq) > 0:
             project.virtualenv.install_from_list(pyreq)
 
