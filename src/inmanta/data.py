@@ -424,8 +424,9 @@ class ResourceVersion(Document):
     @gen.coroutine
     def delete_cascade(self):
         resource_actions = yield ResourceAction.objects.filter(resource_version=self).find_all()
-        yield [r.delete() for r in resource_actions]
-        yield self.delete(self)
+        for r in resource_actions:
+            yield r.delete()
+        yield self.delete()
 
 
 class ConfigurationModel(Document):
@@ -499,7 +500,7 @@ class ConfigurationModel(Document):
         for d in drs:
             yield d.delete()
 
-        yield self.delete(self)
+        yield self.delete()
 
 
 class Code(Document):
@@ -686,4 +687,4 @@ class Snapshot(IdDocument):
         for restore in restores:
             yield restore.delete_cascade()
 
-        yield self.delete(self)
+        yield self.delete()
