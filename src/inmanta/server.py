@@ -1641,7 +1641,10 @@ host = localhost
         snap_dict = yield snapshot.to_dict()
 
         resources = yield data.ResourceSnapshot.objects.filter(snapshot=snapshot).find_all()  # @UndefinedVariable
-        snap_dict["resources"] = [x.to_dict() for x in resources]
+        snap_dict["resources"] = []
+        for x in resources:
+            res_dict = yield x.to_dict()
+            snap_dict["resources"].append(res_dict)
 
         return 200, {"snapshot": snap_dict}
 
