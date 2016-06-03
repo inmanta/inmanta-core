@@ -22,7 +22,7 @@ import os
 
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import Unknown
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, CompilerException
 from inmanta.execute.runtime import ExecutionUnit
 
 
@@ -213,6 +213,10 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type is None:
             return None
 
+        if not isinstance(arg_type, str):
+            raise CompilerException("bad annotation in plugin %s::%s, expected str but got %s (%s)" %
+                                    (self.ns, self.__class__.__function_name__, type(arg_type), arg_type))
+
         if arg_type == "any":
             return None
 
@@ -223,8 +227,6 @@ class Plugin(object, metaclass=PluginMeta):
             return None
 
         return resolver.get_type(arg_type)
-
-        raise Exception("Unable to find type for '%s'" % arg_type)
 
     def _is_instance(self, value, arg_type):
         """
