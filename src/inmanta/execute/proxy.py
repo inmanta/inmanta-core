@@ -134,6 +134,8 @@ class SequenceProxy(DynamicProxy):
 
     def __getitem__(self, key):
         instance = self._get_instance()
+        if isinstance(key, str):
+            raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (key, self._get_instance()))
 
         return DynamicProxy.return_value(instance[key])
 

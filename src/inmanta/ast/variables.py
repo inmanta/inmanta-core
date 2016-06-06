@@ -21,6 +21,7 @@ import logging
 from inmanta.execute.runtime import ResultVariable, WaitUnit, ExecutionUnit
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement
+from inmanta.ast import RuntimeException
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +72,10 @@ class AttributeReferenceHelper(object):
         """
         # get the Instance
         obj = self.instance.execute(requires, resolver, queue_scheduler)
+
+        if isinstance(obj, list):
+            raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
+
         # get the attribute result variable
         attr = obj.get_attribute(self.attribute)
         # Cache it
