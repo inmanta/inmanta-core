@@ -455,7 +455,14 @@ class Project(ModuleLike):
             self.use_virtual_env()
             self.loaded = True
             self.verify()
-            self.load_plugins()
+            try:
+                self.load_plugins()
+            except CompilerException as e:
+                # do python install
+                pyreq = self.collect_python_requirements()
+                if len(pyreq) > 0:
+                    self.virtualenv.install_from_list(pyreq)
+                self.load_plugins()
 
     @memoize
     def get_complete_ast(self):
@@ -885,16 +892,6 @@ class Module(ModuleLike):
         else:
             return None
 
-    def get_requirements(self):
-        """
-            Returns an array of requirements of this module
-        """
-        if not os.path.exists(os.path.join(self._path, "requirements.txt")):
-            return set()
-
-        with open(os.path.join(self._path, "requirements.txt"), "r") as fd:
-            return set([l.strip() for l in fd.readlines()])
-
 
 class ModuleTool(object):
     """
@@ -1001,11 +998,6 @@ class ModuleTool(object):
             project = Project.get()
 
         project.load()
-
-        # do python install
-        pyreq = [x.strip() for x in [mod.get_python_requirements() for mod in project.modules.values()] if x is not None]
-        if len(pyreq) > 0:
-            project.virtualenv.install_from_list(pyreq)
 
     def status(self):
         """
