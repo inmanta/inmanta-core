@@ -26,7 +26,7 @@ from nose.tools import assert_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException
+from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException
 from nose.tools.nontrivial import raises
 
 
@@ -45,6 +45,58 @@ class CompilerBaseTest(object):
 
     def tearDown(self):
         shutil.rmtree(self.state_dir)
+
+
+@unittest.skip("temporarily disabled")
+class SnippetTests(unittest.TestCase):
+    libs = None
+    env = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.libs = tempfile.mkdtemp()
+        cls.env = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.libs)
+        shutil.rmtree(cls.env)
+
+    def setUpForSnippet(self, snippet):
+        # init project
+        self.project_dir = tempfile.mkdtemp()
+        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
+
+        with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
+            cfg.write(
+                """
+            name: snippet test
+            modulepath: %s
+            downloadpath: %s
+            version: 1.0
+            repo: ['git@git.inmanta.com:modules/', 'git@git.inmanta.com:config/']"""
+                % (self.__class__.libs, self.__class__.libs))
+
+        with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
+            x.write(snippet)
+
+        Project.set(Project(self.project_dir))
+
+    def tearDownForSnippet(self):
+        shutil.rmtree(self.project_dir)
+
+    @raises(DuplicateException)
+    def testIssue90Compile(self):
+        self.setUpForSnippet(""" import ip
+import std
+import redhat
+
+ctrl1 = ip::Host(name="os-ctrl-1", os=redhat::centos7, ip="172.20.20.10")
+odl1  = ip::Host(name="os-odl-1", os=redhat::centos7, ip="172.20.20.15")
+comp1 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.20")
+comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
+""")
+        compiler.do_compile()
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):

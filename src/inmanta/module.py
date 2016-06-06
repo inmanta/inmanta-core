@@ -457,7 +457,7 @@ class Project(ModuleLike):
             self.verify()
             try:
                 self.load_plugins()
-            except CompilerException as e:
+            except CompilerException:
                 # do python install
                 pyreq = self.collect_python_requirements()
                 if len(pyreq) > 0:
