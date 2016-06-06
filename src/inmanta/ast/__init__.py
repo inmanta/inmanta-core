@@ -28,6 +28,9 @@ class Location(object):
     def __str__(self, *args, **kwargs):
         return "%s:%d" % (self.file, self.lnr)
 
+    def __eq__(self, other):
+        return self.file == other.file and self.lnr == other.lnr
+
 
 class MockImport(object):
 

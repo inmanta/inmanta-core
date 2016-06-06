@@ -26,7 +26,7 @@ from nose.tools import assert_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException
+from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, Location
 from nose.tools.nontrivial import raises
 
 
@@ -82,7 +82,7 @@ class SnippetTests(unittest.TestCase):
 
         Project.set(Project(self.project_dir))
 
-    def tearDownForSnippet(self):
+    def tearDown(self):
         shutil.rmtree(self.project_dir)
 
     @raises(DuplicateException)
@@ -99,16 +99,15 @@ comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
         compiler.do_compile()
 
     def testIssue92(self):
-        self.setUpForSnippet(""" import ip
-import std
-import redhat
-
-ctrl1 = ip::Host(name="os-ctrl-1", os=redhat::centos7, ip="172.20.20.10")
-odl1  = ip::Host(name="os-odl-1", os=redhat::centos7, ip="172.20.20.15")
-comp1 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.20")
-comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
+        self.setUpForSnippet("""
+        entity Host extends std::NotThere:
+        end
 """)
-        compiler.do_compile()
+        try:
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except TypeNotFoundException as e:
+            assert_equal(e.location, Location("main.cf", 2))
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):

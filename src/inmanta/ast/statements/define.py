@@ -73,36 +73,40 @@ class DefineEntity(TypeDefinitionStatement):
         """
             Evaluate this statement.
         """
-        entity_type = self.type
-        entity_type.comment = self.comment
+        try:
+            entity_type = self.type
+            entity_type.comment = self.comment
 
-        add_attributes = set()
-        for attribute in self.attributes:
-            attr_type = self.namespace.get_type(attribute.type)
-            if not isinstance(attr_type, (Type, type)):
-                raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
+            add_attributes = set()
+            for attribute in self.attributes:
+                attr_type = self.namespace.get_type(attribute.type)
+                if not isinstance(attr_type, (Type, type)):
+                    raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
-            add_attributes.add(attribute.name)
-            attr_obj = Attribute(entity_type, attr_type, attribute.name)
-            attribute.copy_location(attr_obj)
+                add_attributes.add(attribute.name)
+                attr_obj = Attribute(entity_type, attr_type, attribute.name)
+                attribute.copy_location(attr_obj)
 
-            entity_type.add_default_value(attribute.name, attribute.default)
+                entity_type.add_default_value(attribute.name, attribute.default)
 
-        for parent in self.parents:
-            parent_type = self.namespace.get_type(str(parent))
-            if not isinstance(parent_type, Entity):
-                raise TypingException(self, "Parents of an entity need to be entities. "
-                                      "Default constructors are not supported. %s is not an entity" % parent)
+            for parent in self.parents:
+                parent_type = self.namespace.get_type(str(parent))
+                if not isinstance(parent_type, Entity):
+                    raise TypingException(self, "Parents of an entity need to be entities. "
+                                          "Default constructors are not supported. %s is not an entity" % parent)
 
-            for attr_name in parent_type.attributes.keys():
-                if attr_name not in add_attributes:
-                    add_attributes.add(attr_name)
+                for attr_name in parent_type.attributes.keys():
+                    if attr_name not in add_attributes:
+                        add_attributes.add(attr_name)
 
-                else:
-                    raise TypingException(
-                        self, "Hiding attributes with inheritance is not allowed. %s is already defined" % attr_name)
+                    else:
+                        raise TypingException(
+                            self, "Hiding attributes with inheritance is not allowed. %s is already defined" % attr_name)
 
-            entity_type.parent_entities.add(parent_type)
+                entity_type.parent_entities.add(parent_type)
+        except TypeNotFoundException as e:
+            e.set_location(self.location)
+            raise e
 
 
 class DefineImplementation(TypeDefinitionStatement):
