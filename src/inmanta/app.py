@@ -28,6 +28,7 @@ from inmanta.config import Config
 from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
 from inmanta.ast import CompilerException
+from inmanta.execute.proxy import UnsetException
 
 LOGGER = logging.getLogger()
 
@@ -117,9 +118,12 @@ def export(options):
     from inmanta.export import Exporter
     try:
         (types, scopes) = do_compile()
-    except CompilerException:
+
+    except UnsetException:
         types = None
         scopes = None
+    except CompilerException as e:
+        raise e
 
     export = Exporter(options)
     export.run(types, scopes)

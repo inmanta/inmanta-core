@@ -93,7 +93,7 @@ class DynamicProxy(object):
     def __setattr__(self, attribute, value):
         raise Exception("Readonly object")
 
-    def type(self):
+    def _type(self):
         """
             Return the type of the proxied instance
         """

@@ -100,8 +100,8 @@ def to_id(entity):
     """
         Convert an entity from the model to its resource id
     """
-    entity_name = str(entity.type())
-    for cls_name in [entity_name] + entity.type().get_all_parent_names():
+    entity_name = str(entity._type())
+    for cls_name in [entity_name] + entity._type().get_all_parent_names():
         cls, options = resource.get_class(cls_name)
 
         if cls is not None:

@@ -250,6 +250,7 @@ class RuntimeException(CompilerException):
 
     def __init__(self, stmt, msg):
         CompilerException.__init__(self)
+        self.stmt = None
         if stmt is not None:
             self.set_location(stmt.location)
             self.stmt = stmt

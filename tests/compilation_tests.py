@@ -98,6 +98,18 @@ comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
 """)
         compiler.do_compile()
 
+    def testIssue92(self):
+        self.setUpForSnippet(""" import ip
+import std
+import redhat
+
+ctrl1 = ip::Host(name="os-ctrl-1", os=redhat::centos7, ip="172.20.20.10")
+odl1  = ip::Host(name="os-odl-1", os=redhat::centos7, ip="172.20.20.15")
+comp1 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.20")
+comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
+""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
