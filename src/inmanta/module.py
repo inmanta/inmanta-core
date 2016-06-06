@@ -689,6 +689,7 @@ class Module(ModuleLike):
         """
            Update a module, return module object
         """
+
         if path is None:
             path = project.resolver.path_for(modulename)
 
@@ -983,11 +984,15 @@ class ModuleTool(object):
         """
             Update all modules from their source
         """
+
         if project is None:
             project = Project.get()
+
+        project.get_complete_ast()
         specs = project.collect_imported_requirements()
 
         for name, spec in specs.items():
+            print("updating module: %s" % name)
             Module.update(project, name, spec)
 
     def install(self, project=None):
@@ -1003,13 +1008,19 @@ class ModuleTool(object):
         """
             Run a git status on all modules and report
         """
-        for mod in Project.get().sorted_modules():
+        project = Project.get()
+
+        project.load()
+        for mod in project.sorted_modules():
             mod.status()
 
     def push(self):
         """
             Push all modules
         """
+        project = Project.get()
+
+        project.load()
         for mod in Project.get().sorted_modules():
             mod.push()
 
