@@ -131,6 +131,10 @@ class testModuleTool(unittest.TestCase):
         cls.reporoot = reporoot
         os.makedirs(reporoot)
 
+        std = makemodule(reporoot, "std", [])
+        commitmodule(std, "first commit")
+        addFile(std, "signal", "present", "second commit", version="3.2")
+
         mod1 = makemodule(reporoot, "mod1", [("mod3", "~=0.1")])
         commitmodule(mod1, "first commit")
         addFile(mod1, "signal", "present", "second commit", version="3.2")

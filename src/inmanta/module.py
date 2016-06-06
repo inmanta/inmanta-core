@@ -339,7 +339,7 @@ class Project(ModuleLike):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(self, path):
+    def __init__(self, path, autostd=True):
         """
             Initialize the project, this includes
              * Loading the project.yaml (into self._meta)
@@ -403,6 +403,8 @@ class Project(ModuleLike):
         self.modules = {}
 
         self.root_ns = Namespace("__root__")
+
+        self.autostd = autostd
 
     @classmethod
     def get_project_dir(cls, cur_dir):
@@ -472,6 +474,8 @@ class Project(ModuleLike):
         statements = [x for x in statements]
         # get imports
         imports = [x.name for x in statements if isinstance(x, DefineImport)]
+        if self.autostd:
+            imports.insert(0, "std")
         done = set()
         while len(imports) > 0:
             ns = imports.pop()

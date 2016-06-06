@@ -38,7 +38,7 @@ class CompilerBaseTest(object):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
 
     def setUp(self):
-        Project.set(Project(self.project_dir))
+        Project.set(Project(self.project_dir, autostd=False))
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
@@ -47,7 +47,7 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-@unittest.skip("temporarily disabled")
+#@unittest.skip("temporarily disabled")
 class SnippetTests(unittest.TestCase):
     libs = None
     env = None
@@ -82,7 +82,7 @@ class SnippetTests(unittest.TestCase):
 
         Project.set(Project(self.project_dir))
 
-    def tearDown(self):
+    def xtearDown(self):
         shutil.rmtree(self.project_dir)
 
     @raises(DuplicateException)
@@ -108,6 +108,14 @@ comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
             raise AssertionError("Should get exception")
         except TypeNotFoundException as e:
             assert_equal(e.location, Location("main.cf", 2))
+
+    @raises(TypeNotFoundException)
+    def testIssue73(self):
+        self.setUpForSnippet("""
+vm1 = std::floob()
+""")
+
+        compiler.do_compile()
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
