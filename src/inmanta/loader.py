@@ -57,6 +57,8 @@ class CodeLoader(object):
             self.__current_version = int(fd.read())
             fd.close()
 
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
             if mod_dir in py:
                 mod_name = py[len(mod_dir) + 1:-3]
