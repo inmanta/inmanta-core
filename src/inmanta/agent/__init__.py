@@ -39,10 +39,88 @@ from inmanta.resources import Resource, Id
 LOGGER = logging.getLogger(__name__)
 
 
+class ResourceAction(object):
+
+    def __init__(self, scheduler, resource):
+        self.scheduler = scheduler
+        self.resource = resource
+        self.awaits = []
+        self.waiters = []
+
+    def execute(self):
+        print("do stuff")
+        # do stuff
+        self._success()
+
+    def resolveDependencies(self, dummy, generation):
+        self._await(dummy)
+        for x in self.resource.requires:
+            self._await(generation[x.resource_str()])
+
+    def _await(self, other):
+        self.awaits.append(other)
+        other.waiters.append(self)
+
+    def __str__(self, *args, **kwargs):
+        if self.resource is None:
+            return "DUMMY"
+        return self.resource.id.resource_str()
+
+    def long_string(self):
+        return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([aw.resource.id.resource_str() for aw in self.awaits]))
+
+    def _success(self):
+        for w in self.waiters:
+            w._signal(self)
+
+    def _signal(self, dep):
+        self.awaits.remove(dep)
+        if len(self.awaits) == 0:
+            self.scheduler.queue.append(self)
+
+    def _fail(self):
+        for w in self.waiters:
+            w._skip(self)
+
+    def _skip(self, other):
+        for w in self.waiters:
+            w._skip(other)
+
+
+class ResourceScheduler(object):
+
+    def __init__(self):
+        self.generation = {}
+        self.queue = []
+
+    def reload(self, resources):
+        self.queue = []
+        self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
+        dummy = ResourceAction(self, None)
+        for r in self.generation.values():
+            r.resolveDependencies(dummy, self.generation)
+        dummy._success()
+
+    def size(self):
+        return len(self.queue)
+
+    def pop(self):
+        return self.queue.pop()
+
+    def dump(self):
+        print("Waiting:")
+        for r in self.generation.values():
+            print(r.long_string())
+        print("Ready to run:")
+        for r in self.queue:
+            print(r.long_string())
+
+
 class DependencyManager(object):
     """
         This class manages depencies between resources
     """
+
     def __init__(self):
         self._local_resources = {}
 
@@ -132,6 +210,7 @@ class QueueManager(object):
     """
         This class manages the update queue (including the versioning)
     """
+
     def __init__(self):
         self._queue = list()
         self._ready_queue = list()
@@ -234,6 +313,7 @@ class Agent(AgentEndPoint):
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
+
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None):
         super().__init__("agent", io_loop, heartbeat_interval=int(Config.get("config", "heartbeat-interval", 10)))
 
@@ -245,6 +325,7 @@ class Agent(AgentEndPoint):
 
         self._dm = DependencyManager()
         self._queue = QueueManager()
+        self._nq = ResourceScheduler()
 
         self._last_update = 0
 
@@ -290,7 +371,7 @@ class Agent(AgentEndPoint):
     @gen.coroutine
     def check_deploy(self):
         while True:
-            if self._queue.size() > 0:
+            if self._nq.size() > 0:
                 yield self.deploy_config()
             else:
                 yield gen.sleep(1)
@@ -366,16 +447,19 @@ class Agent(AgentEndPoint):
 
         else:
             yield self._ensure_code(self._env_id, result.result["version"])
-
+            resources = []
             try:
                 for res in result.result["resources"]:
                     data = res["fields"]
                     data["id"] = res["id"]
                     resource = Resource.deserialize(data)
                     self.update(resource)
+                    resources.append(resource)
                     LOGGER.debug("Received update for %s", resource.id)
             except TypeError as e:
                 LOGGER.error("Failed to receive update", e)
+
+            self._nq.reload(resources)
 
     @protocol.handle(methods.AgentDryRun.do_dryrun)
     @gen.coroutine
@@ -669,12 +753,9 @@ class Agent(AgentEndPoint):
         LOGGER.debug("Execute deploy config")
 
         LOGGER.info("Need to update %d resources" % self._queue.size())
-        while self._queue.size() > 0:
-            resource = self._queue.pop()
-            if resource is None:
-                LOGGER.info("No resources ready for deploy.")
-                yield gen.sleep(1)
-                break
+        while self._nq.size() > 0:
+            resourceAction = self._nq.pop()
+            resource = resourceAction.resource
 
             LOGGER.debug("Start deploy of resource %s" % resource)
             provider = None
@@ -683,7 +764,7 @@ class Agent(AgentEndPoint):
             except Exception:
                 provider.close()
                 LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
+                yield self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
                 self._queue.remove(resource)
                 continue
 
