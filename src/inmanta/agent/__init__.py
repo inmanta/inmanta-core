@@ -17,7 +17,6 @@
 """
 
 import base64
-from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 import datetime
 import hashlib
