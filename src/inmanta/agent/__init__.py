@@ -681,7 +681,8 @@ class Agent(AgentEndPoint):
             try:
                 provider = Commander.get_provider(self, resource)
             except Exception:
-                provider.close()
+                if provider is not None:
+                    provider.close()
                 LOGGER.exception("Unable to find a handler for %s" % resource.id)
                 self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
                 self._queue.remove(resource)
