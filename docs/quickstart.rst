@@ -18,7 +18,8 @@ Inmanta exists of several components:
    * The central Inmanta server that stores states,
    * Inmanta agents on each managed system that deploy configuration changes.
 
-In the remainder of this chapter we will install the framework but use it without external server and without agents.
+
+This tutorial requires three machines: a management server (e.g. your own machine) and two VM's to deploy software to. 
 
 .. warning::
 
@@ -34,6 +35,18 @@ install from `source <https://github.com/inmanta>`_. The
 `readme <https://github.com/inmanta>`_ contains installation instructions to
 install Inmanta from source.
 
+From Source
+------------
+
+.. code-block:: sh
+
+    sudo dnf install git python3 python3-devel gcc python3-virtualenv python-virtualenv vim redhat-rpm-config
+    # todo: add /bin/virtualenv3 to search path, don't install python-virtualenv
+    git clone git@git.inmanta.com:platform/inmanta.git
+    cd inmanta
+    sudo pip3 install -r requirements.txt
+    sudo python3 setup.py install
+    sudo inmanta
 
 Fedora
 ------
@@ -68,6 +81,46 @@ Apt might warn about unauthenticated packages, because the packages in our repos
 signed.
 
 
+Server Setup
+------------
+
+First create a server config file (replace 'IP_OF_THE_SERVER' with the actual IP of the server):
+
+.. code-block:: sh
+
+    sudo mkdir /var/log/inmanta
+    sudo chmod a+rw /var/log/inmanta
+    sudo dnf install mongodb-server
+    sudo systemctl start mongod
+    
+    cat > server.cfg <<EOF
+    [config]
+    state-dir=/tmp/inmanta
+    heartbeat-interval = 60
+    fact-expire = 3600
+
+    [dashboard]
+    enabled=True
+    path=/home/fedora/impera-dashboard/dist
+
+    [server]
+    server_address= IP_OF_THE_SERVER
+    EOF
+    
+    cd
+    git clone git@git.inmanta.com:platform/impera-dashboard.git
+    
+    
+    
+To start the server
+
+.. code-block:: sh
+    
+    inmanta -vvv -c server.cfg server
+    
+    
+
+    
 SSH Root access
 ---------------
 
@@ -134,9 +187,15 @@ Here we will create an Inmanta project ``quickstart`` with a basic configuration
     name: quickstart
     modulepath: libs
     downloadpath: libs
+    repo: git@git.inmanta.com:modules/
     description: A quickstart project that installs a drupal website.
     EOF
+    inmanta modules install
+    inmanta-cli project-create -n test
+    inmanta-cli environment-create  -n test -p test -r $(pwd) -b master
+    ENV_ID=$(inmanta-cli environment-list |grep "| test"| cut -d "|" -f 5)
 
+    
 
 The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. The Inmanta compiler looks
 for a file called ``main.cf`` to start the compilation from.  The last line, creates an empty file.
@@ -192,9 +251,15 @@ website. This composition has to be specified in the ``main.cf`` file:
 .. code-block:: ruby
     :linenos:
 
+    import ip
+    import redhat
+    import apache
+    import mysql
+    import web
+    import drupal
+
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
-    #vm1=ip::Host(name="vm1", os=ubuntu::ubuntu1404, ip="IP_OF_VM1")
+    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -237,8 +302,30 @@ the Inmanta project.
 
 .. code-block:: sh
 
-    inmanta deploy --dry-run -a vm1 -i IP_OF_VM1
-    inmanta deploy -a vm1 -i IP_OF_VM1
+    inmanta modules install 
+    inmanta -vvv  export -e $ENV_ID --server_address "127.0.0.1"  --server_port "8888"
+    
+.. code-block:: sh   
+
+    sudo mkdir /var/log/inmanta
+    sudo chmod a+rw /var/log/inmanta
+    mkdir /tmp/lib
+    mkdir /tmp/lib/impera
+    
+    cat > agent.cfg <<EOF
+    [config]
+    heartbeat-interval = 60
+    state-dir=/tmp/lib/impera
+
+    agent-names = vm1,vm2
+    environment=b4c4ebef-3bc8-4c61-875f-868c795b4a96
+    agent-map=vm1=172.17.3.67,vm2=172.17.3.68
+
+    [agent_rest_transport]
+    port = 8888
+    host = 172.17.3.66
+    EOF
+    
 
 The first command compiles the configuration model and does a dry run of the deployment process and
 lists the changes that should be made. The second command does the actual deployment. We could use
