@@ -47,7 +47,7 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-#@unittest.skip("temporarily disabled")
+@unittest.skip("temporarily disabled")
 class SnippetTests(unittest.TestCase):
     libs = None
     env = None
