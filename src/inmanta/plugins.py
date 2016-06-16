@@ -22,7 +22,7 @@ import os
 
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import Unknown
-from inmanta.ast import Namespace, CompilerException
+from inmanta.ast import Namespace, CompilerException, TypeNotFoundException
 from inmanta.execute.runtime import ExecutionUnit
 
 
@@ -59,7 +59,10 @@ class Context(object):
         return self.resolver
 
     def get_type(self, name):
-        return self.queue.types[name]
+        try:
+            return self.queue.types[name]
+        except KeyError:
+            raise TypeNotFoundException(name, self.owner.namespace)
 
     def get_queue_scheduler(self):
         return self.queue
