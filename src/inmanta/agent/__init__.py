@@ -575,7 +575,7 @@ class Agent(AgentEndPoint):
         """
             Return the current items in the queue
         """
-        return 200, {"queue": ["%s" % (x.id) for x in self._queue.all()]}
+        return 200, {"queue": ["%s" % (x.id) for x in self._nq.generation.values()]}
 
     def info(self, operation, body):
         """
@@ -584,82 +584,3 @@ class Agent(AgentEndPoint):
         return 200, {"threads": [x.name for x in enumerate()],
                      "queue length": self._queue.size(),
                      "queue ready length": self._queue.ready_size()}
-
-    def update(self, res_obj):
-        """
-            Process an update
-        """
-        for req in res_obj.requires:
-            self._dm.add_dependency(res_obj, req.version, req.resource_str())
-
-        self._queue.add_resource(res_obj)
-        self._last_update = time.time()
-
-    def resource_updated_received(self, operation, body):
-        rid = body["id"]
-        version = body["version"]
-        reload_resource = body["reload"]
-        self._dm.resource_update(rid, version, reload_resource)
-
-    @gen.coroutine
-    def deploy_config(self):
-        """
-            Deploy a configuration is there are items in the queue
-        """
-        LOGGER.debug("Execute deploy config")
-
-        LOGGER.info("Need to update %d resources" % self._queue.size())
-        while self._nq.size() > 0:
-            resourceAction = self._nq.pop()
-            resource = resourceAction.resource
-
-            LOGGER.debug("Start deploy of resource %s" % resource)
-            provider = None
-            try:
-                provider = Commander.get_provider(self, resource)
-            except Exception:
-                provider.close()
-                LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                yield self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
-                self._queue.remove(resource)
-                continue
-
-            results = yield self.thread_pool.submit(provider.execute, resource)
-            yield self.resource_updated(resource, reload_requires=results["changed"], changes=results["changes"],
-                                        status=results["status"], log_msg=results["log_msg"])
-
-            if resource.do_reload and provider.can_reload():
-                LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
-                yield self.thread_pool.submit(provider.do_reload, resource)
-
-            provider.close()
-            LOGGER.debug("Finished %s" % resource)
-            self._queue.remove(resource)
-
-        return
-
-    @gen.coroutine
-    def resource_updated(self, resource, reload_requires=False, changes={}, status="", log_msg=""):
-        """
-            A resource with id $rid calls this method to indicate that it is now at version $version.
-        """
-        reload_resource = False
-        if hasattr(resource, "reload") and resource.reload and reload_requires:
-            LOGGER.info("%s triggered a reload" % resource)
-            reload_resource = True
-
-        deploy_result = True
-        if status == "failed" or status == "skipped":
-            deploy_result = False
-
-        self._dm.resource_update(resource.id.resource_str(), resource.id.version, reload_resource, deploy_result)
-
-        action = "deploy"
-
-        if status == "dry" or status == "deployed":
-            level = "INFO"
-        else:
-            level = "ERROR"
-
-        yield self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action, status=status,
-                                            message="%s: %s" % (status, log_msg), extra_data=changes)
