@@ -242,9 +242,9 @@ class Resolver(object):
             ns = root
         else:
             ns = self.namespace
-
+            
         if "::" not in name:
-            raise NotFoundException(None, name)
+            return ns.scope.lookup(name)
 
         parts = name.rsplit("::", 1)
 
@@ -267,6 +267,8 @@ class NamespaceResolver(Resolver):
         self.root = lecial_root
 
     def lookup(self, name, root=None):
+        if root is not None:
+            return self.parent.lookup(name, root)
         return self.parent.lookup(name, self.root)
 
     def for_namespace(self, namespace):
