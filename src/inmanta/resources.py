@@ -23,6 +23,7 @@ import re
 
 from inmanta.execute import util
 from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException
+from inmanta.module import Project
 
 
 LOGGER = logging.getLogger(__name__)
@@ -73,9 +74,9 @@ class resource(object):
         """
         resource_to_sources = {}
 
-        for resource, _options in cls._resources.values():
+        for name, (resource, _options) in cls._resources.items():
             sources = {}
-            resource_to_sources[resource] = sources
+            resource_to_sources[name] = sources
             file_name = inspect.getsourcefile(resource)
 
             source_code = ""
@@ -88,9 +89,11 @@ class resource(object):
             hv = sha1sum.hexdigest()
 
             if hv not in sources:
-                sources[hv] = (file_name, resource.__module__, source_code)
+                module_name = resource.__module__.split(".")[1]
+                req = Project.get().modules[module_name].get_python_requirements_as_list()
+                sources[hv] = (file_name, resource.__module__, source_code, req)
 
-        return sources
+        return resource_to_sources
 
 
 class ResourceNotFoundExcpetion(Exception):

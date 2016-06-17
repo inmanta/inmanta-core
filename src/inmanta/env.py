@@ -38,6 +38,7 @@ class VirtualEnv(object):
         self.env_path = env_path
         self.virtual_python = None
         self.virtual_pip = None
+        self.__cache_done = set()
 
     def init_env(self):
         """
@@ -124,11 +125,17 @@ class VirtualEnv(object):
         with open(path, "w+") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: list) -> None:
+    def install_from_list(self, requirements_list: list, detailed_cache=False) -> None:
         """
             Install requirements from a list of requirement strings
         """
         requirements_list = sorted(requirements_list)
+
+        if detailed_cache:
+            requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
+            if len(requirements_list) == 0:
+                return
+
         # hash it
         sha1sum = hashlib.sha1()
         sha1sum.update("\n".join(requirements_list).encode())
@@ -136,15 +143,19 @@ class VirtualEnv(object):
 
         current_hash = self._read_current_requirements_hash()
 
-        if new_req_hash != current_hash:
-            try:
-                # create requirements file
-                requirements_file = tempfile.mktemp()
-                with open(requirements_file, "w+") as fd:
-                    fd.write("\n".join(requirements_list))
-                    fd.close()
+        if new_req_hash == current_hash:
+            return
 
-                self.install_from_file(requirements_file)
-                self._set_current_requirements_hash(new_req_hash)
-            finally:
-                os.remove(requirements_file)
+        try:
+            # create requirements file
+            requirements_file = tempfile.mktemp()
+            with open(requirements_file, "w+") as fd:
+                fd.write("\n".join(requirements_list))
+                fd.close()
+
+            self.install_from_file(requirements_file)
+            self._set_current_requirements_hash(new_req_hash)
+            for x in requirements_list:
+                self.__cache_done.add(x)
+        finally:
+            os.remove(requirements_file)

@@ -646,18 +646,17 @@ class CodeMethod(Method):
     __method_name__ = "code"
 
     @protocol(operation="PUT", id=True, mt=True)
-    def upload_code(self, tid: uuid.UUID, id: int, sources: dict, requires: list):
+    def upload_code(self, tid: uuid.UUID, id: int, resource: str, sources: dict):
         """
             Upload the supporting code to the server
 
             :param tid The environment the code belongs to
             :param id The id (version) of the configuration model
             :param sources The source files that contain handlers and inmanta plug-ins
-            :param requires The requires (dependencies) for the source code (installed with pip)
         """
 
     @protocol(operation="GET", id=True, mt=True)
-    def get_code(self, tid: uuid.UUID, id: int):
+    def get_code(self, tid: uuid.UUID, id: int, resource: str):
         """
             Get the code for a given version of the configuration model
 

@@ -43,6 +43,7 @@ class DependencyManager(object):
     """
         This class manages depencies between resources
     """
+
     def __init__(self):
         self._local_resources = {}
 
@@ -132,6 +133,7 @@ class QueueManager(object):
     """
         This class manages the update queue (including the versioning)
     """
+
     def __init__(self):
         self._queue = list()
         self._ready_queue = list()
@@ -234,6 +236,7 @@ class Agent(AgentEndPoint):
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
+
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None):
         super().__init__("agent", io_loop, heartbeat_interval=int(Config.get("config", "heartbeat-interval", 10)))
 
@@ -328,18 +331,27 @@ class Agent(AgentEndPoint):
             self.get_latest_version_for_agent(agent)
 
     @gen.coroutine
-    def _ensure_code(self, environment, version):
+    def _ensure_code(self, environment, version, resourcetypes):
         """
             Ensure that the code for the given environment and version is loaded
         """
-        if self.latest_code_version < version and self._loader is not None:
-            result = yield self._client.get_code(environment, version)
+        if self._loader is not None:
+            for rt in resourcetypes:
+                result = yield self._client.get_code(environment, version, rt)
 
-            if result.code == 200:
-                self._env.install_from_list(result.result["requires"])
-                self._loader.deploy_version(version, result.result["sources"])
+                if result.code == 200:
+                    for key, source in result.result["sources"].items():
+                        try:
+                            LOGGER.debug("Installing handler %s for %s", rt, source[1])
+                            yield self._install(key, source)
+                            LOGGER.debug("Installed handler %s for %s", rt, source[1])
+                        except Exception:
+                            LOGGER.exception("Failed to install handler %s for %s", rt, source[1])
 
-                self.latest_code_version = version
+    @gen.coroutine
+    def _install(self, key, source):
+        yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
+        yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
     @protocol.handle(methods.NodeMethod.trigger_agent)
     @gen.coroutine
@@ -365,7 +377,9 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s", agent)
 
         else:
-            yield self._ensure_code(self._env_id, result.result["version"])
+            restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+
+            yield self._ensure_code(self._env_id, result.result["version"], restypes)
 
             try:
                 for res in result.result["resources"]:
@@ -395,7 +409,9 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
             return 500
 
-        yield self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
+        restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+
+        yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
         provider = None
         try:

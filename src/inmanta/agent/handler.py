@@ -25,6 +25,7 @@ import base64
 from inmanta.agent.io import get_io
 from inmanta import protocol
 from tornado import ioloop
+from inmanta.module import Project
 
 LOGGER = logging.getLogger(__name__)
 
@@ -342,9 +343,11 @@ class Commander(object):
                 hv = sha1sum.hexdigest()
 
                 if hv not in sources:
-                    sources[hv] = (file_name, provider.__module__, source_code)
+                    module_name = provider.__module__.split(".")[1]
+                    req = Project.get().modules[module_name].get_python_requirements_as_list()
+                    sources[hv] = (file_name, provider.__module__, source_code, req)
 
-        return sources
+        return resource_to_sources
 
     @classmethod
     def get_provider_class(cls, resource_type, name):

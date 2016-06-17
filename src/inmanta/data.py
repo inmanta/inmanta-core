@@ -516,12 +516,11 @@ class Code(Document):
     resource = StringField(sparse=True, required=True)
     version = IntField(sparse=True, required=True)
     sources = JsonField()
-    requires = JsonField()
 
     @classmethod
     @gen.coroutine
-    def get_version(cls, environment, version):
-        codes = yield cls.objects.filter(environment=environment, version=version).find_all()
+    def get_version(cls, environment, version, resource):
+        codes = yield cls.objects.filter(environment=environment, version=version, resource=resource).find_all()
         if len(codes) == 0:
             return None
 
