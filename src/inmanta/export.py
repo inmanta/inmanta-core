@@ -310,9 +310,17 @@ class Exporter(object):
         if version is None:
             version = int(time.time())
 
+        def mergeDict(a, b):
+            """ very specific impl to this particular data structure"""
+            for k, v in b.items():
+                if k not in a:
+                    a[k] = v
+                elif isinstance(v, dict):
+                    mergeDict(a[k], v)
+
         LOGGER.info("Sending resources and handler source to server")
         sources = resource.sources()
-        sources.update(Commander.sources())
+        mergeDict(sources, Commander.sources())
 
         requires = Project.get().collect_python_requirements()
 

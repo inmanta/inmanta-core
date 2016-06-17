@@ -310,8 +310,10 @@ class Commander(object):
     def add_provider(cls, resource: str, name: str, provider):
         """
             Register a new provider
-            
-            resource is the 
+
+            :param resource the name of the resource this handler applies to
+            :param name the name of the handler itself
+            :param provider the handler function
         """
         if resource in cls.__command_functions and name in cls.__command_functions[resource]:
             del cls.__command_functions[resource][name]
@@ -323,8 +325,10 @@ class Commander(object):
         """
         Get all source files that define resources
         """
-        sources = {}
-        for providers in cls.__command_functions.values():
+        resource_to_sources = {}
+        for resource, providers in cls.__command_functions.items():
+            sources = {}
+            resource_to_sources[resource] = sources
             for provider in providers.values():
                 file_name = inspect.getsourcefile(provider)
 

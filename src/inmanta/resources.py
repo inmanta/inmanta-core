@@ -71,8 +71,11 @@ class resource(object):
         """
         Get all source files that define resources
         """
-        sources = {}
+        resource_to_sources = {}
+
         for resource, _options in cls._resources.values():
+            sources = {}
+            resource_to_sources[resource] = sources
             file_name = inspect.getsourcefile(resource)
 
             source_code = ""
