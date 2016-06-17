@@ -507,7 +507,7 @@ class Project(ModuleLike):
 
     def __load_ast(self):
         main_ns = Namespace("__config__", self.root_ns)
-        return self._load_file(main_ns, "main.cf")
+        return self._load_file(main_ns, os.path.join(self.project_path, "main.cf"))
 
     def load_module(self, module_name):
         path = self.resolver.path_for(module_name)
@@ -1184,7 +1184,6 @@ requires:
             test_project = Project(project_dir)
             test_project.use_virtual_env()
             Project.set(test_project)
-            self.install(test_project)
 
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
