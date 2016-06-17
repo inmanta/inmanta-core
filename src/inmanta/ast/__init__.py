@@ -49,7 +49,11 @@ class Namespace(object):
         self.__children = {}
         self.unit = None
         self.defines_types = {}
-        self.visible_namespaces = {name: MockImport(self)}
+        if self.__parent is not None:
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)}
+            self.__parent.add_child(self)
+        else:
+            self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None
 
     def set_primitives(self, primitives):
@@ -101,7 +105,7 @@ class Namespace(object):
             Get the name of this namespace
         """
         if(self.__parent is None):
-            print("DANG")
+            raise Exception("Should not occur, compiler corrupt")
         if self.__parent.__parent is None:
             return self.get_name()
         return self.__parent.get_full_name() + "::" + self.get_name()
@@ -178,8 +182,7 @@ class Namespace(object):
         """
         if name in self.__children:
             return self.__children[name]
-        out = Namespace(name)
-        out.set_parent(self)
+        out = Namespace(name, self)
         return out
 
     def get_ns_or_create(self, name):

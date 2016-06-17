@@ -506,8 +506,7 @@ class Project(ModuleLike):
         return (statements, blocks)
 
     def __load_ast(self):
-        main_ns = Namespace("__config__")
-        main_ns.parent = self.root_ns
+        main_ns = Namespace("__config__", self.root_ns)
         return self._load_file(main_ns, "main.cf")
 
     def load_module(self, module_name):
