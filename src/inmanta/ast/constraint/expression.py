@@ -20,24 +20,8 @@ from abc import ABCMeta, abstractmethod
 import re
 
 from inmanta.ast.statements import ReferenceStatement, Literal
-
-
-def create_function(expression):
-    """
-        Function that returns a function that evaluates the given expression.
-        The generated function accepts the unbound variables in the expression
-        as arguments.
-    """
-    def function(*args, **kwargs):
-        """
-            A function that evaluates the expression
-        """
-        if len(args) != 1:
-            raise NotImplementedError()
-
-        return expression.execute({'self': args[0]}, None, None)
-
-    return function
+from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit
+from inmanta.ast.type import Bool, create_function
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -107,6 +91,9 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     def execute(self, requires, resolver, queue):
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
+    def execute_direct(self, requires):
+        return self._op([x.execute_direct(requires) for x in self._arguments])
+
     @abstractmethod
     def _op(self, args):
         """
@@ -149,6 +136,52 @@ class BinaryOperator(Operator):
         """
             The implementation of the binary op
         """
+
+
+class LazyBinaryOperator(BinaryOperator):
+    """
+        This class represents a binary operator.
+    """
+
+    def __init__(self, name, op1, op2):
+        Operator.__init__(self, name, [op1, op2])
+
+    def requires_emit(self, resolver, queue):
+        # introduce temp variable to contain the eventual result of this stmt
+        temp = ResultVariable()
+        temp.set_provider(self)
+        temp.set_type(Bool())
+
+        # wait for the lhs
+        HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
+        return {self: temp}
+
+    def resume(self, requires, resolver, queue, target):
+        result = self.children[0].execute(requires, resolver, queue)
+        if self._is_final(result):
+            target.set_value(result, self.location)
+        else:
+            ExecutionUnit(queue, resolver, target, self.children[1].requires_emit(resolver, queue), self.children[1])
+
+    def execute_direct(self, requires):
+        result = self.children[0].execute_direct(requires)
+        if self._is_final(result):
+            return result
+        else:
+            return self.children[1].execute_direct(requires)
+
+    def execute(self, requires, resolver, queue):
+        # helper returned: return result
+        return requires[self]
+
+    def _is_final(self, result):
+        raise NotImplementedError()
+
+    def _bin_op(self, arg1, arg2):
+        """
+            The implementation of the binary op
+        """
+        raise NotImplementedError()
 
 
 class UnaryOperator(Operator):
@@ -321,42 +354,30 @@ class NotEqual(BinaryOperator):
         return arg1 != arg2
 
 
-class And(BinaryOperator):
+class And(LazyBinaryOperator):
     """
         The and boolean operator
     """
     __op = "and"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "and", op1, op2)
+        LazyBinaryOperator.__init__(self, "and", op1, op2)
 
-    def _bin_op(self, arg1, arg2):
-        """
-            @see Operator#_op
-        """
-        if not isinstance(arg1, bool) or not isinstance(arg2, bool):
-            raise Exception("Unable to 'and' two types that are not bool.")
-
-        return arg1 and arg2
+    def _is_final(self, result):
+        return not result
 
 
-class Or(BinaryOperator):
+class Or(LazyBinaryOperator):
     """
         The or boolean operator
     """
     __op = "or"
 
     def __init__(self, op1, op2):
-        BinaryOperator.__init__(self, "or", op1, op2)
+        LazyBinaryOperator.__init__(self, "or", op1, op2)
 
-    def _bin_op(self, arg1, arg2):
-        """
-            @see Operator#_op
-        """
-        if not isinstance(arg1, bool) or not isinstance(arg2, bool):
-            raise Exception("Unable to 'or' two types that are not bool.")
-
-        return arg1 or arg2
+    def _is_final(self, result):
+        return result
 
 
 class In(BinaryOperator):

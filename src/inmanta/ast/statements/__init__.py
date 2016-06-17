@@ -169,3 +169,6 @@ class Literal(ExpressionStatement):
 
     def execute(self, requires, resolver, queue):
         return self.value
+
+    def execute_direct(self, requires):
+        return self.value

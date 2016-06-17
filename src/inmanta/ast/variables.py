@@ -49,6 +49,9 @@ class Reference(ExpressionStatement):
     def execute(self, requires, resolver, queue):
         return requires[self.name]
 
+    def execute_direct(self, requires):
+        return requires[self.name]
+
     def get_containing_namespace(self,):
         return self.namespace
 

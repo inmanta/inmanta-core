@@ -187,6 +187,12 @@ class OptionVariable(DelayedResultVariable):
     def can_get(self):
         return True
 
+    def get_value(self):
+        result = DelayedResultVariable.get_value(self)
+        if result is None:
+            raise RuntimeException(None, "Optional variable accessed that has no value ")
+        return result
+
 
 class Waiter(object):
 
@@ -365,8 +371,8 @@ class ExecutionUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        requires = {k: v.get_value() for (k, v) in self.requires.items()}
         try:
+            requires = {k: v.get_value() for (k, v) in self.requires.items()}
             value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
             self.result.set_value(value, self.expression.location)
         except RuntimeException as e:

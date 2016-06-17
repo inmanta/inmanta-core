@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast.constraint.expression import create_function
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
 from inmanta.execute.util import Unknown
 
@@ -168,7 +167,7 @@ class Bool(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        return True  # allow this function to be called from a lambda function
+        return isinstance(value, bool)
 
     @classmethod
     def cast(cls, value):
@@ -318,5 +317,23 @@ class ConstraintType(Type):
 
     def __str__(self):
         return "%s::%s" % (self.namespace, self.name)
+
+
+def create_function(expression):
+    """
+        Function that returns a function that evaluates the given expression.
+        The generated function accepts the unbound variables in the expression
+        as arguments.
+    """
+    def function(*args, **kwargs):
+        """
+            A function that evaluates the expression
+        """
+        if len(args) != 1:
+            raise NotImplementedError()
+
+        return expression.execute_direct({'self': args[0]})
+
+    return function
 
 TYPES = {"string": String, "number": Number, "bool": Bool, "list": List}
