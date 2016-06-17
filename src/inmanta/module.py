@@ -1188,7 +1188,7 @@ requires:
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
             with open(main_cf, "w+") as fd:
-                fd.write("")
+                fd.write("import %s" % (module.name))
 
             if workingcopy:
                 # overwrite with actual
@@ -1202,7 +1202,7 @@ requires:
             LOGGER.info("Verifying modules")
             project.verify()
             LOGGER.info("Loading all plugins")
-            project.load_plugins()
+            project.load()
 
             values = inmanta.compiler.do_compile()
 
