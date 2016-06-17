@@ -512,8 +512,9 @@ class Code(Document):
         :param sources The source code of plugins
         :param requires Python requires for the source code above
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    version = IntField()
+    environment = ReferenceField(reference_document_type=Environment, sparse=True, required=True)
+    resource = StringField(sparse=True, required=True)
+    version = IntField(sparse=True, required=True)
     sources = JsonField()
     requires = JsonField()
 

@@ -1191,7 +1191,7 @@ host = localhost
 
     @protocol.handle(methods.CodeMethod.upload_code)
     @gen.coroutine
-    def upload_code(self, tid, id, sources, requires):
+    def upload_code(self, tid, id, resource, sources, requires):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
@@ -1200,7 +1200,7 @@ host = localhost
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env, version=id, sources=sources, requires=requires)
+        code = data.Code(environment=env, version=id, resource=resource, sources=sources, requires=requires)
         yield code.save()
 
         return 200

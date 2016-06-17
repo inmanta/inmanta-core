@@ -307,9 +307,11 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource, name, provider):
+    def add_provider(cls, resource: str, name: str, provider):
         """
             Register a new provider
+            
+            resource is the 
         """
         if resource in cls.__command_functions and name in cls.__command_functions[resource]:
             del cls.__command_functions[resource][name]
