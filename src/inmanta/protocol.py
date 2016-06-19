@@ -34,6 +34,9 @@ from inmanta.config import Config
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
+import base64
+import os
+from tornado.web import decode_signed_value, create_signed_value
 
 
 LOGGER = logging.getLogger(__name__)
@@ -223,24 +226,72 @@ def json_encode(value):
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
+class LoginHandler(tornado.web.RequestHandler):
+    def initialize(self, aa):
+        self._aa = aa
+    
+    def get(self):
+        self.write('<html><body><form action="/login" method="post">'
+                   'Name: <input type="text" name="name">'
+                   '<input type="submit" value="Sign in">'
+                   '</form></body></html>')
 
+    def post(self):
+        self.write(json_encode({"token":create_signed_value(self._aa.secret, "user", self.get_argument("name")).decode("utf8")}))
+        
+
+class AuthManager(object):
+    
+    def auth(self, user, method, request_headers, config):
+        if user is not None:
+            return True
+        else:
+            return method == "GET"
+        
+class AuthNManager(object):
+    
+    def isValid(self, user, credential):
+        return True
+    
+class AandA(object):
+    
+    def __init__(self):
+        self.authorization = AuthManager()
+        self.authentication = AuthNManager()
+        self.secret = base64.b64encode(os.urandom(50)).decode('ascii')
+        
+    def get_authz(self):
+        return self.authorization
+    
+    def get_authn(self):
+        return self.authentication
+        
 class RESTHandler(tornado.web.RequestHandler):
     """
         A generic class use by the transport
     """
-    def initialize(self, transport, config):
+        
+    def initialize(self, transport, config, aa):
         self._transport = transport
         self._config = config
+        self._aa = aa
 
     def _get_config(self, http_method):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" %
+            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" % 
                                              (http_method, allowed))
             return
 
         return self._config[http_method]
+
+    def get_current_user(self, headers):
+        if "X-inmanta-user" not in headers:
+            return None
+        pre = headers["X-inmanta-user"]
+        return decode_signed_value(self._aa.secret, "user", pre)
+        
 
     @gen.coroutine
     def _call(self, kwargs, http_method, config):
@@ -263,8 +314,14 @@ class RESTHandler(tornado.web.RequestHandler):
                 message[key] = [v.decode("latin-1") for v in value]
 
         request_headers = self.request.headers
-        body, headers, status = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
-
+        
+        if self._aa.authorization.auth(self.get_current_user(request_headers),http_method, request_headers, config):
+            body, headers, status = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+        else:
+            body = "Access denied."
+            headers = {}
+            status = 403
+        
         if body is not None:
             self.write(json_encode(body))
 
@@ -272,6 +329,8 @@ class RESTHandler(tornado.web.RequestHandler):
             self.set_header(header, value)
 
         self.set_status(status)
+    
+            
 
     @gen.coroutine
     def head(self, *args, **kwargs):
@@ -301,7 +360,7 @@ class RESTHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, " +
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, " + 
                         INMANTA_MT_HEADER)
 
         self.set_status(200)
@@ -325,6 +384,9 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
+        self._aa = AandA()
+        self._handlers.append((r"/login",LoginHandler,{"aa":self._aa}))
+        
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -434,11 +496,11 @@ class RESTTransport(Transport):
                             else:
                                 message[arg] = arg_type(message[arg])
                         except (ValueError, TypeError):
-                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
+                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" % 
                                                          (arg, arg_type, message[arg].__class__), headers)
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
+                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) + 
                                              "that are not declared in method and no kwargs argument is provided.", headers)
 
             LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
@@ -504,7 +566,7 @@ class RESTTransport(Transport):
             for op, cfg in configs.items():
                 handler_config[op] = cfg
 
-            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
+            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config, "aa": self._aa}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
 
         port = 8888
