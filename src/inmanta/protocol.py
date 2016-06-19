@@ -229,15 +229,12 @@ def json_encode(value):
 class LoginHandler(tornado.web.RequestHandler):
     def initialize(self, aa):
         self._aa = aa
-    
-    def get(self):
-        self.write('<html><body><form action="/login" method="post">'
-                   'Name: <input type="text" name="name">'
-                   '<input type="submit" value="Sign in">'
-                   '</form></body></html>')
 
     def post(self):
-        self.write(json_encode({"token":create_signed_value(self._aa.secret, "user", self.get_argument("name")).decode("utf8")}))
+        if self._aa.get_authn().isValid(self.get_body_argument("name", ""), self.get_body_argument("password", "")):
+            self.write(json_encode({"token":create_signed_value(self._aa.secret, "user", self.get_argument("name")).decode("utf8")}))
+        else:
+            raise HTTPError(401, "bad password username combination")
         
 
 class AuthManager(object):
