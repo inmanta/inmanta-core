@@ -25,7 +25,7 @@ from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
 from nose.tools.nontrivial import raises
 from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex
-from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And
+from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
@@ -438,6 +438,17 @@ a=a::b::c.d
     tools.assert_is_instance(stmt.value.instance, Reference)
     tools.assert_equals(stmt.value.instance.full_name, "a::b::c")
     tools.assert_equals(stmt.value.attribute, "d")
+
+
+def test_isDefined():
+    statements = parse_code("""
+implement Test1 using tt when self.other is defined
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineImplement)
+    tools.assert_is_instance(stmt.select, IsDefined)
 
 
 def test_Lexer():

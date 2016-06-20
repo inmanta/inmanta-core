@@ -20,8 +20,9 @@ from abc import ABCMeta, abstractmethod
 import re
 
 from inmanta.ast.statements import ReferenceStatement, Literal
-from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit
+from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit
 from inmanta.ast.type import Bool, create_function
+from inmanta.ast.variables import IsDefinedReferenceHelper
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -56,6 +57,31 @@ class OpMetaClass(ABCMeta):
         if attribute in attr_dict:
             Operator.register_operator(attr_dict[attribute], self)
         super(OpMetaClass, self).__init__(name, bases, attr_dict)
+
+
+class IsDefined(ReferenceStatement):
+
+    def __init__(self, attr, name):
+        super(IsDefined, self).__init__([attr])
+        self.attr = attr
+        self.name = name
+
+    def requires_emit(self, resolver, queue):
+        # introduce temp variable to contain the eventual result of this stmt
+        temp = ResultVariable()
+        temp.set_provider(self)
+
+        # construct waiter
+        resumer = IsDefinedReferenceHelper(temp, self.attr, self.name)
+        self.copy_location(resumer)
+
+        # wait for the instance
+        RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
+        return {self: temp}
+
+    def execute(self, requires, resolver, queue):
+        # helper returned: return result
+        return requires[self]
 
 
 class Operator(ReferenceStatement, metaclass=OpMetaClass):

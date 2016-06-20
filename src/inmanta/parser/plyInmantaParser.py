@@ -27,7 +27,7 @@ from inmanta.ast import Location
 from inmanta.ast.statements.generator import For, Constructor
 from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
     DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
-from inmanta.ast.constraint.expression import Operator, Not
+from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat
 from inmanta.ast.variables import Reference, AttributeReference
@@ -293,7 +293,7 @@ def p_condition_1(p):
 
 
 def p_condition_2(p):
-    """condition : operand CMP_OP operand 
+    """condition : operand CMP_OP operand
                 | operand IN list_def
                 | operand IN var_ref
                 | condition AND condition
@@ -304,13 +304,20 @@ def p_condition_2(p):
 
 
 def p_condition_3(p):
-    "condition : function_call"
+    """condition : function_call
+                | var_ref"""
     p[0] = p[1]
 
 
 def p_condition_not(p):
     """condition : NOT condition"""
     p[0] = Not(p[2])
+    attach_lnr(p)
+
+
+def p_condition_is_defined(p):
+    """condition : var_ref '.' ID IS DEFINED"""
+    p[0] = IsDefined(p[1], p[3])
     attach_lnr(p)
 
 

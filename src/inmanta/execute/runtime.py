@@ -356,6 +356,26 @@ class HangUnit(Waiter):
             raise e
 
 
+class RawUnit(Waiter):
+
+    def __init__(self, queue_scheduler, resolver, requires, resumer):
+        Waiter.__init__(self, queue_scheduler)
+        self.queue_scheduler = queue_scheduler
+        self.resolver = resolver
+        self.requires = requires
+        self.resumer = resumer
+        for r in requires.values():
+            self.await(r)
+        self.ready(self)
+
+    def execute(self):
+        try:
+            self.resumer.resume(self.requires, self.resolver, self.queue_scheduler)
+        except RuntimeException as e:
+            e.set_statement(self.resumer)
+            raise e
+
+
 class ExecutionUnit(Waiter):
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
