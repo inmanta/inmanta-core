@@ -572,9 +572,15 @@ class Project(ModuleLike):
         return specs
 
     def collect_imported_requirements(self):
-        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-        specs = {name: spec for name, spec in self.collect_requirements().items() if name in imports}
-        return specs
+        imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
+        specs = self.collect_requirements()
+
+        def get_spec(name):
+            if name in specs:
+                return specs[name]
+            return parse_requirements(name)
+
+        return {name: get_spec(name) for name in imports}
 
     def verify_requires(self) -> bool:
         """
