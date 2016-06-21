@@ -18,10 +18,8 @@
 
 from .local import LocalIO
 from .remote import RemoteIO
-from inmanta.util import memoize
 
 
-@memoize
 def get_io(remote=None):
     """
         Get an IO instance.

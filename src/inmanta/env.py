@@ -38,6 +38,7 @@ class VirtualEnv(object):
         self.env_path = env_path
         self.virtual_python = None
         self.virtual_pip = None
+        self.__cache_done = set()
 
     def init_env(self):
         """
@@ -50,11 +51,11 @@ class VirtualEnv(object):
         python_bin = os.path.join(self.env_path, "bin", python_name)
 
         if not os.path.exists(python_bin):
-            virtualenv_path = "/usr/bin/virtualenv"
+            virtualenv_path = os.path.join(os.path.dirname(python_exec), "virtualenv")
             if not os.path.exists(virtualenv_path):
                 raise Exception("Unable to find virtualenv script (%s does not exist)" % virtualenv_path)
 
-            proc = subprocess.Popen(["/usr/bin/virtualenv", "-p", python_exec, self.env_path], env={}, stdout=subprocess.PIPE,
+            proc = subprocess.Popen([virtualenv_path, "-p", python_exec, self.env_path], env={}, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
             out, err = proc.communicate()
 
@@ -93,6 +94,7 @@ class VirtualEnv(object):
             cmd.append(require)
 
         subprocess.call(cmd)
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     def install_from_file(self, requirements_file: str) -> None:
         """
@@ -101,6 +103,8 @@ class VirtualEnv(object):
         if os.path.exists(requirements_file):
             cmd = [self.virtual_pip, "install", "-r", requirements_file]
             subprocess.call(cmd)
+
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     def _read_current_requirements_hash(self):
         """
@@ -121,11 +125,17 @@ class VirtualEnv(object):
         with open(path, "w+") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: list) -> None:
+    def install_from_list(self, requirements_list: list, detailed_cache=False) -> None:
         """
             Install requirements from a list of requirement strings
         """
         requirements_list = sorted(requirements_list)
+
+        if detailed_cache:
+            requirements_list = sorted(list(set(requirements_list) - self.__cache_done))
+            if len(requirements_list) == 0:
+                return
+
         # hash it
         sha1sum = hashlib.sha1()
         sha1sum.update("\n".join(requirements_list).encode())
@@ -133,15 +143,19 @@ class VirtualEnv(object):
 
         current_hash = self._read_current_requirements_hash()
 
-        if new_req_hash != current_hash:
-            try:
-                # create requirements file
-                requirements_file = tempfile.mktemp()
-                with open(requirements_file, "w+") as fd:
-                    fd.write("\n".join(requirements_list))
-                    fd.close()
+        if new_req_hash == current_hash:
+            return
 
-                self.install_from_file(requirements_file)
-                self._set_current_requirements_hash(new_req_hash)
-            finally:
-                os.remove(requirements_file)
+        try:
+            # create requirements file
+            requirements_file = tempfile.mktemp()
+            with open(requirements_file, "w+") as fd:
+                fd.write("\n".join(requirements_list))
+                fd.close()
+
+            self.install_from_file(requirements_file)
+            self._set_current_requirements_hash(new_req_hash)
+            for x in requirements_list:
+                self.__cache_done.add(x)
+        finally:
+            os.remove(requirements_file)

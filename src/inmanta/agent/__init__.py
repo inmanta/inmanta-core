@@ -22,7 +22,6 @@ import datetime
 import hashlib
 import logging
 import os
-import time
 
 from tornado import gen
 from inmanta import env
@@ -81,8 +80,13 @@ class ResourceAction(object):
         else:
             level = "ERROR"
 
-        yield self.scheduler.agent._client.resource_updated(tid=self.scheduler._env_id, id=str(self.resource.id), level=level, action=action, status=status,
-                                                            message="%s: %s" % (status, log_msg), extra_data=changes)
+        yield self.scheduler.agent._client.resource_updated(tid=self.scheduler._env_id,
+                                                            id=str(self.resource.id),
+                                                            level=level,
+                                                            action=action,
+                                                            status=status,
+                                                            message="%s: %s" % (status, log_msg),
+                                                            extra_data=changes)
 
         self.future.set_result(ResourceActionResult(success, reload, False))
         print("end run %s" % self.resource)
@@ -109,6 +113,7 @@ class ResourceAction(object):
 
             LOGGER.debug("Start deploy of resource %s" % resource)
             provider = None
+
             try:
                 provider = Commander.get_provider(self.scheduler.agent, resource)
             except Exception:
@@ -121,7 +126,10 @@ class ResourceAction(object):
             status = results["status"]
             if status == "failed" or status == "skipped":
                 provider.close()
-                return self.__complete(False, False, changes=results["changes"], status=results["status"], log_msg=results["log_msg"])
+                return self.__complete(False, False,
+                                       changes=results["changes"],
+                                       status=results["status"],
+                                       log_msg=results["log_msg"])
 
             if result.reload and provider.can_reload():
                 LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
@@ -265,18 +273,27 @@ class Agent(AgentEndPoint):
             self.get_latest_version_for_agent(agent)
 
     @gen.coroutine
-    def _ensure_code(self, environment, version):
+    def _ensure_code(self, environment, version, resourcetypes):
         """
             Ensure that the code for the given environment and version is loaded
         """
-        if self.latest_code_version < version and self._loader is not None:
-            result = yield self._client.get_code(environment, version)
+        if self._loader is not None:
+            for rt in resourcetypes:
+                result = yield self._client.get_code(environment, version, rt)
 
-            if result.code == 200:
-                self._env.install_from_list(result.result["requires"])
-                self._loader.deploy_version(version, result.result["sources"])
+                if result.code == 200:
+                    for key, source in result.result["sources"].items():
+                        try:
+                            LOGGER.debug("Installing handler %s for %s", rt, source[1])
+                            yield self._install(key, source)
+                            LOGGER.debug("Installed handler %s for %s", rt, source[1])
+                        except Exception:
+                            LOGGER.exception("Failed to install handler %s for %s", rt, source[1])
 
-                self.latest_code_version = version
+    @gen.coroutine
+    def _install(self, key, source):
+        yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
+        yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
     @protocol.handle(methods.NodeMethod.trigger_agent)
     @gen.coroutine
@@ -302,8 +319,9 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s", agent)
 
         else:
-            yield self._ensure_code(self._env_id, result.result["version"])
+            restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
             resources = []
+            yield self._ensure_code(self._env_id, result.result["version"], restypes)
             try:
                 for res in result.result["resources"]:
                     data = res["fields"]
@@ -334,7 +352,9 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
             return 500
 
-        yield self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
+        restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+
+        yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
         provider = None
         try:

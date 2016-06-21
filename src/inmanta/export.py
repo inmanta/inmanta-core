@@ -31,10 +31,10 @@ from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id
 from inmanta.config import Config
-from inmanta.module import Project
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.ast import RuntimeException
 from tornado.ioloop import IOLoop
+from tornado import gen
 
 LOGGER = logging.getLogger(__name__)
 
@@ -310,23 +310,33 @@ class Exporter(object):
         if version is None:
             version = int(time.time())
 
+        def mergeDict(a, b):
+            """Very specific impl to this particular data structure."""
+            for k, v in b.items():
+                if k not in a:
+                    a[k] = v
+                elif isinstance(v, dict):
+                    mergeDict(a[k], v)
+                else:
+                    if a[k] != v:
+                        raise Exception("Hash collision!", k, a[k], v)
+
         LOGGER.info("Sending resources and handler source to server")
         sources = resource.sources()
-        sources.update(Commander.sources())
+        mergeDict(sources, Commander.sources())
 
-        requires = Project.get().collect_python_requirements()
-
-        LOGGER.info("Uploading source files")
+        LOGGER.info("Uploding source files")
 
         conn = protocol.Client("compiler")
 
+        @gen.coroutine
         def call():
-            return conn.upload_code(tid=tid, id=version, sources=sources, requires=list(requires))
+            for myresource, mysources in sources.items():
+                res = yield conn.upload_code(tid=tid, id=version, resource=myresource, sources=mysources)
+                if res is None or res.code != 200:
+                    raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
-        res = self.run_sync(call)
-
-        if res is None or res.code != 200:
-            raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+        self.run_sync(call)
 
     def commit_resources(self, version, resources):
         """

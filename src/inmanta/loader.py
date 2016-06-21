@@ -38,6 +38,7 @@ class CodeLoader(object):
 
         :param code_dir The directory where the code is stored
     """
+
     def __init__(self, code_dir):
         self.__code_dir = code_dir
         self.__modules = {}
@@ -56,6 +57,8 @@ class CodeLoader(object):
             fd = open(os.path.join(self.__code_dir, VERSION_FILE), "r")
             self.__current_version = int(fd.read())
             fd.close()
+
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
             if mod_dir in py:
@@ -97,42 +100,35 @@ class CodeLoader(object):
         except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
-    def deploy_version(self, version, modules, persist=False):
+    def deploy_version(self, key, mod, persist=False):
         """
             Deploy a new version of the modules
 
             :param version The version of the deployed modules
             :modules modules A list of module names and the hashes of the code files
         """
-        if version > self.__current_version:
-            LOGGER.info("Deploying new version of code (v=%s)" % version)
-            # deploy the new code
-            for hv, mod in modules.items():
-                name = mod[1]
-                source_code = mod[2]
+        LOGGER.info("Deploying code (key=%s)" % key)
+        # deploy the new code
+        name = mod[1]
+        source_code = mod[2]
 
-                # if the module is new, or update
-                if name not in self.__modules or hv != self.__modules[name][0]:
-                    # write the new source
-                    source_file = os.path.join(self.__code_dir, MODULE_DIR, name + ".py")
+        # if the module is new, or update
+        if name not in self.__modules or key != self.__modules[name][0]:
+            # write the new source
+            source_file = os.path.join(self.__code_dir, MODULE_DIR, name + ".py")
 
-                    fd = open(source_file, "w+")
-                    fd.write(source_code)
-                    fd.close()
-
-                    # (re)load the new source
-                    self._load_module(name, source_file, hv)
-
-            self.__current_version = version
-            fd = open(os.path.join(self.__code_dir, VERSION_FILE), "w+")
-            fd.write(str(version))
+            fd = open(source_file, "w+")
+            fd.write(source_code)
             fd.close()
 
-            if persist:
-                with open(os.path.join(self.__code_dir, PERSIST_FILE), "w+") as fd:
-                    json.dump(modules, fd)
+            # (re)load the new source
+            self._load_module(name, source_file, key)
 
-            pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+        if persist:
+            with open(os.path.join(self.__code_dir, PERSIST_FILE), "w+") as fd:
+                json.dump(mod, fd)
+
+        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
     def get_module_payload(self):
         """

@@ -506,8 +506,7 @@ class Project(ModuleLike):
         return (statements, blocks)
 
     def __load_ast(self):
-        main_ns = Namespace("__config__")
-        main_ns.parent = self.root_ns
+        main_ns = Namespace("__config__", self.root_ns)
         return self._load_file(main_ns, "main.cf")
 
     def load_module(self, module_name):
@@ -896,6 +895,14 @@ class Module(ModuleLike):
                 return fd.read()
         else:
             return None
+
+    @memoize
+    def get_python_requirements_as_list(self):
+        raw = self.get_python_requirements()
+        if raw is None:
+            return []
+        else:
+            return [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
 
 
 class ModuleTool(object):

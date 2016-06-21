@@ -981,7 +981,7 @@ class Server(protocol.ServerEndpoint):
             Ensure that the agent is running if required
         """
         if self._agent_matches(agent_name):
-            LOGGER.debug("%s matches agents managed by server, ensuring it is started.", agent_name)
+            LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
             agent_data = None
             if environment_id in self._requires_agents:
                 agent_data = self._requires_agents[environment_id]
@@ -1191,32 +1191,32 @@ host = localhost
 
     @protocol.handle(methods.CodeMethod.upload_code)
     @gen.coroutine
-    def upload_code(self, tid, id, sources, requires):
+    def upload_code(self, tid, id, resource, sources):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = yield data.Code.get_version(environment=env, version=id)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=env, version=id, resource=resource)  # @UndefinedVariable
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env, version=id, sources=sources, requires=requires)
+        code = data.Code(environment=env, version=id, resource=resource, sources=sources)
         yield code.save()
 
         return 200
 
     @protocol.handle(methods.CodeMethod.get_code)
     @gen.coroutine
-    def get_code(self, tid, id):
+    def get_code(self, tid, id, resource):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = yield data.Code.get_version(environment=env, version=id)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=env, version=id, resource=resource)  # @UndefinedVariable
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
-        return 200, {"version": id, "environment": tid, "sources": code.sources, "requires": code.requires}
+        return 200, {"version": id, "environment": tid, "resource": resource, "sources": code.sources}
 
     @protocol.handle(methods.ResourceMethod.resource_updated)
     @gen.coroutine
