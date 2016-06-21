@@ -27,6 +27,7 @@ fedora-rpm:
     only:
         - /^stable/.*$/
         - master
+        - /^staging/.*$/
 
 publish-rpm:
     stage: deploy
@@ -39,3 +40,4 @@ publish-rpm:
     only:
         - /^stable/.*$/
         - master
+        - /^staging/.*$/
