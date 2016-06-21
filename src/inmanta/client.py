@@ -28,6 +28,7 @@ from cliff.command import Command
 from inmanta.config import Config
 from blessings import Terminal
 from tornado.ioloop import IOLoop
+import os
 
 LOGGER = logging.getLogger(__name__)
 
@@ -200,6 +201,7 @@ class ProjectShow(InmantaCommand, ShowOne):
     """
         Show project details
     """
+
     def parser_config(self, parser):
         parser.add_argument("id", help="The the id of the project to show")
         return parser
@@ -214,6 +216,7 @@ class ProjectCreate(InmantaCommand, ShowOne):
     """
         Create a new project
     """
+
     def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the new project", required=True)
         return parser
@@ -227,6 +230,7 @@ class ProjectModify(InmantaCommand, ShowOne):
     """
         Modify a project
     """
+
     def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the new project")
         parser.add_argument("id", help="The id of the project to modify")
@@ -243,6 +247,7 @@ class ProjectList(InmantaCommand, Lister):
     """
         List all projects defined on the server
     """
+
     def run_action(self, parsed_args):
         projects = self.do_request("list_projects", "projects")
 
@@ -257,6 +262,7 @@ class ProjectDelete(InmantaCommand, Command):
     """
         Delete a project
     """
+
     def parser_config(self, parser):
         parser.add_argument("id", help="The id of the project to delete.")
         return parser
@@ -271,6 +277,7 @@ class EnvironmentCreate(InmantaCommand, ShowOne):
     """
         Create a new environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the new environment", required=True)
         parser.add_argument("-p", "--project", dest="project", help="The id of the project this environment belongs to",
@@ -279,6 +286,8 @@ class EnvironmentCreate(InmantaCommand, ShowOne):
                             help="The url of the repository that contains the configuration model")
         parser.add_argument("-b", "--branch", dest="branch", required=True,
                             help="The branch in the repository that contains the configuration model")
+        parser.add_argument("-s", "--save", dest="save", action='store_true', default=False,
+                            help="Save the ID of the environment and the server to the .inmanta config file")
         return parser
 
     def run_action(self, parsed_args):
@@ -286,6 +295,27 @@ class EnvironmentCreate(InmantaCommand, ShowOne):
         env = self.do_request("create_environment", "environment", dict(project_id=project_id, name=parsed_args.name,
                                                                         repository=parsed_args.repo, branch=parsed_args.branch))
         project = self.do_request("get_project", "project", {"id": project_id})
+
+        if parsed_args.save:
+            cfg = """
+[config]
+heartbeat-interval = 60
+fact-expire = 1800
+environment=%s
+
+
+[compiler_rest_transport]
+host = %s
+port = %s
+
+[cmdline_rest_transport]
+host=%s
+port=%s""" % (env["id"], parsed_args.host, parsed_args.port, parsed_args.host, parsed_args.port)
+            if os.path.exists(".inmanta"):
+                print(".inmanta exits, not writing config")
+            else:
+                with open(".inmanta", 'w') as f:
+                    f.write(cfg)
 
         return (('Environment ID', 'Environment name', 'Project ID', 'Project name'),
                 ((env["id"], env["name"], project["id"], project["name"]))
@@ -296,6 +326,7 @@ class EnvironmentList(InmantaCommand, Lister):
     """
         List environment defined on the server
     """
+
     def run_action(self, parsed_args):
         environments = self.do_request("list_environments", "environments")
 
@@ -317,6 +348,7 @@ class EnvironmentShow(InmantaCommand, ShowOne):
     """
         Show environment details
     """
+
     def parser_config(self, parser):
         parser.add_argument("id", help="The the id of the evironment to show")
         return parser
@@ -331,6 +363,7 @@ class EnvironmentModify(InmantaCommand, ShowOne):
     """
         Modify an environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-n", "--name", dest="name", help="The name of the environment")
         parser.add_argument("id", help="The id of the environment to modify")
@@ -353,6 +386,7 @@ class EnvironmentDelete(InmantaCommand, Command):
     """
         Delete an environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("id", help="The id of the environment to delete.")
         return parser
@@ -367,6 +401,7 @@ class VersionList(InmantaCommand, Lister):
     """
         List the configuration model versions
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         return parser
@@ -382,6 +417,7 @@ class AgentList(InmantaCommand, Lister):
     """
         List all the agents connected to the server
     """
+
     def run_action(self, parsed_args):
         nodes = self.do_request("list_agents", "nodes")
         data = []
@@ -396,6 +432,7 @@ class VersionRelease(InmantaCommand, ShowOne):
     """
         Release a version of the configuration model
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-p", "--push", dest="push", action="store_true", help="Push the version to the deployment agents")
@@ -417,6 +454,7 @@ class ParamList(InmantaCommand, Lister):
     """
         List all parameters for the environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         return parser
@@ -439,6 +477,7 @@ class ParamSet(InmantaCommand, ShowOne):
     """
         Set a parameter in the environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("--name", dest="name", help="The name of the parameter", required=True)
@@ -465,6 +504,7 @@ class ParamGet(InmantaCommand, ShowOne):
     """
         Set a parameter in the environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("--name", dest="name", help="The name of the parameter", required=True)
@@ -489,6 +529,7 @@ class VersionReport(InmantaCommand, Command):
     """
         Generate a deploy report
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-i", "--version", dest="version", help="The version to create a report from", required=True)
@@ -552,6 +593,7 @@ class FormList(InmantaCommand, Lister):
     """
         List all parameters for the environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         return parser
@@ -570,6 +612,7 @@ class FormShow(InmantaCommand, ShowOne):
     """
         List all parameters for the environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
@@ -594,6 +637,7 @@ class RecordList(InmantaCommand, Lister):
     """
         List all parameters for the environment
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-t", "--form-type", dest="form", help="Show records from this form", required=True)
@@ -614,6 +658,7 @@ class RecordCreate(InmantaCommand, ShowOne):
     """
         Create a new record
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
@@ -652,6 +697,7 @@ class RecordUpdate(InmantaCommand, ShowOne):
     """
         Create a new record
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-r", "--record", dest="record", help="The id of the record to edit", required=True)
@@ -684,6 +730,7 @@ class RecordDelete(InmantaCommand, ShowOne):
     """
         Delete a record
     """
+
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("record_id", help="The the id of the record to delete")
