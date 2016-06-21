@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 
+import os
 import logging
 import uuid
 import datetime
@@ -28,7 +29,7 @@ from cliff.command import Command
 from inmanta.config import Config
 from blessings import Terminal
 from tornado.ioloop import IOLoop
-import os
+
 
 LOGGER = logging.getLogger(__name__)
 
