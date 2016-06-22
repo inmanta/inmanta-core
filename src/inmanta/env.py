@@ -54,8 +54,8 @@ class VirtualEnv(object):
             if not os.path.exists(virtualenv_path):
                 raise Exception("Unable to find virtualenv script (%s does not exist)" % virtualenv_path)
 
-            proc = subprocess.Popen([virtualenv_path, "-p", python_exec, self.env_path], env={}, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
+            proc = subprocess.Popen([virtualenv_path, "-p", python_exec, self.env_path], env=os.environ.copy(),
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = proc.communicate()
 
             if proc.returncode == 0:
