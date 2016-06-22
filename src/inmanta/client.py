@@ -20,6 +20,7 @@ import os
 import logging
 import uuid
 import datetime
+import json
 from collections import defaultdict
 
 from inmanta import protocol
@@ -29,15 +30,6 @@ from cliff.command import Command
 from inmanta.config import Config
 from blessings import Terminal
 from tornado.ioloop import IOLoop
-
-
-LOGGER = logging.getLogger(__name__)
-
-
-def client_parser(parser):
-    parser.add_argument("--host", dest="host", help="The server hostname to connect to (default: localhost)",
-                        default="localhost")
-    parser.add_argument("--port", dest="port", help="The server port to connect to (default: 8888)", default=8888, type=int)
 
 
 class InmantaCommand(Command):
@@ -191,6 +183,8 @@ class InmantaCommand(Command):
         return env_id
 
     def take_action(self, parsed_args):
+        Config.set("cmdline_rest_transport", "host", parsed_args.host)
+        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
         self._client = protocol.Client("cmdline")
         return self.run_action(parsed_args)
 
@@ -424,9 +418,9 @@ class AgentList(InmantaCommand, Lister):
         data = []
         for node in nodes:
             for agent in node["agents"]:
-                data.append((node["hostname"], agent["name"], agent["role"], agent["environment"], agent["last_seen"]))
+                data.append((node["hostname"], agent["name"], agent["environment"], agent["last_seen"]))
 
-        return (('Node', 'Agent', 'Role', 'Environment', 'Last seen'), data)
+        return (('Node', 'Agent', 'Environment', 'Last seen'), data)
 
 
 class VersionRelease(InmantaCommand, ShowOne):
@@ -632,6 +626,26 @@ class FormShow(InmantaCommand, ShowOne):
                 values.append("type: %s" % v)
 
         return (headers, values)
+
+
+class FormExport(InmantaCommand, ShowOne):
+    """
+        Export all data in the records of a form to json
+    """
+
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
+        return parser
+
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
+        form_def = self.do_request("get_form", "form", arguments=dict(tid=tid, id=parsed_args.form))
+        form_records = self.do_request("list_records", "records", arguments=dict(tid=tid, form_type=parsed_args.form,
+                                                                                 include_record=True))
+
+        print(json.dumps({"form_type": form_def, "records": form_records}))
+        return ((), ())
 
 
 class RecordList(InmantaCommand, Lister):
