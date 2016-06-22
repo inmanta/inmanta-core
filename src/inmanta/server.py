@@ -430,7 +430,7 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.FormRecords.list_records)
     @gen.coroutine
-    def list_records(self, tid, form_type):
+    def list_records(self, tid, form_type, include_record):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
@@ -441,7 +441,16 @@ class Server(protocol.ServerEndpoint):
 
         records = yield data.FormRecord.objects.filter(form=form_type).find_all()  # @UndefinedVariable
 
-        return 200, {"records": [{"record_id": r.uuid, "changed": r.changed} for r in records]}
+        if not include_record:
+            return 200, {"records": [{"record_id": r.uuid, "changed": r.changed} for r in records]}
+
+        else:
+            record_dict = []
+            for record in records:
+                data_dict = yield record.to_dict()
+                record_dict.append(data_dict)
+
+            return 200, {"records": record_dict}
 
     @protocol.handle(methods.FormRecords.get_record)
     @gen.coroutine

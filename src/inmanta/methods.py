@@ -556,12 +556,13 @@ class FormRecords(Method):
     __method_name__ = "records"
 
     @protocol(operation="GET", mt=True, index=True)
-    def list_records(self, tid: uuid.UUID, form_type: str):
+    def list_records(self, tid: uuid.UUID, form_type: str, include_record: bool=False):
         """
             Get a list of all records of a specific form
 
             :param tid The id of the environment
             :param form_type The type of the form
+            :param include_record Include all the data contained in the record as well
         """
 
     @protocol(operation="GET", mt=True, id=True)
