@@ -648,6 +648,41 @@ class FormExport(InmantaCommand, ShowOne):
         return ((), ())
 
 
+class FormImport(InmantaCommand, ShowOne):
+    """
+        Import records into an existing form. It creates new records!
+    """
+
+    def parser_config(self, parser):
+        parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
+        parser.add_argument("-t", "--form-type", dest="form", help="Show details of this form", required=True)
+        parser.add_argument("--file", dest="file", help="The json file with the record data", required=True)
+        return parser
+
+    def run_action(self, parsed_args):
+        tid = self.to_environment_id(parsed_args.env)
+        file_name = parsed_args.file
+        if not os.path.exists(file_name):
+            raise Exception("%s file does not exist." % file_name)
+
+        data = {}
+        with open(file_name, "r") as fd:
+            try:
+                data = json.load(fd)
+            except Exception as e:
+                raise Exception("Unable to load records, invalid json") from e
+
+        if "records" not in data:
+            raise Exception("No records found in input file")
+
+        for record in data["records"]:
+            if record["form_type"] == parsed_args.form:
+                self.do_request("create_record", "record", arguments=dict(tid=tid, form_type=parsed_args.form,
+                                                                          form=record["fields"]))
+
+        return ((), ())
+
+
 class RecordList(InmantaCommand, Lister):
     """
         List all parameters for the environment

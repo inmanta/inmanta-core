@@ -46,6 +46,7 @@ setup(
         'form-list = inmanta.client:FormList',
         'form-show = inmanta.client:FormShow',
         'form-export = inmanta.client:FormExport',
+        'form-import = inmanta.client:FormImport',
 
         'record-list = inmanta.client:RecordList',
         'record-create = inmanta.client:RecordCreate',
