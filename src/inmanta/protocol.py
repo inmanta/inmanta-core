@@ -1042,8 +1042,11 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
 
                                 result_body, _, status = future.result()
                                 if status == 500:
+                                    msg = ""
+                                    if result_body is not None and "message" in result_body:
+                                        msg = result_body["message"]
                                     LOGGER.error("An error occurred during heartbeat method call (%s %s): %s",
-                                                 method_call["method"], method_call["url"], result_body["message"])
+                                                 method_call["method"], method_call["url"], msg)
                                 self._client.heartbeat_reply(self._env_id, method_call["reply_id"],
                                                              {"result": result_body, "code": status})
 
