@@ -24,6 +24,8 @@ import urllib
 import uuid
 import json
 import re
+import base64
+import os
 from datetime import datetime
 from collections import defaultdict
 
@@ -34,8 +36,6 @@ from inmanta.config import Config
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
-import base64
-import os
 from tornado.web import decode_signed_value, create_signed_value
 
 
@@ -255,11 +255,11 @@ class LoginHandler(tornado.web.RequestHandler):
             LOGGER.exception("An exception occured")
             self._transport.return_error_msg(500, "Unable to decode request body")
 
-        if not "user" in message:
+        if "user" not in message:
             self.respond(*self._transport.return_error_msg(400, "Field user is missing"))
             return
 
-        if not "password" in message:
+        if "password" not in message:
             self.respond(*self._transport.return_error_msg(400, "Field password is missing"))
             return
 
@@ -359,6 +359,15 @@ class RESTHandler(tornado.web.RequestHandler):
         pre = headers["X-inmanta-user"]
         return decode_signed_value(self._aa.secret, "user", pre)
 
+    def respond(self, body, headers, status):
+        if body is not None:
+            self.write(json_encode(body))
+
+        for header, value in headers.items():
+            self.set_header(header, value)
+
+        self.set_status(status)
+
     @gen.coroutine
     def _call(self, kwargs, http_method, config):
         """
@@ -379,20 +388,13 @@ class RESTHandler(tornado.web.RequestHandler):
             request_headers = self.request.headers
 
             if self._aa.authorization.auth(self.get_current_user(request_headers), http_method, request_headers, config):
-                body, headers, status = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+                result = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+                self.respond(*result)
             else:
-                body, headers, status = self._transport.return_error_msg(403, "Access denied.")
+                self.respond(*self._transport.return_error_msg(403, "Access denied."))
         except ValueError:
             LOGGER.exception("An exception occured")
-            body, headers, status = self._transport.return_error_msg(500, "Unable to decode request body")
-
-        if body is not None:
-            self.write(json_encode(body))
-
-        for header, value in headers.items():
-            self.set_header(header, value)
-
-        self.set_status(status)
+            self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
 
     @gen.coroutine
     def head(self, *args, **kwargs):
@@ -1139,9 +1141,9 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
     def get_security_policy(self):
 
-        secret = Config.get("server", "shared-secret",  base64.b64encode(os.urandom(50)).decode('ascii'))
-        username = Config.get("server", "username",  None)
-        password = Config.get("server", "password",  None)
+        secret = Config.get("server", "shared-secret", base64.b64encode(os.urandom(50)).decode('ascii'))
+        username = Config.get("server", "username", None)
+        password = Config.get("server", "password", None)
 
         if username is None and password is None:
             return AandA(NullAuthManager(), NoAuthManager(), secret)
@@ -1303,14 +1305,14 @@ class Client(Endpoint, metaclass=ClientMeta):
         return result
 
 
-class ReturnClient(Endpoint, metaclass=ClientMeta):
+class ReturnClient(Client, metaclass=ClientMeta):
     """
         A client that uses a return channel to connect to its destination. This client is used by the server to communicate
         back to clients over the heartbeat channel.
     """
 
     def __init__(self, name, server, tid, agent):
-        super().__init__(IOLoop.current(), name)
+        super().__init__(name)
         self._server = server
         self._tid = tid
         self._agent = agent
