@@ -18,7 +18,7 @@
 
 import logging
 
-from inmanta.execute.runtime import ResultVariable, WaitUnit, ExecutionUnit
+from inmanta.execute.runtime import ResultVariable, WaitUnit, ExecutionUnit, RawUnit
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast import RuntimeException
@@ -47,6 +47,9 @@ class Reference(ExpressionStatement):
         return out
 
     def execute(self, requires, resolver, queue):
+        return requires[self.name]
+
+    def execute_direct(self, requires):
         return requires[self.name]
 
     def get_containing_namespace(self,):
@@ -88,6 +91,50 @@ class AttributeReferenceHelper(object):
         else:
             # reschedule on the attribute, XU will assign it to the target variable
             ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
+
+    def execute(self, requires, resolver, queue):
+        # Attribute is ready, return it,
+        return self.attr.get_value()
+
+
+class IsDefinedReferenceHelper(object):
+    """
+        Helper class for AttributeReference, reschedules itself
+    """
+
+    def __init__(self, target, instance, attribute):
+        self.attribute = attribute
+        self.target = target
+        self.instance = instance
+
+    def resume(self, requires, resolver, queue_scheduler):
+        """
+            Instance is ready to execute, do it and see if the attribute is already present
+        """
+        try:
+            # get the Instance
+            obj = self.instance.execute({k: v.get_value() for k, v in requires.items()}, resolver, queue_scheduler)
+
+            if isinstance(obj, list):
+                raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
+
+            # get the attribute result variable
+            attr = obj.get_attribute(self.attribute)
+            # Cache it
+            self.attr = attr
+
+            if attr.is_ready():
+                # go ahead
+                # i.e. back to the AttributeReference itself
+                attr.get_value()
+                self.target.set_value(True, self.location)
+            else:
+                requires["x"] = attr
+                # reschedule on the attribute, XU will assign it to the target variable
+                RawUnit(queue_scheduler, resolver, requires, self)
+
+        except RuntimeException:
+            self.target.set_value(False, self.location)
 
     def execute(self, requires, resolver, queue):
         # Attribute is ready, return it,

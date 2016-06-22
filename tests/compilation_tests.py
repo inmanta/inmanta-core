@@ -117,6 +117,55 @@ vm1 = std::floob()
 
         compiler.do_compile()
 
+    @raises(RuntimeException)
+    def testOptionValues(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+
+entity Test2:
+    bool flag=false
+end
+
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:1] Test2 other
+
+implementation tt for Test1:
+
+end
+
+implement Test1 using tt when self.other.flag == false
+
+Test1()
+""")
+        compiler.do_compile()
+
+    def testIsset(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+
+entity Test2:
+    bool flag=false
+end
+
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:1] Test2 other
+
+implementation tt for Test1:
+
+end
+
+implement Test1 using tt when std::isset(self, "other") and self.other.flag == false
+
+Test1()
+""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
