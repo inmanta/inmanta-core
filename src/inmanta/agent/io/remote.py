@@ -19,6 +19,7 @@
 from execnet import multi, gateway_bootstrap
 from . import local
 from inmanta import resources
+from inmanta import config
 
 
 class RemoteIO(object):
@@ -29,8 +30,9 @@ class RemoteIO(object):
         return True
 
     def __init__(self, host):
+        python_path = config.Config.get("config", "python_binary", "python")
         try:
-            self._gw = multi.makegateway("ssh=root@%s//python=python" % host)
+            self._gw = multi.makegateway("ssh=root@%s//python=%s" % (host, python_path))
         except (gateway_bootstrap.HostNotFound, BrokenPipeError) as e:
             raise resources.HostNotFoundException(hostname=host, user="root", error=e)
 

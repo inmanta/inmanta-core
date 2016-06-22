@@ -1033,12 +1033,14 @@ state-dir=/var/lib/inmanta
 agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
+python_binary=%(python_binary)s
 
 [agent_rest_transport]
 port = %(port)s
 host = localhost
-""" % {"agents": agent_names, "env_id": environment_id, "port": port, "agent_map":
-                ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()])}
+""" % {"agents": agent_names, "env_id": environment_id, "port": port,
+                "python_binary": Config.get("config", "python_binary", "python"),
+                "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()])}
 
             config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
             if not os.path.exists(config_dir):
