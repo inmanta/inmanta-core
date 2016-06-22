@@ -26,7 +26,7 @@ from nose.tools import assert_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, Location
+from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException
 from nose.tools.nontrivial import raises
 
 
