@@ -33,6 +33,7 @@ class provider(object):
     """
         A decorator that registers a new implementation
     """
+
     def __init__(self, resource_type, name):
         self._resource_type = resource_type
         self._name = name
@@ -53,6 +54,7 @@ class ResourceHandler(object):
     """
         A baseclass for classes that handle resource on a platform
     """
+
     def __init__(self, agent, io=None):
         self._agent = agent
 
@@ -79,8 +81,9 @@ class ResourceHandler(object):
             Method executed after a transaction
         """
 
-    def close(self):
-        self._io.close()
+    def close(self, with_io=True):
+        if with_io:
+            self._io.close()
         self._ioloop.close(all_fds=True)
 
     @classmethod
@@ -291,7 +294,7 @@ class Commander(object):
                 if h.available(resource):
                     available.append(h)
                 else:
-                    h.close()
+                    h.close(with_io=False)
 
         if len(available) > 1:
             for h in available:

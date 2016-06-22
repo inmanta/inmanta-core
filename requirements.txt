@@ -6,7 +6,7 @@ urllib3
 six
 sphinx-argparse
 sphinx
-cliff
+cliff == 2.0.0
 blessings
 python-dateutil
 ply

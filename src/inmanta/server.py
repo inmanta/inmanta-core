@@ -981,7 +981,7 @@ class Server(protocol.ServerEndpoint):
             Ensure that the agent is running if required
         """
         if self._agent_matches(agent_name):
-            LOGGER.debug("%s matches agents managed by server, ensuring it is started.", agent_name)
+            LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
             agent_data = None
             if environment_id in self._requires_agents:
                 agent_data = self._requires_agents[environment_id]
