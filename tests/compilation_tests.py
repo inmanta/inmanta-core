@@ -160,9 +160,9 @@ implementation tt for Test1:
 
 end
 
-implement Test1 using tt when std::isset(self, "other") and self.other.flag == false
+implement Test1 using tt when self.other is defined and self.other.flag == false
 
-Test1()
+Test1(other=Test2())
 """)
         compiler.do_compile()
 
