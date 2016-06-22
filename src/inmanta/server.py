@@ -483,9 +483,18 @@ class Server(protocol.ServerEndpoint):
         form_fields = record.form.fields
         for k, _v in form_fields.items():
             if k in form:
-                record.fields[k] = form[k]
+                value = form[k]
+                field_type = form_fields[k]
+                if field_type in type.TYPES:
+                    type_obj = type.TYPES[field_type]
+                    record.fields[k] = type_obj.cast(value)
+                else:
+                    LOGGER.warning("Field %s in form %s has an invalid type." % (k, id))
 
-        _, record_dict = yield [record.save(), record.to_dict()]
+        yield record.save()
+
+        new_record = yield data.FormRecord.get_uuid(id)
+        record_dict = yield new_record.to_dict()
 
         self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
         return 200, {"record": record_dict}
