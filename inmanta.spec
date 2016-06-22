@@ -38,6 +38,7 @@ Requires:       %scl_require_package rh-python34 python-PyYAML
 Requires:       %scl_require_package rh-python34 python-virtualenv
 Requires:       %scl_require_package rh-python34 python-pymongo
 Requires:       %scl_require_package rh-python34 python-motorengine
+Requires:       %scl_require_package rh-python34 python-ruamel-yaml
 %else
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
@@ -119,7 +120,7 @@ rm -rf %{buildroot}
 %{_bindir}/inmanta-cli
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
 %config %attr(-, root, root) /etc/inmanta.cfg
-%attr(-, inmanta, inmanta) %{_localstatedir}/log/inmanta
+%attr(-, inmanta, inmanta) /var/log/inmanta
 %attr(-, root, root)/etc/inmanta
 
 %files server
