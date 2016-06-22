@@ -909,6 +909,12 @@ class Module(ModuleLike):
         else:
             return [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
 
+    def execute_command(self, cmd):
+        print("executing %s on %s in %s" % (cmd, self.get_name(), self._path))
+        print("=" * 10)
+        subprocess.call(cmd, shell=True, cwd=self._path)
+        print("=" * 10)
+
 
 class ModuleTool(object):
     """
@@ -922,6 +928,8 @@ class ModuleTool(object):
     def modules_parser_config(cls, parser: ArgumentParser):
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
         subparser.add_parser("list", help="List all modules in a table")
+        do = subparser.add_parser("do", help="Execute a command on all loaded modules")
+        do.add_argument("command", metavar='mycmd', help='the command to  execute')
         subparser.add_parser("update", help="Update all modules from their source")
         subparser.add_parser("install", help="List all modules in a table")
         subparser.add_parser("status", help="Run a git status on all modules and report")
@@ -961,6 +969,16 @@ class ModuleTool(object):
             Show a list of commands
         """
         print("Available commands: list")
+
+    def do(self, command):
+        project = Project.get()
+
+        project.load()
+        for mod in Project.get().sorted_modules():
+            try:
+                mod.execute_command(command)
+            except Exception as e:
+                print(e)
 
     def list(self):
         """
