@@ -43,6 +43,7 @@ LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
 INMANTA_AUTH_HEADER = "X-Inmanta-user"
 
+
 class Result(object):
     """
         A result of a method call
@@ -234,6 +235,15 @@ class LoginHandler(tornado.web.RequestHandler):
         self._aa = aa
         self._transport = transport
 
+    def respond(self, body, headers, status):
+        if body is not None:
+            self.write(json_encode(body))
+
+        for header, value in headers.items():
+            self.set_header(header, value)
+
+        self.set_status(status)
+
     def post(self):
 
         self.set_header("Access-Control-Allow-Origin", "*")
@@ -246,16 +256,18 @@ class LoginHandler(tornado.web.RequestHandler):
             self._transport.return_error_msg(500, "Unable to decode request body")
 
         if not "user" in message:
-            self._transport.return_error_msg(400, "Field user is missing")
+            self.respond(*self._transport.return_error_msg(400, "Field user is missing"))
+            return
 
         if not "password" in message:
-            self._transport.return_error_msg(400, "Field user is missing")
+            self.respond(*self._transport.return_error_msg(400, "Field password is missing"))
+            return
 
         if self._aa.get_authn().isValid(message["user"], message["password"]):
             self.write(
                 json_encode({"token": create_signed_value(self._aa.secret, "user", message["user"]).decode("utf8")}))
         else:
-            raise HTTPError(401, "bad password username combination")
+            self.respond(*self._transport.return_error_msg(401, "bad password username combination"))
 
     @gen.coroutine
     def options(self, *args, **kwargs):
@@ -299,6 +311,12 @@ class SingleUserAuthManager(AuthNManager):
 
     def isValid(self, user, credential):
         return user == self.user and self.crediation == credential
+
+
+class NoAuthManager(AuthNManager):
+
+    def isValid(self, user, credential):
+        return False
 
 
 class AandA(object):
@@ -351,24 +369,22 @@ class RESTHandler(tornado.web.RequestHandler):
             message = self._transport._decode(self.request.body)
             if message is None:
                 message = {}
+
+            for key, value in self.request.query_arguments.items():
+                if len(value) == 1:
+                    message[key] = value[0].decode("latin-1")
+                else:
+                    message[key] = [v.decode("latin-1") for v in value]
+
+            request_headers = self.request.headers
+
+            if self._aa.authorization.auth(self.get_current_user(request_headers), http_method, request_headers, config):
+                body, headers, status = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+            else:
+                body, headers, status = self._transport.return_error_msg(403, "Access denied.")
         except ValueError:
             LOGGER.exception("An exception occured")
-            self._transport.return_error_msg(500, "Unable to decode request body")
-
-        for key, value in self.request.query_arguments.items():
-            if len(value) == 1:
-                message[key] = value[0].decode("latin-1")
-            else:
-                message[key] = [v.decode("latin-1") for v in value]
-
-        request_headers = self.request.headers
-
-        if self._aa.authorization.auth(self.get_current_user(request_headers), http_method, request_headers, config):
-            body, headers, status = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
-        else:
-            body = "Access denied."
-            headers = {}
-            status = 403
+            body, headers, status = self._transport.return_error_msg(500, "Unable to decode request body")
 
         if body is not None:
             self.write(json_encode(body))
@@ -876,9 +892,6 @@ class Endpoint(object):
 
     node_name = property(get_node_name)
 
-    def get_security_policy(self):
-        return AandA(HasUserAuthManager(), SingleUserAuthManager("jos", "jos"), base64.b64encode(os.urandom(50)).decode('ascii'))
-
 
 def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message):
     def on_timeout():
@@ -1080,6 +1093,25 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         env = self.get_env(tid)
         env.set_reply(reply_id, data)
         return 200
+
+    def get_security_policy(self):
+
+        secret = Config.get("server", "shared-secret",  base64.b64encode(os.urandom(50)).decode('ascii'))
+        username = Config.get("server", "username",  None)
+        password = Config.get("server", "password",  None)
+
+        if username is None and password is None:
+            return AandA(NullAuthManager(), NoAuthManager(), secret)
+
+        if username is None:
+            LOGGER.warning("password not set, but username is")
+            return AandA(NullAuthManager(), NoAuthManager(), secret)
+
+        if password is None:
+            LOGGER.warning("username not set, but password is")
+            return AandA(NullAuthManager(), NoAuthManager(), secret)
+
+        return AandA(HasUserAuthManager(), SingleUserAuthManager(username, password), secret)
 
 
 class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
