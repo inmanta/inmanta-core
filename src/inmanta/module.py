@@ -28,6 +28,7 @@ from argparse import ArgumentParser
 import inspect
 from pkg_resources import parse_version, parse_requirements
 import time
+from subprocess import CalledProcessError
 
 import yaml
 import inmanta
@@ -107,6 +108,8 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def push(self, repo):
+        return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"], cwd=repo).decode("utf-8")
 
 # try:
 #     import pygit2
@@ -573,6 +576,7 @@ class Project(ModuleLike):
 
     def collect_imported_requirements(self):
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
+        imports.add("std")
         specs = self.collect_requirements()
 
         def get_spec(name):
@@ -869,27 +873,22 @@ class Module(ModuleLike):
                 print("\t%s" % f)
 
             print()
+        else:
+            print("Module %s (%s) has no changes" % (self._meta["name"], self._path))
 
     def push(self):
         """
             Run a git status on this module
         """
-        sys.stdout.write("%s (%s) " % (self._meta["name"], self._path))
+        sys.stdout.write("%s (%s) " % (self.get_name(), self._path))
         sys.stdout.flush()
-
-        cmd = ["git", "push", "--porcelain"]
-        output = self._call(cmd, self._path, "git push")
-        if output is not None:
-            sys.stdout.write("branches ")
-            sys.stdout.flush()
-
-        cmd = ["git", "push", "--porcelain", "--tags"]
-        output = self._call(cmd, self._path, "git push tags")
-        if output is not None:
-            sys.stdout.write("tags ")
-            sys.stdout.flush()
-
-        print("done")
+        try:
+            print(gitprovider.push(self._path))
+        except CalledProcessError:
+            print("Cloud not push module %s" % self.get_name())
+        else:
+            print("done")
+        print()
 
     def get_python_requirements(self):
         """
@@ -973,10 +972,12 @@ class ModuleTool(object):
 
         project = Project.get()
         names = sorted(project.modules.keys())
-        specs = project.collect_requirements()
+        specs = project.collect_imported_requirements()
         for name in names:
             mod = Project.get().modules[name]
             version = str(mod.version)
+            if name not in specs:
+                specs[name] = []
             versions = Module.get_suitable_versions_for(name, specs[name], mod._path)
             if len(versions) == 0:
                 reqv = "None"
