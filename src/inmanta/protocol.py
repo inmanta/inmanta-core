@@ -41,7 +41,7 @@ from tornado.web import decode_signed_value, create_signed_value
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-
+INMANTA_AUTH_HEADER = "X-Inmanta-user"
 
 class Result(object):
     """
@@ -261,8 +261,8 @@ class LoginHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, X-inmanta-user" +
-                        INMANTA_MT_HEADER)
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
+                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
 
@@ -270,24 +270,43 @@ class LoginHandler(tornado.web.RequestHandler):
 class AuthManager(object):
 
     def auth(self, user, method, request_headers, config):
-        if user is not None:
-            return True
-        else:
-            return method == "GET"
+        raise NotImplementedError()
+
+
+class NullAuthManager(AuthManager):
+
+    def auth(self, user, method, request_headers, config):
+        return True
+
+
+class HasUserAuthManager(AuthManager):
+
+    def auth(self, user, method, request_headers, config):
+        return user is not None
 
 
 class AuthNManager(object):
 
     def isValid(self, user, credential):
-        return True
+        raise NotImplementedError()
+
+
+class SingleUserAuthManager(AuthNManager):
+
+    def __init__(self, user, credential):
+        self.user = user
+        self.crediation = credential
+
+    def isValid(self, user, credential):
+        return user == self.user and self.crediation == credential
 
 
 class AandA(object):
 
-    def __init__(self):
-        self.authorization = AuthManager()
-        self.authentication = AuthNManager()
-        self.secret = base64.b64encode(os.urandom(50)).decode('ascii')
+    def __init__(self, authorization, authentication, secret):
+        self.authorization = authorization
+        self.authentication = authentication
+        self.secret = secret
 
     def get_authz(self):
         return self.authorization
@@ -387,8 +406,8 @@ class RESTHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, X-inmanta-user, " +
-                        INMANTA_MT_HEADER)
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
+                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
 
@@ -411,8 +430,6 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
-        self._aa = AandA()
-        self._handlers.append((r"/login", LoginHandler, {"aa": self._aa, "transport": self}))
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -587,13 +604,16 @@ class RESTTransport(Transport):
         """
         url_map = self.create_op_mapping()
 
+        aa = self.endpoint.get_security_policy()
         for url, configs in url_map.items():
             handler_config = {}
             for op, cfg in configs.items():
                 handler_config[op] = cfg
 
-            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config, "aa": self._aa}))
+            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config, "aa": aa}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
+
+        self._handlers.append((r"/login", LoginHandler, {"aa": aa, "transport": self}))
 
         port = 8888
         if self.id in Config.get() and "port" in Config.get()[self.id]:
@@ -856,6 +876,9 @@ class Endpoint(object):
 
     node_name = property(get_node_name)
 
+    def get_security_policy(self):
+        return AandA(HasUserAuthManager(), SingleUserAuthManager("jos", "jos"), base64.b64encode(os.urandom(50)).decode('ascii'))
+
 
 def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message):
     def on_timeout():
@@ -962,6 +985,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     def __init__(self, name, io_loop, transport=RESTTransport):
         super().__init__(io_loop, name)
         self._transport = transport
+
         self._transport_instance = Transport.create(self._transport, self)
         self._sched = Scheduler(self._io_loop)
 
