@@ -257,6 +257,12 @@ class testModuleTool(unittest.TestCase):
 
         assert_true(not os.path.exists(os.path.join(coroot, "libs", "mod5")), "mod5 should not be present!")
 
+        # test all tools, perhaps isolate to other test case
+        ModuleTool().execute("list", [])
+        ModuleTool().execute("update", [])
+        ModuleTool().execute("status", [])
+        ModuleTool().execute("push", [])
+
     @raises(CompilerException)
     def test_badDepCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "baddep")
