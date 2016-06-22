@@ -28,7 +28,7 @@ from datetime import datetime
 from collections import defaultdict
 
 import tornado.web
-from tornado import gen, queues
+from tornado import gen, queues, locks
 from inmanta import methods
 from inmanta.config import Config
 from tornado.httpserver import HTTPServer
@@ -446,6 +446,8 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
+        self.token = None
+        self.token_lock = locks.Lock()
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -702,11 +704,19 @@ class RESTTransport(Transport):
         return url, method, headers, body
 
     @gen.coroutine
-    def call(self, properties, args, kwargs={}):
+    def call(self, properties, args, kwargs={}, reauth=True):
         url, method, headers, body = self.build_call(properties, args, kwargs)
 
         url_host = self._get_client_config()
         url = url_host + url
+
+        if self.token is None:
+            yield self.get_token()
+            reauth = False
+
+        if self.token is not None:
+            headers[INMANTA_AUTH_HEADER] = self.token
+
         LOGGER.debug("Calling server %s %s", method, url)
 
         try:
@@ -722,11 +732,44 @@ class RESTTransport(Transport):
                 except ValueError:
                     result = {}
                 return Result(code=e.code, result=result)
+
+            if e.code == 403:
+                self.token = None and reauth
+                val = yield self.call(properties, args, kwargs, True)
+                return val
+
             return Result(code=e.code, result={"message": str(e)})
         except Exception as e:
             return Result(code=500, result={"message": str(e)})
 
         return Result(code=response.code, result=self._decode(response.body))
+
+    @gen.coroutine
+    def get_token(self):
+        with (yield self.token_lock.acquire()):
+            if self.token is not None:
+                return
+
+            username = Config.get(self.id, "username", None)
+            password = Config.get(self.id, "password", None)
+
+            LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
+
+            if username is not None and password is not None:
+                body = {"user": username, "password": password}
+                body = json_encode(body)
+
+                url_host = self._get_client_config()
+                url = url_host + "/login"
+
+                try:
+                    request = HTTPRequest(url=url, method="POST", body=body, connect_timeout=120, request_timeout=120)
+                    client = AsyncHTTPClient()
+                    response = yield client.fetch(request)
+                    response = self._decode(response.body)
+                    self.token = response["token"]
+                except Exception as e:
+                    LOGGER.error("Login failed: %s %s", e.code, str(e))
 
 
 class handle(object):
@@ -1222,6 +1265,18 @@ class ClientMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
+def get_method_name(properties):
+    method = properties["method"]
+    class_name = method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
+    module = inspect.getmodule(method)
+    method_class = getattr(module, class_name)
+
+    if not hasattr(method_class, "__method_name__"):
+        raise Exception("%s should have a __method_name__ variable." % method_class)
+
+    return method_class.__method_name__
+
+
 class Client(Endpoint, metaclass=ClientMeta):
     """
         A client that communicates with end-point based on its configuration
@@ -1238,42 +1293,31 @@ class Client(Endpoint, metaclass=ClientMeta):
         tr = Transport.create(self._transport, self)
         self._transport_instance = tr
 
-    def get_method_name(self, properties):
-        method = properties["method"]
-        class_name = method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
-        module = inspect.getmodule(method)
-        method_class = getattr(module, class_name)
-
-        if not hasattr(method_class, "__method_name__"):
-            raise Exception("%s should have a __method_name__ variable." % method_class)
-
-        return method_class.__method_name__
-
     @gen.coroutine
     def _call(self, args, kwargs, protocol_properties):
         """
             Execute the rpc call
         """
-        protocol_properties["method_name"] = self.get_method_name(protocol_properties)
+        protocol_properties["method_name"] = get_method_name(protocol_properties)
         result = yield self._transport_instance.call(protocol_properties, args, kwargs)
         return result
 
 
-class ReturnClient(Client, metaclass=ClientMeta):
+class ReturnClient(Endpoint, metaclass=ClientMeta):
     """
         A client that uses a return channel to connect to its destination. This client is used by the server to communicate
         back to clients over the heartbeat channel.
     """
 
     def __init__(self, name, server, tid, agent):
-        super().__init__(name)
+        super().__init__(IOLoop.current(), name)
         self._server = server
         self._tid = tid
         self._agent = agent
 
     @gen.coroutine
     def _call(self, args, kwargs, protocol_properties):
-        protocol_properties["method_name"] = self.get_method_name(protocol_properties)
+        protocol_properties["method_name"] = get_method_name(protocol_properties)
         url, method, headers, body = self._transport_instance.build_call(protocol_properties, args, kwargs)
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
