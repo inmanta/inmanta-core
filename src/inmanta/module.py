@@ -506,9 +506,8 @@ class Project(ModuleLike):
         return (statements, blocks)
 
     def __load_ast(self):
-        main_ns = Namespace("__config__")
-        main_ns.parent = self.root_ns
-        return self._load_file(main_ns, "main.cf")
+        main_ns = Namespace("__config__", self.root_ns)
+        return self._load_file(main_ns, os.path.join(self.project_path, "main.cf"))
 
     def load_module(self, module_name):
         path = self.resolver.path_for(module_name)
@@ -573,9 +572,15 @@ class Project(ModuleLike):
         return specs
 
     def collect_imported_requirements(self):
-        imports = set([x.name for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
-        specs = {name: spec for name, spec in self.collect_requirements().items() if name in imports}
-        return specs
+        imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
+        specs = self.collect_requirements()
+
+        def get_spec(name):
+            if name in specs:
+                return specs[name]
+            return parse_requirements(name)
+
+        return {name: get_spec(name) for name in imports}
 
     def verify_requires(self) -> bool:
         """
@@ -1185,12 +1190,11 @@ requires:
             test_project = Project(project_dir)
             test_project.use_virtual_env()
             Project.set(test_project)
-            self.install(test_project)
 
             LOGGER.info("Compiling empty initial model")
             main_cf = os.path.join(project_dir, "main.cf")
             with open(main_cf, "w+") as fd:
-                fd.write("")
+                fd.write("import %s" % (module.name))
 
             if workingcopy:
                 # overwrite with actual
@@ -1204,7 +1208,7 @@ requires:
             LOGGER.info("Verifying modules")
             project.verify()
             LOGGER.info("Loading all plugins")
-            project.load_plugins()
+            project.load()
 
             values = inmanta.compiler.do_compile()
 
