@@ -54,9 +54,10 @@ Next, grab vagrant box from out git repo and let vagrant do the setup
     cd tutorial-vagrant
     vagrant up
     
+Vagrant will set up the Inmanta server and two VM's to experiment on. The server itself will also be used as the developer machine.    
 When vagrant is ready, you should be able to open the dashboard at http://127.0.0.1:8888.  
 
-To get a shell on the Inmanta Server machine:
+To get a shell on the Inmanta Server:
 
 .. code-block:: sh
 
@@ -74,11 +75,11 @@ To get a shell on the Inmanta Server machine:
 
 
 Create an Inmanta project
-========================
+==========================
 
 An Inmanta project bundles modules that contain configuration information. A project is nothing more
-than a directory with an .inmanta file, which contains parameters such as the location to search for
-modules and where to find the server.
+than a directory with a project.yml file, which contains parameters such as the location to search for
+modules and where to find the server. 
 
 Here we will create an Inmanta project ``quickstart`` with a basic configuration file.
 
@@ -86,12 +87,6 @@ Here we will create an Inmanta project ``quickstart`` with a basic configuration
 
     mkdir quickstart
     cd quickstart
-    cat > .inmanta <<EOF
-    [config]
-    export=
-    git-http-only=true
-    EOF
-    touch main.cf
     cat > project.yml <<EOF
     name: quickstart
     modulepath: libs
@@ -101,7 +96,7 @@ Here we will create an Inmanta project ``quickstart`` with a basic configuration
     EOF
 
     
-The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. The Inmanta compiler looks for a file called ``main.cf`` to start the compilation from.  The last line, creates an empty file.
+The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. 
 
 
 In the next section we will re-use existing modules to deploy our LAMP stack.
@@ -158,10 +153,8 @@ website. This composition has to be specified in the ``main.cf`` file:
 On lines 1-6 we import all required packages.  
 On line 9 we define the server on which we want to deploy Drupal. The *name* attribute is the hostname of the
 machine, which is later used to determine what configuration needs to be deployed on which machine.
-The *os* attribute defines which operating system this server runs. This attribute can be used to
-create configuration modules that handle the heterogeneity of different operating systems.
-The current value refers to Fedora. To deploy this on Ubuntu, import ubuntu and change this value to
-ubuntu::ubuntu1404. The *ip* attribute is the IP address of this host. In this introduction
+The *os* attribute defines which operating system this server runs. 
+The current value refers to Fedora. The *ip* attribute is the IP address of this host. In this introduction
 we define this attribute manually, later on we will let Inmanta manage this automatically.
 
 Lines 12 and 13 deploy an httpd server and mysql server on our server.
@@ -180,16 +173,21 @@ For the CLI:
 .. code-block:: sh
 
     inmanta-cli project-create -n test
-    inmanta-cli environment-create  -n test -p test -r $(pwd) -b master
+    inmanta-cli environment-create  -n test -p test -r $(pwd) -b master --save
     
-When the environment is created, its UUID will be reported. This UUID is needed for the compiler to correctly contact the server.
-To compile the model and send it to the server:
+.. note::
+
+	The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to export to the correct project. Alternately, use options ``-e``, ``--server_address``, and ``--server_port``.
+	
+Then compile the project and send it to the server:
 
 .. code-block:: sh 
 
-    inmanta -vvv  export -e [ENV_ID] --server_address 127.0.0.1  --server_port 8888
+    inmanta -vvv  export
+    
+The first time you run this command may take a while, as all dependencies are downloaded.  When it is done, go to the `dashboard <http://127.0.0.1:8888>`_.  
 
-Then go to the `dashboard <http://127.0.0.1:8888>`_.  Go to your environment, and press Deploy.
+Go to your environment, and press Deploy.
 
 Accessing your new Drupal install
 ---------------------------------
@@ -246,7 +244,7 @@ to an IP address we provide this address directly with the -i parameter.
 
 .. code-block:: sh 
 
-    inmanta -vvv  export -e [ENV_ID] --server_address 127.0.0.1  --server_port 8888
+    inmanta -vvv  export
 
 
 If you browse to the drupal site again, the database should be empty once more.
@@ -271,7 +269,7 @@ A configuration module requires a specific layout:
       machines.
     * The templates directory contains templates that use parameters from the
       configuration model to generate configuration files.
-    * Python files in the plugins directory are loaded by the platform and can
+    * The plugins plugins directory contains python file that are loaded by the platform and can
       extend it using the Inmanta API.
 
 
@@ -306,10 +304,6 @@ The following commands create all directories and files to develop a full-featur
     mkdir {lamp,lamp/model}
     touch lamp/model/_init.cf
     touch lamp/module.yml
-
-    mkdir {lamp/files,lamp/templates}
-    mkdir lamp/plugins
-    touch lamp/plugins/__init__.py
 
 Next, edit the ``lamp/module.yml`` file and add meta-data to it:
 
@@ -404,8 +398,8 @@ required.
     :linenos:
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="IP_OF_VM1")
-    vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="IP_OF_VM2")
+    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="192.168.33.101")
+    vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="192.168.33.102")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
                       admin_password="test", admin_email="admin@example.com", site_name="localhost")
@@ -419,6 +413,5 @@ configuration.
 
 .. code-block:: sh
 
-    inmanta deploy -a vm1 -i IP_OF_VM1
-    inmanta deploy -a vm2 -i IP_OF_VM2
+    inmanta -vvv export
 
