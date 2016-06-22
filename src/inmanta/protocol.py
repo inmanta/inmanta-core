@@ -247,23 +247,29 @@ class RESTHandler(tornado.web.RequestHandler):
         """
             An rpc like call
         """
-        self.set_header("Access-Control-Allow-Origin", "*")
-        try:
-            message = self._transport._decode(self.request.body)
-            if message is None:
-                message = {}
-        except ValueError:
-            LOGGER.exception("An exception occured")
-            self._transport.return_error_msg(500, "Unable to decode request body")
+        status = 200
+        if config is None:
+            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
 
-        for key, value in self.request.query_arguments.items():
-            if len(value) == 1:
-                message[key] = value[0].decode("latin-1")
-            else:
-                message[key] = [v.decode("latin-1") for v in value]
+        else:
+            self.set_header("Access-Control-Allow-Origin", "*")
+            try:
+                message = self._transport._decode(self.request.body)
+                if message is None:
+                    message = {}
 
-        request_headers = self.request.headers
-        body, headers, status = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+                for key, value in self.request.query_arguments.items():
+                    if len(value) == 1:
+                        message[key] = value[0].decode("latin-1")
+                    else:
+                        message[key] = [v.decode("latin-1") for v in value]
+
+                request_headers = self.request.headers
+                body, headers, status = yield self._transport._execute_call(kwargs, http_method, config,
+                                                                            message, request_headers)
+            except ValueError:
+                LOGGER.exception("An exception occured")
+                body, headers, status = self._transport.return_error_msg(500, "Unable to decode request body")
 
         if body is not None:
             self.write(json_encode(body))
