@@ -17,13 +17,11 @@
 """
 
 import base64
-from collections import defaultdict
 from concurrent.futures.thread import ThreadPoolExecutor
 import datetime
 import hashlib
 import logging
 import os
-import time
 
 from tornado import gen
 from inmanta import env
@@ -34,199 +32,156 @@ from inmanta.config import Config
 from inmanta.loader import CodeLoader
 from inmanta.protocol import Scheduler, AgentEndPoint
 from inmanta.resources import Resource, Id
+from tornado.concurrent import Future
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-class DependencyManager(object):
-    """
-        This class manages depencies between resources
-    """
-    def __init__(self):
-        self._local_resources = {}
+class ResourceActionResult(object):
 
-        # contains a set of version of a certain resource and a list
-        # of resource that depend on a certain version
-        self._deps = defaultdict(set)
+    def __init__(self, success, reload, cancel):
+        self.success = success
+        self.reload = reload
+        self.cancel = cancel
 
-        # a hash that indicates the latest version of every resource that
-        # has been updated since we started
-        self._resource_versions = {}
+    def __add__(self, other):
+        return ResourceActionResult(self.success and other.success, self.reload or other.reload, self.cancel or other.cancel)
 
-    def add_dependency(self, resource, version, required_id):
-        """
-            Register the dependency of resource_id on require_id with version.
-
-            :param resource The resource that has dependencies
-            :param version The version the of the required resource
-            :param required_id The id of the required resource
-        """
-        # check if this resource was already updated
-        if required_id in self._resource_versions:
-            v = self._resource_versions[required_id]
-            if v >= version:
-                # ignore the dep
-                return
-
-        resource.add_require(required_id, version)
-
-        resource_id = str(resource.id)
-
-        # add the version to the list of versions
-        self._deps[required_id].add(version)
-
-        # add the dependency
-        versioned_id = "%s,v=%d" % (required_id, version)
-        self._deps[versioned_id].add(resource_id)
-
-        # save the resource
-        self._local_resources[resource_id] = resource
-
-    def get_dependencies(self, resource_id, version):
-        """
-            Get all dependencies on resource_id for all versions that are
-            equal or lower than version
-        """
-        versions = [int(x) for x in self._deps[resource_id]]
-        sorted(versions)
-
-        resource_list = []
-        for v in versions:
-            if v <= version:
-                versioned_id = "%s,v=%d" % (resource_id, version)
-                dep_list = self._deps[versioned_id]
-                resource_list += [self._local_resources[dep] for dep in dep_list if dep in self._local_resources]
-
-        # TODO cleanup?
-        return resource_list
-
-    def resource_update(self, resource_id, version, reload_requires=False, deploy_status=True):
-        """
-            This method should be called to indicate that a resource has been
-            updated.
-
-            :param resource_id The id of the resource that has been deployed
-            :param version The version of the resource that was deployed
-            :param reload_requires The deployed resource requires its dependants to be reloaded
-            :param deploy_status A boolean that indicates if the deploy was successful and requires can be notified, or if false
-                                 the requires should be skipped.
-        """
-        resource_id = str(resource_id)
-
-        self._resource_versions[resource_id] = version
-
-        for res in self.get_dependencies(resource_id, version):
-            if deploy_status:
-                res.update_require(resource_id, version)
-                if reload_requires:
-                    res.do_reload = reload_requires
-                    LOGGER.debug("Marking %s to reload, triggered by %s" % (res, resource_id))
-                    LOGGER.debug("Resource %s: do_reload=%s, %d" % (res, res.do_reload, id(res)))
-
-            else:
-                res.update_require(resource_id, version, failed=True)
+    def __str__(self, *args, **kwargs):
+        return "%r %r %r" % (self.success, self.reload, self.cancel)
 
 
-class QueueManager(object):
-    """
-        This class manages the update queue (including the versioning)
-    """
-    def __init__(self):
-        self._queue = list()
-        self._ready_queue = list()
-        self._resources = {}
+class ResourceAction(object):
 
-    def add_resource(self, resource):
-        """
-            Add a resource to the queue. When an older version of the resource
-            is already in the queue, replace it.
-        """
-        if resource.id in self._resources:
-            res, version, queue = self._resources[resource.id]
+    def __init__(self, scheduler, resource):
+        self.scheduler = scheduler
+        self.resource = resource
+        self.future = Future()
+        self.running = False
 
-            if version <= resource.version:
-                try:
-                    queue.remove(res)
-                    del self._resources[resource.id]
-                except Exception:
-                    pass
+    def is_running(self):
+        return self.running
 
-            else:
-                # a newer version
-                return
+    def is_done(self):
+        return self.future.done()
 
-        if len(resource.requires_queue) == 0:
-            self._ready_queue.append(resource)
-            self._resources[resource.id] = (resource, resource.version, self._ready_queue)
+    def cancel(self):
+        if not self.is_running() and not self.is_done():
+            print("CANCEL")
+            self.future.set_result(ResourceActionResult(False, False, True))
+
+    @gen.coroutine
+    def __complete(self, success, reload, changes={}, status="", log_msg=""):
+        action = "deploy"
+
+        if status == "dry" or status == "deployed":
+            level = "INFO"
         else:
-            self._queue.append(resource)
-            self._resources[resource.id] = (resource, resource.version, self._queue)
+            level = "ERROR"
 
-    def notify_ready(self, resource):
-        """
-            This resource can be processed because all of its deps are finished
-        """
-#         res, version, queue = self._resources[resource.id]
-#         queue.remove(res)
-#
-#         self._ready_queue.append(resource)
-#         self._resources[resource.id] = (resource, version, self._ready_queue)
+        yield self.scheduler.agent._client.resource_updated(tid=self.scheduler._env_id,
+                                                            id=str(self.resource.id),
+                                                            level=level,
+                                                            action=action,
+                                                            status=status,
+                                                            message="%s: %s" % (status, log_msg),
+                                                            extra_data=changes)
 
-    def _move_ready(self):
-        """
-            Move resources that are ready to the ready queue
-        """
-        for res in self._queue:
-            if len(res.requires_queue) == 0:
-                self._ready_queue.append(res)
-                self._queue.remove(res)
+        self.future.set_result(ResourceActionResult(success, reload, False))
+        print("end run %s" % self.resource)
+        self.running = False
 
-    def pop(self):
-        """
-            Pop a resource from the list
-        """
-        if self.size() == 0:
-            return None
+    @gen.coroutine
+    def execute(self, dummy, generation):
+        self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
+        waiters = [x.future for x in self.dependencies]
+        waiters.append(dummy.future)
+        results = yield waiters
 
-        if len(self._ready_queue) == 0:
-            self._move_ready()
+        print("run %s" % self.resource)
+        self.running = True
+        result = sum(results, ResourceActionResult(True, False, False))
 
-        if len(self._ready_queue) == 0:
-            return None
+        if result.cancel:
+            return
 
-        # return the last element. If ready, remove it from the queue
-        return self._ready_queue[-1]
+        if not result.success:
+            self.__complete(False, False)
+        else:
+            resource = self.resource
 
-    def remove(self, resource):
-        try:
-            self._ready_queue.remove(resource)
-            del self._resources[resource.id]
-        except Exception:
-            pass
-            # this might fail if in the meanwhile a new version was deployed
+            LOGGER.debug("Start deploy of resource %s" % resource)
+            provider = None
 
-    def size(self):
-        return len(self._queue) + len(self._ready_queue)
+            try:
+                provider = Commander.get_provider(self.scheduler.agent, resource)
+            except Exception:
+                provider.close()
+                LOGGER.exception("Unable to find a handler for %s" % resource.id)
+                return self.__complete(False, False, changes={}, status="unavailable")
 
-    def ready_size(self):
-        self._move_ready()
-        return len(self._ready_queue)
+            results = yield self.scheduler.agent.thread_pool.submit(provider.execute, resource)
 
-    def all(self):
-        """
-            Return all items in the queue
-        """
-        return self._queue + self._ready_queue
+            status = results["status"]
+            if status == "failed" or status == "skipped":
+                provider.close()
+                return self.__complete(False, False,
+                                       changes=results["changes"],
+                                       status=results["status"],
+                                       log_msg=results["log_msg"])
+
+            if result.reload and provider.can_reload():
+                LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
+                yield self.scheduler.agent.thread_pool.submit(provider.do_reload, resource)
+
+            provider.close()
+
+            reload = results["changed"] and hasattr(resource, "reload") and resource.reload
+            return self.__complete(True, reload=reload, changes=results["changes"],
+                                   status=results["status"], log_msg=results["log_msg"])
+
+            LOGGER.debug("Finished %s" % resource)
+
+    def __str__(self, *args, **kwargs):
+        if self.resource is None:
+            return "DUMMY"
+
+        status = ""
+        if self.is_done():
+            status = "Done"
+        elif self.is_running():
+            status = "Running"
+
+        return self.resource.id.resource_str() + status
+
+    def long_string(self):
+        return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
+
+
+class ResourceScheduler(object):
+
+    def __init__(self, agent, env_id):
+        self.generation = {}
+        self._env_id = env_id
+        self.agent = agent
+
+    def reload(self, resources):
+        for ra in self.generation.values():
+            ra.cancel()
+        self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
+        dummy = ResourceAction(self, None)
+        for r in self.generation.values():
+            r.execute(dummy, self.generation)
+        dummy.future.set_result(ResourceActionResult(True, False, False))
 
     def dump(self):
-        """
-            Dump the queue
-        """
-        LOGGER.info("Dumping queue")
-        for r in self.all():
-            LOGGER.info(r)
-            LOGGER.info("\t-> %s" % r.requires_queue)
+        print("Waiting:")
+        for r in self.generation.values():
+            print(r.long_string())
+        print("Ready to run:")
+        for r in self.queue:
+            print(r.long_string())
 
 
 class Agent(AgentEndPoint):
@@ -234,6 +189,7 @@ class Agent(AgentEndPoint):
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
     """
+
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None):
         super().__init__("agent", io_loop, heartbeat_interval=int(Config.get("config", "heartbeat-interval", 10)))
 
@@ -243,9 +199,6 @@ class Agent(AgentEndPoint):
         self.agent_map = self._process_map(agent_map)
         self._storage = self.check_storage()
 
-        self._dm = DependencyManager()
-        self._queue = QueueManager()
-
         self._last_update = 0
 
         if env_id is None:
@@ -253,6 +206,7 @@ class Agent(AgentEndPoint):
             if env_id is None:
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(env_id)
+        self._nq = ResourceScheduler(self, env_id)
 
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
@@ -283,17 +237,8 @@ class Agent(AgentEndPoint):
 
         self._sched = Scheduler(io_loop=self._io_loop)
         self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
-        self._io_loop.add_callback(self.check_deploy)
 
         self.thread_pool = ThreadPoolExecutor(1)
-
-    @gen.coroutine
-    def check_deploy(self):
-        while True:
-            if self._queue.size() > 0:
-                yield self.deploy_config()
-            else:
-                yield gen.sleep(1)
 
     def _process_map(self, agent_map):
         """
@@ -328,18 +273,27 @@ class Agent(AgentEndPoint):
             self.get_latest_version_for_agent(agent)
 
     @gen.coroutine
-    def _ensure_code(self, environment, version):
+    def _ensure_code(self, environment, version, resourcetypes):
         """
             Ensure that the code for the given environment and version is loaded
         """
-        if self.latest_code_version < version and self._loader is not None:
-            result = yield self._client.get_code(environment, version)
+        if self._loader is not None:
+            for rt in resourcetypes:
+                result = yield self._client.get_code(environment, version, rt)
 
-            if result.code == 200:
-                self._env.install_from_list(result.result["requires"])
-                self._loader.deploy_version(version, result.result["sources"])
+                if result.code == 200:
+                    for key, source in result.result["sources"].items():
+                        try:
+                            LOGGER.debug("Installing handler %s for %s", rt, source[1])
+                            yield self._install(key, source)
+                            LOGGER.debug("Installed handler %s for %s", rt, source[1])
+                        except Exception:
+                            LOGGER.exception("Failed to install handler %s for %s", rt, source[1])
 
-                self.latest_code_version = version
+    @gen.coroutine
+    def _install(self, key, source):
+        yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
+        yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
     @protocol.handle(methods.NodeMethod.trigger_agent)
     @gen.coroutine
@@ -365,17 +319,20 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s", agent)
 
         else:
-            yield self._ensure_code(self._env_id, result.result["version"])
-
+            restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+            resources = []
+            yield self._ensure_code(self._env_id, result.result["version"], restypes)
             try:
                 for res in result.result["resources"]:
                     data = res["fields"]
                     data["id"] = res["id"]
                     resource = Resource.deserialize(data)
-                    self.update(resource)
+                    resources.append(resource)
                     LOGGER.debug("Received update for %s", resource.id)
             except TypeError as e:
                 LOGGER.error("Failed to receive update", e)
+
+            self._nq.reload(resources)
 
     @protocol.handle(methods.AgentDryRun.do_dryrun)
     @gen.coroutine
@@ -395,7 +352,9 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
             return 500
 
-        yield self._ensure_code(self._env_id, version)  # TODO: handle different versions for dryrun and deploy!
+        restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+
+        yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
         provider = None
         try:
@@ -409,7 +368,8 @@ class Agent(AgentEndPoint):
                     provider = Commander.get_provider(self, resource)
                 except Exception:
                     LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                    self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
+                    self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                               changes={}, log_msg="No handler available")
                     continue
 
                 results = yield self.thread_pool.submit(provider.execute, resource, dry_run=True)
@@ -635,7 +595,7 @@ class Agent(AgentEndPoint):
         """
             Return the current items in the queue
         """
-        return 200, {"queue": ["%s" % (x.id) for x in self._queue.all()]}
+        return 200, {"queue": ["%s" % (x.id) for x in self._nq.generation.values()]}
 
     def info(self, operation, body):
         """
@@ -644,86 +604,3 @@ class Agent(AgentEndPoint):
         return 200, {"threads": [x.name for x in enumerate()],
                      "queue length": self._queue.size(),
                      "queue ready length": self._queue.ready_size()}
-
-    def update(self, res_obj):
-        """
-            Process an update
-        """
-        for req in res_obj.requires:
-            self._dm.add_dependency(res_obj, req.version, req.resource_str())
-
-        self._queue.add_resource(res_obj)
-        self._last_update = time.time()
-
-    def resource_updated_received(self, operation, body):
-        rid = body["id"]
-        version = body["version"]
-        reload_resource = body["reload"]
-        self._dm.resource_update(rid, version, reload_resource)
-
-    @gen.coroutine
-    def deploy_config(self):
-        """
-            Deploy a configuration is there are items in the queue
-        """
-        LOGGER.debug("Execute deploy config")
-
-        LOGGER.info("Need to update %d resources" % self._queue.size())
-        while self._queue.size() > 0:
-            resource = self._queue.pop()
-            if resource is None:
-                LOGGER.info("No resources ready for deploy.")
-                yield gen.sleep(1)
-                break
-
-            LOGGER.debug("Start deploy of resource %s" % resource)
-            provider = None
-            try:
-                provider = Commander.get_provider(self, resource)
-            except Exception:
-                if provider is not None:
-                    provider.close()
-                LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                self.resource_updated(resource, reload_requires=False, changes={}, status="unavailable")
-                self._queue.remove(resource)
-                continue
-
-            results = yield self.thread_pool.submit(provider.execute, resource)
-            yield self.resource_updated(resource, reload_requires=results["changed"], changes=results["changes"],
-                                        status=results["status"], log_msg=results["log_msg"])
-
-            if resource.do_reload and provider.can_reload():
-                LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
-                yield self.thread_pool.submit(provider.do_reload, resource)
-
-            provider.close()
-            LOGGER.debug("Finished %s" % resource)
-            self._queue.remove(resource)
-
-        return
-
-    @gen.coroutine
-    def resource_updated(self, resource, reload_requires=False, changes={}, status="", log_msg=""):
-        """
-            A resource with id $rid calls this method to indicate that it is now at version $version.
-        """
-        reload_resource = False
-        if hasattr(resource, "reload") and resource.reload and reload_requires:
-            LOGGER.info("%s triggered a reload" % resource)
-            reload_resource = True
-
-        deploy_result = True
-        if status == "failed" or status == "skipped":
-            deploy_result = False
-
-        self._dm.resource_update(resource.id.resource_str(), resource.id.version, reload_resource, deploy_result)
-
-        action = "deploy"
-
-        if status == "dry" or status == "deployed":
-            level = "INFO"
-        else:
-            level = "ERROR"
-
-        yield self._client.resource_updated(tid=self._env_id, id=str(resource.id), level=level, action=action, status=status,
-                                            message="%s: %s" % (status, log_msg), extra_data=changes)

@@ -14,7 +14,7 @@ setup(
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
-    install_requires=['cliff == 2.0.0'],
+    install_requires=['cliff <= 2.0.0'],
 
     entry_points={
     'console_scripts': [

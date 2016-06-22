@@ -25,6 +25,7 @@ import base64
 from inmanta.agent.io import get_io
 from inmanta import protocol
 from tornado import ioloop
+from inmanta.module import Project
 
 LOGGER = logging.getLogger(__name__)
 
@@ -307,9 +308,13 @@ class Commander(object):
         raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
-    def add_provider(cls, resource, name, provider):
+    def add_provider(cls, resource: str, name: str, provider):
         """
             Register a new provider
+
+            :param resource the name of the resource this handler applies to
+            :param name the name of the handler itself
+            :param provider the handler function
         """
         if resource in cls.__command_functions and name in cls.__command_functions[resource]:
             del cls.__command_functions[resource][name]
@@ -321,8 +326,10 @@ class Commander(object):
         """
         Get all source files that define resources
         """
-        sources = {}
-        for providers in cls.__command_functions.values():
+        resource_to_sources = {}
+        for resource, providers in cls.__command_functions.items():
+            sources = {}
+            resource_to_sources[resource] = sources
             for provider in providers.values():
                 file_name = inspect.getsourcefile(provider)
 
@@ -336,9 +343,11 @@ class Commander(object):
                 hv = sha1sum.hexdigest()
 
                 if hv not in sources:
-                    sources[hv] = (file_name, provider.__module__, source_code)
+                    module_name = provider.__module__.split(".")[1]
+                    req = Project.get().modules[module_name].get_python_requirements_as_list()
+                    sources[hv] = (file_name, provider.__module__, source_code, req)
 
-        return sources
+        return resource_to_sources
 
     @classmethod
     def get_provider_class(cls, resource_type, name):

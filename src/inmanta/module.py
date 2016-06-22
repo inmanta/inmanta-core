@@ -902,6 +902,14 @@ class Module(ModuleLike):
         else:
             return None
 
+    @memoize
+    def get_python_requirements_as_list(self):
+        raw = self.get_python_requirements()
+        if raw is None:
+            return []
+        else:
+            return [y for y in [x.strip() for x in raw.split("\n")] if len(y) != 0]
+
 
 class ModuleTool(object):
     """
