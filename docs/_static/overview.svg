@@ -181,15 +181,15 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="1.4"
-     inkscape:cx="178.5231"
-     inkscape:cy="213.47064"
+     inkscape:cx="295.27979"
+     inkscape:cy="212.04207"
      inkscape:document-units="px"
      inkscape:current-layer="layer1"
      showgrid="false"
-     inkscape:window-width="2560"
-     inkscape:window-height="1376"
-     inkscape:window-x="1920"
-     inkscape:window-y="27"
+     inkscape:window-width="1280"
+     inkscape:window-height="987"
+     inkscape:window-x="4480"
+     inkscape:window-y="0"
      inkscape:window-maximized="1"
      fit-margin-top="0"
      fit-margin-left="0"
@@ -203,7 +203,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -251,7 +251,7 @@
          sodipodi:role="line"
          id="tspan4140-5"
          x="413.92859"
-         y="415.21936">Inmanta Master</tspan></text>
+         y="415.21936">Inmanta Server</tspan></text>
     <g
        id="g4215"
        transform="translate(117.14286,177.14286)">
