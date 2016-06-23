@@ -33,6 +33,7 @@ class testProtocolClient(ServerTest):
 
     def setUp(self):
         ServerTest.setUp(self)
+        self.server.start()
         # start the client
         self.client = protocol.Client("client")
 

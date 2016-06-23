@@ -59,7 +59,6 @@ class ServerTest(MongoTestCase, AsyncTestCase):
             raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
 
         self.server = Server(database_host="localhost", database_port=int(mongo_port), io_loop=self.io_loop)
-        self.server.start()
 
     def tearDown(self):
         self.server.stop()

@@ -38,8 +38,6 @@ from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 from tornado.web import decode_signed_value, create_signed_value
 import ssl
-from tornado.httputil import SSLError
-
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -654,7 +652,7 @@ class RESTTransport(Transport):
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             ssl_ctx.load_cert_chain(crt, key)
 
-            self.http_server = HTTPServer(application,  ssl_options=ssl_ctx)
+            self.http_server = HTTPServer(application, ssl_options=ssl_ctx)
         else:
             self.http_server = HTTPServer(application)
         self.http_server.listen(port)

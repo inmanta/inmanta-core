@@ -19,6 +19,7 @@
 import time
 import random
 import string
+import os
 
 from inmanta import protocol, config
 from server_test import ServerTest
@@ -45,6 +46,7 @@ class testRestServer(ServerTest):
         """
             Test auto removal of older deploy model versions
         """
+        self.server.start()
         result = yield self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
 
@@ -73,7 +75,8 @@ class testRestServer(ServerTest):
         testuser = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
         testpass = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
 
-        for x in ["server_rest_transport",
+        for x in ["server",
+                  "server_rest_transport",
                   "agent_rest_transport",
                   "compiler_rest_transport",
                   "client_rest_transport",
@@ -83,10 +86,46 @@ class testRestServer(ServerTest):
 
         return self.get_resource_for_agent()
 
+    @gen_test
+    def test_get_resource_for_agent_with_SSL(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        for x in ["server",
+                  "server_rest_transport",
+                  "agent_rest_transport",
+                  "compiler_rest_transport",
+                  "client_rest_transport",
+                  "cmdline_rest_transport"]:
+            config.Config.set(x, "SSLCertificateFile", os.path.join(path, "server.crt"))
+            config.Config.set(x, "SSLCertificateKeyFile", os.path.join(path, "server.open.key"))
+            config.Config.set(x, "SSL", "True")
+
+        return self.get_resource_for_agent()
+
+    @gen_test
+    def test_get_resource_for_agent_with_SSLAndAuth(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        testuser = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
+        testpass = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
+
+        for x in ["server",
+                  "server_rest_transport",
+                  "agent_rest_transport",
+                  "compiler_rest_transport",
+                  "client_rest_transport",
+                  "cmdline_rest_transport"]:
+            config.Config.set(x, "SSLCertificateFile", os.path.join(path, "server.crt"))
+            config.Config.set(x, "SSLCertificateKeyFile", os.path.join(path, "server.open.key"))
+            config.Config.set(x, "SSL", "True")
+            config.Config.set(x, "username", testuser)
+            config.Config.set(x, "password", testpass)
+
+        return self.get_resource_for_agent()
+
     def get_resource_for_agent(self):
         """
             Test the server to manage the updates on a model during agent deploy
         """
+        self.server.start()
         result = yield self.client.create_project("env-test")
         project_id = result.result["project"]["id"]
 

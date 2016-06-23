@@ -112,6 +112,7 @@ class testAgentServer(ServerTest):
 
     def setUp(self):
         ServerTest.setUp(self)
+        self.server.start()
         self.client = protocol.Client("client")
 
     def tearDown(self):
