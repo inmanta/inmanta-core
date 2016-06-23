@@ -58,6 +58,7 @@ class Server(protocol.ServerEndpoint):
 
         :param usedb Use a database to store data. If not, only facts are persisted in a yaml file.
     """
+
     def __init__(self, io_loop, database_host=None, database_port=None):
         super().__init__("server", io_loop=io_loop)
         LOGGER.info("Starting server endpoint")
@@ -1028,7 +1029,7 @@ class Server(protocol.ServerEndpoint):
             # generate config file
             config = """[config]
 heartbeat-interval = 60
-state-dir=/var/lib/inmanta
+state-dir=%(statedir)s
 
 agent-names = %(agents)s
 environment=%(env_id)s
@@ -1036,11 +1037,20 @@ agent-map=%(agent_map)s
 python_binary=%(python_binary)s
 
 [agent_rest_transport]
-port = %(port)s
-host = localhost
+port=%(port)s
+host=localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port,
                 "python_binary": Config.get("config", "python_binary", "python"),
-                "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()])}
+                "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()]),
+                "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
+
+            user = Config.get("server", "username", None)
+            passwd = Config.get("server", "password", None)
+
+            if user is not None and passwd is not None:
+                config += """
+username=%s
+password=%s""" % (user, passwd)
 
             config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
             if not os.path.exists(config_dir):

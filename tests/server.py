@@ -17,14 +17,17 @@
 """
 
 import time
+import random
+import string
 
-from inmanta import protocol
+from inmanta import protocol, config
 from server_test import ServerTest
 from nose.tools import assert_equal, assert_less_equal, assert_true
 from tornado.testing import gen_test
 
 
 class testRestServer(ServerTest):
+
     def __init__(self, methodName='runTest'):
         super().__init__(methodName)
         self.client = None
@@ -63,6 +66,24 @@ class testRestServer(ServerTest):
 
     @gen_test
     def test_get_resource_for_agent(self):
+        return self.get_resource_for_agent()
+
+    @gen_test
+    def test_get_resource_for_agent_with_auth(self):
+        testuser = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
+        testpass = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
+
+        for x in ["server_rest_transport",
+                  "agent_rest_transport",
+                  "compiler_rest_transport",
+                  "client_rest_transport",
+                  "cmdline_rest_transport"]:
+            config.Config.set(x, "username", testuser)
+            config.Config.set(x, "password", testpass)
+
+        return self.get_resource_for_agent()
+
+    def get_resource_for_agent(self):
         """
             Test the server to manage the updates on a model during agent deploy
         """

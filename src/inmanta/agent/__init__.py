@@ -215,7 +215,6 @@ class Agent(AgentEndPoint):
         else:
             self._loader = None
 
-        self._client = protocol.Client("agent")
         if hostname is not None:
             self.add_end_point_name(hostname)
 

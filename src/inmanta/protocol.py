@@ -24,26 +24,31 @@ import urllib
 import uuid
 import json
 import re
+import base64
+import os
 from datetime import datetime
 from collections import defaultdict
 
 import tornado.web
-from tornado import gen, queues
+from tornado import gen, queues, locks
 from inmanta import methods
 from inmanta.config import Config
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
+from tornado.web import decode_signed_value, create_signed_value
 
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
+INMANTA_AUTH_HEADER = "X-Inmanta-user"
 
 
 class Result(object):
     """
         A result of a method call
     """
+
     def __init__(self, multiple=False, code=0, result=None):
         self._multiple = multiple
         if multiple:
@@ -224,13 +229,119 @@ def json_encode(value):
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
 
+class LoginHandler(tornado.web.RequestHandler):
+
+    def initialize(self, aa, transport):
+        self._aa = aa
+        self._transport = transport
+
+    def respond(self, body, headers, status):
+        if body is not None:
+            self.write(json_encode(body))
+
+        for header, value in headers.items():
+            self.set_header(header, value)
+
+        self.set_status(status)
+
+    def post(self):
+
+        self.set_header("Access-Control-Allow-Origin", "*")
+        try:
+            message = self._transport._decode(self.request.body)
+            if message is None:
+                message = {}
+        except ValueError:
+            LOGGER.exception("An exception occured")
+            self._transport.return_error_msg(500, "Unable to decode request body")
+
+        if "user" not in message:
+            self.respond(*self._transport.return_error_msg(400, "Field user is missing"))
+            return
+
+        if "password" not in message:
+            self.respond(*self._transport.return_error_msg(400, "Field password is missing"))
+            return
+
+        if self._aa.get_authn().isValid(message["user"], message["password"]):
+            self.write(
+                json_encode({"token": create_signed_value(self._aa.secret, "user", message["user"]).decode("utf8")}))
+        else:
+            self.respond(*self._transport.return_error_msg(401, "bad password username combination"))
+
+    @gen.coroutine
+    def options(self, *args, **kwargs):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
+                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
+
+        self.set_status(200)
+
+
+class AuthManager(object):
+
+    def auth(self, user, method, request_headers, config):
+        raise NotImplementedError()
+
+
+class NullAuthManager(AuthManager):
+
+    def auth(self, user, method, request_headers, config):
+        return True
+
+
+class HasUserAuthManager(AuthManager):
+
+    def auth(self, user, method, request_headers, config):
+        return user is not None
+
+
+class AuthNManager(object):
+
+    def isValid(self, user, credential):
+        raise NotImplementedError()
+
+
+class SingleUserAuthManager(AuthNManager):
+
+    def __init__(self, user, credential):
+        self.user = user
+        self.crediation = credential
+
+    def isValid(self, user, credential):
+        return user == self.user and self.crediation == credential
+
+
+class NoAuthManager(AuthNManager):
+
+    def isValid(self, user, credential):
+        return False
+
+
+class AandA(object):
+
+    def __init__(self, authorization, authentication, secret):
+        self.authorization = authorization
+        self.authentication = authentication
+        self.secret = secret
+
+    def get_authz(self):
+        return self.authorization
+
+    def get_authn(self):
+        return self.authentication
+
+
 class RESTHandler(tornado.web.RequestHandler):
     """
         A generic class use by the transport
     """
-    def initialize(self, transport, config):
+
+    def initialize(self, transport, config, aa):
         self._transport = transport
         self._config = config
+        self._aa = aa
 
     def _get_config(self, http_method):
         if http_method.upper() not in self._config:
@@ -242,35 +353,13 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return self._config[http_method]
 
-    @gen.coroutine
-    def _call(self, kwargs, http_method, config):
-        """
-            An rpc like call
-        """
-        status = 200
-        if config is None:
-            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
+    def get_current_user(self, headers):
+        if "X-inmanta-user" not in headers:
+            return None
+        pre = headers["X-inmanta-user"]
+        return decode_signed_value(self._aa.secret, "user", pre)
 
-        else:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            try:
-                message = self._transport._decode(self.request.body)
-                if message is None:
-                    message = {}
-
-                for key, value in self.request.query_arguments.items():
-                    if len(value) == 1:
-                        message[key] = value[0].decode("latin-1")
-                    else:
-                        message[key] = [v.decode("latin-1") for v in value]
-
-                request_headers = self.request.headers
-                body, headers, status = yield self._transport._execute_call(kwargs, http_method, config,
-                                                                            message, request_headers)
-            except ValueError:
-                LOGGER.exception("An exception occured")
-                body, headers, status = self._transport.return_error_msg(500, "Unable to decode request body")
-
+    def respond(self, body, headers, status):
         if body is not None:
             self.write(json_encode(body))
 
@@ -278,6 +367,38 @@ class RESTHandler(tornado.web.RequestHandler):
             self.set_header(header, value)
 
         self.set_status(status)
+
+    @gen.coroutine
+    def _call(self, kwargs, http_method, config):
+        """
+            An rpc like call
+        """
+        if config is None:
+            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
+            self.respond(body, headers, status)
+
+        self.set_header("Access-Control-Allow-Origin", "*")
+        try:
+            message = self._transport._decode(self.request.body)
+            if message is None:
+                message = {}
+
+            for key, value in self.request.query_arguments.items():
+                if len(value) == 1:
+                    message[key] = value[0].decode("latin-1")
+                else:
+                    message[key] = [v.decode("latin-1") for v in value]
+
+            request_headers = self.request.headers
+
+            if self._aa.authorization.auth(self.get_current_user(request_headers), http_method, request_headers, config):
+                result = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+                self.respond(*result)
+            else:
+                self.respond(*self._transport.return_error_msg(403, "Access denied."))
+        except ValueError:
+            LOGGER.exception("An exception occured")
+            self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
 
     @gen.coroutine
     def head(self, *args, **kwargs):
@@ -307,8 +428,8 @@ class RESTHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, " +
-                        INMANTA_MT_HEADER)
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
+                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
 
@@ -331,6 +452,8 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
+        self.token = None
+        self.token_lock = locks.Lock()
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -505,13 +628,16 @@ class RESTTransport(Transport):
         """
         url_map = self.create_op_mapping()
 
+        aa = self.endpoint.get_security_policy()
         for url, configs in url_map.items():
             handler_config = {}
             for op, cfg in configs.items():
                 handler_config[op] = cfg
 
-            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
+            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config, "aa": aa}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
+
+        self._handlers.append((r"/login", LoginHandler, {"aa": aa, "transport": self}))
 
         port = 8888
         if self.id in Config.get() and "port" in Config.get()[self.id]:
@@ -584,11 +710,19 @@ class RESTTransport(Transport):
         return url, method, headers, body
 
     @gen.coroutine
-    def call(self, properties, args, kwargs={}):
+    def call(self, properties, args, kwargs={}, reauth=True):
         url, method, headers, body = self.build_call(properties, args, kwargs)
 
         url_host = self._get_client_config()
         url = url_host + url
+
+        if self.token is None:
+            yield self.get_token()
+            reauth = False
+
+        if self.token is not None:
+            headers[INMANTA_AUTH_HEADER] = self.token
+
         LOGGER.debug("Calling server %s %s", method, url)
 
         try:
@@ -604,11 +738,44 @@ class RESTTransport(Transport):
                 except ValueError:
                     result = {}
                 return Result(code=e.code, result=result)
+
+            if e.code == 403:
+                self.token = None and reauth
+                val = yield self.call(properties, args, kwargs, True)
+                return val
+
             return Result(code=e.code, result={"message": str(e)})
         except Exception as e:
             return Result(code=500, result={"message": str(e)})
 
         return Result(code=response.code, result=self._decode(response.body))
+
+    @gen.coroutine
+    def get_token(self):
+        with (yield self.token_lock.acquire()):
+            if self.token is not None:
+                return
+
+            username = Config.get(self.id, "username", None)
+            password = Config.get(self.id, "password", None)
+
+            LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
+
+            if username is not None and password is not None:
+                body = {"user": username, "password": password}
+                body = json_encode(body)
+
+                url_host = self._get_client_config()
+                url = url_host + "/login"
+
+                try:
+                    request = HTTPRequest(url=url, method="POST", body=body, connect_timeout=120, request_timeout=120)
+                    client = AsyncHTTPClient()
+                    response = yield client.fetch(request)
+                    response = self._decode(response.body)
+                    self.token = response["token"]
+                except Exception as e:
+                    LOGGER.error("Login failed: %s %s", e.code, str(e))
 
 
 class handle(object):
@@ -620,6 +787,7 @@ class handle(object):
         :param id Is the special parameter id required
         :param index Does this method handle the index
     """
+
     def __init__(self, method):
         self.method = method
 
@@ -670,6 +838,7 @@ class Scheduler(object):
     """
         An event scheduler class
     """
+
     def __init__(self, io_loop):
         self._scheduled = set()
         self._io_loop = io_loop
@@ -713,6 +882,7 @@ class Endpoint(object):
     """
         An end-point in the rpc framework
     """
+
     def __init__(self, io_loop, name):
         self._name = name
         self._node_name = self.set_node_name()
@@ -788,6 +958,7 @@ class Environment(object):
     """
         An environment that segments agents connected to the server
     """
+
     def __init__(self, io_loop, env_id):
         self._env_id = env_id
         self._agents = set()
@@ -876,6 +1047,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     def __init__(self, name, io_loop, transport=RESTTransport):
         super().__init__(io_loop, name)
         self._transport = transport
+
         self._transport_instance = Transport.create(self._transport, self)
         self._sched = Scheduler(self._io_loop)
 
@@ -971,11 +1143,31 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         env.set_reply(reply_id, data)
         return 200
 
+    def get_security_policy(self):
+
+        secret = Config.get("server", "shared-secret", base64.b64encode(os.urandom(50)).decode('ascii'))
+        username = Config.get("server", "username", None)
+        password = Config.get("server", "password", None)
+
+        if username is None and password is None:
+            return AandA(NullAuthManager(), NoAuthManager(), secret)
+
+        if username is None:
+            LOGGER.warning("password not set, but username is")
+            return AandA(NullAuthManager(), NoAuthManager(), secret)
+
+        if password is None:
+            LOGGER.warning("username not set, but password is")
+            return AandA(NullAuthManager(), NoAuthManager(), secret)
+
+        return AandA(HasUserAuthManager(), SingleUserAuthManager(username, password), secret)
+
 
 class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
     """
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
+
     def __init__(self, name, io_loop, heartbeat_interval=10, transport=RESTTransport):
         super().__init__(io_loop, name)
         self._transport = transport
@@ -1079,10 +1271,23 @@ class ClientMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
+def get_method_name(properties):
+    method = properties["method"]
+    class_name = method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
+    module = inspect.getmodule(method)
+    method_class = getattr(module, class_name)
+
+    if not hasattr(method_class, "__method_name__"):
+        raise Exception("%s should have a __method_name__ variable." % method_class)
+
+    return method_class.__method_name__
+
+
 class Client(Endpoint, metaclass=ClientMeta):
     """
         A client that communicates with end-point based on its configuration
     """
+
     def __init__(self, name, ioloop=None, transport=RESTTransport):
         if ioloop is None:
             ioloop = IOLoop.current()
@@ -1094,23 +1299,12 @@ class Client(Endpoint, metaclass=ClientMeta):
         tr = Transport.create(self._transport, self)
         self._transport_instance = tr
 
-    def get_method_name(self, properties):
-        method = properties["method"]
-        class_name = method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
-        module = inspect.getmodule(method)
-        method_class = getattr(module, class_name)
-
-        if not hasattr(method_class, "__method_name__"):
-            raise Exception("%s should have a __method_name__ variable." % method_class)
-
-        return method_class.__method_name__
-
     @gen.coroutine
     def _call(self, args, kwargs, protocol_properties):
         """
             Execute the rpc call
         """
-        protocol_properties["method_name"] = self.get_method_name(protocol_properties)
+        protocol_properties["method_name"] = get_method_name(protocol_properties)
         result = yield self._transport_instance.call(protocol_properties, args, kwargs)
         return result
 
@@ -1120,6 +1314,7 @@ class ReturnClient(Client, metaclass=ClientMeta):
         A client that uses a return channel to connect to its destination. This client is used by the server to communicate
         back to clients over the heartbeat channel.
     """
+
     def __init__(self, name, server, tid, agent):
         super().__init__(name)
         self._server = server
@@ -1128,7 +1323,7 @@ class ReturnClient(Client, metaclass=ClientMeta):
 
     @gen.coroutine
     def _call(self, args, kwargs, protocol_properties):
-        protocol_properties["method_name"] = self.get_method_name(protocol_properties)
+        protocol_properties["method_name"] = get_method_name(protocol_properties)
         url, method, headers, body = self._transport_instance.build_call(protocol_properties, args, kwargs)
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
