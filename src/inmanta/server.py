@@ -1455,10 +1455,15 @@ password=%s""" % (user, passwd)
         if env is None:
             return 404, {"message": "The environment with given id does not exist."}
 
+        agents = yield data.Agent.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        for agent in agents:
+            yield agent.delete()
+
         compiles = yield data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        futures = [compile.delete() for compile in compiles]
-        futures.append(env.delete_cascade())
-        yield futures
+        for compile in compiles:
+            yield compile.delete()
+
+        yield env.delete_cascade()
 
         return 200
 
