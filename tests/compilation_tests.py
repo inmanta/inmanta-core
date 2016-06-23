@@ -106,7 +106,6 @@ comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except TypeNotFoundException as e:
-            print(e.location)
             assert_equal(e.location.lnr, 2)
 
     @raises(TypeNotFoundException)
@@ -165,6 +164,33 @@ implement Test1 using tt when self.other is defined and self.other.flag == false
 Test1(other=Test2())
 """)
         compiler.do_compile()
+
+    def testIssue93(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+    string attribute="1234"
+end
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:] Test2 test2
+
+t = Test1()
+t2a = Test2(test1=t)
+t2b = Test2(test1=t)
+
+std::print(t.test2.attribute)
+        """)
+
+        try:
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except RuntimeException as e:
+            assert_equal(e.location.lnr, 18)
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
