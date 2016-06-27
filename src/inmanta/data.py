@@ -646,6 +646,8 @@ class SnapshotRestore(IdDocument):
         for restore in restores:
             yield restore.delete()
 
+        yield self.delete()
+
 
 class Snapshot(IdDocument):
     """
