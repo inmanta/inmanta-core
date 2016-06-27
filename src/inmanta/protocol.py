@@ -37,7 +37,7 @@ from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 from tornado.web import decode_signed_value, create_signed_value
-
+import ssl
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -644,7 +644,17 @@ class RESTTransport(Transport):
             port = Config.get()[self.id]["port"]
 
         application = tornado.web.Application(self._handlers)
-        self.http_server = HTTPServer(application)
+
+        crt = Config.get("server", "SSLCertificateFile", None)
+        key = Config.get("server", "SSLCertificateKeyFile", None)
+
+        if(crt is not None and key is not None):
+            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            ssl_ctx.load_cert_chain(crt, key)
+
+            self.http_server = HTTPServer(application, ssl_options=ssl_ctx)
+        else:
+            self.http_server = HTTPServer(application)
         self.http_server.listen(port)
 
         LOGGER.debug("Start REST transport")
@@ -667,8 +677,13 @@ class RESTTransport(Transport):
         if self.id in Config.get() and "host" in Config.get()[self.id]:
             host = Config.get()[self.id]["host"]
 
+        if Config.getboolean(self.id, "SSL", False):
+            protocol = "https"
+        else:
+            protocol = "http"
+
         LOGGER.debug("Using %s:%s", host, port)
-        return "http://%s:%d" % (host, port)
+        return "%s://%s:%d" % (protocol, host, port)
 
     def build_call(self, properties, args, kwargs={}):
         """
@@ -723,12 +738,15 @@ class RESTTransport(Transport):
         if self.token is not None:
             headers[INMANTA_AUTH_HEADER] = self.token
 
+        ca_certs = Config.get(self.id, "SSLCertificateFile", None)
+
         LOGGER.debug("Calling server %s %s", method, url)
 
         try:
             if body is not None:
                 body = json_encode(body)
-            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=120, request_timeout=120)
+            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=120,
+                                  request_timeout=120, ca_certs=ca_certs)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
         except HTTPError as e:
@@ -758,6 +776,7 @@ class RESTTransport(Transport):
 
             username = Config.get(self.id, "username", None)
             password = Config.get(self.id, "password", None)
+            ca_certs = Config.get(self.id, "SSLCertificateFile", None)
 
             LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
 
@@ -769,13 +788,16 @@ class RESTTransport(Transport):
                 url = url_host + "/login"
 
                 try:
-                    request = HTTPRequest(url=url, method="POST", body=body, connect_timeout=120, request_timeout=120)
+                    request = HTTPRequest(
+                        url=url, method="POST", body=body, connect_timeout=120, request_timeout=120, ca_certs=ca_certs)
                     client = AsyncHTTPClient()
                     response = yield client.fetch(request)
                     response = self._decode(response.body)
                     self.token = response["token"]
-                except Exception as e:
+                except HTTPError as e:
                     LOGGER.error("Login failed: %s %s", e.code, str(e))
+                except Exception as e:
+                    LOGGER.error("Login failed: %s", str(e))
 
 
 class handle(object):
