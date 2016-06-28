@@ -273,7 +273,7 @@ class LoginHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" % 
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
                         (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
@@ -347,7 +347,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" % 
+            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" %
                                              (http_method, allowed))
             return
 
@@ -428,7 +428,7 @@ class RESTHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" % 
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
                         (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
@@ -563,11 +563,11 @@ class RESTTransport(Transport):
                             else:
                                 message[arg] = arg_type(message[arg])
                         except (ValueError, TypeError):
-                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" % 
+                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
                                                          (arg, arg_type, message[arg].__class__), headers)
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) + 
+                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
                                              "that are not declared in method and no kwargs argument is provided.", headers)
 
             LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
@@ -655,7 +655,7 @@ class RESTTransport(Transport):
             self.http_server = HTTPServer(application, ssl_options=ssl_ctx)
         else:
             self.http_server = HTTPServer(application)
-            
+
         self.http_server.listen(port)
 
         LOGGER.debug("Start REST transport")
