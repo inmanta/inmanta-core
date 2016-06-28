@@ -273,7 +273,7 @@ class LoginHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" % 
                         (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
@@ -347,7 +347,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" %
+            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" % 
                                              (http_method, allowed))
             return
 
@@ -428,7 +428,7 @@ class RESTHandler(tornado.web.RequestHandler):
     def options(self, *args, **kwargs):
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
+        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" % 
                         (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
 
         self.set_status(200)
@@ -563,11 +563,11 @@ class RESTTransport(Transport):
                             else:
                                 message[arg] = arg_type(message[arg])
                         except (ValueError, TypeError):
-                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
+                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" % 
                                                          (arg, arg_type, message[arg].__class__), headers)
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
+                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) + 
                                              "that are not declared in method and no kwargs argument is provided.", headers)
 
             LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
@@ -645,8 +645,8 @@ class RESTTransport(Transport):
 
         application = tornado.web.Application(self._handlers)
 
-        crt = Config.get("server", "SSLCertificateFile", None)
-        key = Config.get("server", "SSLCertificateKeyFile", None)
+        crt = Config.get("server", "ssl_cert_file", None)
+        key = Config.get("server", "ssl_key_file", None)
 
         if(crt is not None and key is not None):
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -655,6 +655,7 @@ class RESTTransport(Transport):
             self.http_server = HTTPServer(application, ssl_options=ssl_ctx)
         else:
             self.http_server = HTTPServer(application)
+            
         self.http_server.listen(port)
 
         LOGGER.debug("Start REST transport")
@@ -677,7 +678,7 @@ class RESTTransport(Transport):
         if self.id in Config.get() and "host" in Config.get()[self.id]:
             host = Config.get()[self.id]["host"]
 
-        if Config.getboolean(self.id, "SSL", False):
+        if Config.getboolean(self.id, "ssl", False):
             protocol = "https"
         else:
             protocol = "http"
@@ -738,7 +739,7 @@ class RESTTransport(Transport):
         if self.token is not None:
             headers[INMANTA_AUTH_HEADER] = self.token
 
-        ca_certs = Config.get(self.id, "SSLCertificateFile", None)
+        ca_certs = Config.get(self.id, "ssl_ca_cert_file", None)
 
         LOGGER.debug("Calling server %s %s", method, url)
 
@@ -776,7 +777,7 @@ class RESTTransport(Transport):
 
             username = Config.get(self.id, "username", None)
             password = Config.get(self.id, "password", None)
-            ca_certs = Config.get(self.id, "SSLCertificateFile", None)
+            ca_certs = Config.get(self.id, "ssl_ca_cert_file", None)
 
             LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
 
@@ -788,8 +789,8 @@ class RESTTransport(Transport):
                 url = url_host + "/login"
 
                 try:
-                    request = HTTPRequest(
-                        url=url, method="POST", body=body, connect_timeout=120, request_timeout=120, ca_certs=ca_certs)
+                    request = HTTPRequest(url=url, method="POST", body=body, connect_timeout=120, request_timeout=120,
+                                          ca_certs=ca_certs)
                     client = AsyncHTTPClient()
                     response = yield client.fetch(request)
                     response = self._decode(response.body)

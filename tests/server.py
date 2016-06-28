@@ -47,7 +47,10 @@ class testRestServer(ServerTest):
             Test auto removal of older deploy model versions
         """
         self.server.start()
+        result = yield self.server.list_projects()
+        print(result)
         result = yield self.client.create_project("env-test")
+        assert_equal(result.code, 200)
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_environment(project_id=project_id, name="dev")
@@ -95,9 +98,10 @@ class testRestServer(ServerTest):
                   "compiler_rest_transport",
                   "client_rest_transport",
                   "cmdline_rest_transport"]:
-            config.Config.set(x, "SSLCertificateFile", os.path.join(path, "server.crt"))
-            config.Config.set(x, "SSLCertificateKeyFile", os.path.join(path, "server.open.key"))
-            config.Config.set(x, "SSL", "True")
+            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
+            config.Config.set(x, "ssl", "True")
 
         return self.get_resource_for_agent()
 
@@ -113,9 +117,10 @@ class testRestServer(ServerTest):
                   "compiler_rest_transport",
                   "client_rest_transport",
                   "cmdline_rest_transport"]:
-            config.Config.set(x, "SSLCertificateFile", os.path.join(path, "server.crt"))
-            config.Config.set(x, "SSLCertificateKeyFile", os.path.join(path, "server.open.key"))
-            config.Config.set(x, "SSL", "True")
+            config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
+            config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
+            config.Config.set(x, "ssl", "True")
             config.Config.set(x, "username", testuser)
             config.Config.set(x, "password", testpass)
 
@@ -127,6 +132,7 @@ class testRestServer(ServerTest):
         """
         self.server.start()
         result = yield self.client.create_project("env-test")
+        assert_equal(result.code, 200)
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_environment(project_id=project_id, name="dev")

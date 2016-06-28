@@ -1375,7 +1375,7 @@ password=%s""" % (user, passwd)
         # check if an environment with this name is already defined in this project
         envs = yield data.Environment.objects.filter(project_id=project_id, name=name).find_all()  # @UndefinedVariable
         if len(envs) > 0:
-            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
+            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" % 
                          (project.name, project.uuid, name)}
 
         env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)
