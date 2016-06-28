@@ -178,7 +178,7 @@ class OptionVariable(DelayedResultVariable):
 
         # set counterpart
         if self.attribute.end and recur:
-            value.set_attribute(self.attribute.end.name, self.myself, False)
+            value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
         self.value = value
         self.location = location
