@@ -47,8 +47,6 @@ class testRestServer(ServerTest):
             Test auto removal of older deploy model versions
         """
         self.server.start()
-        result = yield self.server.list_projects()
-        print(result)
         result = yield self.client.create_project("env-test")
         assert_equal(result.code, 200)
         project_id = result.result["project"]["id"]
