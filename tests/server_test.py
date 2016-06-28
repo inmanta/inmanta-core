@@ -62,7 +62,7 @@ class ServerTest(MongoTestCase, AsyncTestCase):
 
     def tearDown(self):
         self.server.stop()
-        self.purge_database()
+        self.purge_database(drop=True)
         shutil.rmtree(self.state_dir)
 
         AsyncTestCase.tearDown(self)
