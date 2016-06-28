@@ -18,8 +18,8 @@ fedora-rpm:
         - docker
     image: fedora-python3
     script:
-        - python3 setup.py egg_info -RDb "rc1" sdist
-        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid rc1" -bb inmanta.spec
+        - python3 setup.py egg_info -RDb ".rc2" sdist
+        - rpmbuild --define "_sourcedir $(pwd)/dist" --define "_rpmdir $(pwd)/rpms" --define "buildid rc2" -bb inmanta.spec
     artifacts:
         paths:
             - dist/
