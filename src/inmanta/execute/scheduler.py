@@ -204,7 +204,7 @@ class Scheduler(object):
             zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
             if(len(waitqueue) > 0):
                 LOGGER.debug("Moved zerowaiters to waiters")
-                waitqueue.pop(0).freeze()
+                waitqueue.pop((randrange(len(waitqueue)))).freeze()
                 progress = True
 
             # no one waiting anymore, all done, freeze and finish
