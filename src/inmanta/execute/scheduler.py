@@ -26,6 +26,7 @@ from inmanta.ast.type import TYPES, Type
 
 from inmanta.ast.statements.define import DefineEntity, DefineImplement
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler
+from random import Random, randint, randrange
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -189,7 +190,7 @@ class Scheduler(object):
 
             # find a RV that is has waiters
             while len(waitqueue) > 0 and not progress:
-                next = waitqueue.pop(0)
+                next = waitqueue.pop(randrange(len(waitqueue)))
                 if len(next.waiters) == 0:
                     zerowaiters.append(next)
                 else:
@@ -199,13 +200,12 @@ class Scheduler(object):
 
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
-            if not progress:
-                waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
-                zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
-                if(len(waitqueue) > 0):
-                    LOGGER.debug("Moved zerowaiters to waiters")
-                    waitqueue.pop(0).freeze()
-                    progress = True
+            waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
+            zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
+            if(len(waitqueue) > 0):
+                LOGGER.debug("Moved zerowaiters to waiters")
+                waitqueue.pop(0).freeze()
+                progress = True
 
             # no one waiting anymore, all done, freeze and finish
             if not progress:
