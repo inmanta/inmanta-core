@@ -270,6 +270,10 @@ class RuntimeException(CompilerException):
         return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
 
 
+class OptionalValueException(RuntimeException):
+    pass
+
+
 class TypingException(CompilerException):
 
     def __init__(self, stmt, msg):
