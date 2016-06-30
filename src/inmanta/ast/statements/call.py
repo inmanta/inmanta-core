@@ -16,12 +16,17 @@
     Contact: code@inmanta.com
 """
 
+import logging
+
 from inmanta.ast.statements import ReferenceStatement
 from inmanta.execute.runtime import ResultVariable, Waiter
 from inmanta.execute.proxy import UnsetException, UnknownException
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException
 from inmanta import plugins
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class FunctionCall(ReferenceStatement):
@@ -101,6 +106,7 @@ class FunctionUnit(Waiter):
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
         except UnsetException as e:
+            LOGGER.debug("Unset value in python code in plugin %s." % self.function.function)
             self.await(e.get_result_variable())
         except RuntimeException as e:
             e.set_statement(self.function)
