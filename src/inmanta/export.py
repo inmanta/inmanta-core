@@ -310,20 +310,20 @@ class Exporter(object):
         if version is None:
             version = int(time.time())
 
-        def mergeDict(a, b):
+        def merge_dict(a, b):
             """Very specific impl to this particular data structure."""
             for k, v in b.items():
                 if k not in a:
                     a[k] = v
                 elif isinstance(v, dict):
-                    mergeDict(a[k], v)
+                    merge_dict(a[k], v)
                 else:
                     if a[k] != v:
                         raise Exception("Hash collision!", k, a[k], v)
 
         LOGGER.info("Sending resources and handler source to server")
         sources = resource.sources()
-        mergeDict(sources, Commander.sources())
+        merge_dict(sources, Commander.sources())
 
         LOGGER.info("Uploding source files")
 
