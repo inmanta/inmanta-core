@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
 
 
 class ResultVariable(object):
@@ -190,7 +190,7 @@ class OptionVariable(DelayedResultVariable):
     def get_value(self):
         result = DelayedResultVariable.get_value(self)
         if result is None:
-            raise RuntimeException(None, "Optional variable accessed that has no value ")
+            raise OptionalValueException(None, "Optional variable accessed that has no value ")
         return result
 
 
@@ -250,7 +250,10 @@ class Resolver(object):
             ns = self.namespace
 
         if "::" not in name:
-            return ns.scope.lookup(name)
+            try:
+                return ns.scope.lookup(name)
+            except RuntimeError:
+                print(name)
 
         parts = name.rsplit("::", 1)
 
