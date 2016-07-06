@@ -303,6 +303,9 @@ class Plugin(object, metaclass=PluginMeta):
 
         value = self.call(*new_args)
 
+        if isinstance(value, DynamicProxy):
+            value = value._get_instance()
+
         if self.returntype is not None and not isinstance(value, Unknown):
             valid = False
             exception = None
