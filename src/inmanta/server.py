@@ -45,6 +45,7 @@ from inmanta.agent.io.remote import RemoteIO
 from inmanta.ast import type
 from inmanta.config import Config
 from inmanta.resources import Id, HostNotFoundException
+from uuid import UUID
 
 
 LOGGER = logging.getLogger(__name__)
@@ -703,7 +704,7 @@ class Server(protocol.ServerEndpoint):
             node_dict["agents"] = []
             for agent in agents:
                 agent_dict = yield agent.to_dict()  # do this first, because it also loads all lazy references
-                if environment is None or str(agent.environment.uuid) == environment:
+                if environment is None or agent.environment.uuid == environment:
                     node_dict["agents"].append(agent_dict)
 
             if len(node_dict["agents"]) > 0:
