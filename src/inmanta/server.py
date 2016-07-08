@@ -45,8 +45,6 @@ from inmanta.agent.io.remote import RemoteIO
 from inmanta.ast import type
 from inmanta.config import Config
 from inmanta.resources import Id, HostNotFoundException
-from uuid import UUID
-
 
 LOGGER = logging.getLogger(__name__)
 LOCK = locks.Lock()
