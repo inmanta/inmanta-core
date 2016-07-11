@@ -236,6 +236,22 @@ class QueueScheduler(object):
         return self.types
 
 
+"""
+Resolution
+
+ - lexical scope (module it is in, then parent modules)
+   - handled in NS and direct_lookup on XU
+ - dynamic scope (entity, for loop,...)
+   - resolvers
+   - lex scope as arg or root
+
+resolution
+ - FQN:  to lexical scope (via parents) -> to its  NS (imports) -> to target NS -> directLookup
+ - N: to resolver -> to parents -> to NS (lex root) -> directlookup
+
+"""
+
+
 class Resolver(object):
 
     def __init__(self, namespace):
@@ -249,18 +265,7 @@ class Resolver(object):
         else:
             ns = self.namespace
 
-        if "::" not in name:
-            try:
-                return ns.scope.lookup(name)
-            except RuntimeError:
-                print(name)
-
-        parts = name.rsplit("::", 1)
-
-        if parts[0] not in ns.visible_namespaces:
-            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
-
-        return ns.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
+        return ns.lookup(name)
 
     def get_root_resolver(self):
         return self
@@ -295,10 +300,16 @@ class ExecutionContext(object):
 
     def lookup(self, name, root=None):
         if "::" in name:
-            self.resolver.lookup(name, root)
+            return self.resolver.lookup(name, root)
         if name in self.slots:
             return self.slots[name]
         return self.resolver.lookup(name, root)
+
+    def direct_lookup(self, name):
+        if name in self.slots:
+            return self.slots[name]
+        else:
+            raise NotFoundException(None, name, "Namespace %s not found" % name)
 
     def emit(self, queue):
         self.block.emit(self, queue)

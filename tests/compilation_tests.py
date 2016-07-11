@@ -29,6 +29,7 @@ from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import NotFoundException
 from nose.tools.nontrivial import raises
 
 
@@ -193,6 +194,24 @@ std::print(t.test2.attribute)
             raise AssertionError("Should get exception")
         except RuntimeException as e:
             assert_equal(e.location.lnr, 18)
+
+    @raises(NotFoundException)
+    def testIssue110Resolution(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using test1i
+
+
+implementation test1i for Test1:
+    test = host
+end
+
+t = Test1()
+""")
+
+        compiler.do_compile()
 
     def testIssue120BadImport(self):
         self.setUpForSnippet("""import ip::ip""")
