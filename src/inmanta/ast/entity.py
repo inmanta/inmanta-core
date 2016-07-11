@@ -22,7 +22,7 @@ from inmanta.ast.type import Type
 from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException
 
 
 class Entity(Type):
@@ -136,7 +136,7 @@ class Entity(Type):
         """
             Get the full name of the entity
         """
-        return self.__namespace + "::" + self.__name
+        return self.__namespace.get_full_name() + "::" + self.__name
 
     def get_attributes(self):
         """
@@ -341,11 +341,11 @@ class Entity(Type):
                 self._index[key] = instance
 
                 if key in self.index_queue:
-                    for x in self.index_queue[key]:
-                        x.set_value(instance, None)
+                    for x, stmt in self.index_queue[key]:
+                        x.set_value(instance, stmt.location)
                     self.index_queue.pop(key)
 
-    def lookup_index(self, params, target: ResultVariable=None):
+    def lookup_index(self, params, stmt, target: ResultVariable=None):
         """
             Search an instance in the index.
         """
@@ -367,18 +367,23 @@ class Entity(Type):
             else:
                 return None
         elif key in self._index:
-            target.set_value(self._index[key], None)
+            target.set_value(self._index[key], stmt.location)
         else:
             if key in self.index_queue:
-                self.index_queue[key].append(target)
+                self.index_queue[key].append((target, stmt))
             else:
-                self.index_queue[key] = [target]
+                self.index_queue[key] = [(target, stmt)]
 
     def get_entity(self):
         """
             Get the entity (follow through defaults if needed)
         """
         return self
+
+    def final(self):
+        for key, indices in self.index_queue.items():
+            for _, stmt in indices:
+                raise NotFoundException(stmt, key, "No match in index on type %s with key %s" % (self.get_full_name(), key))
 
 
 class Implementation(object):

@@ -26,6 +26,7 @@ from inmanta.ast.type import TYPES, Type
 
 from inmanta.ast.statements.define import DefineEntity, DefineImplement
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler
+from inmanta.ast.entity import Entity
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ class Scheduler(object):
         pass
 
     def freeze_all(self):
+        for t in [t for t in self.types.values() if isinstance(t, Entity)]:
+            t.final()
+
         instances = self.types["std::Entity"].get_all_instances()
 
         for i in instances:
@@ -115,7 +119,7 @@ class Scheduler(object):
             d.evaluate()
 
         types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type) or isinstance(v, plugins.Plugin)}
-        compiler.plugins = {k: v for k, v in types.items() if isinstance(v, plugins.Plugin)}
+        compiler.plugins = {k: v for k, v in types_and_impl.items() if isinstance(v, plugins.Plugin)}
 
         # give type info to all types, to normalize blocks inside them
         for t in types.values():
@@ -125,7 +129,7 @@ class Scheduler(object):
         for block in blocks:
             block.normalize()
 
-        self.types = types
+        self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
     def run(self, compiler, statements, blocks):
         """

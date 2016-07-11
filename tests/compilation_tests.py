@@ -195,6 +195,17 @@ std::print(t.test2.attribute)
         except RuntimeException as e:
             assert_equal(e.location.lnr, 18)
 
+    def testIssue121_non_matching_index(self):
+        self.setUpForSnippet("""
+        a=std::Host[name="test"]
+        """)
+
+        try:
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except NotFoundException as e:
+            assert_equal(e.location.lnr, 2)
+
     @raises(NotFoundException)
     def testIssue110Resolution(self):
         self.setUpForSnippet("""
