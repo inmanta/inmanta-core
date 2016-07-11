@@ -33,7 +33,7 @@ from subprocess import CalledProcessError
 import yaml
 import inmanta
 from inmanta import env
-from inmanta.ast import Namespace, CompilerException
+from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException
 from inmanta import plugins
 from inmanta.parser.plyInmantaParser import parse
 import ruamel.yaml
@@ -476,35 +476,40 @@ class Project(ModuleLike):
         blocks = [block]
         statements = [x for x in statements]
         # get imports
-        imports = [x.name for x in statements if isinstance(x, DefineImport)]
+        imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.autostd:
-            imports.insert(0, "std")
+            imports.insert(0, DefineImport("std", "std"))
         done = set()
         while len(imports) > 0:
-            ns = imports.pop()
+            imp = imports.pop()
+            ns = imp.name
             if ns in done:
                 continue
 
             parts = ns.split("::")
             module_name = parts[0]
-        #   get module
-            if module_name in self.modules:
-                module = self.modules[module_name]
-            else:
-                module = self.load_module(module_name)
-        #   get NS
-            for i in range(1, len(parts) + 1):
-                subs = '::'.join(parts[0:i])
-                if subs in done:
-                    continue
-                (nstmt, nb) = module.get_ast(subs)
-                done.add(subs)
-                statements.extend(nstmt)
-                blocks.append(nb)
 
-        #   get imports and add to list
-                nimp = [x.name for x in nstmt if isinstance(x, DefineImport)]
-                imports.extend(nimp)
+            try:
+                # get module
+                if module_name in self.modules:
+                    module = self.modules[module_name]
+                else:
+                    module = self.load_module(module_name)
+                # get NS
+                for i in range(1, len(parts) + 1):
+                    subs = '::'.join(parts[0:i])
+                    if subs in done:
+                        continue
+                    (nstmt, nb) = module.get_ast(subs)
+                    done.add(subs)
+                    statements.extend(nstmt)
+                    blocks.append(nb)
+
+                # get imports and add to list
+                    nimp = [x for x in nstmt if isinstance(x, DefineImport)]
+                    imports.extend(nimp)
+            except InvalidModuleException:
+                raise ModuleNotFoundException(ns, imp)
 
         return (statements, blocks)
 
@@ -808,7 +813,10 @@ class Module(ModuleLike):
 
         ns = self._project.get_root_namespace().get_ns_or_create(name)
 
-        return self._load_file(ns, file)
+        try:
+            return self._load_file(ns, file)
+        except FileNotFoundError:
+            raise InvalidModuleException("could not locate module with name: %s", name)
 
     def load_plugins(self):
         """
