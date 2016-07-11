@@ -55,6 +55,7 @@ class Namespace(object):
         else:
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None
+        self.scope = None
 
     def set_primitives(self, primitives):
         self.primitives = primitives
@@ -72,6 +73,17 @@ class Namespace(object):
         if name in self.visible_namespaces and not isinstance(self.visible_namespaces[name], MockImport):
             raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
+
+    def lookup(self, name):
+        if "::" not in name:
+            return self.scope.direct_lookup(name)
+
+        parts = name.rsplit("::", 1)
+
+        if parts[0] not in self.visible_namespaces:
+            raise NotFoundException(None, name, "Variable %s not found" % parts[0])
+
+        return self.visible_namespaces[parts[0]].target.scope.direct_lookup(parts[1])
 
     def get_type(self, name):
         if "::" in name:
