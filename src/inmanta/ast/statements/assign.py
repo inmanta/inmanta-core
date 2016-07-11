@@ -121,7 +121,7 @@ class IndexLookup(ReferenceStatement):
         return {self: temp}
 
     def resume(self, requires, resolver, queue, target):
-        self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], target)
+        self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
 
     def execute(self, requires, resolver, queue):
         return requires[self]

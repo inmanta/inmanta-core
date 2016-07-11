@@ -209,7 +209,7 @@ class Constructor(GeneratorStatement):
             for attr in index:
                 params.append((attr, attributes[attr]))
 
-            obj = type_class.lookup_index(params)
+            obj = type_class.lookup_index(params, self)
             if obj is not None:
                 instances.append(obj)
 
