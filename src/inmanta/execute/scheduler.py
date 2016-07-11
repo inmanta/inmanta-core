@@ -177,7 +177,7 @@ class Scheduler(object):
 
             # evaluate all that is ready
             while len(basequeue) > 0:
-                next = basequeue.pop()
+                next = basequeue.pop(0)
                 try:
                     next.execute()
                     count = count + 1

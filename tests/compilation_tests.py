@@ -21,6 +21,8 @@ import tempfile
 import shutil
 import os
 from itertools import groupby
+import sys
+from io import StringIO
 
 from nose.tools import assert_equal
 from inmanta.module import Project
@@ -192,6 +194,23 @@ std::print(t.test2.attribute)
         except RuntimeException as e:
             assert_equal(e.location.lnr, 18)
 
+    def testOrderOfExecution(self):
+        self.setUpForSnippet("""
+for i in std::sequence(10):
+    std::print(i)
+end
+        """)
+
+        saved_stdout = sys.stdout
+        try:
+            out = StringIO()
+            sys.stdout = out
+            compiler.do_compile()
+            output = out.getvalue().strip()
+            assert_equal(output, '\n'.join([str(x) for x in range(10)]))
+        finally:
+            sys.stdout = saved_stdout
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
@@ -242,6 +261,7 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
         variables = {k: x.get_value() for k, x in scopes.get_child("__config__").scope.slots.items()}
 
         import re
+
         p = re.compile(r'(f\d+h\d+)(a\d+)?')
 
         items = [(m.groups()[0], m.groups()[1], v)
