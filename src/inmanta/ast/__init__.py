@@ -286,6 +286,18 @@ class TypingException(CompilerException):
         return "%s (reported in type: %s) (%s)" % (self.msg, self.stmt, self.location)
 
 
+class ModuleNotFoundException(RuntimeException):
+
+    def __init__(self, name, stmt, msg=None):
+        RuntimeException.__init__(self, stmt, msg)
+        self.name = name
+
+    def __str__(self, *args, **kwargs):
+        if self.msg is not None:
+            return " %s (reported at (%s))" % (self.msg, self.location)
+        return "could not find module %s (reported at (%s))" % (self.name, self.location)
+
+
 class NotFoundException(RuntimeException):
 
     def __init__(self, stmt, name, msg=None):

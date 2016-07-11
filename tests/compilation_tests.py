@@ -28,7 +28,7 @@ from nose.tools import assert_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException
+from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
 from nose.tools.nontrivial import raises
 
 
@@ -193,6 +193,22 @@ std::print(t.test2.attribute)
             raise AssertionError("Should get exception")
         except RuntimeException as e:
             assert_equal(e.location.lnr, 18)
+
+    def testIssue120BadImport(self):
+        self.setUpForSnippet("""import ip::ip""")
+        try:
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except ModuleNotFoundException as e:
+            assert_equal(e.location.lnr, 1)
+
+    def testIssue120BadImport_extra(self):
+        self.setUpForSnippet("""import slorpf""")
+        try:
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except ModuleNotFoundException as e:
+            assert_equal(e.location.lnr, 1)
 
     def testOrderOfExecution(self):
         self.setUpForSnippet("""

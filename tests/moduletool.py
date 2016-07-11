@@ -28,8 +28,8 @@ import unittest
 from nose.tools import raises, assert_true
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, InvalidModuleException, Project, LocalFileRepo, RemoteRepo
-from inmanta.ast import CompilerException
+from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo
+from inmanta.ast import CompilerException, ModuleNotFoundException
 
 
 def makemodule(reporoot, name, deps, project=False, imports=None,):
@@ -211,7 +211,7 @@ class testModuleTool(unittest.TestCase):
         result = repo.clone("thatotherthing", coroot)
         assert_true(not result, "checkout should have failed")
 
-    @raises(InvalidModuleException)
+    @raises(ModuleNotFoundException)
     def test_BadCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "badproject")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "badproject")],
@@ -222,7 +222,7 @@ class testModuleTool(unittest.TestCase):
 
         ModuleTool().execute("install", [])
 
-    @raises(InvalidModuleException)
+    @raises(ModuleNotFoundException)
     def test_BadSetup(self):
         coroot = os.path.join(testModuleTool.tempdir, "badprojectx")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "badproject"), coroot],
