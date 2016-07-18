@@ -125,7 +125,7 @@ class Server(protocol.ServerEndpoint):
         for env_id in self._requires_agents.keys():
             agent = list(self._requires_agents[env_id]["agents"])[0]
             self._requires_agents[env_id]["agents"].remove(agent)
-            yield self._ensure_agent(env_id, agent)
+            yield self._ensure_agent(str(env_id), agent)
 
     def stop(self):
         disconnect()
@@ -226,7 +226,7 @@ class Server(protocol.ServerEndpoint):
             if len(rvs) == 0:
                 return 404, {"message": "The parameter does not exist."}
 
-            yield self._ensure_agent(tid, resource.agent)
+            yield self._ensure_agent(str(tid), resource.agent)
             client = self.get_agent_client(tid, resource.agent)
             if client is not None:
                 future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
@@ -248,8 +248,11 @@ class Server(protocol.ServerEndpoint):
 
         for param in expired_params:
             yield param.load_references()
-            LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
-                         param.environment.uuid)
+            if param.environment is None:
+                LOGGER.debug("Requesting new parameter value for %s of resource %s in env None", param.name, param.resource_id)
+            else:
+                LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
+                             param.environment.uuid)
             self._request_parameter(param.environment, param)
 
         unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
@@ -296,7 +299,7 @@ class Server(protocol.ServerEndpoint):
                 if len(rvs) == 0:
                     return 404, {"message": "The parameter does not exist (no versions of this resource available)."}
 
-                yield self._ensure_agent(tid, resource.agent)
+                yield self._ensure_agent(str(tid), resource.agent)
                 client = self.get_agent_client(tid, resource.agent)
                 if client is not None:
                     future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
@@ -313,7 +316,8 @@ class Server(protocol.ServerEndpoint):
             return 200, {"parameter": params[0].to_dict()}
 
         LOGGER.info("Parameter %s of resource %s expired.", id, resource_id)
-        return self._request_parameter(env, param)
+        out = yield self._request_parameter(env, param)
+        return out
 
     @protocol.handle(methods.ParameterMethod.set_param)
     @gen.coroutine
@@ -994,39 +998,40 @@ class Server(protocol.ServerEndpoint):
         return proc.wait()
 
     @gen.coroutine
-    def _ensure_agent(self, environment_id, agent_name):
+    def _ensure_agent(self, environment_id: str, agent_name):
         """
             Ensure that the agent is running if required
         """
         if self._agent_matches(agent_name):
-            LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
-            agent_data = None
-            if environment_id in self._requires_agents:
-                agent_data = self._requires_agents[environment_id]
+            with (yield LOCK.acquire()):
+                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
+                agent_data = None
+                if environment_id in self._requires_agents:
+                    agent_data = self._requires_agents[environment_id]
 
-                if agent_name in agent_data["agents"]:
-                    return
+                    if agent_name in agent_data["agents"]:
+                        return
 
-            if agent_data is None:
-                agent_data = {"agents": set(), "process": None}
-                self._requires_agents[environment_id] = agent_data
+                if agent_data is None:
+                    agent_data = {"agents": set(), "process": None}
+                    self._requires_agents[environment_id] = agent_data
 
-            agent_data["agents"].add(agent_name)
+                agent_data["agents"].add(agent_name)
 
-            agent_names = ",".join(agent_data["agents"])
+                agent_names = ",".join(agent_data["agents"])
 
-            agent_map = {}
-            for agent in agent_data["agents"]:
-                try:
-                    gw = RemoteIO(agent)
-                    gw.close()
-                except HostNotFoundException:
-                    agent_map[agent] = "localhost"
+                agent_map = {}
+                for agent in agent_data["agents"]:
+                    try:
+                        gw = RemoteIO(agent)
+                        gw.close()
+                    except HostNotFoundException:
+                        agent_map[agent] = "localhost"
 
-            port = Config.get("server_rest_transport", "port", "8888")
+                port = Config.get("server_rest_transport", "port", "8888")
 
-            # generate config file
-            config = """[config]
+                # generate config file
+                config = """[config]
 heartbeat-interval = 60
 state-dir=%(statedir)s
 
@@ -1039,41 +1044,50 @@ python_binary=%(python_binary)s
 port=%(port)s
 host=localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port,
-                "python_binary": Config.get("config", "python_binary", "python"),
-                "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()]),
-                "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
+                    "python_binary": Config.get("config", "python_binary", "python"),
+                    "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()]),
+                    "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
 
-            user = Config.get("server", "username", None)
-            passwd = Config.get("server", "password", None)
+                user = Config.get("server", "username", None)
+                passwd = Config.get("server", "password", None)
 
-            if user is not None and passwd is not None:
-                config += """
+                if user is not None and passwd is not None:
+                    config += """
 username=%s
-password=%s""" % (user, passwd)
+password=%s
+""" % (user, passwd)
 
-            config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
-            if not os.path.exists(config_dir):
-                os.mkdir(config_dir)
+                ssl_cert = Config.get("server", "ssl_key_file", None)
+                ssl_ca = Config.get("server", "ssl_cert_file", None)
+                if ssl_ca is not None and ssl_cert is not None:
+                    config += """
+ssl=True
+ssl_ca_cert_file=%s
+""" % (ssl_ca)
 
-            config_path = os.path.join(config_dir, "agent.cfg")
-            with open(config_path, "w+") as fd:
-                fd.write(config)
+                config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
+                if not os.path.exists(config_dir):
+                    os.mkdir(config_dir)
 
-            proc = self._fork_inmanta(["-vvv", "-c", config_path, "agent"])
+                config_path = os.path.join(config_dir, "agent.cfg")
+                with open(config_path, "w+") as fd:
+                    fd.write(config)
 
-            if agent_data["process"] is not None:
-                LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
-                agent_data["process"].terminate()
+                proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"])
 
-            # FIXME: include agent
-            threading.Thread(target=self._log_agent_output, args=(environment_id, proc)).start()
-            agent_data["process"] = proc
-            self._requires_agents[environment_id] = agent_data
-            # wait a bit here to make sure the agents registers with the server
-            # TODO: queue calls in agent work queue even if agent is not available
-            yield gen.sleep(2)
+                if agent_data["process"] is not None:
+                    LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
+                    agent_data["process"].terminate()
 
-            LOGGER.debug("Started new agent with PID %s", proc.pid)
+                # FIXME: include agent
+                threading.Thread(target=self._log_agent_output, args=(environment_id, proc)).start()
+                agent_data["process"] = proc
+                self._requires_agents[environment_id] = agent_data
+                # wait a bit here to make sure the agents registers with the server
+                # TODO: queue calls in agent work queue even if agent is not available
+                yield gen.sleep(2)
+
+                LOGGER.debug("Started new agent with PID %s", proc.pid)
 
     @protocol.handle(methods.CMVersionMethod.release_version)
     @gen.coroutine
@@ -1100,7 +1114,7 @@ password=%s""" % (user, passwd)
                 agents.add(rv.resource.agent)
 
             for agent in agents:
-                yield self._ensure_agent(tid, agent)
+                yield self._ensure_agent(str(tid), agent)
                 client = self.get_agent_client(tid, agent)
                 if client is not None:
                     future = client.trigger_agent(tid, agent)
@@ -1139,7 +1153,7 @@ password=%s""" % (user, passwd)
 
         tid = str(tid)
         for agent in agents:
-            yield self._ensure_agent(tid, agent)
+            yield self._ensure_agent(str(tid), agent)
             client = self.get_agent_client(tid, agent)
             if client is not None:
                 future = client.do_dryrun(tid, dryrun_id, agent, id)
@@ -1906,12 +1920,13 @@ password=%s""" % (user, passwd)
             rr.success = success
             rr.started = start
             rr.finished = stop
+            rr.msg = msg
             yield [rr.save(), rr.load_references()]
 
             restore.resources_todo -= 1
             if restore.resources_todo == 0:
                 restore.finished = datetime.datetime.now()
-                yield restore.save()
+            yield restore.save()
 
         return 200
 
@@ -1938,7 +1953,7 @@ password=%s""" % (user, passwd)
 
         version = int(time.time())
         result = yield self.put_version(id, version, [], [], {})
-        return result
+        return result, {"version": version}
 
     @protocol.handle(methods.Decommision.clear_environment)
     @gen.coroutine

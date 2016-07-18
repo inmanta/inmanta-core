@@ -138,7 +138,19 @@ class Resource(object):
         Convert all requires
         """
         for res in cls.__create_cache.values():
-            res.requires = set([cls.__create_cache[r] for r in res.requires])
+            final_requires = set()
+            inital_requires = [x for x in res.requires]
+            for r in inital_requires:
+                if r in cls.__create_cache:
+                    final_requires.add(cls.__create_cache[r])
+                else:
+                    new_requires = r.requires
+                    if len(new_requires) == 0:
+                        LOGGER.warning("A resource (%s) depends on a non resource that has no dependencies (%s)", res, r)
+                    else:
+                        inital_requires.extend(new_requires)
+
+            res.requires = final_requires
 
     @classmethod
     def get_resource(cls, model_object):

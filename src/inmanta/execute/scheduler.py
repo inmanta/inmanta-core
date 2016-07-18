@@ -235,5 +235,5 @@ class Scheduler(object):
         # rint(len(self.types["std::Entity"].get_all_instances()))
 
         self.freeze_all()
-
+        # self.dump("std::File")
         return True

@@ -30,6 +30,14 @@ class Context(object):
     """
         An instance of this class is used to pass context to the plugin
     """
+    __client = None
+
+    @classmethod
+    def __get_client(cls):
+        if cls.__client is None:
+            from inmanta import protocol
+            cls.__client = protocol.Client("compiler")
+        return cls.__client
 
     def __init__(self, resolver, queue, owner, result):
         self.resolver = resolver
@@ -71,9 +79,7 @@ class Context(object):
         return data_dir
 
     def get_client(self):
-        from inmanta import protocol
-        client = protocol.Client("compiler")
-        return client
+        return self.__class__.__get_client()
 
     def run_sync(self, function):
         from tornado.ioloop import IOLoop, TimeoutError

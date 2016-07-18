@@ -269,7 +269,7 @@ class Agent(AgentEndPoint):
             Get the latest version of managed resources for all agents
         """
         for agent in self.end_point_names:
-            self.get_latest_version_for_agent(agent)
+            yield self.get_latest_version_for_agent(agent)
 
     @gen.coroutine
     def _ensure_code(self, environment, version, resourcetypes):
@@ -432,6 +432,9 @@ class Agent(AgentEndPoint):
         """
         LOGGER.info("Start a restore %s", restore_id)
 
+        yield self._ensure_code(tid, resources[0][1]["id_fields"]["version"],
+                                [res[1]["id_fields"]["entity_type"] for res in resources])
+
         for restore, resource in resources:
             start = datetime.datetime.now()
             provider = None
@@ -478,6 +481,9 @@ class Agent(AgentEndPoint):
             Create a snapshot of stateful resources managed by this agent
         """
         LOGGER.info("Start snapshot %s", snapshot_id)
+
+        yield self._ensure_code(tid, resources[0]["id_fields"]["version"],
+                                [res["id_fields"]["entity_type"] for res in resources])
 
         for resource in resources:
             start = datetime.datetime.now()

@@ -61,8 +61,43 @@ def start_agent(options):
         a.stop()
 
 
-@command("compile", help_msg="Compile the project to a configuration model", require_project=True)
+def compiler_config(parser):
+    """
+        Configure the compiler of the export function
+    """
+    parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
+    parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
+    parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
+    parser.add_argument("--username", dest="user", help="The username of the server")
+    parser.add_argument("--password", dest="password", help="The password of the server")
+    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
+    parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
+
+
+@command("compile", help_msg="Compile the project to a configuration model",
+         parser_config=compiler_config, require_project=True)
 def compile_project(options):
+    if options.environment is not None:
+        Config.set("config", "environment", options.environment)
+
+    if options.server is not None:
+        Config.set("compiler_rest_transport", "host", options.server)
+
+    if options.port is not None:
+        Config.set("compiler_rest_transport", "port", options.port)
+
+    if options.user is not None:
+        Config.set("compiler_rest_transport", "username", options.user)
+
+    if options.password is not None:
+        Config.set("compiler_rest_transport", "password", options.password)
+
+    if options.ssl:
+        Config.set("compiler_rest_transport", "ssl", "true")
+
+    if options.ca_cert is not None:
+        Config.set("compiler_rest_transport", "ssl_ca_cert_file", options.ca_cert)
+
     if options.profile:
         import cProfile
         import pstats
@@ -100,6 +135,10 @@ def export_parser_config(parser):
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
+    parser.add_argument("--username", dest="user", help="The username of the server")
+    parser.add_argument("--password", dest="password", help="The password of the server")
+    parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
+    parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -112,6 +151,18 @@ def export(options):
 
     if options.server is not None:
         Config.set("compiler_rest_transport", "port", options.port)
+
+    if options.user is not None:
+        Config.set("compiler_rest_transport", "username", options.user)
+
+    if options.password is not None:
+        Config.set("compiler_rest_transport", "password", options.password)
+
+    if options.ssl:
+        Config.set("compiler_rest_transport", "ssl", "true")
+
+    if options.ca_cert is not None:
+        Config.set("compiler_rest_transport", "ssl_ca_cert_file", options.ca_cert)
 
     from inmanta.export import Exporter
 
