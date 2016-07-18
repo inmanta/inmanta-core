@@ -39,6 +39,7 @@ class Resource(Resource):
 
 @provider("test::Resource", name="test_resource")
 class TestProvider(ResourceHandler):
+
     def check_resource(self, resource):
         current = resource.clone()
         current.purged = not TestProvider.isset(resource.id.get_agent_name(), resource.key)
@@ -105,6 +106,7 @@ class TestProvider(ResourceHandler):
 
 
 class testAgentServer(ServerTest):
+
     def __init__(self, methodName='runTest'):
         super().__init__(methodName)
         self.client = None
@@ -146,7 +148,6 @@ class testAgentServer(ServerTest):
         resources = [{'key': 'key1',
                       'value': 'value1',
                       'id': 'test::Resource[agent1,key=key1],v=%d' % version,
-                      'requires': [],
                       'purged': False,
                       'state_id': '',
                       'allow_restore': True,
@@ -229,7 +230,7 @@ class testAgentServer(ServerTest):
         assert_equal(TestProvider.get("agent1", "key2"), "value2")
         assert_true(not TestProvider.isset("agent1", "key3"))
 
-    @gen_test
+    @gen_test()
     def test_snapshot_restore(self):
         """
             create a snapshot and restore it again
@@ -252,6 +253,15 @@ class testAgentServer(ServerTest):
         resources = [{'key': 'key',
                       'value': 'value',
                       'id': 'test::Resource[agent1,key=key],v=%d' % version,
+                      'requires': [],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      },
+                     {'key': 'key2',
+                      'value': 'value',
+                      'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                       'requires': [],
                       'purged': False,
                       'state_id': '',

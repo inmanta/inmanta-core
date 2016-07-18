@@ -29,7 +29,7 @@ from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
-from inmanta.ast import NotFoundException
+from inmanta.ast import NotFoundException, TypingException
 from nose.tools.nontrivial import raises
 
 
@@ -205,6 +205,45 @@ std::print(t.test2.attribute)
             raise AssertionError("Should get exception")
         except NotFoundException as e:
             assert_equal(e.location.lnr, 2)
+
+    def testIssue122IndexInheritance(self):
+        self.setUpForSnippet("""
+entity Repository extends std::File:
+    string name
+    bool gpgcheck=false
+    bool enabled=true
+    string baseurl
+    string gpgkey=""
+    number metadata_expire=7200
+end
+
+implementation redhatRepo for Repository:
+    self.mode = 644
+    self.owner = "root"
+    self.group = "root"
+
+    self.path = "/etc/yum.repos.d/{{ name }}.repo"
+    self.content = "{{name}}"
+end
+
+implement Repository using redhatRepo
+
+import redhat
+
+h1 = std::Host(name="test", os=redhat::fedora23)
+
+Repository(host=h1, name="flens-demo",
+                           baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
+
+Repository(host=h1, name="flens-demo",
+                           baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
+        """)
+
+        try:
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except TypingException as e:
+            assert_equal(e.location.lnr, 26)
 
     @raises(NotFoundException)
     def testIssue110Resolution(self):

@@ -314,7 +314,11 @@ class Entity(Type):
         self._index_def.append(attributes)
 
     def get_indices(self):
-        return self._index_def
+        base = []
+        base.extend(self._index_def)
+        for parent in self.parent_entities:
+            base.extend(parent.get_indices())
+        return base
 
     def add_to_index(self, instance):
         """
