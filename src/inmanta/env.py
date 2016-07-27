@@ -125,7 +125,7 @@ class VirtualEnv(object):
         with open(path, "w+") as fd:
             fd.write(new_hash)
 
-    def install_from_list(self, requirements_list: list, detailed_cache=False) -> None:
+    def install_from_list(self, requirements_list: list, detailed_cache=False, cache=True) -> None:
         """
             Install requirements from a list of requirement strings
         """
@@ -143,7 +143,7 @@ class VirtualEnv(object):
 
         current_hash = self._read_current_requirements_hash()
 
-        if new_req_hash == current_hash:
+        if new_req_hash == current_hash and cache:
             return
 
         try:

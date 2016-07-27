@@ -466,8 +466,16 @@ class Project(ModuleLike):
                 # do python install
                 pyreq = self.collect_python_requirements()
                 if len(pyreq) > 0:
-                    self.virtualenv.install_from_list(pyreq)
-                self.load_plugins()
+                    try:
+                        #install reqs, with cache
+                        self.virtualenv.install_from_list(pyreq)
+                        self.load_plugins()
+                    except CompilerException:
+                        #cache could be damaged, ignore it
+                        self.virtualenv.install_from_list(pyreq, cache=False)
+                        self.load_plugins()
+                else:
+                    self.load_plugins()
 
     @memoize
     def get_complete_ast(self):
