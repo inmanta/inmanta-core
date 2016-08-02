@@ -156,6 +156,7 @@ class Scheduler(object):
         waitqueue = []
         # queue for RV's that are delayed and had no waiters when they were first in the waitqueue
         zerowaiters = []
+
         # Wrap in object to pass around
         queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
 
@@ -196,6 +197,10 @@ class Scheduler(object):
                 next = waitqueue.pop(0)
                 if len(next.waiters) == 0:
                     zerowaiters.append(next)
+                elif next.get_waiting_providers() > 0:
+                    #will requeue when value is added
+                    print("XX drop")
+                    pass
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
                     next.freeze()

@@ -63,7 +63,7 @@ class ExpressionStatement(DynamicStatement):
 
     def emit(self, resolver, queue):
         target = ResultVariable()
-        target.set_provider(self)
+        #target.set_provider(self)
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 

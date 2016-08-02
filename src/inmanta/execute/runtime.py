@@ -18,22 +18,36 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, CompilerError
 
 
 class ResultVariable(object):
 
-    def __init__(self, value=[]):
+    def __init__(self, value=None):
         self.provider = None
         self.waiters = []
         self.value = value
         self.hasValue = False
         self.type = None
 
+    def get_waiting_providers(self):
+        # todo: optimize?
+
+        if self.provider is None and self.hasValue:
+            print("no provider")
+
+        if self.provider is None:
+            return 0
+        if self.hasValue:
+            return 0
+        return 1
+
     def set_type(self, type):
         self.type = type
 
     def set_provider(self, provider):
+        if self.provider is not None:
+            print("two providers set on single value variable")
         self.provider = provider
 
     def is_ready(self):
@@ -121,7 +135,19 @@ class ListVariable(DelayedResultVariable):
     def __init__(self, attribute, instance, queue):
         self.attribute = attribute
         self.myself = instance
+        self.providers = []
         DelayedResultVariable.__init__(self, queue, [])
+
+    def set_provider(self, provider):
+        self.providers.append(provider)
+
+    def get_waiting_providers(self):
+        # todo: optimize?
+        out = len(self.providers) - len(self.value)
+        #heuristics,...
+        if out < 0:
+            return 0
+        return out
 
     def set_value(self, value, location, recur=True):
         if self.hasValue:
@@ -155,8 +181,11 @@ class ListVariable(DelayedResultVariable):
         if self.can_get():
             self.queue()
 
+        # WDB remove
+        self.get_waiting_providers()
+
     def can_get(self):
-        return len(self.value) >= self.attribute.low
+        return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
 
 class OptionVariable(DelayedResultVariable):
@@ -166,7 +195,7 @@ class OptionVariable(DelayedResultVariable):
         self.value = None
         self.attribute = attribute
         self.myself = instance
-        self.queue()
+        # self.queue()
 
     def set_value(self, value, location, recur=True):
         if self.hasValue:
@@ -185,7 +214,7 @@ class OptionVariable(DelayedResultVariable):
         self.freeze()
 
     def can_get(self):
-        return True
+        return self.get_waiting_providers() == 0
 
     def get_value(self):
         result = DelayedResultVariable.get_value(self)
@@ -294,8 +323,8 @@ class ExecutionContext(object):
     def __init__(self, block, resolver):
         self.block = block
         self.slots = {n: ResultVariable() for n in block.get_variables()}
-        for (n, s) in self.slots.items():
-            s.set_provider(self)
+#         for (n, s) in self.slots.items():
+#             s.set_provider(self)
         self.resolver = resolver
 
     def lookup(self, name, root=None):
@@ -392,10 +421,11 @@ class RawUnit(Waiter):
 
 class ExecutionUnit(Waiter):
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression, provides=True):
         Waiter.__init__(self, queue_scheduler)
         self.result = result
-        result.set_provider(self)
+        if provides:
+            result.set_provider(expression)
         self.requires = requires
         self.expression = expression
         self.resolver = resolver
@@ -430,9 +460,11 @@ class Instance(ExecutionContext):
     def get_type(self):
         return self.type
 
-    def set_attribute(self, name, value, location, recur=True):
+    def set_attribute(self, name, value, location, recur=True, provides=False):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
+        if provides:
+            self.slots[name].set_provider(self)
         self.slots[name].set_value(value, location, recur)
 
     def get_attribute(self, name):

@@ -344,3 +344,8 @@ class DuplicateException(TypingException):
 
     def __str__(self, *args, **kwargs):
         return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.location)
+
+
+class CompilerError(Exception):
+
+    pass
