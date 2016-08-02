@@ -54,7 +54,6 @@ class FunctionCall(ReferenceStatement):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         # add lazy vars
         temp = ResultVariable()
-        #temp.set_provider(self)
         FunctionUnit(queue, resolver, temp, sub, self)
         return {self: temp}
 

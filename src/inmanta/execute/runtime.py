@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, CompilerError
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
 
 
 class ResultVariable(object):
@@ -144,7 +144,7 @@ class ListVariable(DelayedResultVariable):
     def get_waiting_providers(self):
         # todo: optimize?
         out = len(self.providers) - len(self.value)
-        #heuristics,...
+        # heuristics,...
         if out < 0:
             return 0
         return out

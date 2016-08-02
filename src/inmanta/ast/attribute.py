@@ -78,7 +78,6 @@ class Attribute(object):
     def get_new_Result_Variable(self, instance, queue):
         out = ResultVariable()
         out.set_type(self.__type)
-        #out.set_provider(instance)
         return out
 
 
@@ -112,5 +111,4 @@ class RelationAttribute(Attribute):
         else:
             out = ListVariable(self, instance, queue)
         out.set_type(self.get_type())
-        #out.set_provider(self)
         return out

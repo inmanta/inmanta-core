@@ -467,11 +467,11 @@ class Project(ModuleLike):
                 pyreq = self.collect_python_requirements()
                 if len(pyreq) > 0:
                     try:
-                        #install reqs, with cache
+                        # install reqs, with cache
                         self.virtualenv.install_from_list(pyreq)
                         self.load_plugins()
                     except CompilerException:
-                        #cache could be damaged, ignore it
+                        # cache could be damaged, ignore it
                         self.virtualenv.install_from_list(pyreq, cache=False)
                         self.load_plugins()
                 else:
