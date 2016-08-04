@@ -19,6 +19,7 @@
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
 from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
+from distutils.errors import CompileError
 
 
 class ResultVariable(object):
@@ -32,10 +33,6 @@ class ResultVariable(object):
 
     def get_waiting_providers(self):
         # todo: optimize?
-
-        if self.provider is None and self.hasValue:
-            print("no provider")
-
         if self.provider is None:
             return 0
         if self.hasValue:
@@ -47,7 +44,7 @@ class ResultVariable(object):
 
     def set_provider(self, provider):
         if self.provider is not None:
-            print("two providers set on single value variable")
+            raise CompileError("two providers set on single value variable")
         self.provider = provider
 
     def is_ready(self):
@@ -180,9 +177,6 @@ class ListVariable(DelayedResultVariable):
 
         if self.can_get():
             self.queue()
-
-        # WDB remove
-        self.get_waiting_providers()
 
     def can_get(self):
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
