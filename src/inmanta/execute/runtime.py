@@ -43,8 +43,6 @@ class ResultVariable(object):
         self.type = type
 
     def set_provider(self, provider):
-        if self.provider is not None:
-            raise CompileError("two providers set on single value variable")
         self.provider = provider
 
     def is_ready(self):
@@ -189,7 +187,6 @@ class OptionVariable(DelayedResultVariable):
         self.value = None
         self.attribute = attribute
         self.myself = instance
-        # self.queue()
 
     def set_value(self, value, location, recur=True):
         if self.hasValue:
