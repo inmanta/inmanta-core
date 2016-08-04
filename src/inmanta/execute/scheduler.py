@@ -198,7 +198,7 @@ class Scheduler(object):
                 if len(next.waiters) == 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
-                    #will requeue when value is added
+                    # will requeue when value is added
                     pass
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
