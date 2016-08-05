@@ -18,7 +18,7 @@
 
 import logging
 
-from inmanta.execute.runtime import ResultVariable, WaitUnit, ExecutionUnit, RawUnit
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast import RuntimeException
@@ -69,7 +69,7 @@ class AttributeReferenceHelper(object):
         self.target = target
         self.instance = instance
 
-    def resume(self, requires, resolver, queue_scheduler):
+    def resume(self, requires, resolver, queue_scheduler, target):
         """
             Instance is ready to execute, do it and see if the attribute is already present
         """
@@ -172,7 +172,7 @@ class AttributeReference(Reference):
         self.copy_location(resumer)
 
         # wait for the instance
-        WaitUnit(queue, resolver, self.instance.requires_emit(resolver, queue), resumer)
+        HangUnit(queue, resolver, self.instance.requires_emit(resolver, queue), None, resumer)
         return {self: temp}
 
     def execute(self, requires, resolver, queue):

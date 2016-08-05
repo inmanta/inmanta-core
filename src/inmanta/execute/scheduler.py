@@ -101,7 +101,7 @@ class Scheduler(object):
         for (name, type_symbol) in newtypes:
             types_and_impl[name] = type_symbol
 
-        # now that we have objects for all types, popuate them
+        # now that we have objects for all types, populate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
         others = [t for t in definitions if not isinstance(t, DefineImplement)]
         entities = [t for t in others if isinstance(t, DefineEntity)]
@@ -125,7 +125,7 @@ class Scheduler(object):
         for t in types.values():
             t.normalize()
 
-        # normalize other blocks
+        # normalize root blocks
         for block in blocks:
             block.normalize()
 
@@ -187,19 +187,22 @@ class Scheduler(object):
                     next.execute()
                     count = count + 1
                 except UnsetException as e:
+                    # some statements don't know all their dependencies up front,...
                     next.await(e.get_result_variable())
 
             # all safe stmts are done
             progress = False
 
-            # find a RV that is has waiters
+            # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
                 next = waitqueue.pop(0)
                 if len(next.waiters) == 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
+                    # definitely not done
+                    # drop from queue
                     # will requeue when value is added
-                    pass
+                    next.unqueue()
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
                     next.freeze()
@@ -210,10 +213,14 @@ class Scheduler(object):
             if not progress:
                 waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
                 zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
-                if(len(waitqueue) > 0):
+                while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
-                    waitqueue.pop(0).freeze()
-                    progress = True
+                    next = waitqueue.pop(0)
+                    if next.get_waiting_providers() > 0:
+                        next.unqueue()
+                    else:
+                        next.freeze()
+                        progress = True
 
             # no one waiting anymore, all done, freeze and finish
             if not progress:

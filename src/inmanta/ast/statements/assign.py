@@ -21,7 +21,7 @@
 from . import ReferenceStatement
 from inmanta.ast.type import List
 from inmanta.ast.statements import AssignStatement
-from inmanta.execute.runtime import ExecutionUnit, WaitUnit, ResultVariable, HangUnit
+from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit
 
 
 class CreateList(ReferenceStatement):
@@ -62,9 +62,9 @@ class SetAttribute(AssignStatement):
 
     def emit(self, resolver, queue):
         reqs = self.instance.requires_emit(resolver, queue)
-        WaitUnit(queue, resolver, reqs, self)
+        HangUnit(queue, resolver, reqs, None, self)
 
-    def resume(self, requires, resolver, queue):
+    def resume(self, requires, resolver, queue, target):
         var = self.instance.execute(requires, resolver, queue).get_attribute(self.attribute_name)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, var, reqs, self.value)
