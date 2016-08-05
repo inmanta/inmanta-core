@@ -19,7 +19,6 @@
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
 from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
-from distutils.errors import CompileError
 
 
 class ResultVariable(object):
