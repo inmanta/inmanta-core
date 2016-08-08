@@ -110,6 +110,7 @@ class FunctionUnit(Waiter):
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e
+        self.done = True
 
     def __repr__(self):
         return repr(self.function)

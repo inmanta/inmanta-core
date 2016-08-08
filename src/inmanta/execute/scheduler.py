@@ -25,8 +25,9 @@ from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
 
 from inmanta.ast.statements.define import DefineEntity, DefineImplement
-from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler
+from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
+from inmanta.ast import RuntimeException
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -156,9 +157,11 @@ class Scheduler(object):
         waitqueue = []
         # queue for RV's that are delayed and had no waiters when they were first in the waitqueue
         zerowaiters = []
+        # queue containing everything, to find haning statements
+        all_statements = []
 
         # Wrap in object to pass around
-        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
+        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
 
         # emit all top level statements
         for block in blocks:
@@ -246,5 +249,16 @@ class Scheduler(object):
         # rint(len(self.types["std::Entity"].get_all_instances()))
 
         self.freeze_all()
+
+        all_statements = [x for x in all_statements if not x.done]
+
+        if all_statements:
+            stmt = None
+            for st in all_statements:
+                if isinstance(st, ExecutionUnit):
+                    stmt = st
+                    break
+
+            raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
         # self.dump("std::File")
         return True

@@ -296,6 +296,29 @@ end
         finally:
             sys.stdout = saved_stdout
 
+    @raises(RuntimeException)
+    def testIssue126HangingStatements(self):
+        self.setUpForSnippet("""entity LogFile:
+string name
+end
+
+implement LogFile using std::none
+
+entity LogCollector:
+string name
+end
+
+implement LogCollector using std::none
+
+LogCollector collectors [0:] -- [0:] LogFile logfiles
+
+lf1 = LogFile(name="lf1", collectors = c2)
+
+c2 = LogCollector(name="c2", logfiles=lf1)
+""")
+
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 

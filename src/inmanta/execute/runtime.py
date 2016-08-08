@@ -254,11 +254,12 @@ class QueueScheduler(object):
         Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
     """
 
-    def __init__(self, compiler, runqueue, waitqueue, types):
+    def __init__(self, compiler, runqueue, waitqueue, types, allwaiters):
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
+        self.allwaiters = allwaiters
 
     def add_running(self, item: "Waiter"):
         return self.runqueue.append(item)
@@ -272,6 +273,9 @@ class QueueScheduler(object):
     def get_types(self):
         return self.types
 
+    def add_to_all(self, item):
+        self.allwaiters.append(item)
+
 
 class Waiter(object):
     """
@@ -281,6 +285,8 @@ class Waiter(object):
     def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
         self.queue = queue
+        self.queue.add_to_all(self)
+        self.done = False
 
     def await(self, waitable):
         self.waitcount = self.waitcount + 1
@@ -328,6 +334,7 @@ class ExecutionUnit(Waiter):
         except RuntimeException as e:
             e.set_statement(self.expression)
             raise e
+        self.done = True
 
     def __repr__(self):
         return repr(self.expression)
@@ -356,6 +363,7 @@ class HangUnit(Waiter):
         except RuntimeException as e:
             e.set_statement(self.resumer)
             raise e
+        self.done = True
 
 
 class RawUnit(Waiter):
@@ -380,6 +388,7 @@ class RawUnit(Waiter):
         except RuntimeException as e:
             e.set_statement(self.resumer)
             raise e
+        self.done = True
 
 """
 Resolution
