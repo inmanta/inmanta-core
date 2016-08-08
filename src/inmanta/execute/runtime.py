@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
 
 
 class ResultVariable(object):
@@ -178,7 +178,7 @@ class OptionVariable(DelayedResultVariable):
 
         # set counterpart
         if self.attribute.end and recur:
-            value.set_attribute(self.attribute.end.name, self.myself, False)
+            value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
         self.value = value
         self.location = location
@@ -186,6 +186,12 @@ class OptionVariable(DelayedResultVariable):
 
     def can_get(self):
         return True
+
+    def get_value(self):
+        result = DelayedResultVariable.get_value(self)
+        if result is None:
+            raise OptionalValueException(None, "Optional variable accessed that has no value ")
+        return result
 
 
 class Waiter(object):
@@ -230,6 +236,22 @@ class QueueScheduler(object):
         return self.types
 
 
+"""
+Resolution
+
+ - lexical scope (module it is in, then parent modules)
+   - handled in NS and direct_lookup on XU
+ - dynamic scope (entity, for loop,...)
+   - resolvers
+   - lex scope as arg or root
+
+resolution
+ - FQN:  to lexical scope (via parents) -> to its  NS (imports) -> to target NS -> directLookup
+ - N: to resolver -> to parents -> to NS (lex root) -> directlookup
+
+"""
+
+
 class Resolver(object):
 
     def __init__(self, namespace):
@@ -242,16 +264,8 @@ class Resolver(object):
             ns = root
         else:
             ns = self.namespace
-            
-        if "::" not in name:
-            return ns.scope.lookup(name)
 
-        parts = name.rsplit("::", 1)
-
-        if parts[0] not in ns.visible_namespaces:
-            raise NotFoundException(None, name, "Namespace %s not found" % parts[0])
-
-        return ns.visible_namespaces[parts[0]].target.scope.lookup(parts[1])
+        return ns.lookup(name)
 
     def get_root_resolver(self):
         return self
@@ -286,10 +300,16 @@ class ExecutionContext(object):
 
     def lookup(self, name, root=None):
         if "::" in name:
-            self.resolver.lookup(name, root)
+            return self.resolver.lookup(name, root)
         if name in self.slots:
             return self.slots[name]
         return self.resolver.lookup(name, root)
+
+    def direct_lookup(self, name):
+        if name in self.slots:
+            return self.slots[name]
+        else:
+            raise NotFoundException(None, name, "Namespace %s not found" % name)
 
     def emit(self, queue):
         self.block.emit(self, queue)
@@ -350,6 +370,26 @@ class HangUnit(Waiter):
             raise e
 
 
+class RawUnit(Waiter):
+
+    def __init__(self, queue_scheduler, resolver, requires, resumer):
+        Waiter.__init__(self, queue_scheduler)
+        self.queue_scheduler = queue_scheduler
+        self.resolver = resolver
+        self.requires = requires
+        self.resumer = resumer
+        for r in requires.values():
+            self.await(r)
+        self.ready(self)
+
+    def execute(self):
+        try:
+            self.resumer.resume(self.requires, self.resolver, self.queue_scheduler)
+        except RuntimeException as e:
+            e.set_statement(self.resumer)
+            raise e
+
+
 class ExecutionUnit(Waiter):
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
@@ -365,8 +405,8 @@ class ExecutionUnit(Waiter):
         self.ready(self)
 
     def execute(self):
-        requires = {k: v.get_value() for (k, v) in self.requires.items()}
         try:
+            requires = {k: v.get_value() for (k, v) in self.requires.items()}
             value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
             self.result.set_value(value, self.expression.location)
         except RuntimeException as e:

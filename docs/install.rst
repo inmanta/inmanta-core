@@ -7,6 +7,20 @@ install from `source <https://github.com/inmanta>`_. The
 install Inmanta from source.
 
 
+An Inmanta setup has several parts: 
+
+.. image:: _static/overview.svg
+   :width: 70%
+   :alt: Overview of the Inmanta platform
+
+* The central Inmanta server. This server manages the deployment process.
+* A mongodb database. The central Inmanta server stores it state in a mongo database.
+* The git server. The source code of the configuration models is stored in (one or more) git repositories.  
+* The compiler. To convert the source code into deployable artifacts, it is compiled and sent to the server. If the model consists of multiple modules, these are downloaded automatically from the git server. The compiler can run either on a developer machine or on the server. 
+* CLI and Dashboard. To control the server, you can use either the web dashboard or the command line tools. 
+* The Inmanta agents. Agents deploy configuration to the target machines. Agent can run on the server, or on the machines they manage. 
+
+
 Fedora
 ------
 

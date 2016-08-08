@@ -11,42 +11,26 @@ This tutorial gets you started with Inmanta. You will learn how to:
 * Create a configuration model to deploy a LAMP (Linux, Apache, MySQL and PHP) stack
 * Deploy the configuration
 
-An Inmanta setup has several parts: 
-
-.. image:: _static/overview.svg
-   :width: 70%
-   :alt: Overview of the Inmanta platform
-
-* The central Inmanta server. This server manages the deployment process.
-* A mongodb database. The central Inmanta server stores it state in a mongo database.
-* The git server. The source code of the configuration models is stored in (one or more) git repositories.  
-* The compiler. To convert the source code into deployable artifacts, it is compiled and sent to the server. If the model consists of multiple modules, these are downloaded automatically from the git server. The compiler can run either on a developer machine or on the server. 
-* CLI and Dashboard. To control the server, you can use either the web dashboard or the command line tools. 
-* The Inmanta agents. Agents deploy configuration to the target machines. Agent can run on the server, or on the machines they manage. 
-
-
 The Goal
 =========
 
-The goal of this tutorial is to set up a Drupal CMS.  Drupal itself has a number of dependencies:
+The goal of this tutorial is to set up a Drupal CMS, with all its dependencies automatically.  
+
+Drupal depends on:
 
 1. A web server to server Drupal
-2. A `vhost <https://en.wikipedia.org/wiki/Virtual_hosting>`_ in the webserver 
-3. A database server to store data in
-4. A database configured in the database server (with a username and password and the proper permissions configured)
+2. A database server to store data in
+3. A database configured in the database server (with a username and password and the proper permissions configured)
 
-A such, setting up drupal is quite a lot of work. All parts must be installed and configured. Depending on the operating system, the configuration can be different,...
-
-In this tutorial, we will set up Drupal using Impera, automatically.
 
 Setting up the tutorial
 =========================
 
-To get started on Inmanta, we use vagrant to set up the server and some machines to manage. 
+To get started on Inmanta, we use vagrant to set up the management server and some machines to manage. 
 Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_. 
 
  
-Next, grab vagrant box from out git repo and let vagrant do the setup
+Next, grab the vagrant box from out git repo and let vagrant do the setup of the Inmanta server.
 
 .. code-block:: sh
 
@@ -54,7 +38,7 @@ Next, grab vagrant box from out git repo and let vagrant do the setup
     cd tutorial-vagrant
     vagrant up
     
-Vagrant will set up the Inmanta server and two VM's to experiment on. The server itself will also be used as the developer machine.    
+Vagrant will set up the Inmanta server and two VM's to experiment on.
 When vagrant is ready, you should be able to open the dashboard at http://127.0.0.1:8888.  
 
 To get a shell on the Inmanta Server:
@@ -66,7 +50,7 @@ To get a shell on the Inmanta Server:
     
 .. warning::
 
-    When using modules from a private git repo, use the following command to enable agents forwarding. (In this case, compiling from the server is not possible)
+    When using modules from a private git repo, use the following command to enable agents forwarding.
     
     .. code-block:: sh
 
@@ -98,32 +82,22 @@ Here we will create an Inmanta project ``quickstart`` with a basic configuration
     
 The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. 
 
-
-In the next section we will re-use existing modules to deploy our LAMP stack.
+In the next section we will use existing modules to deploy our LAMP stack.
 
 Re-use existing modules
 =======================
 
-At GitHub, we host already many modules that provide types and refinements for one or more
-operating systems. Our modules are available in the https://github.com/inmanta/ repositories.
+At GitHub, we host modules to setup and mange many systems. Our modules are available in the https://github.com/inmanta/ repositories.
 
-When you use an import statement in your model, Inmanta downloads these modules and their dependencies. 
-
+When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically. 
 
 
 The configuration model
 =======================
 
-In this section we will use the configuration concepts defined in the existing
-modules to create a new composition that defines the final configuration model. In
-this guide we assume a server called ``vm1`` on which we will install Drupal.
+In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-Compose a configuration model
------------------------------
-
-In this section we will make
-a composition of the configuration modules to deploy and configure a Drupal
-website. This composition has to be specified in the ``main.cf`` file:
+First, create a new ``main.cf`` file:
 
 .. code-block:: ruby
     :linenos:
@@ -150,24 +124,21 @@ website. This composition has to be specified in the ``main.cf`` file:
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
-On lines 1-6 we import all required packages.  
-On line 9 we define the server on which we want to deploy Drupal. The *name* attribute is the hostname of the
-machine, which is later used to determine what configuration needs to be deployed on which machine.
-The *os* attribute defines which operating system this server runs. 
-The current value refers to Fedora. The *ip* attribute is the IP address of this host. In this introduction
-we define this attribute manually, later on we will let Inmanta manage this automatically.
-
-Lines 12 and 13 deploy an httpd server and mysql server on our server.
-
-Line 16 defines the name (hostname) of the web application, and line 18 defines the database used by Drupal.
-
-Line 19 defines a database for our Drupal website.
+* On lines 1-6 we import all required packages.  
+* On line 9 we define the server on which we want to deploy Drupal. 
+ * The *name* attribute is the hostname of the machine, which is later used to determine what configuration needs to be deployed on which machine. 
+ * The *os* attribute defines which operating system this server runs.  
+ * The *ip* attribute is the IP address of this host. Now, we define this attribute manually, later on we will let Inmanta manage this automatically.
+* Lines 12 and 13 deploy an apache server and mysql server on our host.
+* Line 16 defines the name (hostname) of the web application, and line 18 defines the database used by Drupal.
+* Line 17 defines a database for our Drupal website.
+* Line 19 defines the actual Drupal application.
 
 
 Deploy the configuration model
 ------------------------------
 
-The first step is creating a project and an environment on the server. This can be done via the dashboard, or via the CLI. 
+To deploy the project, we must first register it with the management server, by creating a project and an environment. This can be done via the dashboard, or via the CLI. 
 For the CLI:
 
 .. code-block:: sh
@@ -193,11 +164,6 @@ Accessing your new Drupal install
 ---------------------------------
 
 When the install is done, you can find the new drupal at `http://localhost:8080/ <http://localhost:8080/>`_ to access your Drupal server.
-
-.. warning::
-
-   Using "localhost" in the url is essential because the configuration model
-   generates a name-based virtual host that matches the name *localhost*.
 
 
 Managing multiple machines
@@ -350,42 +316,17 @@ configuration module.
 
     implement DrupalStack using drupalStackImplementation
 
-On lines 1 to 7 we define an entity which is the definition of a *concept* in
-the configuration model. Entities behave as an interface to a partial
-configuration model that encapsulates parts of the configuration, in this case
-how to configure a LAMP stack. On lines 2 and 6 typed attributes are defined
-which we can later on use in the implementation of an entity instance.
-
-Line 9 defines that *hostname* is an identifying attribute for instances of
-the DrupalStack entity. This also means that all instances of DrupalStack need
-to have a unique *hostname* attribute.
-
-On lines 11 and 12 we define a relation between a Host and our DrupalStack entity.
-This relation represents a double binding between these instances and it has a
-multiplicity. The first relation reads as follows:
+* Lines 1 to 7 define an entity which is the definition of a *concept* in the configuration model. On lines 2 and 6 typed attributes are defined which we can later on use in the implementation of an entity instance.
+* Line 9 defines that *hostname* is an identifying attribute for instances of the DrupalStack entity. This also means that all instances of DrupalStack need to have a unique *hostname* attribute.
+* Lines 11 and 12 define a relation between a Host and our DrupalStack entity. The first relation reads as follows:
 
     * Each DrupalStack instance has exactly one ip::Host instance that is available
       in the webserver attribute.
     * Each ip::Host has zero or one DrupalStack instances that use the host as a
       webserver. The DrupalStack instance is available in the drupal_stack_webserver attribute.
 
-.. warning::
-
-   On lines 11 and 12 we explicity give the DrupalStack side of the relation a
-   multiplicity that starts from zero. Setting this to one would break the ip
-   module because each Host would require an instance of DrupalStack.
-
-On lines 14 to 25 an implementation is defined that provides a refinement of the DrupalStack entity.
-It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining
-DrupalStack in function of other entities, which on their turn do the same. The refinement process
-is evaluated by the compiler and continues until all instances are refined into instances of
-entities that Inmanta knows how to deploy.
-
-Inside the implementation the attributes and relations of the entity are available as variables.
-They can be hidden by new variable definitions, but are also accessible through the ``self``
-variable (not used in this example).
-
-And finally the *implement* statement on line 27 links the implementation to the entity.
+* On lines 14 to 25 an implementation is defined that provides a refinement of the DrupalStack entity. It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining DrupalStack in function of other entities, which on their turn do the same. Inside the implementation the attributes and relations of the entity are available as variables. 
+* On line 27, the *implement* statement links the implementation to the entity.
 
 The composition
 ---------------

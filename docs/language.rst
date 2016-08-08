@@ -1,15 +1,15 @@
 Language reference
 ******************
 
-This chapter is a reference for the Inmanta DSL. The Inmanta language is a declarative
-language to model the configuration of an infrastructure. 
+The Inmanta language is a declarative language to model the configuration of an infrastructure. 
 
-The evaluation order of statements in the Inmanta modeling language is determined by their dependencies on other statements and not based on
-the lexical order. i.e. The code is not necessarily executed top to bottom.
+The evaluation order of statements in the Inmanta modeling language is determined by their dependencies on other statements and not based on the lexical order. i.e. The code is not necessarily executed top to bottom.
+
+
 Modules
 ============================
 
-The source is organised in modules. Each module is a git repository with the following structure::
+The source is organized in modules. Each module is a git repository with the following structure::
 
     module/
     +-- files/
@@ -32,9 +32,9 @@ The model code is in the ``.cf`` files. Each file forms a namespace. The namespa
 +-----------------------------------------+----------------------------------+
 | module/model/submodule1.cf              | module::submodule1               |
 +-----------------------------------------+----------------------------------+
-| module/model/submodule1/_init.cf        | module::submodule2               |
+| module/model/submodule2/_init.cf        | module::submodule2               |
 +-----------------------------------------+----------------------------------+
-| module/model/submodule1/subsubmodule.cf | module::submodule2::subsubmodule |
+| module/model/submodule2/subsubmodule.cf | module::submodule2::subsubmodule |
 +-----------------------------------------+----------------------------------+
 
 
@@ -42,11 +42,11 @@ Assignment
 ============================
 
 Variables can be defined in any lexical scope. They are visible in their defining scope and its children.
+Each namespace is a named lexical scope. Each code block (between ``:`` and ``end``) is an anonymous lexical scope.
 
 Variable names must start with a lower case character and can consist of the characters: ``a-zA-Z_0-9-``
 
 A value can be assigned to a variable exactly once. The type of the variable is the type of the value.
-
 Assigning a value to the same variable twice will produce a compiler error, unless the values are identical.
 
 To access members from another namespace, it must be imported.::
@@ -76,7 +76,7 @@ Assigning literal values to variables::
     # var6 is a list of values
     var6 = ["fedora", "ubuntu", "rhel"]
 
-    # var 7 is a label for the same value as var 2
+    # var7 contains the same value as var2
     var7 = var2
     
     # next assignment will not return an error because var1 already contains this value
@@ -145,12 +145,11 @@ For example::
 Entities
 ========
 
-Entities model concepts from the configuration. They are like classes in other object oriented languages: they can be instantiated and they define the structure of their instances. 
+Entities model configuration concepts. They are like classes in other object oriented languages: they can be instantiated and they define the structure of their instances. 
 
 Entity names must start with an upper case character and can consist of the characters: ``a-zA-Z_0-9-``
 
 Entities can have a number of attributes and relations to other entities.  
-
 Entity attributes have primitive types, with an optional default value.
 
 Entities can inherit from multiple other entities. Entities inherits attributes and relations from parent entities.
@@ -186,8 +185,7 @@ Relations
 
 A Relation is a bi-direction relation between two entities. Consistency of the double binding is maintained by the compiler: assignment to one side of the relation is an implicit assignment of the reverse relation.  
 
-Relations are defined by specifying each end of the relation together with the multiplicity of each relation end. Each end of the relation is named and is
-maintained as a double binding by the Inmanta runtime.
+Relations are defined by specifying each end of the relation together with the multiplicity of each relation end. Each end of the relation is named and is maintained as a double binding by the Inmanta runtime.
 
 Defining relations between entities in the domain model::
 
@@ -274,6 +272,16 @@ In the implementation block, the entity instance itself can be accessed through 
 
 ``implement`` statements are not inherited. 
 
+
+The syntax for implements and implementation is:
+
+.. code-block:: antlr
+
+    implementation: 'implementation' ID 'for' class ':' statement* 'end';
+    implement: 'implement' class 'using' ID ('when' condition)?;
+    
+
+
 Indexes and queries
 ===================
 
@@ -297,8 +305,26 @@ Explicit index lookup is performed with a query statement::
     testhost = Host[name="test"]
     
 
+For loop
+=========
+
+To iterate over the items of a list, a for loop can be used::
+
+    n_s = std::sequence(size, 1)
+    for i in n_s:
+        app_vm = Host(name="app{{i}}")
+    end
+
+The syntax is:
+
+.. code-block:: antlr
+
+    for: 'for' ID 'in' value ':' statement* 'end';
+
+
+
 Transformations: string interpolation, templates and plug-ins
-=============================================================
+==============================================================
 
 At the lowest level of abstraction the configuration of an infrastructure often consists of
 configuration files. To construct configuration files, templates and string interpolation can be used. 
@@ -314,7 +340,7 @@ The included variables are resolved in the lexical scope of the string they are 
 Interpolating strings::
 
     hostname = "serv1.example.org"
-    motd = """Welcome to {{{hostname }}}\n"""
+    motd = """Welcome to {{hostname}}\n"""
 
 
 Templates
@@ -326,8 +352,7 @@ path of a template file. The first part of the path is the module that contains 
 directory of the module.
 
 The integrated Jinja2 engine supports to the entire Jinja feature set, except for subtemplates. During execution Jinja2 has access to all variables and plug-ins that are
-available in the scope where the template is evaluated. However, fully qualified names in the Inmanta model use
-``::`` as a path separator. This syntax is reserved in Jinja2, so ``::`` needs to be replaced with a
+available in the scope where the template is evaluated. However, the ``::`` in paths needs to be replaced with a
 ``.``. The result of the template is returned by the template function.
 
 Using a template to transform variables to a configuration file::
@@ -380,10 +405,47 @@ Plugins have to be decorated with @plugin to work.
 Arguments to the plugin have to be annotated with a type that is visible in the namespace of the module (or with ``any``).
 An argument of the type ``inmanta.plugins.Context`` can be used to get access to the internal state of the compiler.
 
-The inmanta.config.Config singleton can be used to get access to the configuration of the compiler.
+The ``inmanta.config.Config`` singleton can be used to get access to the configuration of the compiler.
 
 Often, plugins are used to collect information from external systems, such as for example, the IP of virtual machine. When the virtual machine has not been created yet, the IP is not known yet. To indicate that situation (where information is not available yet), the type ``Unknown`` is used. 
-i.e. When the plugin is used to collect information from external systems, but this information is not available yet (but will be when the model deployment advances) then the plugin should return an instantance of the type ``inmanta.execute.util.Unknown``. 
+i.e. When the plugin is used to collect information from external systems, but this information is not available yet (but will be when the model deployment advances) then the plugin should return an instance of the type ``inmanta.execute.util.Unknown``. 
 
 Resources
 ============
+
+Resources are entities that can be deployed directly, such as ``std::File`` or ``std::Package``. 
+
+Resource deployment has the following flow:
+ 1. a model is compiled
+ 2. all resources are identified and converted in serializeable form (``Resource`` object)
+ 3. all resources (and their associated python files) are uploaded to the server
+ 4. deploy is triggered
+ 5. resources are deployed to the agents that are responsible for this esource
+ 6. agents download the associated python code
+ 7. agents deserialize the resources
+ 8. agent execute the relevant handlers for the resources
+
+To create new types of resource, two python objects are required: the ``Resource`` and the ``Handler``.
+
+The resource convert a model object into a serializable form::
+
+    @resource("std::File", agent="host.name", id_attribute="path")
+    class File(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("path", "owner", "hash", "group", "permissions", "purged", "reload")
+        map = {"hash": store_file, "permissions": lambda y, x: int(x.mode)}
+
+
+A resource is a subclass of ``inmanta.resources.Resource`` annotated with ``inmanta.resources.resource``. The annotation takes 3 parameters: 
+ * ``name``: the name of the entity to convert into a resource
+ * ``agent``: the name of the agent that will deploy this resource. Often the name of the host on which the resource will be deployed. 
+ * ``id_attribute``: the attribute of the entity that uniquely distinguishes this instance from the others within its agent.
+ 
+The class has two class fields: 
+ * ``fields``: the list of fields to be serialized and sent to the agent
+ * ``map``: a dict, providing functions to generate values for fields that do not directly correspond to a property of the entity. 
+ 
+ 
+The handler is responsible for the actual deployment. For this, we refer to the examples available in the ``std`` module.
