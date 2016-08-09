@@ -37,6 +37,14 @@ class Resource(Resource):
     fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
 
+@resource("test::Fail", agent="agent", id_attribute="key")
+class FailR(Resource):
+    """
+        A file on a filesystem
+    """
+    fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+
+
 @provider("test::Resource", name="test_resource")
 class TestProvider(ResourceHandler):
 
@@ -103,6 +111,28 @@ class TestProvider(ResourceHandler):
     def delete(cls, agent, key):
         if cls.isset(agent, key):
             del cls._STATE[agent][key]
+
+
+@provider("test::Fail", name="test_fail")
+class TestFail(ResourceHandler):
+
+    def check_resource(self, resource):
+        current = resource.clone()
+        current.purged = not TestProvider.isset(resource.id.get_agent_name(), resource.key)
+
+        if not current.purged:
+            current.value = TestProvider.get(resource.id.get_agent_name(), resource.key)
+        else:
+            current.value = None
+
+        return current
+
+    def list_changes(self, desired):
+        current = self.check_resource(desired)
+        return self._diff(current, desired)
+
+    def do_changes(self, resource):
+        raise Exception()
 
 
 class testAgentServer(ServerTest):
@@ -319,3 +349,92 @@ class testAgentServer(ServerTest):
             yield gen.sleep(0.1)
 
         assert_equal(TestProvider.get("agent1", "key"), "value")
+
+    @gen_test()
+    def test_fail(self):
+        """
+            create a snapshot and restore it again
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+                                 code_loader=False)
+        self.agent.add_end_point_name("agent1")
+        self.agent.start()
+
+        TestProvider.set("agent1", "key", "value")
+
+        version = int(time.time())
+
+        resources = [{'key': 'key',
+                      'value': 'value',
+                      'id': 'test::Fail[agent1,key=key],v=%d' % version,
+                      'requires': [],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      },
+                     {'key': 'key2',
+                      'value': 'value',
+                      'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                      'requires': ['test::Fail[agent1,key=key],v=%d' % version],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      },
+                     {'key': 'key3',
+                      'value': 'value',
+                      'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                      'requires': ['test::Fail[agent1,key=key],v=%d' % version],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      },
+                     {'key': 'key4',
+                      'value': 'value',
+                      'id': 'test::Resource[agent1,key=key4],v=%d' % version,
+                      'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      },
+                     {'key': 'key5',
+                      'value': 'value',
+                      'id': 'test::Resource[agent1,key=key5],v=%d' % version,
+                      'requires': ['test::Resource[agent1,key=key4],v=%d' % version, 'test::Fail[agent1,key=key],v=%d' % version],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      }]
+
+        result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert_equal(result.code, 200)
+
+        # deploy and wait until done
+        result = yield self.client.release_version(env_id, version, True)
+        assert_equal(result.code, 200)
+
+        result = yield self.client.get_version(env_id, version)
+        assert_equal(result.code, 200)
+        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            result = yield self.client.get_version(env_id, version)
+            yield gen.sleep(0.1)
+
+        assert_equal(result.result["model"]["done"], len(resources))
+
+        states = {x["id"]: x["status"] for x in result.result["resources"]}
+
+        assert_equal(states['test::Fail[agent1,key=key],v=%d' % version], "failed")
+        assert_equal(states['test::Resource[agent1,key=key2],v=%d' % version], "skipped")
+        assert_equal(states['test::Resource[agent1,key=key3],v=%d' % version], "skipped")
+        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version], "skipped")
+        assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version], "skipped")
