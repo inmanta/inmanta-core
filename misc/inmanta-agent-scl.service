@@ -9,8 +9,6 @@ Environment=PATH=/opt/rh/rh-python34/root/usr/bin:/usr/bin:/usr/sbin:${PATH}
 Environment=LD_LIBRARY_PATH=/opt/rh/rh-python34/root/usr/lib64:${LD_LIBRARY_PATH}
 ExecStart=/opt/rh/rh-python34/root/usr/bin/inmanta -vvv -c /etc/inmanta/agent.cfg agent
 Restart=on-failure
-User=inmanta
-Group=inmanta
 
 [Install]
 WantedBy=multi-user.target
