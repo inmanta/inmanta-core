@@ -46,7 +46,9 @@ class ResourceActionResult(object):
         self.cancel = cancel
 
     def __add__(self, other):
-        return ResourceActionResult(self.success and other.success, self.reload or other.reload, self.cancel or other.cancel)
+        return ResourceActionResult(self.success and other.success,
+                                    self.reload or other.reload,
+                                    self.cancel or other.cancel)
 
     def __str__(self, *args, **kwargs):
         return "%r %r %r" % (self.success, self.reload, self.cancel)
@@ -74,8 +76,7 @@ class ResourceAction(object):
     @gen.coroutine
     def __complete(self, success, reload, changes={}, status="", log_msg=""):
         action = "deploy"
-
-        if status == "dry" or status == "deployed":
+        if status == "skipped" or status == "dry" or status == "deployed":
             level = "INFO"
         else:
             level = "ERROR"
@@ -107,7 +108,7 @@ class ResourceAction(object):
             return
 
         if not result.success:
-            self.__complete(False, False)
+            self.__complete(False, False, changes={}, status="skipped")
         else:
             resource = self.resource
 
