@@ -196,7 +196,8 @@ class Constructor(GeneratorStatement):
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self.__attributes.items()}
 
         for (k, v) in self.type.get_defaults().items():
-            attributes[k] = v.execute(requires, resolver, queue)
+            if(k not in attributes):
+                attributes[k] = v.execute(requires, resolver, queue)
 
         for (k, v) in type_class.get_default_values().items():
             if(k not in attributes):
