@@ -18,6 +18,8 @@
 from collections import defaultdict
 import time
 import json
+from time import sleep
+
 
 from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
@@ -27,7 +29,6 @@ from inmanta import protocol, agent
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 from server_test import ServerTest
-from time import sleep
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -440,7 +441,8 @@ class testAgentServer(ServerTest):
                      {'key': 'key5',
                       'value': 'value',
                       'id': 'test::Resource[agent1,key=key5],v=%d' % version,
-                      'requires': ['test::Resource[agent1,key=key4],v=%d' % version, 'test::Fail[agent1,key=key],v=%d' % version],
+                      'requires': ['test::Resource[agent1,key=key4],v=%d' % version,
+                                   'test::Fail[agent1,key=key],v=%d' % version],
                       'purged': False,
                       'state_id': '',
                       'allow_restore': True,
@@ -530,7 +532,8 @@ class testAgentServer(ServerTest):
                          {'key': 'key5',
                           'value': 'value',
                           'id': 'test::Resource[agent1,key=key5],v=%d' % version,
-                          'requires': ['test::Resource[agent1,key=key4],v=%d' % version, 'test::Wait[agent1,key=key],v=%d' % version],
+                          'requires': ['test::Resource[agent1,key=key4],v=%d' % version,
+                                       'test::Wait[agent1,key=key],v=%d' % version],
                           'purged': False,
                           'state_id': '',
                           'allow_restore': True,
