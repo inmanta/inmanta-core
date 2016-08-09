@@ -355,9 +355,9 @@ class Agent(AgentEndPoint):
 
         yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
-        provider = None
-        try:
-            for res in result.result["resources"]:
+        for res in result.result["resources"]:
+            provider = None
+            try:
                 data = res["fields"]
                 data["id"] = res["id"]
                 resource = Resource.deserialize(data)
@@ -375,12 +375,12 @@ class Agent(AgentEndPoint):
                 yield self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
                                                  changes=results["changes"], log_msg=results["log_msg"])
 
-        except TypeError:
-            LOGGER.exception("Unable to process resource for dryrun.")
-            return 500
-        finally:
-            if provider is not None:
-                provider.close()
+            except TypeError:
+                LOGGER.exception("Unable to process resource for dryrun.")
+                return 500
+            finally:
+                if provider is not None:
+                    provider.close()
 
         return 200
 
