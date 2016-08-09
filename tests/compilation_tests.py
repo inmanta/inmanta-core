@@ -296,6 +296,14 @@ end
         finally:
             sys.stdout = saved_stdout
 
+    def testIssue127DefaultOverrides(self):
+        self.setUpForSnippet("""
+f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
+        """)
+        (types, scopes) = compiler.do_compile()
+        instances = types["std::File"].get_all_instances()
+        assert_equal(instances[0].get_attribute("owner").get_value(), "wouter")
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
