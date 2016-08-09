@@ -1005,9 +1005,12 @@ class ModuleTool(object):
         version_length = 10
 
         project = Project.get()
+        project.get_complete_ast()
+
         names = sorted(project.modules.keys())
         specs = project.collect_imported_requirements()
         for name in names:
+            name_length = max(len(name), name_length)
             mod = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
@@ -1017,6 +1020,8 @@ class ModuleTool(object):
                 reqv = "None"
             else:
                 reqv = str(versions[0])
+
+            version_length = max(len(version), len(reqv), version_length)
 
             table.append((name, version, reqv))
         print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
