@@ -513,7 +513,7 @@ class ParametersMethod(Method):
     """
     __method_name__ = "parameters"
 
-    @protocol(operation="PUT", mt=True, id=True)
+    @protocol(operation="PUT", mt=True, index=True)
     def set_parameters(self, tid: uuid.UUID, parameters: list):
         """
             Set a parameter on the server

@@ -23,7 +23,7 @@ from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
 from tornado import gen
 
-from inmanta import protocol, agent
+from inmanta import protocol, agent, data
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 from server_test import ServerTest
@@ -81,7 +81,7 @@ class TestProvider(ResourceHandler):
             TestProvider.set(resource.id.get_agent_name(), resource.key, data["value"])
 
     def facts(self, resource):
-        return {"length": len(TestProvider.get(resource.id.get_agent_name(), resource.key))}
+        return {"length": len(TestProvider.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
 
     _STATE = defaultdict(dict)
 
@@ -319,3 +319,56 @@ class testAgentServer(ServerTest):
             yield gen.sleep(0.1)
 
         assert_equal(TestProvider.get("agent1", "key"), "value")
+
+    @gen_test
+    def test_get_facts(self):
+        """
+            Test retrieving facts from the agent
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+                                 code_loader=False)
+        self.agent.add_end_point_name("agent1")
+        self.agent.start()
+
+        TestProvider.set("agent1", "key", "value")
+
+        version = int(time.time())
+
+        resource_id_wov = "test::Resource[agent1,key=key]"
+        resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+        resources = [{'key': 'key',
+                      'value': 'value',
+                      'id': resource_id,
+                      'requires': [],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      }]
+
+        result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert_equal(result.code, 200)
+        result = yield self.client.release_version(env_id, version, True)
+        assert_equal(result.code, 200)
+
+        result = yield self.client.get_param(env_id, "length", resource_id_wov)
+        assert_equal(result.code, 503, result.result["message"])
+
+        env = yield data.Environment.get_uuid(env_id)
+
+        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
+                                                     resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+        while len(params) < 3:
+            params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
+                                                         resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+            yield gen.sleep(0.1)
+
+        result = yield self.client.get_param(env_id, "key1", resource_id_wov)
+        assert_equal(result.code, 200)

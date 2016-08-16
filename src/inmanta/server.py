@@ -216,7 +216,7 @@ class Server(protocol.ServerEndpoint):
                                                            resource_id=resource_id).find_all()  # @UndefinedVariable
 
             if len(resources) == 0:
-                return 404, {"message": "The parameter does not exist."}
+                return 404, {"message": "The resource parameter does not exist."}
 
             resource = resources[0]
 
@@ -225,7 +225,7 @@ class Server(protocol.ServerEndpoint):
                                                             model=version, resource=resource).find_all()  # @UndefinedVariable
 
             if len(rvs) == 0:
-                return 404, {"message": "The parameter does not exist."}
+                return 404, {"message": "The resource has no recent version."}
 
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
@@ -290,7 +290,8 @@ class Server(protocol.ServerEndpoint):
                                                      name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         if len(params) == 0:
-            self._request_parameter(env, resource_id)
+            out = yield self._request_parameter(env, resource_id)
+            return out
 
         param = params[0]
         # check if it was expired
@@ -299,14 +300,19 @@ class Server(protocol.ServerEndpoint):
             return 200, {"parameter": params[0].to_dict()}
 
         LOGGER.info("Parameter %s of resource %s expired.", id, resource_id)
-        out = yield self._request_parameter(env, param)
+        out = yield self._request_parameter(env, resource_id)
         return out
 
+    @gen.coroutine
     def _update_param(self, env, name, value, source, resource_id, metadata):
         """
             Update or set a parameter. This method returns true if this update resolves an unknown
         """
-        if value is None or value is "":
+        LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env, resource_id)
+        if not isinstance(value, str):
+            value = str(value)
+
+        if value is None or value == "":
             value = " "
 
         if resource_id is None:
@@ -350,7 +356,8 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        if self._update_param(env, id, value, source, resource_id, metadata):
+        result = yield self._update_param(env, id, value, source, resource_id, metadata)
+        if result:
             self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
 
         params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
@@ -373,13 +380,14 @@ class Server(protocol.ServerEndpoint):
             resource_id = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
 
-            if self._update_param(env, name, value, source, resource_id, metadata):
+            result = yield self._update_param(env, name, value, source, resource_id, metadata)
+            if result:
                 recompile = True
 
         if recompile:
             self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
 
-            return 200
+        return 200
 
     @protocol.handle(methods.ParameterMethod.list_params)
     @gen.coroutine
