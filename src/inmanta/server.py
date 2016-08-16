@@ -941,6 +941,7 @@ class Server(protocol.ServerEndpoint):
 
                         attributes = rv.attributes.copy()
                         attributes["purged"] = "true"
+                        attributes["requires"] = []
                         rv = data.ResourceVersion(environment=env, rid="%s,v=%s" % (res.resource_id, version),
                                                   resource=res, model=cm, attributes=attributes)
                         yield rv.save()
