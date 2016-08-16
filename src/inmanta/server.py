@@ -193,11 +193,12 @@ class Server(protocol.ServerEndpoint):
         return dir_map
 
     @gen.coroutine
-    def _request_parameter(self, env, param):
+    def _request_parameter(self, env, param=None, resource_id=None):
         """
             Request the value of a parameter from an agent
         """
-        resource_id = param.resource_id
+        if resource_id is None:
+            resource_id = param.resource_id
         tid = str(env.uuid)
 
         if resource_id is not None and resource_id != "":
@@ -273,41 +274,7 @@ class Server(protocol.ServerEndpoint):
                                                      name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         if len(params) == 0:
-            if resource_id is not None and resource_id != "":
-                # get the latest version
-                versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                                  order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-
-                if len(versions) == 0:
-                    return 404, {"message": "The parameter does not exist (no versions available)."}
-
-                version = versions[0]
-
-                # get the associated resource
-                resources = yield data.Resource.objects.filter(environment=env,  # @UndefinedVariable
-                                                               resource_id=resource_id).find_all()  # @UndefinedVariable
-
-                if len(resources) == 0:
-                    return 404, {"message": "The parameter does not exist (no resources available)."}
-
-                resource = resources[0]
-
-                # get a resource version
-                rvs = yield (data.ResourceVersion.objects.  # @UndefinedVariable
-                             filter(environment=env, model=version, resource=resource).find_all())  # @UndefinedVariable
-
-                if len(rvs) == 0:
-                    return 404, {"message": "The parameter does not exist (no versions of this resource available)."}
-
-                yield self._ensure_agent(str(tid), resource.agent)
-                client = self.get_agent_client(tid, resource.agent)
-                if client is not None:
-                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
-                    self.add_future(future)
-
-                return 503, {"message": "Agents queried for resource parameter."}
-
-            return 404, {"message": "The parameter does not exist."}
+            return self._request_parameter(env, params[0], resource_id)
 
         param = params[0]
         # check if it was expired
@@ -1388,7 +1355,7 @@ ssl_ca_cert_file=%s
         # check if an environment with this name is already defined in this project
         envs = yield data.Environment.objects.filter(project_id=project_id, name=name).find_all()  # @UndefinedVariable
         if len(envs) > 0:
-            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
+            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" % 
                          (project.name, project.uuid, name)}
 
         env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)

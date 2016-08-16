@@ -1,4 +1,5 @@
 # Use release 0 for prerelease version.
+%define buildid rc5
 %define release 2.
 %define version 2016.3
 
