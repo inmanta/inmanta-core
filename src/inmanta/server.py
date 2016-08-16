@@ -313,10 +313,10 @@ class Server(protocol.ServerEndpoint):
             resource_id = ""
 
         params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
+                                                     name=name, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         if len(params) == 0:
-            param = data.Parameter(environment=env, name=id, resource_id=resource_id, value=value, source=source,
+            param = data.Parameter(environment=env, name=name, resource_id=resource_id, value=value, source=source,
                                    updated=datetime.datetime.now(), metadata=metadata)
 
         else:
@@ -329,7 +329,7 @@ class Server(protocol.ServerEndpoint):
         yield param.save()
 
         # check if the parameter is an unknown
-        params = yield data.UnknownParameter.objects.filter(environment=env, name=id,  # @UndefinedVariable
+        params = yield data.UnknownParameter.objects.filter(environment=env, name=name,  # @UndefinedVariable
                                                             resource_id=resource_id,
                                                             resolved=False).find_all()  # @UndefinedVariable
         if len(params) > 0:

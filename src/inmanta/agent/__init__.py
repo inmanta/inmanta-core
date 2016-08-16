@@ -586,7 +586,7 @@ class Agent(AgentEndPoint):
 
             try:
                 result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
-                parameters = [dict(id=name, value=value, resource_id=resource_obj.id.resource_str(), source="fact")
+                parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
                               for name, value in result.items()]
                 yield self._client.set_parameters(tid=tid, parameters=parameters)
 
