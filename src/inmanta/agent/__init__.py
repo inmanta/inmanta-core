@@ -22,6 +22,8 @@ import datetime
 import hashlib
 import logging
 import os
+import random
+
 
 from tornado import gen
 from inmanta import env
@@ -230,12 +232,15 @@ class Agent(AgentEndPoint):
                     self.add_end_point_name(name)
 
         # do regular deploys
-        self._deploy_interval = 600
+        self._deploy_interval = int(Config.get("config", "agent-interval", "600"))
+        self._splay_interval = int(Config.get("config", "agent-splay", "600"))
+        self._splay_value = random.randint(0, self._splay_interval)
+
         self.latest_version = 0
         self.latest_code_version = 0
 
         self._sched = Scheduler(io_loop=self._io_loop)
-        self._sched.add_action(self.get_latest_version, self._deploy_interval, True)
+        self._sched.add_action(self.get_latest_version, self._deploy_interval, self._splay_value)
 
         self.thread_pool = ThreadPoolExecutor(1)
 

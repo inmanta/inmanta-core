@@ -866,15 +866,19 @@ class Scheduler(object):
         self._scheduled = set()
         self._io_loop = io_loop
 
-    def add_action(self, action, interval, now=False):
+    def add_action(self, action, interval, initial_delay=None):
         """
             Add a new action
 
             :param action A function to call periodically
             :param interval The interval between execution of actions
-            :param now Execute the first action now and schedule subsequent invocations
+            :param initial_delay Delay to the first execution, default to interval
         """
-        LOGGER.debug("Scheduling action %s every %d seconds", action, interval)
+
+        if initial_delay is None:
+            initial_delay = interval
+
+        LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
 
         def action_function():
             LOGGER.info("Calling %s" % action)
@@ -887,11 +891,8 @@ class Scheduler(object):
                 finally:
                     self._io_loop.call_later(interval, action_function)
 
-        self._io_loop.call_later(interval, action_function)
+        self._io_loop.call_later(initial_delay, action_function)
         self._scheduled.add(action)
-
-        if now:
-            self._io_loop.add_callback(action)
 
     def remove(self, action):
         """
