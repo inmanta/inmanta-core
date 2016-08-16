@@ -246,21 +246,33 @@ class Server(protocol.ServerEndpoint):
         updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
         expired_params = yield data.Parameter.objects.filter(updated__lt=updated_before).find_all()  # @UndefinedVariable
 
+        resource_done = []
+
+        LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
+
         for param in expired_params:
             yield param.load_references()
+            if param.resource_id in resource_done:
+                continue
             if param.environment is None:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env None", param.name, param.resource_id)
             else:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
                              param.environment.uuid)
-            self._request_parameter(param.environment, param)
+                code, _ = yield self._request_parameter(param.environment, param)
+                if code == 503:
+                    resource_done.append(param.resource_id)
 
         unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
         for u in unknown_parameters:
             yield u.load_references()
+            if u.environment is None:
+                continue
             LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
                          u.environment.uuid)
             self._request_parameter(u.environment, u)
+
+        LOGGER.info("Done renewing expired parameters")
 
     @protocol.handle(methods.ParameterMethod.get_param)
     @gen.coroutine
@@ -325,6 +337,9 @@ class Server(protocol.ServerEndpoint):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
+
+        if value is None or value is "":
+            value = " "
 
         if resource_id is None:
             resource_id = ""
@@ -941,6 +956,7 @@ class Server(protocol.ServerEndpoint):
 
                         attributes = rv.attributes.copy()
                         attributes["purged"] = "true"
+                        # TODO: handle delete relations
                         attributes["requires"] = []
                         rv = data.ResourceVersion(environment=env, rid="%s,v=%s" % (res.resource_id, version),
                                                   resource=res, model=cm, attributes=attributes)
