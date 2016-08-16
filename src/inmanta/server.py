@@ -76,6 +76,8 @@ class Server(protocol.ServerEndpoint):
 
         self._fact_expire = int(Config.get("server", "fact-expire", 3600))
         self._fact_renew = int(Config.get("server", "fact-renew", self._fact_expire / 3))
+        self._fact_resource_block = int(Config.get("server", "fact-resource_block", 60))
+        self._fact_resource_block_set = {}
 
         self.add_end_point_name(self.node_name)
 
@@ -193,11 +195,10 @@ class Server(protocol.ServerEndpoint):
         return dir_map
 
     @gen.coroutine
-    def _request_parameter(self, env, param):
+    def _request_parameter(self, env, resource_id):
         """
             Request the value of a parameter from an agent
         """
-        resource_id = param.resource_id
         tid = str(env.uuid)
 
         if resource_id is not None and resource_id != "":
@@ -226,11 +227,21 @@ class Server(protocol.ServerEndpoint):
             if len(rvs) == 0:
                 return 404, {"message": "The parameter does not exist."}
 
-            yield self._ensure_agent(str(tid), resource.agent)
-            client = self.get_agent_client(tid, resource.agent)
-            if client is not None:
-                future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
-                self.add_future(future)
+            # only request facts of a resource every _fact_resource_block time
+            now = time.time()
+            if (resource_id not in self._fact_resource_block_set or
+                    (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
+                yield self._ensure_agent(str(tid), resource.agent)
+                client = self.get_agent_client(tid, resource.agent)
+                if client is not None:
+                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
+                    self.add_future(future)
+
+                self._fact_resource_block_set[resource_id] = now
+
+            else:
+                LOGGER.debug("Ignore fact request for %s, last request was sent %d seconds ago.",
+                             resource_id, now - self._fact_resource_block_set[resource_id])
 
             return 503, {"message": "Agents queried for resource parameter."}
 
@@ -246,22 +257,16 @@ class Server(protocol.ServerEndpoint):
         updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
         expired_params = yield data.Parameter.objects.filter(updated__lt=updated_before).find_all()  # @UndefinedVariable
 
-        resource_done = []
-
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
 
         for param in expired_params:
             yield param.load_references()
-            if param.resource_id in resource_done:
-                continue
             if param.environment is None:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env None", param.name, param.resource_id)
             else:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
                              param.environment.uuid)
-                code, _ = yield self._request_parameter(param.environment, param)
-                if code == 503:
-                    resource_done.append(param.resource_id)
+                yield self._request_parameter(param.environment, param.resource_id)
 
         unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
         for u in unknown_parameters:
@@ -285,41 +290,7 @@ class Server(protocol.ServerEndpoint):
                                                      name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         if len(params) == 0:
-            if resource_id is not None and resource_id != "":
-                # get the latest version
-                versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                                  order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-
-                if len(versions) == 0:
-                    return 404, {"message": "The parameter does not exist (no versions available)."}
-
-                version = versions[0]
-
-                # get the associated resource
-                resources = yield data.Resource.objects.filter(environment=env,  # @UndefinedVariable
-                                                               resource_id=resource_id).find_all()  # @UndefinedVariable
-
-                if len(resources) == 0:
-                    return 404, {"message": "The parameter does not exist (no resources available)."}
-
-                resource = resources[0]
-
-                # get a resource version
-                rvs = yield (data.ResourceVersion.objects.  # @UndefinedVariable
-                             filter(environment=env, model=version, resource=resource).find_all())  # @UndefinedVariable
-
-                if len(rvs) == 0:
-                    return 404, {"message": "The parameter does not exist (no versions of this resource available)."}
-
-                yield self._ensure_agent(str(tid), resource.agent)
-                client = self.get_agent_client(tid, resource.agent)
-                if client is not None:
-                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
-                    self.add_future(future)
-
-                return 503, {"message": "Agents queried for resource parameter."}
-
-            return 404, {"message": "The parameter does not exist."}
+            self._request_parameter(env, resource_id)
 
         param = params[0]
         # check if it was expired
@@ -331,13 +302,10 @@ class Server(protocol.ServerEndpoint):
         out = yield self._request_parameter(env, param)
         return out
 
-    @protocol.handle(methods.ParameterMethod.set_param)
-    @gen.coroutine
-    def set_param(self, tid, id, source, value, resource_id, metadata):
-        env = yield data.Environment.get_uuid(tid)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
+    def _update_param(self, env, name, value, source, resource_id, metadata):
+        """
+            Update or set a parameter. This method returns true if this update resolves an unknown
+        """
         if value is None or value is "":
             value = " "
 
@@ -371,9 +339,47 @@ class Server(protocol.ServerEndpoint):
                 p.resolved = True
                 yield p.save()
 
+            return True
+
+        return False
+
+    @protocol.handle(methods.ParameterMethod.set_param)
+    @gen.coroutine
+    def set_param(self, tid, id, source, value, resource_id, metadata):
+        env = yield data.Environment.get_uuid(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        if self._update_param(env, id, value, source, resource_id, metadata):
             self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
 
-        return 200, {"parameter": param.to_dict()}
+        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
+                                                     name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
+
+        return 200, {"parameter": params[0].to_dict()}
+
+    @protocol.handle(methods.ParametersMethod.set_parameters)
+    @gen.coroutine
+    def set_parameters(self, tid, parameters):
+        env = yield data.Environment.get_uuid(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        recompile = False
+        for param in parameters:
+            name = param["id"]
+            source = param["source"]
+            value = param["value"] if "value" in param else None
+            resource_id = param["resource_id"] if "resource_id" in param else None
+            metadata = param["metadata"] if "metadata" in param else None
+
+            if self._update_param(env, name, value, source, resource_id, metadata):
+                recompile = True
+
+        if recompile:
+            self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+
+            return 200
 
     @protocol.handle(methods.ParameterMethod.list_params)
     @gen.coroutine

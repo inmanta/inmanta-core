@@ -507,6 +507,27 @@ class ParameterMethod(Method):
         """
 
 
+class ParametersMethod(Method):
+    """
+        Get and set parameters on the server
+    """
+    __method_name__ = "parameters"
+
+    @protocol(operation="PUT", mt=True, id=True)
+    def set_parameters(self, tid: uuid.UUID, parameters: list):
+        """
+            Set a parameter on the server
+
+            :param tid The id of the environment
+            :param parameters A list of dicts with the following keys:
+                - id The name of the parameter
+                - source The source of the parameter, this can be the user, agent, plugin, compiler, ...
+                - value The value of the parameter
+                - resource_id Optionally, scope the parameter to resource (fact)
+                - metadata metadata about the parameter
+        """
+
+
 class AgentParameterMethod(Method):
     """
         Get parameters from the agent
