@@ -308,7 +308,7 @@ class Server(protocol.ServerEndpoint):
         """
             Update or set a parameter. This method returns true if this update resolves an unknown
         """
-        LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env, resource_id)
+        LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.uuid, resource_id)
         if not isinstance(value, str):
             value = str(value)
 
@@ -359,6 +359,9 @@ class Server(protocol.ServerEndpoint):
         result = yield self._update_param(env, id, value, source, resource_id, metadata)
         if result:
             self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+
+        if resource_id is None:
+            resource_id = ""
 
         params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
                                                      name=id, resource_id=resource_id).find_all()  # @UndefinedVariable

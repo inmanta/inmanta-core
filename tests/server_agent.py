@@ -372,3 +372,17 @@ class testAgentServer(ServerTest):
 
         result = yield self.client.get_param(env_id, "key1", resource_id_wov)
         assert_equal(result.code, 200)
+
+    @gen_test
+    def test_get_set_param(self):
+        """
+            Test getting and setting params
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        result = yield self.client.set_param(tid=env_id, id="key10", value="value10", source="user")
+        assert_equal(result.code, 200)
