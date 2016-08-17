@@ -35,6 +35,7 @@ from inmanta.loader import CodeLoader
 from inmanta.protocol import Scheduler, AgentEndPoint
 from inmanta.resources import Resource, Id
 from tornado.concurrent import Future
+from inmanta.agent.cache import AgentCache
 
 
 LOGGER = logging.getLogger(__name__)
@@ -95,7 +96,9 @@ class ResourceAction(object):
         self.running = False
 
     @gen.coroutine
-    def execute(self, dummy, generation):
+    def execute(self, dummy, generation, cache):
+        cache.open_version(self.resource.version)
+
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
         waiters.append(dummy.future)
@@ -118,8 +121,10 @@ class ResourceAction(object):
 
             try:
                 provider = Commander.get_provider(self.scheduler.agent, resource)
+                provider.set_cache(cache)
             except Exception:
                 provider.close()
+                cache.close_version(self.resource.version)
                 LOGGER.exception("Unable to find a handler for %s" % resource.id)
                 return self.__complete(False, False, changes={}, status="unavailable")
 
@@ -128,6 +133,7 @@ class ResourceAction(object):
             status = results["status"]
             if status == "failed" or status == "skipped":
                 provider.close()
+                cache.close_version(self.resource.version)
                 return self.__complete(False, False,
                                        changes=results["changes"],
                                        status=results["status"],
@@ -138,6 +144,7 @@ class ResourceAction(object):
                 yield self.scheduler.agent.thread_pool.submit(provider.do_reload, resource)
 
             provider.close()
+            cache.close_version(self.resource.version)
 
             reload = results["changed"] and hasattr(resource, "reload") and resource.reload
             return self.__complete(True, reload=reload, changes=results["changes"],
@@ -174,7 +181,7 @@ class ResourceScheduler(object):
         self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
         dummy = ResourceAction(self, None)
         for r in self.generation.values():
-            r.execute(dummy, self.generation)
+            r.execute(dummy, self.generation, self.agent.cache)
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
     def dump(self):
@@ -243,6 +250,8 @@ class Agent(AgentEndPoint):
         self._sched.add_action(self.get_latest_version, self._deploy_interval, self._splay_value)
 
         self.thread_pool = ThreadPoolExecutor(1)
+
+        self.cache = AgentCache()
 
     def _process_map(self, agent_map):
         """
@@ -360,6 +369,8 @@ class Agent(AgentEndPoint):
 
         yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
+        self.cache.open_version(version)
+
         for res in result.result["resources"]:
             provider = None
             try:
@@ -370,6 +381,7 @@ class Agent(AgentEndPoint):
 
                 try:
                     provider = Commander.get_provider(self, resource)
+                    provider.set_cache(self.cache)
                 except Exception:
                     LOGGER.exception("Unable to find a handler for %s" % resource.id)
                     self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
@@ -386,6 +398,8 @@ class Agent(AgentEndPoint):
             finally:
                 if provider is not None:
                     provider.close()
+
+        self.cache.close_version(version)
 
         return 200
 
@@ -440,6 +454,9 @@ class Agent(AgentEndPoint):
         yield self._ensure_code(tid, resources[0][1]["id_fields"]["version"],
                                 [res[1]["id_fields"]["entity_type"] for res in resources])
 
+        version = resources[0][1]["id_fields"]["version"]
+        self.cache.open_version(version)
+
         for restore, resource in resources:
             start = datetime.datetime.now()
             provider = None
@@ -448,6 +465,7 @@ class Agent(AgentEndPoint):
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
                 provider = Commander.get_provider(self, resource_obj)
+                provider.set_cache(self.cache)
 
                 if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
                     yield self._client.update_restore(tid=tid, id=restore_id, resource_id=str(resource_obj.id),
@@ -476,6 +494,7 @@ class Agent(AgentEndPoint):
             finally:
                 if provider is not None:
                     provider.close()
+        self.cache.close_version(version)
 
         return 200
 
@@ -490,6 +509,9 @@ class Agent(AgentEndPoint):
         yield self._ensure_code(tid, resources[0]["id_fields"]["version"],
                                 [res["id_fields"]["entity_type"] for res in resources])
 
+        version = resources[0]["id_fields"]["version"]
+        self.cache.open_version(version)
+
         for resource in resources:
             start = datetime.datetime.now()
             provider = None
@@ -498,6 +520,7 @@ class Agent(AgentEndPoint):
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
                 provider = Commander.get_provider(self, resource_obj)
+                provider.set_cache(self.cache)
 
                 if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
                     yield self._client.update_snapshot(tid=tid, id=snapshot_id,
@@ -546,6 +569,8 @@ class Agent(AgentEndPoint):
             finally:
                 if provider is not None:
                     provider.close()
+
+        self.cache.close_version(version)
         return 200
 
     def status(self, operation, body):
@@ -553,13 +578,18 @@ class Agent(AgentEndPoint):
             return 500
 
         if operation is None:
-            resource = Id.parse_id(body["id"]).get_instance()
+            id = Id.parse_id(body["id"])
+            resource = id.get_instance()
 
             if resource is None:
                 return 500
 
+            version = id.get_version()
+            self.cache.open_version(version)
+
             try:
                 provider = Commander.get_provider(self, resource)
+                provider.set_cache(self.cache)
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s" % resource)
                 return 500
@@ -570,6 +600,8 @@ class Agent(AgentEndPoint):
             except Exception:
                 LOGGER.exception("Unable to check status of %s" % resource)
                 return 500
+
+            self.cache.close_version(version)
 
         else:
             return 501
@@ -582,7 +614,12 @@ class Agent(AgentEndPoint):
             data = resource["fields"]
             data["id"] = resource["id"]
             resource_obj = Resource.deserialize(data)
+
+            version = resource_obj.version
+            self.cache.open_version(version)
+
             provider = Commander.get_provider(self, resource_obj)
+            provider.set_cache(self.cache)
 
             try:
                 result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
@@ -599,6 +636,7 @@ class Agent(AgentEndPoint):
         finally:
             if provider is not None:
                 provider.close()
+            self.cache.close_version(version)
         return 200
 
     def queue(self, operation, body):
