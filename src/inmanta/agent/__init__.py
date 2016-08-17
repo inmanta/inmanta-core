@@ -70,7 +70,7 @@ class ResourceAction(object):
 
     def cancel(self):
         if not self.is_running() and not self.is_done():
-            print("CANCEL")
+            LOGGER.info("Cancelled deploy of %s", self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
@@ -91,7 +91,7 @@ class ResourceAction(object):
                                                             extra_data=changes)
 
         self.future.set_result(ResourceActionResult(success, reload, False))
-        print("end run %s" % self.resource)
+        LOGGER.info("end run %s" % self.resource)
         self.running = False
 
     @gen.coroutine
@@ -101,8 +101,13 @@ class ResourceAction(object):
         waiters.append(dummy.future)
         results = yield waiters
 
-        print("run %s" % self.resource)
+        LOGGER.info("run %s" % self.resource)
         self.running = True
+        if self.is_done():
+            # Action is cancelled
+            self.running = False
+            return
+
         result = sum(results, ResourceActionResult(True, False, False))
 
         if result.cancel:
