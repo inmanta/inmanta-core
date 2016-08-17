@@ -23,6 +23,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast import RuntimeException, DuplicateException, NotFoundException
+from inmanta.util import memoize
 
 
 class Entity(Type):
@@ -44,6 +45,7 @@ class Entity(Type):
         self.__namespace = namespace
 
         self.parent_entities = set()  # : Entity<>
+        self.child_entities = set()
         self._attributes = {}
 
         self.__cls_type = None
@@ -205,6 +207,39 @@ class Entity(Type):
                 attr = parent.get_attribute(name)
                 if attr is not None:
                     return attr
+        return None
+
+    @memoize
+    def __get_related(self):
+        # down
+        all_children = [self]
+        done = set()
+        while len(all_children) != 0:
+            current = all_children.pop()
+            if current not in done:
+                all_children.extend(current.child_entities)
+                done.add(current)
+        # up
+        parents = set()
+        work = list(done)
+        while len(work) != 0:
+            current = work.pop()
+            if current not in parents:
+                work.extend(current.parent_entities)
+                parents.add(current)
+
+        return parents
+
+    def get_attribute_from_related(self, name):
+        """
+            Get the attribute with the given name, in both parents and children
+            (for type checking)
+        """
+
+        for parent in self.__get_related():
+            if name in parent._attributes:
+                return parent._attributes[name]
+
         return None
 
     def has_attribute(self, attribute):

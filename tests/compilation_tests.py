@@ -304,6 +304,102 @@ f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", o
         instances = types["std::File"].get_all_instances()
         assert_equal(instances[0].get_attribute("owner").get_value(), "wouter")
 
+    @raises(DuplicateException)
+    def testIssue135DuploRelations(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:] Test2 test2
+Test1 test1 [0:1] -- [0:] Test2 test2
+""")
+        compiler.do_compile()
+
+    @raises(DuplicateException)
+    def testIssue135DuploRelations2(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:] Test2 test2
+Test1 test1 [1] -- [0:] Test2 floem
+""")
+        compiler.do_compile()
+
+    @raises(DuplicateException)
+    def testIssue135DuploRelations3(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:] Test2 test2
+Test1 test1 [1] -- [0:] Test1 test2
+""")
+        compiler.do_compile()
+
+    @raises(DuplicateException)
+    def testIssue135DuploRelations4(self):
+        self.setUpForSnippet("""
+entity Stdhost:
+
+end
+
+entity Tussen extends Stdhost:
+end
+
+entity Oshost extends Tussen:
+
+end
+
+entity Agent:
+end
+
+Agent inmanta_agent   [1] -- [1] Oshost os_host
+Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
+""")
+        compiler.do_compile()
+
+    @raises(DuplicateException)
+    def testIssue135DuploRelations5(self):
+        self.setUpForSnippet("""
+entity Stdhost:
+
+end
+
+entity Tussen extends Stdhost:
+end
+
+entity Oshost extends Tussen:
+
+end
+
+entity Agent:
+end
+
+Oshost os_host [1] -- [1] Agent inmanta_agent
+
+Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
+""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 

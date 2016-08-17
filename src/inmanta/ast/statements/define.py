@@ -104,6 +104,7 @@ class DefineEntity(TypeDefinitionStatement):
                             self, "Hiding attributes with inheritance is not allowed. %s is already defined" % attr_name)
 
                 entity_type.parent_entities.add(parent_type)
+                parent_type.child_entities.add(entity_type)
         except TypeNotFoundException as e:
             e.set_location(self.location)
             raise e
@@ -314,7 +315,7 @@ class DefineRelation(DefinitionStatement):
         if isinstance(left, Default):
             left = left.get_entity()
 
-        if left.get_attribute(self.right[1]) is not None:
+        if left.get_attribute_from_related(self.right[1]) is not None:
             raise DuplicateException(self, left.get_attribute(self.right[1]),
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.right[1], left.name))
@@ -323,7 +324,7 @@ class DefineRelation(DefinitionStatement):
         if isinstance(right, Default):
             right = right.get_entity()
 
-        if right.get_attribute(self.left[1]) is not None:
+        if right.get_attribute_from_related(self.left[1]) is not None:
             raise DuplicateException(self, right.get_attribute(self.left[1]),
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.left[1], right.name))
