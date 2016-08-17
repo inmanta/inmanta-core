@@ -262,20 +262,25 @@ class Server(protocol.ServerEndpoint):
         for param in expired_params:
             yield param.load_references()
             if param.environment is None:
-                LOGGER.debug("Requesting new parameter value for %s of resource %s in env None", param.name, param.resource_id)
+                LOGGER.warning("Found parameter without environment (%s for resource %s). Deleting it.",
+                               param.name, param.resource_id)
+                yield param.delete()
             else:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
                              param.environment.uuid)
                 yield self._request_parameter(param.environment, param.resource_id)
 
-        unknown_parameters = yield data.UnknownParameter.objects.find_all()  # @UndefinedVariable
+        unknown_parameters = yield data.UnknownParameter.objects.filter(resolved=False).find_all()  # @UndefinedVariable
         for u in unknown_parameters:
             yield u.load_references()
             if u.environment is None:
-                continue
-            LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
-                         u.environment.uuid)
-            self._request_parameter(u.environment, u)
+                LOGGER.warning("Found unknown parameter without environment (%s for resource %s). Deleting it.",
+                               u.name, u.resource_id)
+                yield u.delete()
+            else:
+                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
+                             u.environment.uuid)
+                self._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 

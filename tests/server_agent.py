@@ -386,3 +386,58 @@ class testAgentServer(ServerTest):
 
         result = yield self.client.set_param(tid=env_id, id="key10", value="value10", source="user")
         assert_equal(result.code, 200)
+
+    @gen_test
+    def test_unkown_parameters(self):
+        """
+            Test retrieving facts from the agent
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+                                 code_loader=False)
+        self.agent.add_end_point_name("agent1")
+        self.agent.start()
+
+        TestProvider.set("agent1", "key", "value")
+
+        version = int(time.time())
+
+        resource_id_wov = "test::Resource[agent1,key=key]"
+        resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+        resources = [{'key': 'key',
+                      'value': 'value',
+                      'id': resource_id,
+                      'requires': [],
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      }]
+
+        unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
+        result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=unknowns,
+                                               version_info={})
+        assert_equal(result.code, 200)
+
+        result = yield self.client.release_version(env_id, version, True)
+        assert_equal(result.code, 200)
+
+        yield self.server.renew_expired_facts()
+
+        env = yield data.Environment.get_uuid(env_id)
+
+        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
+                                                     resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+        while len(params) < 3:
+            params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
+                                                         resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+            yield gen.sleep(0.1)
+
+        result = yield self.client.get_param(env_id, "length", resource_id_wov)
+        assert_equal(result.code, 200)
