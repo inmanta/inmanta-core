@@ -1422,7 +1422,7 @@ ssl_ca_cert_file=%s
         # check if an environment with this name is already defined in this project
         envs = yield data.Environment.objects.filter(project_id=project_id, name=name).find_all()  # @UndefinedVariable
         if len(envs) > 0:
-            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" % 
+            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
                          (project.name, project.uuid, name)}
 
         env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)
@@ -1647,10 +1647,8 @@ ssl_ca_cert_file=%s
             self._recompiles[environment_id] = end
             for stage in stages:
                 yield stage.save()
-            futures = []  # [x.save() for x in stages]
-            futures.append(data.Compile(environment=env, started=requested, completed=end, reports=stages).save())
 
-            yield futures
+            yield data.Compile(environment=env, started=requested, completed=end, reports=stages).save()
 
     @protocol.handle(methods.CompileReport.get_reports)
     @gen.coroutine
@@ -1685,15 +1683,12 @@ ssl_ca_cert_file=%s
             if limit is not None:
                 models = models[:int(limit)]
 
-        futures = []
+        reports = []
         for m in models:
-            report_dict = m.to_dict()
-            futures.append(report_dict)
+            report_dict = yield m.to_dict()
+            reports.append(report_dict)
 
-        reports = yield futures
-        d = {"reports": reports}
-
-        return 200, d
+        return 200, {"reports": reports}
 
     @protocol.handle(methods.Snapshot.list_snapshots)
     @gen.coroutine

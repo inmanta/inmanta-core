@@ -61,9 +61,10 @@ class Project(IdDocument):
     @gen.coroutine
     def delete_cascade(self):
         envs = yield Environment.objects.filter(project_id=self.uuid).find_all()
-        futures = [env.delete_cascade() for env in envs]
-        futures.append(self.delete())
-        yield futures
+        for env in envs:
+            yield env.delete_cascade()
+
+        yield self.delete()
 
 
 class Environment(IdDocument):
@@ -92,9 +93,10 @@ class Environment(IdDocument):
     @gen.coroutine
     def delete_cascade(self):
         models = yield ConfigurationModel.objects.filter(environment=self).find_all()
-        futures = [model.delete_cascade() for model in models]
-        futures.append(self.delete())
-        yield futures
+        for model in models:
+            yield model.delete_cascade()
+
+        yield self.delete()
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")
