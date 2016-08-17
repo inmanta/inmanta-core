@@ -150,8 +150,8 @@ class Server(protocol.ServerEndpoint):
                 delete_list = sorted(version_dict.keys())
                 delete_list = delete_list[:-n_versions]
 
-                futures = [version_dict[v].delete() for v in delete_list]
-                yield futures
+                for v in delete_list:
+                    yield version_dict[v].delete_cascade()
 
     def check_storage(self):
         """
@@ -1422,7 +1422,7 @@ ssl_ca_cert_file=%s
         # check if an environment with this name is already defined in this project
         envs = yield data.Environment.objects.filter(project_id=project_id, name=name).find_all()  # @UndefinedVariable
         if len(envs) > 0:
-            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
+            return 500, {"message": "Project %s (id=%s) already has an environment with name %s" % 
                          (project.name, project.uuid, name)}
 
         env = data.Environment(uuid=uuid.uuid4(), name=name, project_id=project_id)
