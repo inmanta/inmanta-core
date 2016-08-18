@@ -1,5 +1,5 @@
-v 2016.3rc1 (2016-06-27)
-First release candidate for the third release
+v 2016.3 (2016-08-18)
+New release. Way to late due to kids and vacation.
 - Added SSL support
 - Added auth to server
 - Add JIT loading of modules
