@@ -27,7 +27,7 @@ from inmanta.ast.type import TYPES, Type
 from inmanta.ast.statements.define import DefineEntity, DefineImplement
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
-from inmanta.ast import RuntimeException
+from inmanta.ast import RuntimeException, MultiException
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -43,14 +43,14 @@ class Scheduler(object):
     def __init__(self):
         pass
 
-    def freeze_all(self):
+    def freeze_all(self, exns):
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
-            t.final()
+            t.final(exns)
 
         instances = self.types["std::Entity"].get_all_instances()
 
         for i in instances:
-            i.final()
+            i.final(exns)
 
     def dump(self, type="std::Entity"):
         instances = self.types[type].get_all_instances()
@@ -248,7 +248,15 @@ class Scheduler(object):
         # self.dump()
         # rint(len(self.types["std::Entity"].get_all_instances()))
 
-        self.freeze_all()
+        excns = []
+        self.freeze_all(excns)
+
+        if len(excns) == 0:
+            pass
+        elif len(excns) == 1:
+            raise excns[0]
+        else:
+            raise MultiException(excns)
 
         all_statements = [x for x in all_statements if not x.done]
 
@@ -261,4 +269,5 @@ class Scheduler(object):
 
             raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
         # self.dump("std::File")
+
         return True

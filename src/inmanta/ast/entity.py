@@ -385,10 +385,11 @@ class Entity(Type):
         """
         return self
 
-    def final(self):
+    def final(self, excns):
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
-                raise NotFoundException(stmt, key, "No match in index on type %s with key %s" % (self.get_full_name(), key))
+                excns.append(NotFoundException(stmt, key,
+                                               "No match in index on type %s with key %s" % (self.get_full_name(), key)))
 
 
 class Implementation(object):

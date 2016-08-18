@@ -29,6 +29,7 @@ from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from nose.tools.nontrivial import raises
 
@@ -315,6 +316,25 @@ LogCollector collectors [0:] -- [0:] LogFile logfiles
 lf1 = LogFile(name="lf1", collectors = c2)
 
 c2 = LogCollector(name="c2", logfiles=lf1)
+""")
+
+        compiler.do_compile()
+
+    @raises(MultiException)
+    def testIssue139Scheduler(self):
+        self.setUpForSnippet("""import std
+
+entity Host extends std::Host:
+    string attr
+end
+implement Host using std::none
+
+host = Host(name="vm1", os=std::linux)
+
+f = std::ConfigFile(host=host, path="", content="{{ host.attr }}")
+std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
+ref = std::Service[host=host, name="svc"]
+
 """)
 
         compiler.do_compile()

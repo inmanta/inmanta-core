@@ -516,13 +516,13 @@ class Instance(ExecutionContext):
         self.implemenations.add(impl)
         return True
 
-    def final(self):
+    def final(self, excns):
         """
             The object should be complete, freeze all attributes
         """
         if len(self.implemenations) == 0:
-            raise RuntimeException(self, "Unable to select implementation for entity %s" %
-                                   self.type.name)
+            excns.append(RuntimeException(self, "Unable to select implementation for entity %s" %
+                                          self.type.name))
 
         for k, v in self.slots.items():
             if not v.is_ready():
@@ -530,8 +530,8 @@ class Instance(ExecutionContext):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
-                    raise UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
-                                         (self, k, attr.location), self, attr)
+                    excns.append(UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
+                                                (self, k, attr.location), self, attr))
 
     def dump(self):
         print("------------ ")
