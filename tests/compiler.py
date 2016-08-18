@@ -449,6 +449,36 @@ implement Test1 using tt when self.other is defined
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineImplement)
     tools.assert_is_instance(stmt.select, IsDefined)
+    tools.assert_equals(stmt.select.attr.name, 'self')
+    tools.assert_equals(stmt.select.name, 'other')
+
+
+def test_isDefined_implicit_self():
+    statements = parse_code("""
+implement Test1 using tt when other is defined
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineImplement)
+    tools.assert_is_instance(stmt.select, IsDefined)
+    tools.assert_equals(stmt.select.attr.name, 'self')
+    tools.assert_equals(stmt.select.name, 'other')
+
+
+def test_isDefined_short():
+    statements = parse_code("""
+implement Test1 using tt when a.other is defined
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineImplement)
+    tools.assert_is_instance(stmt.select, IsDefined)
+    tools.assert_is_instance(stmt.select.attr, AttributeReference)
+    tools.assert_equals(stmt.select.attr.instance.name, 'self')
+    tools.assert_equals(stmt.select.attr.attribute, 'a')
+    tools.assert_equals(stmt.select.name, 'other')
 
 
 def test_Lexer():
