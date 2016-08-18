@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-
-from typing import Hashable
 import time
 import sys
 import bisect
@@ -32,7 +30,7 @@ class Scope(object):
 
 class CacheItem(object):
 
-    def __init__(self, key: Hashable, scope: Scope, value):
+    def __init__(self, key, scope: Scope, value):
         self.key = key
         self.scope = scope
         self.value = value
@@ -101,7 +99,7 @@ class AgentCache():
             del self.cache[item.key]
             self.nextAction = self.timerqueue[0].time
 
-    def _get(self, key: Hashable):
+    def _get(self, key):
         self._advance_time()
         return self.cache[key]
 
