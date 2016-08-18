@@ -71,8 +71,9 @@ class Entity(Type):
         for i in self.implements:
             i.normalize()
 
-        self.subc = SubConstructor(self)
-        self.subc.normalize()
+        self.subc = [SubConstructor(self, i) for i in self.implements]
+        for sub in self.subc:
+            sub.normalize()
 
     def get_sub_constructor(self):
         return self.subc

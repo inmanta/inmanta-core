@@ -214,6 +214,9 @@ class ListVariable(DelayedResultVariable):
     def can_get(self):
         return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
 
+    def __str__(self):
+        return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+
 
 class OptionVariable(DelayedResultVariable):
 
@@ -245,8 +248,12 @@ class OptionVariable(DelayedResultVariable):
     def get_value(self):
         result = DelayedResultVariable.get_value(self)
         if result is None:
-            raise OptionalValueException(None, "Optional variable accessed that has no value ")
+            raise OptionalValueException(
+                None, "Optional variable accessed that has no value (%s.%s)" % (self.myself, self.attribute))
         return result
+
+    def __str__(self):
+        return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
 
 class QueueScheduler(object):
@@ -482,6 +489,7 @@ class Instance(ExecutionContext):
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
         self.sid = id(self)
+        self.implemenations = set()
 
     def get_type(self):
         return self.type
@@ -502,10 +510,20 @@ class Instance(ExecutionContext):
     def __repr__(self):
         return "%s %02x" % (self.type, self.sid)
 
+    def add_implementation(self, impl):
+        if impl in self.implemenations:
+            return False
+        self.implemenations.add(impl)
+        return True
+
     def final(self):
         """
             The object should be complete, freeze all attributes
         """
+        if len(self.implemenations) == 0:
+            raise RuntimeException(self, "Unable to select implementation for entity %s" %
+                                   self.type.name)
+
         for k, v in self.slots.items():
             if not v.is_ready():
                 if v.can_get():

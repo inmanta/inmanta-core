@@ -30,62 +30,37 @@ class SubConstructor(GeneratorStatement):
         imports the statements
     """
 
-    def __init__(self, instance_type):
+    def __init__(self, instance_type, implements):
         GeneratorStatement.__init__(self)
         self.type = instance_type
+        self.implements = implements
 
     def normalize(self):
         # done in define type
         pass
 
     def requires_emit(self, resolver, queue):
-        out = {}
+        try:
+            return self.implements.constraint.requires_emit(resolver, queue)
+        except NotFoundException as e:
+            e.set_statement(self.implements)
+            raise e
 
-        for i in self.type.implements:
-            try:
-                for (rk, rv) in i.constraint.requires_emit(resolver, queue).items():
-                    out[rk] = rv
-            except NotFoundException as e:
-                e.set_statement(i)
-                raise e
-        return out
-
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires, instance, queue):
         """
             Evaluate this statement
         """
-        implement_list = self.get_implementation(requires, resolver, queue)
+        expr = self.implements.constraint
+        if not expr.execute(requires, instance, queue):
+            return
 
-        if len(implement_list) == 0:
-            raise RuntimeException(resolver, "Unable to select implementation for entity %s" %
-                                   self.type.name)
-
-        implementations = []
-        for impl in implement_list:
-            implementations.extend(impl.implementations)
+        implementations = self.implements.implementations
 
         for impl in implementations:
-            # generate a subscope/namespace for each loop
-            xc = ExecutionContext(impl.statements, resolver.for_namespace(impl.statements.namespace))
-            xc.emit(queue)
-
-    def get_implementation(self, requires, resolver, queue):
-        """
-            Search in the list of implementation for an implementation that
-            matches the select clause. If no select clause matches and a default
-            implementation exists, this is chosen.
-
-            If more then one select clause matches an exception will be thrown.
-        """
-
-        select_list = []
-
-        for implementation in self.type.implements:
-            expr = implementation.constraint
-            if expr.execute(requires, resolver, queue):
-                select_list.append(implementation)
-
-        return select_list
+            if instance.add_implementation(impl):
+                # generate a subscope/namespace for each loop
+                xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
+                xc.emit(queue)
 
     def __repr__(self):
         return "EntityImplement(%s)" % self.type
@@ -238,8 +213,8 @@ class Constructor(GeneratorStatement):
 
         else:
             # generate an implementation
-            stmt = type_class.get_sub_constructor()
-            stmt.emit(object_instance, queue)
+            for stmt in type_class.get_sub_constructor():
+                stmt.emit(object_instance, queue)
 
         if self.register:
             raise "don't know this feature"

@@ -1,0 +1,4 @@
+name: lma
+license: Apache 2.0
+description: Logging, Alerting and Monitoring module based on Mirantis LMA
+version: 0.1dev1

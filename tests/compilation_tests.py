@@ -24,7 +24,7 @@ from itertools import groupby
 import sys
 from io import StringIO
 
-from nose.tools import assert_equal
+from nose.tools import assert_equal, assert_is_not_none
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
@@ -400,3 +400,16 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
     @raises(DoubleSetException)
     def test_compile(self):
         compiler.do_compile()
+
+
+class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_138")
+
+    def test_compile(self):
+        (types, _) = compiler.do_compile()
+        assert_is_not_none(types['std::Host'].get_all_instances()[0]
+                           .get_attribute("agent").get_value()
+                           .get_attribute("names").get_value())
