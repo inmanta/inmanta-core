@@ -202,7 +202,7 @@ class ResourceHandler(object):
 
         except Exception as e:
             LOGGER.exception("An error occurred during deployment of %s" % resource.id)
-            results["log_msg"] = e.args
+            results["log_msg"] = repr(e)
             results["status"] = "failed"
 
         return results

@@ -97,7 +97,10 @@ class AgentCache():
         while now > self.nextAction and len(self.timerqueue) > 0:
             item = self.timerqueue.pop(0)
             del self.cache[item.key]
-            self.nextAction = self.timerqueue[0].time
+            if len(self.timerqueue) > 0:
+                self.nextAction = self.timerqueue[0].time
+            else:
+                self.nextAction = sys.maxsize
 
     def _get(self, key):
         self._advance_time()
