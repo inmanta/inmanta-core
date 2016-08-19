@@ -320,7 +320,7 @@ class DefineRelation(DefinitionStatement):
             )
 
         if left.get_attribute_from_related(self.right[1]) is not None:
-            raise DuplicateException(self, left.get_attribute(self.right[1]),
+            raise DuplicateException(self, left.get_attribute_from_related(self.right[1]),
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.right[1], left.name))
 
@@ -333,7 +333,7 @@ class DefineRelation(DefinitionStatement):
             )
 
         if right.get_attribute_from_related(self.left[1]) is not None:
-            raise DuplicateException(self, right.get_attribute(self.left[1]),
+            raise DuplicateException(self, right.get_attribute_from_related(self.left[1]),
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.left[1], right.name))
 

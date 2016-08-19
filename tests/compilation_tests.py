@@ -407,6 +407,18 @@ std::ConfigFile cfg [1] -- [1] std::File stuff
 """)
         compiler.do_compile()
 
+    @raises(DuplicateException)
+    def testIssue141(self):
+        self.setUpForSnippet("""
+h = std::Host(name="test", os=std::linux)
+
+entity SpecialService extends std::Service:
+
+end
+
+std::Host host [1] -- [0:] SpecialService services_list""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
