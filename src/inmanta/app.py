@@ -27,6 +27,7 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config
 from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
+from inmanta import protocol
 
 LOGGER = logging.getLogger()
 
@@ -133,6 +134,8 @@ def export_parser_config(parser):
     parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been " +
                         "submitted in the supplied file")
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
+    parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version",
+                        action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--username", dest="user", help="The username of the server")
@@ -169,7 +172,12 @@ def export(options):
     (types, scopes) = do_compile()
 
     export = Exporter(options)
-    export.run(types, scopes)
+    version, _ = export.run(types, scopes)
+    if options.deploy:
+        conn = protocol.Client("compiler")
+        LOGGER.info("Triggering deploy for version %d" % version)
+        tid = Config.get("config", "environment", None)
+        IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
 
 
 def deploy_parser_config(parser):
