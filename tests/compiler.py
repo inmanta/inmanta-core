@@ -24,12 +24,13 @@ from inmanta.ast.statements import define, Literal
 from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
 from nose.tools.nontrivial import raises
-from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex
+from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineEntity
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
 from inmanta.ast.variables import Reference, AttributeReference
+from bdb import bar
 
 
 def parse_code(model_code: str):
@@ -450,6 +451,39 @@ implement Test1 using tt when self.other is defined
     tools.assert_is_instance(stmt, DefineImplement)
     tools.assert_is_instance(stmt.select, IsDefined)
 
+
+def test_defineListAttribute():
+    statements = parse_code("""
+entity Jos:
+  bool[] bar
+  ip::ip[] ips = ["a"]
+  string[] floom = []
+  string[] floomx = ["a", "b"]
+end""")
+
+    tools.assert_equals(len(statements), 1, "Should return one statement")
+    stmt = statements[0]
+    tools.assert_is_instance(stmt, DefineEntity)
+    tools.assert_equals(len(stmt.attributes), 4)
+
+    def compareAttr(attr,name,type,defs):
+        tools.assert_equals(attr.name, name)
+        defs(attr.default)
+        tools.assert_equals(attr.multi, True)
+        tools.assert_equals(attr.type, type)
+    compareAttr(stmt.attributes[0],"bar", "bool", tools.assert_is_none)
+    compareAttr(stmt.attributes[2],"floom", "string", lambda x: tools.assert_equals([],x))
+    def compareDefault(list):
+        def comp(x):
+            tools.assert_equals(len(list),len(x))
+            for one,it in zip(list,x):
+                tools.assert_is_instance(it, Literal)
+                tools.assert_equals(it.value, one)
+        return comp
+    compareAttr(stmt.attributes[1],"ips", "ip::ip", compareDefault(['a']))
+    compareAttr(stmt.attributes[3],"floomx", "string", compareDefault(['a','b']))
+
+                
 
 def test_Lexer():
     parse_code("""

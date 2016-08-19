@@ -33,10 +33,11 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None):
+    def __init__(self, attr_type, name, default_value=None, multi=False):
         self.type = attr_type
         self.name = name
         self.default = default_value
+        self.multi = multi
 
 
 class DefineEntity(TypeDefinitionStatement):
