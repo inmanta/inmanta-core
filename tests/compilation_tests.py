@@ -429,6 +429,17 @@ std::Host host [1] -- [0:] SpecialService services_list""")
         except NotFoundException as e:
             assert_regexp_matches(str(e), 'No index defined on std::Service for this lookup:.*')
 
+    @raises(DuplicateException)
+    def testIssue134CollidingUmplementations(self):
+
+        self.setUpForSnippet("""
+implementation test for std::Entity:
+end
+implementation test for std::Entity:
+end""")
+        compiler.do_compile()
+        raise AssertionError("Should get exception")
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 

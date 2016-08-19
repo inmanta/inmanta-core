@@ -66,7 +66,7 @@ class Namespace(object):
 
     def define_type(self, name, type):
         if name in self.defines_types:
-            raise DuplicateException(type, self.define_types[name], "Entity type already defined")
+            raise DuplicateException(type, self.defines_types[name], "Entity type already defined")
         self.defines_types[name] = type
 
     def import_ns(self, name, ns):
