@@ -24,7 +24,7 @@ from itertools import groupby
 import sys
 from io import StringIO
 
-from nose.tools import assert_equal
+from nose.tools import assert_equal, assert_regexp_matches
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
@@ -418,6 +418,16 @@ end
 
 std::Host host [1] -- [0:] SpecialService services_list""")
         compiler.do_compile()
+
+    def testIssue140IndexError(self):
+        try:
+            self.setUpForSnippet("""
+        h = std::Host(name="test", os=std::linux)
+        test = std::Service[host=h, path="test"]""")
+            compiler.do_compile()
+            raise AssertionError("Should get exception")
+        except NotFoundException as e:
+            assert_regexp_matches(str(e), 'No index defined on std::Service for this lookup:.*')
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):

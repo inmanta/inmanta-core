@@ -396,7 +396,8 @@ class Entity(Type):
                 found_index = True
 
         if not found_index:
-            raise Exception("No index defined for this lookup: " + str(params))
+            raise NotFoundException(
+                stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params))
 
         key = ", ".join(["%s=%s" % x for x in params])
 
