@@ -20,7 +20,8 @@ import os
 import tempfile
 import shutil
 import logging
-
+import string
+import random
 
 from mongobox.unittest import MongoTestCase
 from inmanta import config
@@ -45,6 +46,7 @@ class ServerTest(MongoTestCase, AsyncTestCase):
 
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
+        config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
         config.Config.set("config", "state-dir", self.state_dir)
         config.Config.set("config", "log-dir", os.path.join(self.state_dir, "logs"))
         config.Config.set("server_rest_transport", "port", PORT)
@@ -62,10 +64,11 @@ class ServerTest(MongoTestCase, AsyncTestCase):
 
     def tearDown(self):
         self.server.stop()
-        # self.purge_database(drop=True)
+        self.purge_database(drop=True)
         # does not work with current pymongo
         for db_name in self.mongo_client.database_names():
             self.mongo_client.drop_database(db_name)
+        # end fix
         shutil.rmtree(self.state_dir)
 
         AsyncTestCase.tearDown(self)
