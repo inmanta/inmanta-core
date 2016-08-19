@@ -109,7 +109,8 @@ class CLIGitProvider(GitProvider):
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def push(self, repo):
-        return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"], cwd=repo).decode("utf-8")
+        return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"],
+                                       cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
 # try:
 #     import pygit2
