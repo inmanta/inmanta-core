@@ -9,6 +9,8 @@ tox:
     image: fedora-python3
     tags:
         - docker
+    variables:
+        ASYNC_TEST_TIMEOUT: '60'
     script:
         - tox
 
