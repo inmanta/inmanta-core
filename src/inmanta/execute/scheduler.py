@@ -24,7 +24,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
 
-from inmanta.ast.statements.define import DefineEntity, DefineImplement
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler
 from inmanta.ast.entity import Entity
 
@@ -104,8 +104,8 @@ class Scheduler(object):
         # now that we have objects for all types, popuate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
         others = [t for t in definitions if not isinstance(t, DefineImplement)]
-        entities = [t for t in others if isinstance(t, DefineEntity)]
-        others = [t for t in others if not isinstance(t, DefineEntity)]
+        entities = [t for t in others if isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault)]
+        others = [t for t in others if not (isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault))]
 
         # first entities, so we have inheritance
         for d in entities:

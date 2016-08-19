@@ -313,7 +313,11 @@ class DefineRelation(DefinitionStatement):
         """
         left = self.namespace.get_type(self.left[0])
         if isinstance(left, Default):
-            left = left.get_entity()
+            raise TypingException(
+                self,
+                "Can not define relation on a default constructor %s, use base type instead: %s " % (
+                    left.name, left.get_entity().get_full_name())
+            )
 
         if left.get_attribute_from_related(self.right[1]) is not None:
             raise DuplicateException(self, left.get_attribute(self.right[1]),
@@ -322,7 +326,11 @@ class DefineRelation(DefinitionStatement):
 
         right = self.namespace.get_type(self.right[0])
         if isinstance(right, Default):
-            right = right.get_entity()
+            raise TypingException(
+                self,
+                "Can not define relation on a default constructor %s, use base type instead: %s " % (
+                    right.name, right.get_entity().get_full_name())
+            )
 
         if right.get_attribute_from_related(self.left[1]) is not None:
             raise DuplicateException(self, right.get_attribute(self.left[1]),
