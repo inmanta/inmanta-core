@@ -10,7 +10,7 @@ tox:
     tags:
         - docker
     variables:
-        ASYNC_TEST_TIMEOUT: 10
+        ASYNC_TEST_TIMEOUT: '10'
     script:
         - tox
 
