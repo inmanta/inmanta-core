@@ -309,7 +309,7 @@ class ExecutionContext(object):
         if name in self.slots:
             return self.slots[name]
         else:
-            raise NotFoundException(None, name, "Namespace %s not found" % name)
+            raise NotFoundException(None, name, "variable %s not found" % name)
 
     def emit(self, queue):
         self.block.emit(self, queue)
