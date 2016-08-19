@@ -400,6 +400,13 @@ Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
 """)
         compiler.do_compile()
 
+    @raises(TypingException)
+    def testIssue132RelationOnDefault(self):
+        self.setUpForSnippet("""
+std::ConfigFile cfg [1] -- [1] std::File stuff
+""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
