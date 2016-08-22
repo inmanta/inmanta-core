@@ -30,7 +30,6 @@ from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
 from inmanta.ast.variables import Reference, AttributeReference
-from bdb import bar
 
 
 def parse_code(model_code: str):
@@ -466,24 +465,24 @@ end""")
     tools.assert_is_instance(stmt, DefineEntity)
     tools.assert_equals(len(stmt.attributes), 4)
 
-    def compareAttr(attr,name,type,defs):
+    def compareAttr(attr, name, type, defs):
         tools.assert_equals(attr.name, name)
         defs(attr.default)
         tools.assert_equals(attr.multi, True)
         tools.assert_equals(attr.type, type)
-    compareAttr(stmt.attributes[0],"bar", "bool", tools.assert_is_none)
-    compareAttr(stmt.attributes[2],"floom", "string", lambda x: tools.assert_equals([],x.items))
+    compareAttr(stmt.attributes[0], "bar", "bool", tools.assert_is_none)
+    compareAttr(stmt.attributes[2], "floom", "string", lambda x: tools.assert_equals([], x.items))
+
     def compareDefault(list):
         def comp(x):
-            tools.assert_equals(len(list),len(x.items))
-            for one,it in zip(list,x.items):
+            tools.assert_equals(len(list), len(x.items))
+            for one, it in zip(list, x.items):
                 tools.assert_is_instance(it, Literal)
                 tools.assert_equals(it.value, one)
         return comp
-    compareAttr(stmt.attributes[1],"ips", "ip::ip", compareDefault(['a']))
-    compareAttr(stmt.attributes[3],"floomx", "string", compareDefault(['a','b']))
+    compareAttr(stmt.attributes[1], "ips", "ip::ip", compareDefault(['a']))
+    compareAttr(stmt.attributes[3], "floomx", "string", compareDefault(['a', 'b']))
 
-                
 
 def test_Lexer():
     parse_code("""

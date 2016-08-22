@@ -261,6 +261,7 @@ c = Jos(bar = ["X"])
 """)
         compiler.do_compile()
 
+
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
     def __init__(self, methodName='runTest'):
