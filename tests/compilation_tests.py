@@ -22,12 +22,13 @@ import shutil
 import os
 from itertools import groupby
 
-from nose.tools import assert_equal
+from nose.tools import assert_equal, assert_list_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException
 from nose.tools.nontrivial import raises
+from inmanta.parser import ParserException
 
 
 class CompilerBaseTest(object):
@@ -192,6 +193,73 @@ std::print(t.test2.attribute)
         except RuntimeException as e:
             assert_equal(e.location.lnr, 18)
 
+    def testListAtributes(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar
+  std::package_state[] ips = ["installed"]
+  string[] floom = []
+  string[] floomx = ["a", "b"]
+  string box = "a"
+end
+
+implement Jos using std::none
+
+a = Jos(bar = [true])
+b = Jos(bar = [true, false])
+c = Jos(bar = [])
+d = Jos(bar = [], floom=["test","test2"])
+
+""")
+        (types, root) = compiler.do_compile()
+
+        def check_jos(jos, bar, ips=["installed"], floom=[], floomx=["a", "b"], box="a"):
+            jos = jos.get_value()
+            assert_list_equal(jos.get_attribute("bar").get_value(), bar)
+            assert_list_equal(jos.get_attribute("ips").get_value(), ips)
+            assert_list_equal(jos.get_attribute("floom").get_value(), floom)
+            assert_list_equal(jos.get_attribute("floomx").get_value(), floomx)
+            assert_equal(jos.get_attribute("box").get_value(), box)
+
+        scope = root.get_child("__config__").scope
+
+        check_jos(scope.lookup("a"), [True])
+        check_jos(scope.lookup("b"), [True, False])
+        check_jos(scope.lookup("c"), [])
+        check_jos(scope.lookup("d"), [], floom=["test", "test2"])
+
+    @raises(ParserException)
+    def testListAtributeTypeViolation1(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar = true
+end
+implement Jos using std::none
+c = Jos()
+""")
+        compiler.do_compile()
+
+    @raises(RuntimeException)
+    def testListAtributeTypeViolation2(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar = ["x"]
+end
+implement Jos using std::none
+c = Jos()
+""")
+        compiler.do_compile()
+
+    @raises(RuntimeException)
+    def testListAtributeTypeViolation3(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar
+end
+implement Jos using std::none
+c = Jos(bar = ["X"])
+""")
+        compiler.do_compile()
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 

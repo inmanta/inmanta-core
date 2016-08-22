@@ -18,6 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
+from inmanta.ast.type import TypedList
 
 
 class Attribute(object):
@@ -27,12 +28,13 @@ class Attribute(object):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity, value_type, name):
+    def __init__(self, entity, value_type, name, multi=False):
         self.__name = name  # : String
 
         entity.add_attribute(self)
         self.__entity = entity
         self.__type = value_type
+        self.__multi = multi
 
     def get_type(self):
         """
@@ -77,7 +79,10 @@ class Attribute(object):
 
     def get_new_Result_Variable(self, instance, queue):
         out = ResultVariable()
-        out.set_type(self.__type)
+        if self.__multi:
+            out.set_type(TypedList(self.__type))
+        else:
+            out.set_type(self.__type)
         out.set_provider(instance)
         return out
 

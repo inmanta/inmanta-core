@@ -167,7 +167,10 @@ class Bool(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        return isinstance(value, bool)
+        if isinstance(value, bool):
+            return True
+        else:
+            raise RuntimeException(None, "Invalid value '%s', expected Bool" % value)
 
     @classmethod
     def cast(cls, value):
@@ -224,9 +227,44 @@ class String(Type, str):
         return "string"
 
 
+class TypedList(Type):
+
+    def __init__(self, basetype):
+        Type.__init__(self)
+        self.basetype = basetype
+
+    def cast(self, value):
+        """
+            Cast the value to the basetype of this constraint
+        """
+        return list([self.basetype.cast(x) for x in value])
+
+    def validate(self, value):
+        """
+            Validate the given value to check if it satisfies the constraint and
+            the basetype.
+        """
+        if isinstance(value, Unknown):
+            return True
+
+        if value is None:
+            return True
+
+        if not isinstance(value, list):
+            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+
+        for x in value:
+            self.basetype.validate(x)
+
+        return True
+
+    def __str__(self):
+        return "list(%s)" % (self.basetype)
+
+
 class List(Type, list):
     """
-        This class represents a string type in the configuration model.
+        This class represents a list type in the configuration model. (instances represent instances)
     """
 
     def __init__(self):

@@ -472,11 +472,11 @@ end""")
         tools.assert_equals(attr.multi, True)
         tools.assert_equals(attr.type, type)
     compareAttr(stmt.attributes[0],"bar", "bool", tools.assert_is_none)
-    compareAttr(stmt.attributes[2],"floom", "string", lambda x: tools.assert_equals([],x))
+    compareAttr(stmt.attributes[2],"floom", "string", lambda x: tools.assert_equals([],x.items))
     def compareDefault(list):
         def comp(x):
-            tools.assert_equals(len(list),len(x))
-            for one,it in zip(list,x):
+            tools.assert_equals(len(list),len(x.items))
+            for one,it in zip(list,x.items):
                 tools.assert_is_instance(it, Literal)
                 tools.assert_equals(it.value, one)
         return comp

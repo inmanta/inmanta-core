@@ -382,6 +382,12 @@ def p_list_def(p):
     attach_lnr(p, 2)
 
 
+def p_list_def_empty(p):
+    " list_def : '[' ']'"
+    p[0] = CreateList([])
+    attach_lnr(p, 1)
+
+
 def p_index_lookup(p):
     " index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3])
@@ -460,12 +466,13 @@ def create_string_format(format_string, variables, location):
 
 def p_constant_list_empty(p):
     " constant_list : '[' ']' "
-    p[0] = []
-
+    p[0] = CreateList([])
+    attach_lnr(p, 1)
 
 def p_constant_list(p):
     " constant_list : '[' constants ']' "
-    p[0] = p[2]
+    p[0] = CreateList(p[2])
+    attach_lnr(p, 1)
 
 
 def p_constants_term(p):
