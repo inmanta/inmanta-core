@@ -126,6 +126,39 @@ def modules(options):
     tool.execute(options.cmd, options)
 
 
+def deploy_parser_config(parser):
+    parser.add_argument("-p", dest="project", help="The project name")
+    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
+                        "and wildcards are supported")
+    parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map"),
+    parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
+    parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
+
+
+@command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
+def deploy(options):
+    from inmanta import deploy
+
+    io_loop = IOLoop.current()
+    run = deploy.Deploy(io_loop)
+    run.setup_server()
+
+    def handle_result(x):
+        if not x.result() or x.exception() is not None:
+            IOLoop.current().stop()
+            run.stop()
+            sys.exit(1)
+
+    io_loop.add_future(run.setup_project(), handle_result)
+    io_loop.add_future(run.setup_agent(), handle_result)
+
+    try:
+        io_loop.start()
+    except KeyboardInterrupt:
+        IOLoop.current().stop()
+        run.stop()
+
+
 def export_parser_config(parser):
     """
         Configure the compiler of the export function
@@ -178,14 +211,6 @@ def export(options):
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = Config.get("config", "environment", None)
         IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
-
-
-def deploy_parser_config(parser):
-    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
-                        "and wildcards are supported")
-    parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map"),
-    parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
-    parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
 
 
 log_levels = {
