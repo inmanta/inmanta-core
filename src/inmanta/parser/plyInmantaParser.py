@@ -333,6 +333,12 @@ def p_condition_is_defined(p):
     attach_lnr(p)
 
 
+def p_condition_is_defined_short(p):
+    """condition : ID IS DEFINED"""
+    p[0] = IsDefined(Reference('self'), p[1])
+    attach_lnr(p)
+
+
 def p_condition_term_1(p):
     """condition : TRUE
                 | FALSE"""

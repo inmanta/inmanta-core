@@ -63,7 +63,7 @@ class IsDefined(ReferenceStatement):
 
     def __init__(self, attr, name):
         super(IsDefined, self).__init__([attr])
-        self.attr = attr
+        self.attr = attr.root_in_self()
         self.name = name
 
     def requires_emit(self, resolver, queue):

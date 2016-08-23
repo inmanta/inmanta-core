@@ -58,6 +58,12 @@ class Reference(ExpressionStatement):
     def as_assign(self, value):
         return Assign(self.name, value)
 
+    def root_in_self(self):
+        if self.name == 'self':
+            return self
+        else:
+            return AttributeReference(Reference('self'), self.name)
+
 
 class AttributeReferenceHelper(object):
     """
@@ -181,3 +187,6 @@ class AttributeReference(Reference):
 
     def as_assign(self, value):
         return SetAttribute(self.instance, self.attribute, value)
+
+    def root_in_self(self):
+        return AttributeReference(self.instance.root_in_self(), self.attribute)
