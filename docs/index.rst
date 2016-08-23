@@ -1,7 +1,7 @@
 .. _index:
 
 Inmanta's documentation
-======================
+========================
 
 Inmanta is a configuration management tool for managing complex and large-scale distributed systems in
 an integrated manner. 

@@ -3,7 +3,7 @@ Language reference
 
 The Inmanta language is a declarative language to model the configuration of an infrastructure. 
 
-The evaluation order of statements in the Inmanta modeling language is determined by their dependencies on other statements and not based on the lexical order. i.e. The code is not necessarily executed top to bottom.
+The evaluation order of statements is determined by their dependencies on other statements and not based on the lexical order. i.e. The code is not necessarily executed top to bottom.
 
 
 Modules
@@ -15,10 +15,22 @@ The source is organized in modules. Each module is a git repository with the fol
     +-- files/
     +-- model/
     |  +-- _init.cf
-    |  +-- submodule1.cf
-    |  +-- submodule2/
-    |    +-- _init.cf
-    |    +-- subsubmodule.cf
+    +-- plugins/
+    +-- templates/   
+    +-- module.yaml
+    
+The ``module.yaml`` file, the ``model`` directory and the ``model/_init.cf`` are required. 
+    
+For example::
+
+    test/
+    +-- files/
+    +-- model/
+    |  +-- _init.cf
+    |  +-- services.cf 
+    |  +-- policy
+    |  |  +-- _init.cf 
+    |  |  +-- other.cf
     +-- plugins/
     +-- templates/   
     +-- module.yaml
@@ -28,42 +40,49 @@ The model code is in the ``.cf`` files. Each file forms a namespace. The namespa
 +-----------------------------------------+----------------------------------+
 | File                                    | Namespace                        |
 +=========================================+==================================+
-| module/model/_init.cf                   | module                           |
+| test/model/_init.cf                     | test                             |
 +-----------------------------------------+----------------------------------+
-| module/model/submodule1.cf              | module::submodule1               |
+| test/model/services.cf                  | test::services                   |
 +-----------------------------------------+----------------------------------+
-| module/model/submodule2/_init.cf        | module::submodule2               |
+| test/model/policy/_init.cf              | test::policy                     |
 +-----------------------------------------+----------------------------------+
-| module/model/submodule2/subsubmodule.cf | module::submodule2::subsubmodule |
+| test/model/policy/other.cf              | test::policy::subsubmodule       |
 +-----------------------------------------+----------------------------------+
 
+Modules are only loaded when they are imported by a loaded module or the ``main.cf`` file of the project. 
 
-Assignment
-============================
+To access members from another namespace, it must be imported into the current namespace.::
 
-Variables can be defined in any lexical scope. They are visible in their defining scope and its children.
-Each namespace is a named lexical scope. Each code block (between ``:`` and ``end``) is an anonymous lexical scope.
+    import test::services
+    
+Imports can also define an alias, to shorten long names::
+
+    import test::services as services
+
+
+
+Variables: assignment, reference and import
+============================================
+
+Variables can be defined in any lexical scope. They are visible in their defining scope and its children. 
+A lexical scope is either a namespaces or a code block (area between ``:`` and ``end``).  
 
 Variable names must start with a lower case character and can consist of the characters: ``a-zA-Z_0-9-``
 
 A value can be assigned to a variable exactly once. The type of the variable is the type of the value.
 Assigning a value to the same variable twice will produce a compiler error, unless the values are identical.
 
-To access members from another namespace, it must be imported.::
+Variables from other modules can be referenced by prefixing them with the module name (or alias)::
 
-    import module::submodule2
+    import redhat
+    os = redhat::fedora23
+    import ubuntu as ubnt
+    os2 = ubnt::ubuntu1204
     
-Imports can also define an alias, to shorten long names::
 
-    import module::submodule2 as subm2
-
-
-Literals
-============================
-
-Literals can be of the type ``string``, ``number`` or ``bool`` or a list of these. 
-
-Assigning literal values to variables::
+Literals values
+==============================
+Literal values can be assigned to variables::
 
     var1 = 1 # assign an integer, var1 contains now a number
     var2 = 3.14 # assign a float, var2 also contains a number
@@ -82,20 +101,22 @@ Assigning literal values to variables::
     # next assignment will not return an error because var1 already contains this value
     var1 = 1
     
-    # next assignment will return an error because var1 already has a different value
-    var1 = "test"
+    # next assignment would return an error because var1 already has a different value
+    #var1 = "test"
     
     #ref to a variable from another namespace
     import ip::services
     sshservice = ip::services::ssh
     
 
+Primitive types
+==============================
 
-Constraining literal types
-==========================
+The basic primitive types are ``string``, ``number`` or ``bool``.
 
-A typedef statement creates a new literal type which is based on one of the basic types with an additional constraint. 
-The name of the type must not collide with the name of a variable or type in the same lexical scope.
+Constrained primitive types can be derived from the basic primitive type with a typedef statement.
+Constrained primitive types add additional constraints to the basic primitive type with either a regex or a logical condition. 
+The name of the constrained primitive type must not collide with the name of a variable or type in the same lexical scope.
 
 .. code-block:: antlr
 
@@ -106,6 +127,9 @@ For example::
     typedef tcp_port as number matching self > 0 and self < 65565
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
     
+
+Lists of primitive types are also primitive types: ``string[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
+   
 
 Conditions
 ==========================
@@ -150,7 +174,7 @@ Entities model configuration concepts. They are like classes in other object ori
 Entity names must start with an upper case character and can consist of the characters: ``a-zA-Z_0-9-``
 
 Entities can have a number of attributes and relations to other entities.  
-Entity attributes have primitive types, with an optional default value.
+Entity attributes have primitive types (string, number, with an optional default value.
 
 Entities can inherit from multiple other entities. Entities inherits attributes and relations from parent entities.
 It is not possible to override or rename attributes or relations. All entities inherit from ``std::Entity``.
@@ -172,6 +196,7 @@ Defining entities in a configuration model::
        string path
        string content
        number mode = 640
+       string[] list = []
     end
 
 Default values can also be set using a type alias::
@@ -185,7 +210,7 @@ Relations
 
 A Relation is a bi-direction relation between two entities. Consistency of the double binding is maintained by the compiler: assignment to one side of the relation is an implicit assignment of the reverse relation.  
 
-Relations are defined by specifying each end of the relation together with the multiplicity of each relation end. Each end of the relation is named and is maintained as a double binding by the Inmanta runtime.
+Relations are defined by specifying each end of the relation together with the multiplicity of each relation end. Each end of the relation is named and is maintained as a double binding by the compiler.
 
 Defining relations between entities in the domain model::
 
@@ -223,7 +248,7 @@ Values can be assigned to the remaining properties as if they are variables. To 
     f2 = File(host=h1, path="/opt/2")
     f3 = File(host=h1, path="/opt/3")
     
-    //now h1.files equals [f1, f2, f3]
+    // h1.files equals [f1, f2, f3]
     
     FileSet set [1] -- [0:] File files
     
@@ -231,11 +256,11 @@ Values can be assigned to the remaining properties as if they are variables. To 
     s1.files = [f1,f2]
     s1.files = f3
     
-    //now s1.files equals [f1, f2, f3]
+    // s1.files equals [f1, f2, f3]
     
     s1.files = f3
-
-    //now s1.files still equals [f1, f2, f3]
+    // adding a value twice does not affect the relation, 
+    // s1.files still equals [f1, f2, f3]
 
 Refinements
 ===========
@@ -420,7 +445,7 @@ Resource deployment has the following flow:
  2. all resources are identified and converted in serializeable form (``Resource`` object)
  3. all resources (and their associated python files) are uploaded to the server
  4. deploy is triggered
- 5. resources are deployed to the agents that are responsible for this esource
+ 5. resources are deployed to the agents that are responsible for this resource
  6. agents download the associated python code
  7. agents deserialize the resources
  8. agent execute the relevant handlers for the resources
