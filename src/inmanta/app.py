@@ -66,8 +66,8 @@ def compiler_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
-    parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
-    parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
+    parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
+    parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
     parser.add_argument("--username", dest="user", help="The username of the server")
     parser.add_argument("--password", dest="password", help="The password of the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
@@ -118,7 +118,7 @@ def list_commands(options):
         print(" %s: %s" % (cmd, info["help"]))
 
 
-@command("modules", help_msg="A tool to manage configuration modules in a project",
+@command("modules", help_msg="Subcommand to manage modules",
          parser_config=ModuleTool.modules_parser_config)
 def modules(options):
     tool = ModuleTool()
@@ -197,7 +197,7 @@ def cmd_parser():
     parser.add_argument("--log-file-level", dest="log_file_level", default=2, type=int,
                         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG")
     parser.add_argument('-v', '--verbose', action='count', default=0,
-                        help="Nothing is only errors, -v warning, -vv info and -vvv debug")
+                        help="Log level for messages going to the console. Default is only errors, -v warning, -vv info and -vvv debug")
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
         cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"])

@@ -61,8 +61,8 @@ Imports can also define an alias, to shorten long names::
 
 
 
-Variables: assignment, reference and import
-============================================
+Variables
+==========
 
 Variables can be defined in any lexical scope. They are visible in their defining scope and its children. 
 A lexical scope is either a namespaces or a code block (area between ``:`` and ``end``).  
@@ -228,7 +228,7 @@ Relation multiplicities are enforced by the compiler. If they are violated a com
 is issued.
 
 
-Instantiation, attribute assignment and Attribute references
+Instantiation
 =============================================================
 
 
@@ -348,7 +348,7 @@ The syntax is:
 
 
 
-Transformations: string interpolation, templates and plug-ins
+Transformations
 ==============================================================
 
 At the lowest level of abstraction the configuration of an infrastructure often consists of

@@ -943,20 +943,22 @@ class ModuleTool(object):
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-        subparser.add_parser("list", help="List all modules in a table")
+        subparser.add_parser("list", help="List all modules used in this project in a table")
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
-        do.add_argument("command", metavar='mycmd', help='the command to  execute')
-        subparser.add_parser("update", help="Update all modules from their source")
-        subparser.add_parser("install", help="List all modules in a table")
+        do.add_argument("command", metavar='command', help='the command to  execute')
+        subparser.add_parser("update", help="Update all modules used in this project")
+        subparser.add_parser("install", help="Install all modules required for this this project")
         subparser.add_parser("status", help="Run a git status on all modules and report")
         subparser.add_parser("push", help="Run a git push on all modules and report")
-        subparser.add_parser("freeze", help="Freeze the version of all modules")
+        # not currently working
+        # subparser.add_parser("freeze", help="Freeze the version of all modules")
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
-        validate = subparser.add_parser("validate", help="Validate the module we are currently in")
-        validate.add_argument("-r", "--repo", help="Addtional repo to load modules from", action="append")
-        validate.add_argument("-n", "--no-clean", help="Do not clean the validation project when finished", action="store_true")
+        validate = subparser.add_parser(
+            "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model")
+        validate.add_argument("-r", "--repo", help="Additional repo to load modules from", action="append")
+        validate.add_argument("-n", "--no-clean", help="Do not remove the validation project when finished", action="store_true")
         validate.add_argument("-s", "--parse-only", help="Only parse the module", action="store_true")
-        validate.add_argument("-i", "--isolate", help="Move module to another directory before cloning."
+        validate.add_argument("-i", "--isolate", help="Move the module to another directory before cloning."
                               " I.e. remove all other modules in the current directory from the search path",
                               action="store_true")
         validate.add_argument("-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag",
