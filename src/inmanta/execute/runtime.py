@@ -19,22 +19,42 @@
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
 from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
+from inmanta.ast.type import Type
 
 
 class ResultVariable(object):
+    """
+        A ResultVariable is like a future
+         - it has a list of waiters
+         - when a value is set, the waiters are notified,
+            they decrease their wait count and
+            queue themselves when their wait count becomes 0
 
-    def __init__(self, value=[]):
+        If a type is set on a result variable, setting a value of another type will produce an exception.
+
+        In order to assist heuristic evaluation, result variables keep track of any statement that will assign a value to it
+    """
+
+    def __init__(self, value=None):
         self.provider = None
         self.waiters = []
         self.value = value
         self.hasValue = False
         self.type = None
 
-    def set_type(self, type):
-        self.type = type
+    def set_type(self, mytype: Type):
+        self.type = mytype
 
     def set_provider(self, provider):
         self.provider = provider
+
+    def get_waiting_providers(self):
+        # todo: optimize?
+        if self.provider is None:
+            return 0
+        if self.hasValue:
+            return 0
+        return 1
 
     def is_ready(self):
         return self.hasValue
@@ -71,6 +91,11 @@ class ResultVariable(object):
 
 
 class AttributeVariable(ResultVariable):
+    """
+        a result variable for a relation with arity 1
+
+        when assigned a value, it will also assign a value to its inverse relation
+    """
 
     def __init__(self, attribute, instance):
         self.attribute = attribute
@@ -94,8 +119,24 @@ class AttributeVariable(ResultVariable):
 
 
 class DelayedResultVariable(ResultVariable):
+    """
+        DelayedResultVariable are ResultVariables of which it is unclear how many results will be set.
 
-    def __init__(self, queue, value=None):
+        i.e. there may be speculation about when they can be considered complete.
+
+        When the freeze method is called, no more values will be accepted and
+        the DelayedResultVariable will behave as a normal ResultVariable.
+
+        When a DelayedResultVariable is definitely full, it is freeze itself.
+
+        DelayedResultVariable are queued with the scheduler at the point at which they might be complete.
+        The scheduler can decide when to freeze them. A DelayedResultVariable  can be complete when
+          - it contains enough elements
+          - there are no providers which still have to provide some values (tracked inexactly)
+            (a queue variable can be dequeued by the scheduler when a provider is added)
+    """
+
+    def __init__(self, queue: "QueueScheduler", value=None):
         ResultVariable.__init__(self, value)
         self.queued = False
         self.queues = queue
@@ -115,13 +156,28 @@ class DelayedResultVariable(ResultVariable):
         self.queued = True
         self.queues.add_possible(self)
 
+    def unqueue(self):
+        self.queued = False
+
 
 class ListVariable(DelayedResultVariable):
 
-    def __init__(self, attribute, instance, queue):
+    def __init__(self, attribute, instance, queue: "QueueScheduler"):
         self.attribute = attribute
         self.myself = instance
+        self.providers = []
         DelayedResultVariable.__init__(self, queue, [])
+
+    def set_provider(self, provider):
+        self.providers.append(provider)
+
+    def get_waiting_providers(self):
+        # todo: optimize?
+        out = len(self.providers) - len(self.value)
+        # heuristics,...
+        if out < 0:
+            return 0
+        return out
 
     def set_value(self, value, location, recur=True):
         if self.hasValue:
@@ -156,17 +212,19 @@ class ListVariable(DelayedResultVariable):
             self.queue()
 
     def can_get(self):
-        return len(self.value) >= self.attribute.low
+        return len(self.value) >= self.attribute.low and self.get_waiting_providers() == 0
+
+    def __str__(self):
+        return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
 
 
 class OptionVariable(DelayedResultVariable):
 
-    def __init__(self, attribute, instance, queue):
+    def __init__(self, attribute, instance, queue: "QueueScheduler"):
         DelayedResultVariable.__init__(self, queue)
         self.value = None
         self.attribute = attribute
         self.myself = instance
-        self.queue()
 
     def set_value(self, value, location, recur=True):
         if self.hasValue:
@@ -185,20 +243,57 @@ class OptionVariable(DelayedResultVariable):
         self.freeze()
 
     def can_get(self):
-        return True
+        return self.get_waiting_providers() == 0
 
     def get_value(self):
         result = DelayedResultVariable.get_value(self)
         if result is None:
-            raise OptionalValueException(None, "Optional variable accessed that has no value ")
+            raise OptionalValueException(
+                None, "Optional variable accessed that has no value (%s.%s)" % (self.myself, self.attribute))
         return result
+
+    def __str__(self):
+        return "OptionVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+
+
+class QueueScheduler(object):
+    """
+        Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
+    """
+
+    def __init__(self, compiler, runqueue, waitqueue, types, allwaiters):
+        self.compiler = compiler
+        self.runqueue = runqueue
+        self.waitqueue = waitqueue
+        self.types = types
+        self.allwaiters = allwaiters
+
+    def add_running(self, item: "Waiter"):
+        return self.runqueue.append(item)
+
+    def add_possible(self, rv: ResultVariable):
+        return self.waitqueue.append(rv)
+
+    def get_compiler(self):
+        return self.compiler
+
+    def get_types(self):
+        return self.types
+
+    def add_to_all(self, item):
+        self.allwaiters.append(item)
 
 
 class Waiter(object):
+    """
+        Waiters represent an executable unit, that can be executed the result variables they depend on have their values.
+    """
 
-    def __init__(self, queue):
+    def __init__(self, queue: QueueScheduler):
         self.waitcount = 1
         self.queue = queue
+        self.queue.add_to_all(self)
+        self.done = False
 
     def await(self, waitable):
         self.waitcount = self.waitcount + 1
@@ -211,30 +306,96 @@ class Waiter(object):
         if self.waitcount < 0:
             raise Exception("SEVERE: COMPILER STATE CORRUPT: waitcount negative")
 
+    def execute(self):
+        pass
 
-class QueueScheduler(object):
 
-    def __init__(self, compiler, runqueue, waitqueue, types):
-        self.compiler = compiler
-        self.runqueue = runqueue
-        self.waitqueue = waitqueue
-        self.types = types
+class ExecutionUnit(Waiter):
+    """
+       Basic assign statement:
+        - Wait for a dict of requirements
+        - Call the execute method on the expression, with a map of the resulting values
+        - Assign the resulting value to the result variable
 
-    def set_queue(self, name, queue):
-        self.queues[name] = queue
+        @param provides: Whether to register this XU as provider to the result variable
+    """
 
-    def add_running(self, item):
-        return self.runqueue.append(item)
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression, provides=True):
+        Waiter.__init__(self, queue_scheduler)
+        self.result = result
+        if provides:
+            result.set_provider(expression)
+        self.requires = requires
+        self.expression = expression
+        self.resolver = resolver
+        self.queue_scheduler = queue_scheduler
+        for r in requires.values():
+            self.await(r)
+        self.ready(self)
 
-    def add_possible(self, rv):
-        return self.waitqueue.append(rv)
+    def execute(self):
+        try:
+            requires = {k: v.get_value() for (k, v) in self.requires.items()}
+            value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
+            self.result.set_value(value, self.expression.location)
+        except RuntimeException as e:
+            e.set_statement(self.expression)
+            raise e
+        self.done = True
 
-    def get_compiler(self):
-        return self.compiler
+    def __repr__(self):
+        return repr(self.expression)
 
-    def get_types(self):
-        return self.types
 
+class HangUnit(Waiter):
+    """
+        Wait for a dict of requirements, call the resume method on the resumer, with a map of the resulting values
+    """
+
+    def __init__(self, queue_scheduler, resolver, requires, target, resumer):
+        Waiter.__init__(self, queue_scheduler)
+        self.queue_scheduler = queue_scheduler
+        self.resolver = resolver
+        self.requires = requires
+        self.resumer = resumer
+        self.target = target
+        for r in requires.values():
+            self.await(r)
+        self.ready(self)
+
+    def execute(self):
+        try:
+            self.resumer.resume({k: v.get_value()
+                                 for (k, v) in self.requires.items()}, self.resolver, self.queue_scheduler, self.target)
+        except RuntimeException as e:
+            e.set_statement(self.resumer)
+            raise e
+        self.done = True
+
+
+class RawUnit(Waiter):
+    """
+        Wait for a map of requirements, call the resume method on the resumer,
+        but with a map of ResultVariables instead of their values
+    """
+
+    def __init__(self, queue_scheduler, resolver, requires, resumer):
+        Waiter.__init__(self, queue_scheduler)
+        self.queue_scheduler = queue_scheduler
+        self.resolver = resolver
+        self.requires = requires
+        self.resumer = resumer
+        for r in requires.values():
+            self.await(r)
+        self.ready(self)
+
+    def execute(self):
+        try:
+            self.resumer.resume(self.requires, self.resolver, self.queue_scheduler)
+        except RuntimeException as e:
+            e.set_statement(self.resumer)
+            raise e
+        self.done = True
 
 """
 Resolution
@@ -294,8 +455,6 @@ class ExecutionContext(object):
     def __init__(self, block, resolver):
         self.block = block
         self.slots = {n: ResultVariable() for n in block.get_variables()}
-        for (n, s) in self.slots.items():
-            s.set_provider(self)
         self.resolver = resolver
 
     def lookup(self, name, root=None):
@@ -321,102 +480,6 @@ class ExecutionContext(object):
         return NamespaceResolver(self, namespace)
 
 
-class WaitUnit(Waiter):
-    """
-        Wait for either a single requirement or a map of requirements, call the resume method on the resumer
-    """
-
-    def __init__(self, queue_scheduler, resolver, require, resumer):
-        Waiter.__init__(self, queue_scheduler)
-        self.queue_scheduler = queue_scheduler
-        self.resolver = resolver
-        self.require = require
-        self.resumer = resumer
-        if isinstance(require, dict):
-            for r in require.values():
-                self.await(r)
-        else:
-            self.await(require)
-        self.ready(self)
-
-    def execute(self):
-        try:
-            requires = {k: v.get_value() for (k, v) in self.require.items()}
-            self.resumer.resume(requires, self.resolver, self.queue_scheduler)
-        except RuntimeException as e:
-            e.set_statement(self.resumer)
-            raise e
-
-
-class HangUnit(Waiter):
-
-    def __init__(self, queue_scheduler, resolver, requires, target, resumer):
-        Waiter.__init__(self, queue_scheduler)
-        self.queue_scheduler = queue_scheduler
-        self.resolver = resolver
-        self.requires = requires
-        self.resumer = resumer
-        self.target = target
-        for r in requires.values():
-            self.await(r)
-        self.ready(self)
-
-    def execute(self):
-        try:
-            self.resumer.resume({k: v.get_value()
-                                 for (k, v) in self.requires.items()}, self.resolver, self.queue_scheduler, self.target)
-        except RuntimeException as e:
-            e.set_statement(self.resumer)
-            raise e
-
-
-class RawUnit(Waiter):
-
-    def __init__(self, queue_scheduler, resolver, requires, resumer):
-        Waiter.__init__(self, queue_scheduler)
-        self.queue_scheduler = queue_scheduler
-        self.resolver = resolver
-        self.requires = requires
-        self.resumer = resumer
-        for r in requires.values():
-            self.await(r)
-        self.ready(self)
-
-    def execute(self):
-        try:
-            self.resumer.resume(self.requires, self.resolver, self.queue_scheduler)
-        except RuntimeException as e:
-            e.set_statement(self.resumer)
-            raise e
-
-
-class ExecutionUnit(Waiter):
-
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
-        Waiter.__init__(self, queue_scheduler)
-        self.result = result
-        result.set_provider(self)
-        self.requires = requires
-        self.expression = expression
-        self.resolver = resolver
-        self.queue_scheduler = queue_scheduler
-        for r in requires.values():
-            self.await(r)
-        self.ready(self)
-
-    def execute(self):
-        try:
-            requires = {k: v.get_value() for (k, v) in self.requires.items()}
-            value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
-            self.result.set_value(value, self.expression.location)
-        except RuntimeException as e:
-            e.set_statement(self.expression)
-            raise e
-
-    def __repr__(self):
-        return repr(self.expression)
-
-
 class Instance(ExecutionContext):
 
     def __init__(self, type, resolver, queue):
@@ -426,13 +489,16 @@ class Instance(ExecutionContext):
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
         self.sid = id(self)
+        self.implemenations = set()
 
     def get_type(self):
         return self.type
 
-    def set_attribute(self, name, value, location, recur=True):
+    def set_attribute(self, name, value, location, recur=True, provides=False):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
+        if provides:
+            self.slots[name].set_provider(self)
         self.slots[name].set_value(value, location, recur)
 
     def get_attribute(self, name):
@@ -444,18 +510,28 @@ class Instance(ExecutionContext):
     def __repr__(self):
         return "%s %02x" % (self.type, self.sid)
 
-    def final(self):
+    def add_implementation(self, impl):
+        if impl in self.implemenations:
+            return False
+        self.implemenations.add(impl)
+        return True
+
+    def final(self, excns):
         """
             The object should be complete, freeze all attributes
         """
+        if len(self.implemenations) == 0:
+            excns.append(RuntimeException(self, "Unable to select implementation for entity %s" %
+                                          self.type.name))
+
         for k, v in self.slots.items():
             if not v.is_ready():
                 if v.can_get():
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
-                    raise UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
-                                         (self, k, attr.location), self, attr)
+                    excns.append(UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
+                                                (self, k, attr.location), self, attr))
 
     def dump(self):
         print("------------ ")
