@@ -246,6 +246,8 @@ class Agent(AgentEndPoint):
         self.latest_code_version = 0
 
         self._sched = Scheduler(io_loop=self._io_loop)
+        if self._splay_interval > 0 and Config.getboolean("config", "agent-run-at-start", False):
+            self._io_loop.add_callback(self.get_latest_version)
         self._sched.add_action(self.get_latest_version, self._deploy_interval, self._splay_value)
 
         self.thread_pool = ThreadPoolExecutor(1)
