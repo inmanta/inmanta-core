@@ -190,6 +190,18 @@ def p_attr_cte(p):
     p[0] = DefineAttribute(p[1], p[2], p[4])
     attach_lnr(p, 2)
 
+
+def p_attr_list(p):
+    "attr : ns_ref '[' ']' ID"
+    p[0] = DefineAttribute(p[1], p[4], None, True)
+    attach_lnr(p, 4)
+
+
+def p_attr_list_cte(p):
+    "attr : ns_ref '[' ']' ID '=' constant_list"
+    p[0] = DefineAttribute(p[1], p[4], p[6], True)
+    attach_lnr(p, 4)
+
 # IMPLEMENT
 
 
@@ -370,6 +382,12 @@ def p_list_def(p):
     attach_lnr(p, 2)
 
 
+def p_list_def_empty(p):
+    " list_def : '[' ']'"
+    p[0] = CreateList([])
+    attach_lnr(p, 1)
+
+
 def p_index_lookup(p):
     " index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3])
@@ -444,6 +462,28 @@ def create_string_format(format_string, variables, location):
             _vars.append((ref, var_str[0]))
 
     return StringFormat(format_string, _vars)
+
+
+def p_constant_list_empty(p):
+    " constant_list : '[' ']' "
+    p[0] = CreateList([])
+    attach_lnr(p, 1)
+
+def p_constant_list(p):
+    " constant_list : '[' constants ']' "
+    p[0] = CreateList(p[2])
+    attach_lnr(p, 1)
+
+
+def p_constants_term(p):
+    "constants : constant"
+    p[0] = [p[1]]
+
+
+def p_constants_collect(p):
+    """constants : constant ',' constants"""
+    p[3].insert(0, p[1])
+    p[0] = p[3]
 
 
 def p_param_list_collect(p):

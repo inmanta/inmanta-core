@@ -24,7 +24,7 @@ from itertools import groupby
 import sys
 from io import StringIO
 
-from nose.tools import assert_equal, assert_regexp_matches, assert_is_not_none
+from nose.tools import assert_equal, assert_regexp_matches, assert_is_not_none, assert_list_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
@@ -32,6 +32,7 @@ from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from nose.tools.nontrivial import raises
+from inmanta.parser import ParserException
 
 
 class CompilerBaseTest(object):
@@ -522,6 +523,74 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         for lf in types["__config__::LogFile"].get_all_instances():
             assert_equal(lf.get_attribute("members").get_value(), len(lf.get_attribute("collectors").get_value()),
                          "content of collectors attribute is not correct on %s" % lf.get_attribute("name").get_value())
+
+    def testListAtributes(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar
+  std::package_state[] ips = ["installed"]
+  string[] floom = []
+  string[] floomx = ["a", "b"]
+  string box = "a"
+end
+
+implement Jos using std::none
+
+a = Jos(bar = [true])
+b = Jos(bar = [true, false])
+c = Jos(bar = [])
+d = Jos(bar = [], floom=["test","test2"])
+
+""")
+        (types, root) = compiler.do_compile()
+
+        def check_jos(jos, bar, ips=["installed"], floom=[], floomx=["a", "b"], box="a"):
+            jos = jos.get_value()
+            assert_list_equal(jos.get_attribute("bar").get_value(), bar)
+            assert_list_equal(jos.get_attribute("ips").get_value(), ips)
+            assert_list_equal(jos.get_attribute("floom").get_value(), floom)
+            assert_list_equal(jos.get_attribute("floomx").get_value(), floomx)
+            assert_equal(jos.get_attribute("box").get_value(), box)
+
+        scope = root.get_child("__config__").scope
+
+        check_jos(scope.lookup("a"), [True])
+        check_jos(scope.lookup("b"), [True, False])
+        check_jos(scope.lookup("c"), [])
+        check_jos(scope.lookup("d"), [], floom=["test", "test2"])
+
+    @raises(ParserException)
+    def testListAtributeTypeViolation1(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar = true
+end
+implement Jos using std::none
+c = Jos()
+""")
+        compiler.do_compile()
+
+    @raises(RuntimeException)
+    def testListAtributeTypeViolation2(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar = ["x"]
+end
+implement Jos using std::none
+c = Jos()
+""")
+        compiler.do_compile()
+
+    @raises(RuntimeException)
+    def testListAtributeTypeViolation3(self):
+        self.setUpForSnippet("""
+entity Jos:
+  bool[] bar
+end
+implement Jos using std::none
+c = Jos(bar = ["X"])
+""")
+        compiler.do_compile()
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
