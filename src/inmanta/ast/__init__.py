@@ -266,13 +266,14 @@ class TypeNotFoundException(CompilerException):
 
 class RuntimeException(CompilerException):
 
-    def __init__(self, stmt, msg):
+    def __init__(self, stmt, msg, root_cause_chance=10):
         CompilerException.__init__(self)
         self.stmt = None
         if stmt is not None:
             self.set_location(stmt.location)
             self.stmt = stmt
         self.msg = msg
+        self.root_cause_chance = root_cause_chance
 
     def set_statement(self, stmt):
         self.set_location(stmt.location)
@@ -280,6 +281,9 @@ class RuntimeException(CompilerException):
 
     def __str__(self, *args, **kwargs):
         return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
+
+    def __le__(self, other):
+        return self.root_cause_chance < other.root_cause_chance
 
 
 class OptionalValueException(RuntimeException):
@@ -344,3 +348,17 @@ class DuplicateException(TypingException):
 
     def __str__(self, *args, **kwargs):
         return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.location)
+
+
+class CompilerError(Exception):
+
+    pass
+
+
+class MultiException(CompilerException):
+
+    def __init__(self, others):
+        self.others = others
+
+    def __str__(self):
+        return "Reported %d errors:\n\t" % len(self.others) + '\n\t'.join([str(e) for e in self.others])

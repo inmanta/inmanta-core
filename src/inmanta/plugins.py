@@ -53,7 +53,7 @@ class Context(object):
         self.owner.copy_location(stmt)
         stmt.normalize(self.resolver)
         reqs = stmt.requires_emit(self.resolver, self.queue)
-        ExecutionUnit(self.queue, self.resolver, self.result, reqs, stmt)
+        ExecutionUnit(self.queue, self.resolver, self.result, reqs, stmt, provides=False)
 
     def get_resolver(self):
         return self.resolver

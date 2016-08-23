@@ -119,7 +119,7 @@ def t_STRING_EMPTY(t):
 
 def t_STRING(t):
     r'\".*?[^\\]\"'
-    t.value = t.value[1:-1]
+    t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     return t
 
 

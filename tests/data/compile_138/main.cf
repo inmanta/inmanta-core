@@ -1,0 +1,38 @@
+"""
+The clue: there are two points of uncertainty
+
+1- mgmt.host_groups is a list
+2- mgmt.agent is optional
+
+mgmt.agent is set when implementation are known, which depends on lma::get_lma which depends on mgmt.host_groups
+
+provides tracking is ineffective, because the statement providing to mgmt.agent has not been emitted yet,...
+
+"""
+
+import std
+
+entity Agent:
+end
+
+entity Name:
+end
+
+Agent agent [1] -- [0:] Name names
+std::Host host [1] -- [0:1] Agent agent
+
+implement Agent using std::none
+implement Name using std::none
+
+mgmt1 = std::Host(name="os-mgmt-1", os=std::linux)
+mgmt1.agent.names = Name()
+
+implementation defaults for std::HostConfig:
+    self.host.agent = Agent()
+end
+
+implement std::HostConfig using defaults
+
+implement std::HostConfig using std::none when lma::get_lma(self.host)
+
+import lma

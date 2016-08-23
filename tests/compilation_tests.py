@@ -24,11 +24,12 @@ from itertools import groupby
 import sys
 from io import StringIO
 
-from nose.tools import assert_equal, assert_regexp_matches
+from nose.tools import assert_equal, assert_regexp_matches, assert_is_not_none
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from nose.tools.nontrivial import raises
 
@@ -440,6 +441,48 @@ end""")
         compiler.do_compile()
         raise AssertionError("Should get exception")
 
+    @raises(RuntimeException)
+    def testIssue126HangingStatements(self):
+        self.setUpForSnippet("""entity LogFile:
+string name
+end
+
+implement LogFile using std::none
+
+entity LogCollector:
+string name
+end
+
+implement LogCollector using std::none
+
+LogCollector collectors [0:] -- [0:] LogFile logfiles
+
+lf1 = LogFile(name="lf1", collectors = c2)
+
+c2 = LogCollector(name="c2", logfiles=lf1)
+""")
+
+        compiler.do_compile()
+
+    @raises(MultiException)
+    def testIssue139Scheduler(self):
+        self.setUpForSnippet("""import std
+
+entity Host extends std::Host:
+    string attr
+end
+implement Host using std::none
+
+host = Host(name="vm1", os=std::linux)
+
+f = std::ConfigFile(host=host, path="", content="{{ host.attr }}")
+std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
+ref = std::Service[host=host, name="svc"]
+
+""")
+
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
@@ -521,3 +564,16 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
     @raises(DoubleSetException)
     def test_compile(self):
         compiler.do_compile()
+
+
+class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_138")
+
+    def test_compile(self):
+        (types, _) = compiler.do_compile()
+        assert_is_not_none(types['std::Host'].get_all_instances()[0]
+                           .get_attribute("agent").get_value()
+                           .get_attribute("names").get_value())

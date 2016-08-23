@@ -1,0 +1,8 @@
+name: beamsat-os
+description: Openstack environment for beamsat
+modulepath: libs
+downloadpath: libs
+repo:
+    - git@git.inmanta.com:modules/
+requires:
+    - std 

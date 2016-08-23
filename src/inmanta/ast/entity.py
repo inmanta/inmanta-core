@@ -73,8 +73,9 @@ class Entity(Type):
         for i in self.implements:
             i.normalize()
 
-        self.subc = SubConstructor(self)
-        self.subc.normalize()
+        self.subc = [SubConstructor(self, i) for i in self.implements]
+        for sub in self.subc:
+            sub.normalize()
 
     def get_sub_constructor(self):
         return self.subc
@@ -278,7 +279,7 @@ class Entity(Type):
         out = Instance(self, resolver, queue)
         out.location = location
         for k, v in attributes.items():
-            out.set_attribute(k, v, location)
+            out.set_attribute(k, v, location, provides=True)
 
         self.add_instance(out)
         return out
@@ -420,10 +421,11 @@ class Entity(Type):
         """
         return self
 
-    def final(self):
+    def final(self, excns):
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
-                raise NotFoundException(stmt, key, "No match in index on type %s with key %s" % (self.get_full_name(), key))
+                excns.append(NotFoundException(stmt, key,
+                                               "No match in index on type %s with key %s" % (self.get_full_name(), key)))
 
 
 class Implementation(object):

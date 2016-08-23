@@ -25,8 +25,9 @@ from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
 
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault
-from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler
+from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
+from inmanta.ast import RuntimeException, MultiException
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -42,14 +43,14 @@ class Scheduler(object):
     def __init__(self):
         pass
 
-    def freeze_all(self):
+    def freeze_all(self, exns):
         for t in [t for t in self.types.values() if isinstance(t, Entity)]:
-            t.final()
+            t.final(exns)
 
         instances = self.types["std::Entity"].get_all_instances()
 
         for i in instances:
-            i.final()
+            i.final(exns)
 
     def dump(self, type="std::Entity"):
         instances = self.types[type].get_all_instances()
@@ -101,7 +102,7 @@ class Scheduler(object):
         for (name, type_symbol) in newtypes:
             types_and_impl[name] = type_symbol
 
-        # now that we have objects for all types, popuate them
+        # now that we have objects for all types, populate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
         others = [t for t in definitions if not isinstance(t, DefineImplement)]
         entities = [t for t in others if isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault)]
@@ -125,7 +126,7 @@ class Scheduler(object):
         for t in types.values():
             t.normalize()
 
-        # normalize other blocks
+        # normalize root blocks
         for block in blocks:
             block.normalize()
 
@@ -156,8 +157,11 @@ class Scheduler(object):
         waitqueue = []
         # queue for RV's that are delayed and had no waiters when they were first in the waitqueue
         zerowaiters = []
+        # queue containing everything, to find haning statements
+        all_statements = []
+
         # Wrap in object to pass around
-        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types)
+        queue = QueueScheduler(compiler, basequeue, waitqueue, self.types, all_statements)
 
         # emit all top level statements
         for block in blocks:
@@ -186,16 +190,22 @@ class Scheduler(object):
                     next.execute()
                     count = count + 1
                 except UnsetException as e:
+                    # some statements don't know all their dependencies up front,...
                     next.await(e.get_result_variable())
 
             # all safe stmts are done
             progress = False
 
-            # find a RV that is has waiters
+            # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
                 next = waitqueue.pop(0)
                 if len(next.waiters) == 0:
                     zerowaiters.append(next)
+                elif next.get_waiting_providers() > 0:
+                    # definitely not done
+                    # drop from queue
+                    # will requeue when value is added
+                    next.unqueue()
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
                     next.freeze()
@@ -206,10 +216,14 @@ class Scheduler(object):
             if not progress:
                 waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
                 zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
-                if(len(waitqueue) > 0):
+                while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
-                    waitqueue.pop(0).freeze()
-                    progress = True
+                    next = waitqueue.pop(0)
+                    if next.get_waiting_providers() > 0:
+                        next.unqueue()
+                    else:
+                        next.freeze()
+                        progress = True
 
             # no one waiting anymore, all done, freeze and finish
             if not progress:
@@ -234,6 +248,26 @@ class Scheduler(object):
         # self.dump()
         # rint(len(self.types["std::Entity"].get_all_instances()))
 
-        self.freeze_all()
+        excns = []
+        self.freeze_all(excns)
+
+        if len(excns) == 0:
+            pass
+        elif len(excns) == 1:
+            raise excns[0]
+        else:
+            raise MultiException(excns)
+
+        all_statements = [x for x in all_statements if not x.done]
+
+        if all_statements:
+            stmt = None
+            for st in all_statements:
+                if isinstance(st, ExecutionUnit):
+                    stmt = st
+                    break
+
+            raise RuntimeException(stmt.expression, "not all statements executed %s" % all_statements)
         # self.dump("std::File")
+
         return True
