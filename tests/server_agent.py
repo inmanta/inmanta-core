@@ -504,7 +504,6 @@ class testAgentServer(ServerTest):
         result = yield self.client.get_param(env_id, "length", resource_id_wov)
         assert_equal(result.code, 200)
 
-
     @gen_test()
     def test_fail(self):
         """
