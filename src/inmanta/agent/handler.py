@@ -26,6 +26,7 @@ from inmanta.agent.io import get_io
 from inmanta import protocol
 from tornado import ioloop
 from inmanta.module import Project
+from inmanta.agent.cache import AgentCache
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +52,29 @@ class SkipResource(Exception):
     pass
 
 
+def cache(f=None, ignore=[], timeout=5000, forVersion=True):
+
+    def actual(f):
+        myignore = set(ignore)
+        myargs = inspect.getargspec(f).args[1:]
+
+        def wrapper(self, *args, **kwds):
+
+            kwds.update(dict(zip(myargs, args)))
+
+            def bound(**kwds):
+                return f(self, **kwds)
+
+            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, **kwds)
+
+        return wrapper
+
+    if f is None:
+        return actual
+    else:
+        return actual(f)
+
+
 class ResourceHandler(object):
     """
         A baseclass for classes that handle resource on a platform
@@ -66,6 +90,9 @@ class ResourceHandler(object):
 
         self._client = None
         self._ioloop = ioloop.IOLoop()
+
+    def set_cache(self, cache: AgentCache):
+        self.cache = cache
 
     def get_client(self):
         if self._client is None:
@@ -175,7 +202,7 @@ class ResourceHandler(object):
 
         except Exception as e:
             LOGGER.exception("An error occurred during deployment of %s" % resource.id)
-            results["log_msg"] = e.args
+            results["log_msg"] = repr(e)
             results["status"] = "failed"
 
         return results
