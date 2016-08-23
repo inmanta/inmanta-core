@@ -51,9 +51,9 @@ class TestServer(protocol.ServerEndpoint):
     @gen.coroutine
     def get_status(self, tid):
         status_list = []
-        for agent in self.get_agents(tid):
-            client = self.get_agent_client(tid, agent)
-            status = yield client.get_agent_status(agent)
+        for session in self._sessions.values():
+            client = session.get_client()
+            status = yield client.get_agent_status("x")
             if status is not None and status.code == 200:
                 status_list.append(status.result)
 
