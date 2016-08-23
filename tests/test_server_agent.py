@@ -189,7 +189,7 @@ class testAgentServer(ServerTest):
 
     # TODO: add test to validate missing handler or other failure in the agent -> result in failure instead of nothing
     # TOOD: handler requires that is missing
-    @gen_test
+    @gen_test()
     def test_dryrun_and_deploy(self):
         """
             dryrun and deploy a configuration model

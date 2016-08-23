@@ -197,22 +197,22 @@ class HeartBeatMethod(Method):
     __method_name__ = "heartbeat"
 
     @protocol(operation="POST", mt=True)
-    def heartbeat(self, tid: uuid.UUID, endpoint_names: list, nodename: str, interval: int):
+    def heartbeat(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str):
         """
             Send a heartbeat to the server
 
+            :paran sid The session ID used by this agent at this moment
             :param tid The environment this node and its agents belongs to
             :param endpoint_names The names of the endpoints on this node
             :param nodename The name of the node from which the heart beat comes
-            :param interval The expected interval between heart beats
         """
 
     @protocol(operation="PUT")
-    def heartbeat_reply(self, tid: uuid.UUID, reply_id: uuid.UUID, data: dict):
+    def heartbeat_reply(self, sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
         """
             Send a reply back to the server
 
-            :param tid The environment this node and its agents belongs to
+            :param sid The session ID used by this agent at this moment
             :param reply_id The id data is a reply to
             :param data The data as a response to the reply
         """

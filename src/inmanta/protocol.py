@@ -978,72 +978,68 @@ def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message)
         del future_list[future_key]
 
 
-class Environment(object):
+class Session(object):
     """
         An environment that segments agents connected to the server
     """
 
-    def __init__(self, io_loop, env_id):
-        self._env_id = env_id
-        self._agents = set()
-        self._agent_node_map = {}
-        self._node_queues = defaultdict(lambda: queues.Queue())
+    def __init__(self, sessionstore, io_loop, sid, hang_interval, timout):
+        self._sid = sid
+        self._interval = hang_interval
+        self._timeout = timout
+        self._sessionstore = sessionstore
+        self._seen = time.time()
+
         self._io_loop = io_loop
+
         self._replies = {}
         self.check_expire()
+        self._queue = queues.Queue()
+
+        self.client = ReturnClient(str(sid), self)
 
     def check_expire(self):
-        # TODO: add expire
-        self._io_loop.call_later(1, self.check_expire)
+        ttw = self._timeout + self._seen - time.time()
+        if ttw < 0:
+            self.expire()
+        else:
+            self._io_loop.call_later(ttw, self.check_expire)
 
     def get_id(self):
-        return self._env_id
-
-    def get_agents(self):
-        return self._agents
+        return self._sid
 
     id = property(get_id)
-    agents = property(get_agents)
 
-    def add_agent(self, node, agent, interval):
-        if agent in self._agent_node_map and self._agent_node_map[agent] != node:
-            LOGGER.info("Agent %s moved from node %s to node %s", agent, self._agent_node_map[agent], node)
+    def expire(self):
+        self._sessionstore.expire(self)
 
-        self._agent_node_map[agent] = node
-        self._agents.add(agent)
+    def seen(self):
+        self._seen = time.time()
 
-    def put_call(self, agent, call_spec):
+    def put_call(self, call_spec):
         future = tornado.concurrent.Future()
-        if agent in self._agent_node_map:
-            LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], agent)
-            nodename = self._agent_node_map[agent]
-            q = self._node_queues[nodename]
-            call_spec["reply_id"] = uuid.uuid4()
-            call_spec["agent"] = agent
-            q.put(call_spec)
 
-            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, int(Config.get("config", "timeout", 2)),
-                         "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], agent))
-            self._replies[call_spec["reply_id"]] = future
-        else:
-            LOGGER.warning("Call for agent %s ignore because it is not known to the server.", agent)
-            future.set_exception(Exception())
+        LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], self._sid)
+
+        q = self._queue
+        call_spec["reply_id"] = uuid.uuid4()
+        q.put(call_spec)
+        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, int(Config.get("config", "timeout", 2)),
+                     "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"],  self._sid))
+        self._replies[call_spec["reply_id"]] = future
 
         return future
 
-    def has_agent(self, agent):
-        return agent in self._agents
-
     @gen.coroutine
-    def get_calls(self, nodename, timeout):
+    def get_calls(self):
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
         """
         try:
-            q = self._node_queues[nodename]
+            q = self._queue
             call_list = []
-            call = yield q.get(timeout=self._io_loop.time() + timeout)
+            call = yield q.get(timeout=self._io_loop.time() + self._interval)
             call_list.append(call)
             while q.qsize() > 0:
                 call = yield q.get()
@@ -1061,6 +1057,9 @@ class Environment(object):
             if not future.done():
                 future.set_result(data)
 
+    def get_client(self):
+        return self.client
+
 
 class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
@@ -1076,15 +1075,12 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         self._sched = Scheduler(self._io_loop)
 
         self._heartbeat_cb = None
-        self._environments = {}
+        self.agent_handles = {}
+        self._sessions = {}
+        self.interval = 60
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
-
-    def get_agents(self, env_id):
-        assert isinstance(env_id, uuid.UUID)
-        env = self.get_env(env_id)
-        return env.agents
 
     def start(self):
         """
@@ -1102,56 +1098,41 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             self._transport_instance.stop_endpoint()
             LOGGER.debug("Stopped %s", self._transport_instance)
 
-    def put_call(self, env_id, agent, call_spec):
-        """
-            Add a call for the given agent on its work queue. This method returns a future to get the response from the
-            agent.
-        """
-        env = self.get_env(env_id)
-        return env.put_call(agent, call_spec)
+    def get_or_create_session(self, sid, tid, endpoint_names, nodename):
+        if isinstance(sid, str):
+            sid = uuid.UUID(sid)
 
-    def get_agent_client(self, env_id, agent):
-        """
-            Get a client to do requests on agent. Returns None if the agent is not known
-        """
-        env = self.get_env(env_id)
-        if not env.has_agent(agent):
-            return None
-        client = ReturnClient("client", self, env_id, agent)
-        return client
+        if sid not in self._sessions:
+            session = self.new_session(sid, tid, endpoint_names, nodename)
+            self._sessions[sid] = session
+        else:
+            session = self._sessions[sid]
+            self.seen(session)
 
-    def add_heartbeat_callback(self, callback):
-        """
-            Register a function that adds custom heartbeat handling to the server. The server does not wait for this method to
-            return. It will be handed over to the ioloop.
-        """
-        self._heartbeat_cb = callback
+        return session
 
-    def get_env(self, env_id):
-        if isinstance(env_id, str):
-            env_id = uuid.UUID(env_id)
+    def new_session(self, sid, tid, endpoint_names, nodename):
+        LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
+        return Session(self, self._io_loop, sid, self.interval * 3 / 4, self.interval)
 
-        if env_id not in self._environments:
-            self._environments[env_id] = Environment(self._io_loop, env_id)
+    def expire(self, session: Session):
+        LOGGER.debug("Expired session with id %s" % (session.get_id()))
+        del self._sessions[session.id]
 
-        return self._environments[env_id]
+    def seen(self, session: Session):
+        LOGGER.debug("Seen session with id %s" % (session.get_id()))
+        session.seen()
 
     @handle(methods.HeartBeatMethod.heartbeat)
     @gen.coroutine
-    def heartbeat(self, tid, endpoint_names, nodename, interval):
-        LOGGER.debug("Received heartbeat from %s for agents %s in %s (interval=%d)",
-                     nodename, ",".join(endpoint_names), tid, interval)
+    def heartbeat(self, sid, tid, endpoint_names, nodename):
+        LOGGER.debug("Received heartbeat from %s for agents %s in %s",
+                     nodename, ",".join(endpoint_names), tid)
 
-        env = self.get_env(tid)
-        for endpoint in endpoint_names:
-            env.add_agent(nodename, endpoint, interval)
-
-        if self._heartbeat_cb is not None:
-            future = self._heartbeat_cb(tid, endpoint_names, nodename, interval)
-            self.add_future(future)
+        session = self.get_or_create_session(sid, tid, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-        call_list = yield env.get_calls(nodename, interval)
+        call_list = yield session.get_calls()
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}
@@ -1162,10 +1143,13 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
     @handle(methods.HeartBeatMethod.heartbeat_reply)
     @gen.coroutine
-    def heartbeat_reply(self, tid, reply_id, data):
-        env = self.get_env(tid)
-        env.set_reply(reply_id, data)
-        return 200
+    def heartbeat_reply(self, sid, reply_id, data):
+        try:
+            env = self._sessions[sid]
+            env.set_reply(reply_id, data)
+            return 200
+        except:
+            LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
 
     def get_security_policy(self):
 
@@ -1201,6 +1185,8 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
 
         self._env_id = None
 
+        self.sessionid = uuid.uuid1()
+
     def get_environment(self):
         return self._env_id
 
@@ -1233,8 +1219,8 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Start a continuous heartbeat call
         """
         while True:
-            result = yield self._client.heartbeat(tid=str(self._env_id), endpoint_names=self.end_point_names,
-                                                  nodename=self.node_name, interval=self._heart_beat_interval)
+            result = yield self._client.heartbeat(sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names,
+                                                  nodename=self.node_name)
             if result.code == 200:
                 if result.result is not None:
                     if "method_calls" in result.result:
@@ -1269,7 +1255,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                                         msg = result_body["message"]
                                     LOGGER.error("An error occurred during heartbeat method call (%s %s): %s",
                                                  method_call["method"], method_call["url"], msg)
-                                self._client.heartbeat_reply(self._env_id, method_call["reply_id"],
+                                self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
                                                              {"result": result_body, "code": status})
 
                             self._io_loop.add_future(call_result, submit_result)
@@ -1339,11 +1325,9 @@ class ReturnClient(Client, metaclass=ClientMeta):
         back to clients over the heartbeat channel.
     """
 
-    def __init__(self, name, server, tid, agent):
+    def __init__(self, name, session):
         super().__init__(name)
-        self._server = server
-        self._tid = tid
-        self._agent = agent
+        self.session = session
 
     @gen.coroutine
     def _call(self, args, kwargs, protocol_properties):
@@ -1352,7 +1336,7 @@ class ReturnClient(Client, metaclass=ClientMeta):
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
         try:
-            return_value = yield self._server.put_call(self._tid, self._agent, call_spec)
+            return_value = yield self.session.put_call(call_spec)
         except gen.TimeoutError:
             return Result(code=500, result="")
 
