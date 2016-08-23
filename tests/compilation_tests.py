@@ -457,7 +457,7 @@ implement LogCollector using std::none
 
 LogCollector collectors [0:] -- [0:] LogFile logfiles
 
-lf1 = LogFile(name="lf1", collectors = c2)
+    lf1 = LogFile(name="lf1", collectors = c2)
 
 c2 = LogCollector(name="c2", logfiles=lf1)
 """)
@@ -482,6 +482,46 @@ ref = std::Service[host=host, name="svc"]
 """)
 
         compiler.do_compile()
+
+    def testMtoN(self):
+        self.setUpForSnippet("""
+entity LogFile:
+  string name
+  number members
+end
+
+implement LogFile using std::none
+
+entity LogCollector:
+  string name
+end
+
+implement LogCollector using std::none
+
+LogCollector collectors [0:] -- [0:] LogFile logfiles
+
+lf1 = LogFile(name="lf1", collectors = [c1, c2], members=3)
+lf2 = LogFile(name="lf2", collectors = [c1, c2], members=2)
+lf3 = LogFile(name="lf3", collectors = lf2.collectors, members=2)
+lf6 = LogFile(name="lf6", collectors = c1, members=1)
+
+lf4 = LogFile(name="lf4", members=2)
+lf5 = LogFile(name="lf5", members=0)
+
+lf7 = LogFile(name="lf7", members=2)
+lf8 = LogFile(name="lf8", collectors = lf7.collectors, members=2)
+
+c1 = LogCollector(name="c1")
+c2 = LogCollector(name="c2", logfiles=[lf4, lf7])
+c3 = LogCollector(name="c3", logfiles=[lf4, lf7, lf1])
+
+std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
+        """)
+
+        (types, _) = compiler.do_compile()
+        for lf in types["__config__::LogFile"].get_all_instances():
+            assert_equal(lf.get_attribute("members").get_value(), len(lf.get_attribute("collectors").get_value()),
+                         "content of collectors attribute is not correct on %s" % lf.get_attribute("name").get_value())
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
