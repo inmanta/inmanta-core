@@ -1,3 +1,18 @@
+v 2016.4 (2016-08-??)
+New relase of the core platform
+- Various compiler improvements
+- Add list types
+- Cleanup of is defined syntax in the DSL and templates
+- Many additional test cases
+- Various bugfixes
+
+v 2016.3 (2016-08-18)
+New release. Way to late due to kids and vacation.
+- Added SSL support
+- Added auth to server
+- Add JIT loading of modules
+- Various bug fixes
+
 v 2016.2.3 (2016-05-30)
 - Fix memory leak in server
 
