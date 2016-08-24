@@ -46,7 +46,7 @@ class StatusMethod(methods.Method):
 from inmanta import protocol  # NOQA
 
 
-class TestServer(protocol.ServerEndpoint):
+class Server(protocol.ServerEndpoint):
     @protocol.handle(StatusMethod.get_status)
     @gen.coroutine
     def get_status(self, tid):
@@ -60,7 +60,7 @@ class TestServer(protocol.ServerEndpoint):
         return 200, {"agents": status_list}
 
 
-class TestAgent(protocol.AgentEndPoint):
+class Agent(protocol.AgentEndPoint):
     @protocol.handle(StatusMethod.get_agent_status)
     @gen.coroutine
     def get_agent_status(self, id):
@@ -95,10 +95,10 @@ def test_2way_protocol(logs=False):
 
     io_loop = IOLoop.current()
     Config.load_config()
-    server = TestServer("server", io_loop)
+    server = Server("server", io_loop)
     server.start()
 
-    agent = TestAgent("agent", io_loop)
+    agent = Agent("agent", io_loop)
     agent.add_end_point_name("agent")
     agent.set_environment(uuid.uuid4())
     agent.start()
