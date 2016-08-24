@@ -227,6 +227,38 @@ Defining relations between entities in the domain model::
 Relation multiplicities are enforced by the compiler. If they are violated a compilation error
 is issued.
 
+New Relation syntax
+====================
+
+A new relation syntex is available, to give a more natural object oriented feeling.
+
+.. code-block:: antlr
+
+   relation: class '.' ID multi '--' class '.' ID multi
+           | class '.' ID multi annotation_list class '.' ID multi ;
+   annotation_list: value
+           | annotation_list ',' value
+   					
+For example (as above)::
+	
+	File.service [1] -- Service.file [1:]
+
+
+.. warning:: The names and multiplicities are on the other side in the old and new syntax!
+    		 
+In this new syntax, relations can also be unidirectional 
+
+.. code-block:: antlr
+
+    uni_relation : class '.' ID multi '--' class
+           | class '.' ID multi annotation_list class;
+    		 
+    		 
+For example)::
+	
+	Service.file [1:] -- File
+    		 
+ 
 
 Instantiation
 =============================================================
