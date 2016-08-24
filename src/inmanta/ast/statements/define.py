@@ -339,21 +339,23 @@ class DefineRelation(DefinitionStatement):
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.left[1], right.name))
 
-        left_end = RelationAttribute(right, left, self.left[1])
-        left_end.set_multiplicity(self.left[2])
-        self.copy_location(left_end)
+        if self.left[1] is not None:
+            left_end = RelationAttribute(right, left, self.left[1])
+            left_end.set_multiplicity(self.left[2])
+            self.copy_location(left_end)
+        else:
+            left_end = None
 
-        right_end = RelationAttribute(left, right, self.right[1])
-        right_end.set_multiplicity(self.right[2])
-        self.copy_location(right_end)
+        if self.right[1] is not None:
+            right_end = RelationAttribute(left, right, self.right[1])
+            right_end.set_multiplicity(self.right[2])
+            self.copy_location(right_end)
+        else:
+            right_end = None
 
-        left_end.end = right_end
-        right_end.end = left_end
-
-        if self.requires == "<":
-            right_end.depends = True
-        elif self.requires == ">":
-            left_end.depends = True
+        if left_end is not None and right_end is not None:
+            left_end.end = right_end
+            right_end.end = left_end
 
 
 class DefineIndex(DefinitionStatement):

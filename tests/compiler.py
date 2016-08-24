@@ -214,8 +214,59 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     tools.assert_equals(rel.right[2], (1, 1))
     tools.assert_equals(statements[0].requires, None)
     tools.assert_equals(len(rel.annotations), 2)
-    tools.assert_equals(rel.annotations[0].name,"foo")
-    tools.assert_equals(rel.annotations[1].name,"bar")
+    tools.assert_equals(rel.annotations[0].name, "foo")
+    tools.assert_equals(rel.annotations[1].name, "bar")
+
+
+def test_new_relation_unidir():
+    """Test definition of relations
+    """
+    statements = parse_code("""
+Test.bar [1] -- Foo
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return four statements")
+    rel = statements[0]
+
+    tools.assert_equals(len(rel.left), 3)
+    tools.assert_equals(len(rel.right), 3)
+
+    tools.assert_equals(rel.left[0], "Test")
+    tools.assert_equals(rel.right[0], "Foo")
+
+    tools.assert_equals(rel.left[1], None)
+    tools.assert_equals(rel.right[1], "bar")
+
+    tools.assert_equals(rel.left[2], None)
+    tools.assert_equals(rel.right[2], (1, 1))
+    tools.assert_equals(statements[0].requires, None)
+
+
+def test_new_relation_with_annotations_unidir():
+    """Test definition of relations
+    """
+    statements = parse_code("""
+Test.bar [1] foo,bar Foo
+""")
+
+    tools.assert_equals(len(statements), 1, "Should return four statements")
+    rel = statements[0]
+
+    tools.assert_equals(len(rel.left), 3)
+    tools.assert_equals(len(rel.right), 3)
+
+    tools.assert_equals(rel.left[0], "Test")
+    tools.assert_equals(rel.right[0], "Foo")
+
+    tools.assert_equals(rel.left[1], None)
+    tools.assert_equals(rel.right[1], "bar")
+
+    tools.assert_equals(rel.left[2], None)
+    tools.assert_equals(rel.right[2], (1, 1))
+    tools.assert_equals(statements[0].requires, None)
+    tools.assert_equals(len(rel.annotations), 2)
+    tools.assert_equals(rel.annotations[0].name, "foo")
+    tools.assert_equals(rel.annotations[1].name, "bar")
 
 
 def test_implementation():

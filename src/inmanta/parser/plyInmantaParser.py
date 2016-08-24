@@ -268,9 +268,21 @@ def p_relation_new(p):
     attach_lnr(p, 2)
 
 
+def p_relation_new_unidir(p):
+    "relation : class_ref '.' ID multi REL class_ref"
+    p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]))
+    attach_lnr(p, 2)
+
+
 def p_relation_new_annotated(p):
     "relation : class_ref '.' ID multi operand_list class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
+    attach_lnr(p, 2)
+
+
+def p_relation_new_annotated_unidir(p):
+    "relation : class_ref '.' ID multi operand_list class_ref"
+    p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 

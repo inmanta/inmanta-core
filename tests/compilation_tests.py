@@ -617,6 +617,72 @@ Test2(test1 = b)
         assert_equal(len(scope.lookup("a").get_value().get_attribute("tests").get_value()), 2)
         assert_equal(len(scope.lookup("b").get_value().get_attribute("tests").get_value()), 1)
 
+    def testNewRelationWithAnnotationSyntax(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+annotation = 5
+
+Test1.tests [0:] annotation Test2.test1 [1]
+
+a = Test1(tests=[Test2(),Test2()])
+b = Test1()
+Test2(test1 = b)
+""")
+        types, root = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        assert_equal(len(scope.lookup("a").get_value().get_attribute("tests").get_value()), 2)
+        assert_equal(len(scope.lookup("b").get_value().get_attribute("tests").get_value()), 1)
+
+    def testNewRelationUniDir(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1.tests [0:] -- Test2
+
+a = Test1(tests=[Test2(),Test2()])
+
+""")
+        types, root = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        assert_equal(len(scope.lookup("a").get_value().get_attribute("tests").get_value()), 2)
+
+    @raises(DuplicateException)
+    def testNewRelationUniDirDoubleDefine(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1.tests [0:] -- Test2
+
+Test2.xx [1] -- Test1.tests [0:]
+""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
