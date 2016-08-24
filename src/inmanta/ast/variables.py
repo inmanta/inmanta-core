@@ -62,7 +62,11 @@ class Reference(ExpressionStatement):
         if self.name == 'self':
             return self
         else:
-            return AttributeReference(Reference('self'), self.name)
+            ref = Reference('self')
+            self.copy_location(ref)
+            attr_ref = AttributeReference(ref, self.name)
+            self.copy_location(attr_ref)
+            return attr_ref
 
 
 class AttributeReferenceHelper(object):
