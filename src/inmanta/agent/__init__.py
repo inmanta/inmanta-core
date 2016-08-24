@@ -322,6 +322,9 @@ class Agent(AgentEndPoint):
         """
             Trigger an update
         """
+        if id not in self.end_point_names:
+            return 200
+
         LOGGER.info("Agent %s got a trigger to update in environment %s", id, tid)
         future = self.get_latest_version_for_agent(id)
         self.add_future(future)
@@ -332,6 +335,9 @@ class Agent(AgentEndPoint):
         """
             Get the latest version for the given agent (this is also how we are notified)
         """
+        if agent not in self.end_point_names:
+            return 200
+
         LOGGER.debug("Getting latest resources for %s" % agent)
         result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
         if result.code == 404:
@@ -361,6 +367,9 @@ class Agent(AgentEndPoint):
         """
            Run a dryrun of the given version
         """
+        if agent not in self.end_point_names:
+            return 200
+
         LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, id, version, tid)
         assert tid == self._env_id
 
@@ -457,6 +466,9 @@ class Agent(AgentEndPoint):
         """
             Restore a snapshot
         """
+        if agent not in self.end_point_names:
+            return 200
+
         LOGGER.info("Start a restore %s", restore_id)
 
         yield self._ensure_code(tid, resources[0][1]["id_fields"]["version"],
@@ -512,6 +524,9 @@ class Agent(AgentEndPoint):
         """
             Create a snapshot of stateful resources managed by this agent
         """
+        if agent not in self.end_point_names:
+            return 200
+
         LOGGER.info("Start snapshot %s", snapshot_id)
 
         yield self._ensure_code(tid, resources[0]["id_fields"]["version"],
@@ -617,6 +632,9 @@ class Agent(AgentEndPoint):
     @protocol.handle(methods.AgentParameterMethod.get_parameter)
     @gen.coroutine
     def get_facts(self, tid, agent, resource):
+        if agent not in self.end_point_names:
+            return 200
+
         provider = None
         try:
             data = resource["fields"]
