@@ -56,14 +56,14 @@ class WaitR(Resource):
 
 
 @provider("test::Resource", name="test_resource")
-class TestProvider(ResourceHandler):
+class Provider(ResourceHandler):
 
     def check_resource(self, resource):
         current = resource.clone()
-        current.purged = not TestProvider.isset(resource.id.get_agent_name(), resource.key)
+        current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
         if not current.purged:
-            current.value = TestProvider.get(resource.id.get_agent_name(), resource.key)
+            current.value = Provider.get(resource.id.get_agent_name(), resource.key)
         else:
             current.value = None
 
@@ -77,17 +77,17 @@ class TestProvider(ResourceHandler):
         changes = self.list_changes(resource)
         if "purged" in changes:
             if changes["purged"][1]:
-                TestProvider.delete(resource.id.get_agent_name(), resource.key)
+                Provider.delete(resource.id.get_agent_name(), resource.key)
             else:
-                TestProvider.set(resource.id.get_agent_name(), resource.key, resource.value)
+                Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
 
         if "value" in changes:
-            TestProvider.set(resource.id.get_agent_name(), resource.key, resource.value)
+            Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
 
         return changes
 
     def snapshot(self, resource):
-        return json.dumps({"value": TestProvider.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
+        return json.dumps({"value": Provider.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
 
     def restore(self, resource, snapshot_id):
         content = self.get_file(snapshot_id)
@@ -96,10 +96,10 @@ class TestProvider(ResourceHandler):
 
         data = json.loads(content.decode())
         if "value" in data:
-            TestProvider.set(resource.id.get_agent_name(), resource.key, data["value"])
+            Provider.set(resource.id.get_agent_name(), resource.key, data["value"])
 
     def facts(self, resource):
-        return {"length": len(TestProvider.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
+        return {"length": len(Provider.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
 
     _STATE = defaultdict(dict)
 
@@ -124,14 +124,14 @@ class TestProvider(ResourceHandler):
 
 
 @provider("test::Fail", name="test_fail")
-class TestFail(ResourceHandler):
+class Fail(ResourceHandler):
 
     def check_resource(self, resource):
         current = resource.clone()
-        current.purged = not TestProvider.isset(resource.id.get_agent_name(), resource.key)
+        current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
         if not current.purged:
-            current.value = TestProvider.get(resource.id.get_agent_name(), resource.key)
+            current.value = Provider.get(resource.id.get_agent_name(), resource.key)
         else:
             current.value = None
 
@@ -148,14 +148,14 @@ waiter = Condition()
 
 
 @provider("test::Wait", name="test_wait")
-class TestWait(ResourceHandler):
+class Wait(ResourceHandler):
 
     def check_resource(self, resource):
         current = resource.clone()
-        current.purged = not TestProvider.isset(resource.id.get_agent_name(), resource.key)
+        current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
         if not current.purged:
-            current.value = TestProvider.get(resource.id.get_agent_name(), resource.key)
+            current.value = Provider.get(resource.id.get_agent_name(), resource.key)
         else:
             current.value = None
 
@@ -206,8 +206,8 @@ class testAgentServer(ServerTest):
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
-        TestProvider.set("agent1", "key2", "incorrect_value")
-        TestProvider.set("agent1", "key3", "value")
+        Provider.set("agent1", "key2", "incorrect_value")
+        Provider.set("agent1", "key3", "value")
 
         version = int(time.time())
 
@@ -241,13 +241,13 @@ class testAgentServer(ServerTest):
                      ]
 
         result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         # request a dryrun
         result = yield self.client.dryrun_request(env_id, version)
-        assert_equal(result.code, 200)
-        assert_equal(result.result["dryrun"]["total"], len(resources))
-        assert_equal(result.result["dryrun"]["todo"], len(resources))
+        assert result.code == 200
+        assert result.result["dryrun"]["total"] == len(resources)
+        assert result.result["dryrun"]["todo"] == len(resources)
 
         # get the dryrun results
         result = yield self.client.dryrun_list(env_id, version)
@@ -291,10 +291,10 @@ class testAgentServer(ServerTest):
 
         assert_equal(result.result["model"]["done"], len(resources))
 
-        assert_true(TestProvider.isset("agent1", "key1"))
-        assert_equal(TestProvider.get("agent1", "key1"), "value1")
-        assert_equal(TestProvider.get("agent1", "key2"), "value2")
-        assert_true(not TestProvider.isset("agent1", "key3"))
+        assert_true(Provider.isset("agent1", "key1"))
+        assert_equal(Provider.get("agent1", "key1"), "value1")
+        assert_equal(Provider.get("agent1", "key2"), "value2")
+        assert_true(not Provider.isset("agent1", "key3"))
 
     @gen_test()
     def test_snapshot_restore(self):
@@ -312,7 +312,7 @@ class testAgentServer(ServerTest):
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
-        TestProvider.set("agent1", "key", "value")
+        Provider.set("agent1", "key", "value")
 
         version = int(time.time())
 
@@ -366,7 +366,7 @@ class testAgentServer(ServerTest):
             yield gen.sleep(0.1)
 
         # Change the value of the resource
-        TestProvider.set("agent1", "key", "other")
+        Provider.set("agent1", "key", "other")
 
         # try to do a restore
         result = yield self.client.restore_snapshot(env_id, snapshot_id)
@@ -384,7 +384,7 @@ class testAgentServer(ServerTest):
             assert_equal(result.code, 200)
             yield gen.sleep(0.1)
 
-        assert_equal(TestProvider.get("agent1", "key"), "value")
+        assert_equal(Provider.get("agent1", "key"), "value")
 
     @gen_test
     def test_get_facts(self):
@@ -402,7 +402,7 @@ class testAgentServer(ServerTest):
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
-        TestProvider.set("agent1", "key", "value")
+        Provider.set("agent1", "key", "value")
 
         version = int(time.time())
 
@@ -469,7 +469,7 @@ class testAgentServer(ServerTest):
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
-        TestProvider.set("agent1", "key", "value")
+        Provider.set("agent1", "key", "value")
 
         version = int(time.time())
 
@@ -524,7 +524,7 @@ class testAgentServer(ServerTest):
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
-        TestProvider.set("agent1", "key", "value")
+        Provider.set("agent1", "key", "value")
 
         version = int(time.time())
 
@@ -614,7 +614,7 @@ class testAgentServer(ServerTest):
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
-        TestProvider.set("agent1", "key", "value")
+        Provider.set("agent1", "key", "value")
 
         def makeVersion(offset=0):
             version = int(time.time() + offset)
