@@ -167,24 +167,6 @@ Test tests [3] -- [:10] Foo bars
     tools.assert_equals(statements[0].requires, None)
 
 
-def test_directional_relation():
-    """Test definition of relations
-    """
-    statements = parse_code("""
-Test tests [0:] -> [5:10] Foo bars
-""")
-
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(statements[0].requires, None)
-
-    statements = parse_code("""
-Test tests [0:] <- [5:10] Foo bars
-""")
-
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(statements[0].requires, None)
-
-
 def test_implementation():
     """Test the definition of implementations
     """
