@@ -33,6 +33,7 @@ from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from nose.tools.nontrivial import raises
 from inmanta.parser import ParserException
+from unittest.case import skip
 
 
 class CompilerBaseTest(object):
@@ -591,6 +592,30 @@ implement Jos using std::none
 c = Jos(bar = ["X"])
 """)
         compiler.do_compile()
+
+    def testNewRelationSyntax(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1.tests [0:] -- Test2.test1 [1]
+
+a = Test1(tests=[Test2(),Test2()])
+b = Test1()
+Test2(test1 = b)
+""")
+        types, root = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        assert_equal(len(scope.lookup("a").get_value().get_attribute("tests").get_value()), 2)
+        assert_equal(len(scope.lookup("b").get_value().get_attribute("tests").get_value()), 1)
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):

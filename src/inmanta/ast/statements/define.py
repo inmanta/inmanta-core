@@ -294,8 +294,9 @@ class DefineRelation(DefinitionStatement):
         Define a relation
     """
 
-    def __init__(self, left, right):
+    def __init__(self, left, right, annotations=[]):
         DefinitionStatement.__init__(self)
+        self.annotations = annotations
 
         self.left = left
         self.right = right

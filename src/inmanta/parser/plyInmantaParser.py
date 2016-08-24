@@ -34,6 +34,11 @@ from inmanta.ast.variables import Reference, AttributeReference
 from inmanta.parser import plyInmantaLex, ParserException
 from inmanta.ast.blocks import BasicBlock
 import re
+import logging
+
+
+LOGGER = logging.getLogger()
+
 
 file = "NOFILE"
 namespace = None
@@ -250,7 +255,22 @@ def p_implementation_2(p):
 
 def p_relation(p):
     "relation : class_ref ID multi REL multi class_ref ID"
+    if not(p[4] == '--'):
+        LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
+                       (p[4], Location(file, p.lineno(4))))
     p[0] = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
+    attach_lnr(p, 2)
+
+
+def p_relation_new(p):
+    "relation : class_ref '.' ID multi REL class_ref '.' ID multi"
+    p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]))
+    attach_lnr(p, 2)
+
+
+def p_relation_new_annotated(p):
+    "relation : class_ref '.' ID multi operand_list class_ref '.' ID multi"
+    p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
@@ -474,6 +494,7 @@ def p_constant_list_empty(p):
     " constant_list : '[' ']' "
     p[0] = CreateList([])
     attach_lnr(p, 1)
+
 
 def p_constant_list(p):
     " constant_list : '[' constants ']' "

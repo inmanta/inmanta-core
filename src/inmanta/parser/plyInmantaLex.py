@@ -59,7 +59,7 @@ def t_SEP(t):
 
 
 def t_REL(t):
-    r'--'
+    r'--|->|<-'
     return t
 
 
