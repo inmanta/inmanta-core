@@ -4,7 +4,7 @@ setup(
     name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2016.4",
+    version="2016.5",
     description="Inmanta Deployment Platform",
     author="Inmanta",
     author_email="code@inmanta.com",
