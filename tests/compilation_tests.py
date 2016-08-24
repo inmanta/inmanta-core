@@ -24,16 +24,16 @@ from itertools import groupby
 import sys
 from io import StringIO
 
+
 from nose.tools import assert_equal, assert_regexp_matches, assert_is_not_none, assert_list_equal
+from nose.tools.nontrivial import raises
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from nose.tools.nontrivial import raises
 from inmanta.parser import ParserException
-from unittest.case import skip
 
 
 class CompilerBaseTest(object):
