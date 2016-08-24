@@ -1,0 +1,194 @@
+--- tests/server_agent.py
++++ tests/server_agent.py
+@@ -381,3 +443,191 @@ class testAgentServer(ServerTest):
+             yield gen.sleep(0.1)
+ 
+         assert_equal(TestProvider.get("agent1", "key"), "value")
++
++    @gen_test()
++    def test_fail(self):
++        """
++            Test results when a step fails
++        """
++        result = yield self.client.create_project("env-test")
++        project_id = result.result["project"]["id"]
++
++        result = yield self.client.create_environment(project_id=project_id, name="dev")
++        env_id = result.result["environment"]["id"]
++
++        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
++                                 code_loader=False)
++        self.agent.add_end_point_name("agent1")
++        self.agent.start()
++
++        TestProvider.set("agent1", "key", "value")
++
++        version = int(time.time())
++
++        resources = [{'key': 'key',
++                      'value': 'value',
++                      'id': 'test::Fail[agent1,key=key],v=%d' % version,
++                      'requires': [],
++                      'purged': False,
++                      'state_id': '',
++                      'allow_restore': True,
++                      'allow_snapshot': True,
++                      },
++                     {'key': 'key2',
++                      'value': 'value',
++                      'id': 'test::Resource[agent1,key=key2],v=%d' % version,
++                      'requires': ['test::Fail[agent1,key=key],v=%d' % version],
++                      'purged': False,
++                      'state_id': '',
++                      'allow_restore': True,
++                      'allow_snapshot': True,
++                      },
++                     {'key': 'key3',
++                      'value': 'value',
++                      'id': 'test::Resource[agent1,key=key3],v=%d' % version,
++                      'requires': ['test::Fail[agent1,key=key],v=%d' % version],
++                      'purged': False,
++                      'state_id': '',
++                      'allow_restore': True,
++                      'allow_snapshot': True,
++                      },
++                     {'key': 'key4',
++                      'value': 'value',
++                      'id': 'test::Resource[agent1,key=key4],v=%d' % version,
++                      'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
++                      'purged': False,
++                      'state_id': '',
++                      'allow_restore': True,
++                      'allow_snapshot': True,
++                      },
++                     {'key': 'key5',
++                      'value': 'value',
++                      'id': 'test::Resource[agent1,key=key5],v=%d' % version,
++                      'requires': ['test::Resource[agent1,key=key4],v=%d' % version,
++                                   'test::Fail[agent1,key=key],v=%d' % version],
++                      'purged': False,
++                      'state_id': '',
++                      'allow_restore': True,
++                      'allow_snapshot': True,
++                      }]
++
++        result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
++        assert_equal(result.code, 200)
++
++        # deploy and wait until done
++        result = yield self.client.release_version(env_id, version, True)
++        assert_equal(result.code, 200)
++
++        result = yield self.client.get_version(env_id, version)
++        assert_equal(result.code, 200)
++        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
++            result = yield self.client.get_version(env_id, version)
++            yield gen.sleep(0.1)
++
++        assert_equal(result.result["model"]["done"], len(resources))
++
++        states = {x["id"]: x["status"] for x in result.result["resources"]}
++
++        assert_equal(states['test::Fail[agent1,key=key],v=%d' % version], "failed")
++        assert_equal(states['test::Resource[agent1,key=key2],v=%d' % version], "skipped")
++        assert_equal(states['test::Resource[agent1,key=key3],v=%d' % version], "skipped")
++        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version], "skipped")
++        assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version], "skipped")
++
++    @gen_test()
++    def test_wait(self):
++        """
++            Test results for a cancel
++        """
++        result = yield self.client.create_project("env-test")
++        project_id = result.result["project"]["id"]
++
++        result = yield self.client.create_environment(project_id=project_id, name="dev")
++        env_id = result.result["environment"]["id"]
++
++        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
++                                 code_loader=False)
++        self.agent.add_end_point_name("agent1")
++        self.agent.start()
++
++        TestProvider.set("agent1", "key", "value")
++
++        def makeVersion(offset=0):
++            version = int(time.time() + offset)
++
++            resources = [{'key': 'key',
++                          'value': 'value',
++                          'id': 'test::Wait[agent1,key=key],v=%d' % version,
++                          'requires': [],
++                          'purged': False,
++                          'state_id': '',
++                          'allow_restore': True,
++                          'allow_snapshot': True,
++                          },
++                         {'key': 'key2',
++                          'value': 'value',
++                          'id': 'test::Resource[agent1,key=key2],v=%d' % version,
++                          'requires': ['test::Wait[agent1,key=key],v=%d' % version],
++                          'purged': False,
++                          'state_id': '',
++                          'allow_restore': True,
++                          'allow_snapshot': True,
++                          },
++                         {'key': 'key3',
++                          'value': 'value',
++                          'id': 'test::Resource[agent1,key=key3],v=%d' % version,
++                          'requires': [],
++                          'purged': False,
++                          'state_id': '',
++                          'allow_restore': True,
++                          'allow_snapshot': True,
++                          },
++                         {'key': 'key4',
++                          'value': 'value',
++                          'id': 'test::Resource[agent1,key=key4],v=%d' % version,
++                          'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
++                          'purged': False,
++                          'state_id': '',
++                          'allow_restore': True,
++                          'allow_snapshot': True,
++                          },
++                         {'key': 'key5',
++                          'value': 'value',
++                          'id': 'test::Resource[agent1,key=key5],v=%d' % version,
++                          'requires': ['test::Resource[agent1,key=key4],v=%d' % version,
++                                       'test::Wait[agent1,key=key],v=%d' % version],
++                          'purged': False,
++                          'state_id': '',
++                          'allow_restore': True,
++                          'allow_snapshot': True,
++                          }]
++            return version, resources
++
++        version1, resources = makeVersion()
++        result = yield self.client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
++        assert_equal(result.code, 200)
++
++        # deploy and wait until done
++        result = yield self.client.release_version(env_id, version1, True)
++        assert_equal(result.code, 200)
++
++        version2, resources = makeVersion(3)
++        result = yield self.client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
++        assert_equal(result.code, 200)
++
++        # deploy and wait until done
++        result = yield self.client.release_version(env_id, version2, True)
++        assert_equal(result.code, 200)
++
++        yield gen.sleep(1)
++
++        result = yield self.client.get_version(env_id, version1)
++        assert_equal(result.code, 200)
++
++        states = {x["id"]: x["status"] for x in result.result["resources"]}
++
++        assert_equal(states['test::Wait[agent1,key=key],v=%d' % version1], "")
++        assert_equal(states['test::Resource[agent1,key=key2],v=%d' % version1], "")
++        assert_equal(states['test::Resource[agent1,key=key3],v=%d' % version1], "deployed")
++        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version1], "")
++        assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version1], "")
