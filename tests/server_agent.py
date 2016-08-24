@@ -18,8 +18,8 @@
 from collections import defaultdict
 import time
 import json
-from time import sleep
-import unittest
+from threading import Condition
+
 
 from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
@@ -144,6 +144,8 @@ class TestFail(ResourceHandler):
     def do_changes(self, resource):
         raise Exception()
 
+waiter = Condition()
+
 
 @provider("test::Wait", name="test_wait")
 class TestWait(ResourceHandler):
@@ -164,7 +166,9 @@ class TestWait(ResourceHandler):
         return self._diff(current, desired)
 
     def do_changes(self, resource):
-        sleep(3)
+        waiter.acquire()
+        waiter.wait()
+        waiter.release()
 
 
 class testAgentServer(ServerTest):
@@ -516,7 +520,7 @@ class testAgentServer(ServerTest):
         env_id = result.result["environment"]["id"]
 
         self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
-                                 code_loader=False)
+                                 code_loader=False, poolsize=10)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
@@ -594,8 +598,7 @@ class testAgentServer(ServerTest):
         assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version], "skipped")
         assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version], "skipped")
 
-    @unittest.skip("temporarily disabled")
-    @gen_test()
+    @gen_test(timeout=10000)
     def test_wait(self):
         """
             Test results for a cancel
@@ -607,7 +610,7 @@ class testAgentServer(ServerTest):
         env_id = result.result["environment"]["id"]
 
         self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
-                                 code_loader=False)
+                                 code_loader=False, poolsize=10)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
 
@@ -664,13 +667,39 @@ class testAgentServer(ServerTest):
                           }]
             return version, resources
 
+        @gen.coroutine
+        def waitForDone(version):
+            # unhang waiters
+            result = yield self.client.get_version(env_id, version)
+            assert_equal(result.code, 200)
+            while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+                result = yield self.client.get_version(env_id, version)
+                if result.result["model"]["done"] > 0:
+                    waiter.acquire()
+                    waiter.notifyAll()
+                    waiter.release()
+                yield gen.sleep(0.1)
+            assert_equal(result.result["model"]["done"], len(resources))
+
+        @gen.coroutine
+        def waitForResources(version, n):
+            result = yield self.client.get_version(env_id, version)
+            assert_equal(result.code, 200)
+
+            while result.result["model"]["done"] < n:
+                result = yield self.client.get_version(env_id, version)
+                yield gen.sleep(0.1)
+            assert_equal(result.result["model"]["done"], n)
+
         version1, resources = makeVersion()
         result = yield self.client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
         assert_equal(result.code, 200)
 
-        # deploy and wait until done
+        # deploy and wait until one is ready
         result = yield self.client.release_version(env_id, version1, True)
         assert_equal(result.code, 200)
+
+        yield waitForResources(version1, 2)
 
         version2, resources = makeVersion(3)
         result = yield self.client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
@@ -680,15 +709,19 @@ class testAgentServer(ServerTest):
         result = yield self.client.release_version(env_id, version2, True)
         assert_equal(result.code, 200)
 
-        yield gen.sleep(1)
+        yield waitForDone(version2)
+
+        result = yield self.client.get_version(env_id, version2)
+        assert_equal(result.code, 200)
+        for x in result.result["resources"]:
+            assert_equal(x["status"], "deployed")
 
         result = yield self.client.get_version(env_id, version1)
         assert_equal(result.code, 200)
-
         states = {x["id"]: x["status"] for x in result.result["resources"]}
 
-        assert_equal(states['test::Wait[agent1,key=key],v=%d' % version1], "")
+        assert_equal(states['test::Wait[agent1,key=key],v=%d' % version1], "deployed")
         assert_equal(states['test::Resource[agent1,key=key2],v=%d' % version1], "")
         assert_equal(states['test::Resource[agent1,key=key3],v=%d' % version1], "deployed")
-        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version1], "")
+        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version1], "deployed")
         assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version1], "")

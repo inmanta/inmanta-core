@@ -205,7 +205,7 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
 
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None):
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
         super().__init__("agent", io_loop, heartbeat_interval=int(Config.get("config", "heartbeat-interval", 10)))
 
         if agent_map is None:
@@ -257,7 +257,7 @@ class Agent(AgentEndPoint):
             self._io_loop.add_callback(self.get_latest_version)
         self._sched.add_action(self.get_latest_version, self._deploy_interval, self._splay_value)
 
-        self.thread_pool = ThreadPoolExecutor(1)
+        self.thread_pool = ThreadPoolExecutor(poolsize)
 
         self.cache = AgentCache()
 
