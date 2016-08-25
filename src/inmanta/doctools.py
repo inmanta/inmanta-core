@@ -21,6 +21,8 @@ import os
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta.config import Config
+import uuid
+import sys
 
 
 class CompilerFixture():
@@ -29,7 +31,7 @@ class CompilerFixture():
         self.libs = tempfile.mkdtemp()
         self.env = tempfile.mkdtemp()
         Config.load_config()
-        Config.set("config", "environment", "0000")
+        Config.set("config", "environment", str(uuid.uuid4()))
 
     def run_snippet(self, snippet):
         project_dir = tempfile.mkdtemp()
@@ -51,6 +53,30 @@ class CompilerFixture():
         Project.set(Project(project_dir))
         compiler.do_compile()
 
+    def run_project(self, root):
+        project_dir = root
+        env = os.path.join(project_dir, ".env")
+        if os.path.exists(env):
+            os.remove(env)
+        os.symlink(self.env, env)
+
+        project = os.path.join(project_dir, "project.yml")
+        if os.path.exists(project):
+            os.remove(project)
+        with open(project, "w") as cfg:
+            cfg.write(
+                """
+            name: snippet test
+            modulepath: [libs,%s]
+            downloadpath: %s
+            version: 1.0
+            repo: ['git@git.inmanta.com:modules/', 'git@git.inmanta.com:config/']"""
+                % (self.libs, self.libs))
+
+        Project.set(Project(project_dir))
+        compiler.do_compile()
+        os.remove(project)
+
     def run_file(self, filename):
         with open(filename, "r") as f:
             self.run_snippet(f.read())
@@ -58,16 +84,32 @@ class CompilerFixture():
 
 def test_snippets():
     """ Test all code snippets in *.snip files"""
+    here = os.getcwd()
     fixture = CompilerFixture()
-    for i in glob.glob("*.snip"):
+    fail = False
+    for i in glob.glob(here + "/*.snip"):
+        print("=" * 20)
+        print(i)
         try:
             fixture.run_file(i)
         except Exception as e:
-            print("=" * 20)
-            print(i)
             print(e)
-            print("=" * 20)
+            fail = True
+        print("=" * 20)
 
+    for i in os.listdir(here):
+        try:
+            x = os.path.join(here, i)
+            print("=" * 20)
+            print(x)
+            if os.path.isdir(x):
+                fixture.run_project(x)
+        except Exception as e:
+            print(e)
+            fail = True
+        print("=" * 20)
+    return fail
 
 if __name__ == '__main__':
-    test_snippets()
+    if not test_snippets():
+        sys.exit(1)

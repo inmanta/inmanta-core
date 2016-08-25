@@ -54,14 +54,31 @@ config::
 Actual usage
 ----------------------------------
 
-In practice, creating instances of `vm::Host` is not practical: it takes too many parameters and they are often the same.
+Creating instances of ``vm::Host`` is not practival: it takes too many parameters and they are often the same.
 
-Models using an IaaS are usually build around two user defined types: a custom infrastructure object and a custom host object.
-The infrastructure object collects all system wide config (such as the ``vm::IaaS`` object, monitoring cluster, networks, global parameters,...)
-The host object contains all seeting that are the same for all hosts.
+Models using an IaaS are built around two user defined types: a custom infrastructure object and a custom host object.
 
-For example
+* The infrastructure object collects all system wide config (such as the ``vm::IaaS`` object, monitoring cluster, networks, global parameters,...)
+* The host object contains all settings that are the same for all hosts.
 
-.. literalinclude:: ../examples/openstackClean.snip
+For example: 
+
+.. todo:: add link to source
+
+We can reduce the main file to:
+
+.. literalinclude:: ../examples/openstackclean/main.cf
    :language: ruby
 
+With the following module:
+
+.. literalinclude:: ../examples/openstackclean/libs/mymodule/model/_init.cf
+   :language: ruby
+   
+If this were not an example, we would still make the following changes:
+
+* hardcode the ``image_id`` and ``os`` (and perhaps ``flavor``) into the defintion of ``myhost``. 
+* the parameters on top would be moved to either a :doc:`form <forms>` or filled in directly into the constructor.
+* use ``std::password`` to store passwords, to prevent accidential check-ins with passwords in the source
+
+ 
