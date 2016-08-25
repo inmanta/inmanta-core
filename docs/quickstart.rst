@@ -1,6 +1,6 @@
 .. vim: spell
 
-Getting started
+Quickstart
 ***************
 
 This tutorial gets you started with Inmanta. You will learn how to:

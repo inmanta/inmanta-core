@@ -1,4 +1,4 @@
-Installing Inmanta
+Install guide
 =================
 
 For Ubuntu 14.04 (trusty) and Fedora 21, follow the instructions below. For other distributions,
