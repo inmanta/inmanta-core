@@ -1,0 +1,93 @@
+connection_url = ""
+tenant = ""
+username = ""
+password = ""
+image_id = ""
+network_name = ""
+machine_flavor_name = ""
+
+ssh_public_key=""" """
+
+# change OS parameter to match the actual image
+import redhat
+import ubuntu
+os = redhat::fedora23
+
+import vm
+import openstack
+import ssh
+
+
+#define the cluster object
+#in this case, we make it responsible for connecting to OpenStack
+entity MyCluster:
+    string connection_url
+    string username
+    string password
+    string tenant
+    string network_name
+    string image_id 
+end
+
+#connect the key
+ssh::Key key [1] -- [0:] MyCluster clusters
+
+#objects needed by hosts, expose via relation
+vm::IaaS iaas [1] -- [0:] MyCluster clusters
+vm::Network network [1] -- [0:] MyCluster clusters
+
+implementation connection for MyCluster:
+    provider = openstack::OpenstackConfig(
+        connection_url=connection_url, 
+        username=username,
+        password=password,
+        tenant=tenant)  
+    self.iaas = vm::IaaS(name = "iaas_openstack", route_script = "", config = provider)
+    self.network=vm::Network(name=network_name)
+end
+
+implement MyCluster using connection
+
+
+entity MyHost extends vm::Host:
+end
+
+MyCluster cluster [1] -- [0:] MyHost hosts
+
+implementation myhost for MyHost:
+    env_name = std::environment_name()
+    env_id = std::environment()
+    env_server = std::environment_server()
+    port = 8888
+
+    self.image = clusters.image_id
+    self.network =  clusters.network
+    self.user_data = std::template("vnftest/user_data.tmpl")
+    self.public_key = wouter_key
+    self.os = redhat::fedora23
+    self.flavor = "c1m1"
+    self.iaas = nfvi.iaas
+    
+    nport = neutron::HostPort(name="sfc{{name}}", host=self, subnet = nfvi.subnet, address=sfc_address, project = nfvi.project, purged=false, iaas = nfvi.iaas, requires=self, portsecurity=false)
+    self.sfc_mac = std::getfact(nport, "mac_address")
+    iface = net::Interface(name="eth1",mac=self.sfc_mac, host = self)
+    alias = ip::Alias(iface=iface, v4=sfc_address, netmask="255.255.255.0", alias=0)
+    self.requires = nfvi.subnet
+    
+    #patch for faulty service
+    exec::Run(host=self, command="ifup eth1", requires=alias)
+end
+
+
+# register ssh key
+my_key = ssh::Key(name="mykey", public_key=ssh_public_key)     
+
+# make a vm!
+host1 = vm::Host(name="testhost",
+                   image = image_id, 
+                   network=vm::Network(name=network_name),
+                   public_key=my_key, 
+                   os=os , 
+                   flavor=machine_flavor_name, 
+                   iaas = iaas,
+                   user_data="")
