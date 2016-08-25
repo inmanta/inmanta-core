@@ -43,3 +43,6 @@ Additional resources
 * `Inmanta developer mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
 * `Inmanta Twitter <https://twitter.com/inmanta_com>`_
 * `Inmanta Community Portal <http://inmanta.github.io>`_ 
+
+
+.. todolist::

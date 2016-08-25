@@ -3,24 +3,17 @@
 Quickstart
 ***************
 
-This tutorial gets you started with Inmanta. You will learn how to:
+This tutorial gets you started with Inmanta. 
+
+The objective of this tutorial is to set up a Drupal CMS.  
+
+Along the way, you will learn how to:
 
 * Use vagrant to make a basic Inmanta install
 * Create an Inmanta project
 * Use existing configuration modules
-* Create a configuration model to deploy a LAMP (Linux, Apache, MySQL and PHP) stack
+* Create a configuration model to deploy a LAMP stack (Linux, Apache, MySQL and PHP).
 * Deploy the configuration
-
-The Goal
-=========
-
-The goal of this tutorial is to set up a Drupal CMS, with all its dependencies automatically.  
-
-Drupal depends on:
-
-1. A web server to server Drupal
-2. A database server to store data in
-3. A database configured in the database server (with a username and password and the proper permissions configured)
 
 
 Setting up the tutorial
@@ -356,3 +349,8 @@ configuration.
 
     inmanta -vvv export
 
+
+Next steps
+==============
+
+:doc:guides
