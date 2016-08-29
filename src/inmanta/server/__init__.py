@@ -16,12 +16,4 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.agent.agent import Agent
-                self.cache.open_version(version)
-                provider.set_cache(self.cache)
-
-            finally:
-                self.cache.close_version(version)
-
-
-
+from inmanta.server.server import Server
