@@ -16,5 +16,4 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.agent.agent import Agent
-
+from inmanta.server.server import Server

@@ -670,13 +670,10 @@ class RESTTransport(Transport):
             Load the configuration for the client
         """
         LOGGER.debug("Getting config in section %s", self.id)
-        port = 8888
-        if self.id in Config.get() and "port" in Config.get()[self.id]:
-            port = int(Config.get()[self.id]["port"])
 
-        host = "localhost"
-        if self.id in Config.get() and "host" in Config.get()[self.id]:
-            host = Config.get()[self.id]["host"]
+        port = Config.get(self.id, "port", 8888)
+
+        host = Config.get(self.id, "host", "localhost")
 
         if Config.getboolean(self.id, "ssl", False):
             protocol = "https"
