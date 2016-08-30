@@ -264,15 +264,15 @@ def test_implements_Selector():
 implement Test using test when not (fg(self) and false)
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineImplement)
-    assert stmt.entity, "Test")
-    assert stmt.implementations, ["test"])
-    tools.assert_is_instance(stmt.select, Not)
-    tools.assert_is_instance(stmt.select.children[0], And)
-    tools.assert_is_instance(stmt.select.children[0].children[0], FunctionCall)
-    tools.assert_is_instance(stmt.select.children[0].children[1], Literal)
+    assert isinstance(stmt, DefineImplement)
+    assert stmt.entity == "Test"
+    assert stmt.implementations == ["test"]
+    assert isinstance(stmt.select, Not)
+    assert isinstance(stmt.select.children[0], And)
+    assert isinstance(stmt.select.children[0].children[0], FunctionCall)
+    assert isinstance(stmt.select.children[0].children[1], Literal)
 
 
 def test_regex():
@@ -280,11 +280,10 @@ def test_regex():
 a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0].value
-    tools.assert_is_instance(stmt, Regex)
-    assert stmt.children[1].value, re.compile(
-        r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
+    assert isinstance(stmt, Regex)
+    assert stmt.children[1].value == re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}")
 
 
 def test_typedef():
@@ -292,14 +291,14 @@ def test_typedef():
 typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineTypeConstraint)
-    assert stmt.name, "uuid")
-    assert stmt.basetype, "string")
-    tools.assert_is_instance(stmt.get_expression(), Regex)
-    assert stmt.get_expression().children[1].value, re.compile(
-        r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
+    assert isinstance(stmt, DefineTypeConstraint)
+    assert stmt.name == "uuid"
+    assert stmt.basetype == "string"
+    assert isinstance(stmt.get_expression(), Regex)
+    assert (stmt.get_expression().children[1].value ==
+            re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
 
 
 def test_typedef2():
@@ -307,11 +306,11 @@ def test_typedef2():
 typedef ConfigFile as File(mode = 644, owner = "root", group = "root")
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineTypeDefault)
-    assert stmt.name, "ConfigFile")
-    tools.assert_is_instance(stmt.ctor, Constructor)
+    assert isinstance(stmt, DefineTypeDefault)
+    assert stmt.name == "ConfigFile"
+    assert isinstance(stmt.ctor, Constructor)
 
 
 def test_index():
@@ -319,11 +318,11 @@ def test_index():
 index File(host, path)
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineIndex)
-    assert stmt.type, "File")
-    assert stmt.attributes, ["host", "path"])
+    assert isinstance(stmt, DefineIndex)
+    assert stmt.type == "File"
+    assert stmt.attributes == ["host", "path"]
 
 
 def test_ctr():
@@ -331,11 +330,11 @@ def test_ctr():
 File(host = 5, path = "Jos")
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Constructor)
-    assert stmt.class_type, "File")
-    assert {k: v.value for k, v in stmt.attributes.items()}, {"host": 5, "path": "Jos"})
+    assert isinstance(stmt, Constructor)
+    assert stmt.class_type == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {"host": 5, "path": "Jos"}
 
 
 def test_indexlookup():
@@ -343,11 +342,11 @@ def test_indexlookup():
 a=File[host = 5, path = "Jos"]
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0].value
-    tools.assert_is_instance(stmt, IndexLookup)
-    assert stmt.index_type, "File")
-    assert {k: v.value for k, v in stmt.query}, {"host": 5, "path": "Jos"})
+    assert isinstance(stmt, IndexLookup)
+    assert stmt.index_type == "File"
+    assert {k: v.value for k, v in stmt.query} == {"host": 5, "path": "Jos"}
 
 
 def test_ctr_2():
@@ -355,11 +354,11 @@ def test_ctr_2():
 File( )
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Constructor)
-    assert stmt.class_type, "File")
-    assert {k: v.value for k, v in stmt.attributes.items()}, {})
+    assert isinstance(stmt, Constructor)
+    assert stmt.class_type == "File"
+    assert {k: v.value for k, v in stmt.attributes.items()} == {}
 
 
 def test_function():
@@ -367,10 +366,10 @@ def test_function():
 file( )
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, FunctionCall)
-    assert stmt.name, "file")
+    assert isinstance(stmt, FunctionCall)
+    assert stmt.name == "file"
 
 
 def test_list_Def():
@@ -378,11 +377,11 @@ def test_list_Def():
 a=["a]","b"]
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Assign)
-    tools.assert_is_instance(stmt.value, CreateList)
-    assert [x.value for x in stmt.value.items], ["a]", "b"])
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateList)
+    assert [x.value for x in stmt.value.items] == ["a]", "b"]
 
 
 def test_booleans():
@@ -390,11 +389,11 @@ def test_booleans():
 a=true b=false
 """)
 
-    assert len(statements), 2, "Should return one statement")
+    assert len(statements) == 2
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Assign)
-    assert stmt.value.value, True)
-    assert statements[1].value.value, False)
+    assert isinstance(stmt, Assign)
+    assert stmt.value.value
+    assert not statements[1].value.value
 
 
 def test_StringFormat():
@@ -402,12 +401,12 @@ def test_StringFormat():
 a="j{{o}}s"
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Assign)
-    tools.assert_is_instance(stmt.value, StringFormat)
-    tools.assert_is_instance(stmt.value._variables[0][0], Reference)
-    assert [x[0].name for x in stmt.value._variables], ["o"])
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, StringFormat)
+    assert isinstance(stmt.value._variables[0][0], Reference)
+    assert [x[0].name for x in stmt.value._variables] == ["o"]
 
 
 def test_StringFormat_2():
@@ -415,15 +414,15 @@ def test_StringFormat_2():
 a="j{{c.d}}s"
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Assign)
-    tools.assert_is_instance(stmt.value, StringFormat)
-    assert len(stmt.value._variables), 1)
-    assert len(stmt.value._variables[0]), 2)
-    tools.assert_is_instance(stmt.value._variables[0][0], AttributeReference)
-    assert stmt.value._variables[0][0].instance.name, "c")
-    assert stmt.value._variables[0][0].attribute, "d")
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, StringFormat)
+    assert len(stmt.value._variables) == 1
+    assert len(stmt.value._variables[0]) == 2
+    assert isinstance(stmt.value._variables[0][0], AttributeReference)
+    assert stmt.value._variables[0][0].instance.name == "c"
+    assert stmt.value._variables[0][0].attribute == "d"
 
 
 def test_AttributeReference():
@@ -431,13 +430,13 @@ def test_AttributeReference():
 a=a::b::c.d
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, Assign)
-    tools.assert_is_instance(stmt.value, AttributeReference)
-    tools.assert_is_instance(stmt.value.instance, Reference)
-    assert stmt.value.instance.full_name, "a::b::c")
-    assert stmt.value.attribute, "d")
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, AttributeReference)
+    assert isinstance(stmt.value.instance, Reference)
+    assert stmt.value.instance.full_name == "a::b::c"
+    assert stmt.value.attribute == "d"
 
 
 def test_isDefined():
@@ -445,12 +444,12 @@ def test_isDefined():
 implement Test1 using tt when self.other is defined
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineImplement)
-    tools.assert_is_instance(stmt.select, IsDefined)
-    assert stmt.select.attr.name, 'self')
-    assert stmt.select.name, 'other')
+    assert isinstance(stmt, DefineImplement)
+    assert isinstance(stmt.select, IsDefined)
+    assert stmt.select.attr.name == 'self'
+    assert stmt.select.name == 'other'
 
 
 def test_isDefined_implicit_self():
@@ -458,12 +457,12 @@ def test_isDefined_implicit_self():
 implement Test1 using tt when other is defined
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineImplement)
-    tools.assert_is_instance(stmt.select, IsDefined)
-    assert stmt.select.attr.name, 'self')
-    assert stmt.select.name, 'other')
+    assert isinstance(stmt, DefineImplement)
+    assert isinstance(stmt.select, IsDefined)
+    assert stmt.select.attr.name == 'self'
+    assert stmt.select.name == 'other'
 
 
 def test_isDefined_short():
@@ -471,14 +470,14 @@ def test_isDefined_short():
 implement Test1 using tt when a.other is defined
 """)
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineImplement)
-    tools.assert_is_instance(stmt.select, IsDefined)
-    tools.assert_is_instance(stmt.select.attr, AttributeReference)
-    assert stmt.select.attr.instance.name, 'self')
-    assert stmt.select.attr.attribute, 'a')
-    assert stmt.select.name, 'other')
+    assert isinstance(stmt, DefineImplement)
+    assert isinstance(stmt.select, IsDefined)
+    assert isinstance(stmt.select.attr, AttributeReference)
+    assert stmt.select.attr.instance.name == 'self'
+    assert stmt.select.attr.attribute == 'a'
+    assert stmt.select.name == 'other'
 
 
 def test_defineListAttribute():
@@ -490,25 +489,32 @@ entity Jos:
   string[] floomx = ["a", "b"]
 end""")
 
-    assert len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineEntity)
-    assert len(stmt.attributes), 4)
+    assert isinstance(stmt, DefineEntity)
+    assert len(stmt.attributes) == 4
 
     def compareAttr(attr, name, type, defs):
-        assert attr.name, name)
+        assert attr.name == name
         defs(attr.default)
-        assert attr.multi, True)
-        assert attr.type, type)
-    compareAttr(stmt.attributes[0], "bar", "bool", tools.assert_is_none)
-    compareAttr(stmt.attributes[2], "floom", "string", lambda x: assert [], x.items))
+        assert attr.multi
+        assert attr.type == type
+
+    def assert_is_none(x):
+        assert x is None
+
+    def assert_equals(x, y):
+        assert x == y
+
+    compareAttr(stmt.attributes[0], "bar", "bool", assert_is_none)
+    compareAttr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items))
 
     def compareDefault(list):
         def comp(x):
-            assert len(list), len(x.items))
+            assert len(list) == len(x.items)
             for one, it in zip(list, x.items):
-                tools.assert_is_instance(it, Literal)
-                assert it.value, one)
+                assert isinstance(it, Literal)
+                assert it.value == one
         return comp
     compareAttr(stmt.attributes[1], "ips", "ip::ip", compareDefault(['a']))
     compareAttr(stmt.attributes[3], "floomx", "string", compareDefault(['a', 'b']))
