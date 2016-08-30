@@ -25,7 +25,6 @@ import subprocess
 import tempfile
 import unittest
 
-from nose.tools import raises, assert_true
 from inmanta import module
 from inmanta.config import Config
 from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo

@@ -23,7 +23,6 @@ import os
 
 from inmanta import protocol, config
 from server_test import ServerTest
-from nose.tools import assert_equal, assert_less_equal, assert_true
 from tornado.testing import gen_test
 
 
@@ -48,7 +47,7 @@ class testRestServer(ServerTest):
         """
         self.server.start()
         result = yield self.client.create_project("env-test")
-        assert_equal(result.code, 200)
+        assert result.code == 200
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_environment(project_id=project_id, name="dev")
@@ -61,11 +60,11 @@ class testRestServer(ServerTest):
 
             yield self.server._purge_versions()
             res = yield self.client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
-            assert_equal(res.code, 200)
+            assert res.code, 200
             result = yield self.client.get_project(id=project_id)
 
             versions = yield self.client.list_versions(tid=env_id)
-            assert_less_equal(versions.result["count"], 2 + 1)
+            assert versions.result["count"] <= 3
 
     @gen_test
     def test_get_resource_for_agent(self):
@@ -73,8 +72,8 @@ class testRestServer(ServerTest):
 
     @gen_test
     def test_get_resource_for_agent_with_auth(self):
-        testuser = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
-        testpass = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
+        testuser = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
+        testpass = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
 
         for x in ["server",
                   "server_rest_transport",
@@ -106,8 +105,8 @@ class testRestServer(ServerTest):
     @gen_test
     def test_get_resource_for_agent_with_SSLAndAuth(self):
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-        testuser = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
-        testpass = ''.join(random.choice(string.ascii_lowercase) for x in range(5))
+        testuser = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
+        testpass = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
 
         for x in ["server",
                   "server_rest_transport",
@@ -130,7 +129,7 @@ class testRestServer(ServerTest):
         """
         self.server.start()
         result = yield self.client.create_project("env-test")
-        assert_equal(result.code, 200)
+        assert result.code == 200
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_environment(project_id=project_id, name="dev")
@@ -176,40 +175,40 @@ class testRestServer(ServerTest):
                       'version': version}]
 
         res = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-        assert_equal(res.code, 200)
+        assert res.code == 200
 
         result = yield self.client.list_versions(env_id)
-        assert_equal(result.code, 200)
-        assert_equal(result.result["count"], 1)
+        assert result.code == 200
+        assert result.result["count"] == 1
 
         result = yield self.client.release_version(env_id, version, push=False)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.get_version(env_id, version)
-        assert_equal(result.code, 200)
-        assert_equal(result.result["model"]["version"], version)
-        assert_equal(result.result["model"]["total"], len(resources))
-        assert_true(result.result["model"]["released"])
-        assert_equal(result.result["model"]["result"], "deploying")
+        assert result.code == 200
+        assert result.result["model"]["version"] == version
+        assert result.result["model"]["total"] == len(resources)
+        assert result.result["model"]["released"]
+        assert result.result["model"]["result"] == "deploying"
 
         result = yield self.client.get_resources_for_agent(env_id, "vm1.dev.inmanta.com")
-        assert_equal(result.code, 200)
-        assert_equal(len(result.result["resources"]), 3)
+        assert result.code == 200
+        assert len(result.result["resources"]) == 3
 
         result = yield self.client.resource_updated(env_id,
                                                     "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
                                                     "INFO", "deploy", "", "deployed", {})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.get_version(env_id, version)
-        assert_equal(result.code, 200)
-        assert_equal(result.result["model"]["done"], 1)
+        assert result.code == 200
+        assert result.result["model"]["done"] == 1
 
         result = yield self.client.resource_updated(env_id,
                                                     "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
                                                     "INFO", "deploy", "", "deployed", {})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.get_version(env_id, version)
-        assert_equal(result.code, 200)
-        assert_equal(result.result["model"]["done"], 2)
+        assert result.code == 200
+        assert result.result["model"]["done"] == 2

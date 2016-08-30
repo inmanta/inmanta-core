@@ -21,7 +21,6 @@ import json
 from threading import Condition
 
 
-from nose.tools import assert_equal, assert_true
 from tornado.testing import gen_test
 from tornado import gen
 
@@ -251,8 +250,8 @@ class testAgentServer(ServerTest):
 
         # get the dryrun results
         result = yield self.client.dryrun_list(env_id, version)
-        assert_equal(result.code, 200)
-        assert_equal(len(result.result["dryruns"]), 1)
+        assert result.code == 200
+        assert len(result.result["dryruns"]) == 1
 
         while result.result["dryruns"][0]["todo"] > 0:
             result = yield self.client.dryrun_list(env_id, version)
@@ -260,41 +259,41 @@ class testAgentServer(ServerTest):
 
         dry_run_id = result.result["dryruns"][0]["id"]
         result = yield self.client.dryrun_report(env_id, dry_run_id)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         changes = result.result["dryrun"]["resources"]
-        assert_equal(changes[resources[0]["id"]]["changes"]["purged"][0], True)
-        assert_equal(changes[resources[0]["id"]]["changes"]["purged"][1], False)
-        assert_equal(changes[resources[0]["id"]]["changes"]["value"][0], None)
-        assert_equal(changes[resources[0]["id"]]["changes"]["value"][1], resources[0]["value"])
+        assert changes[resources[0]["id"]]["changes"]["purged"][0]
+        assert not changes[resources[0]["id"]]["changes"]["purged"][1]
+        assert changes[resources[0]["id"]]["changes"]["value"][0] is None
+        assert changes[resources[0]["id"]]["changes"]["value"][1] == resources[0]["value"]
 
-        assert_equal(changes[resources[1]["id"]]["changes"]["value"][0], "incorrect_value")
-        assert_equal(changes[resources[1]["id"]]["changes"]["value"][1], resources[1]["value"])
+        assert changes[resources[1]["id"]]["changes"]["value"][0] == "incorrect_value"
+        assert changes[resources[1]["id"]]["changes"]["value"][1] == resources[1]["value"]
 
-        assert_equal(changes[resources[2]["id"]]["changes"]["purged"][0], False)
-        assert_equal(changes[resources[2]["id"]]["changes"]["purged"][1], True)
+        assert not changes[resources[2]["id"]]["changes"]["purged"][0]
+        assert changes[resources[2]["id"]]["changes"]["purged"][1]
 
         # do a deploy
         result = yield self.client.release_version(env_id, version, True)
-        assert_equal(result.code, 200)
-        assert_equal(result.result["model"]["deployed"], False)
-        assert_equal(result.result["model"]["released"], True)
-        assert_equal(result.result["model"]["total"], 3)
-        assert_equal(result.result["model"]["result"], "deploying")
+        assert result.code == 200
+        assert not result.result["model"]["deployed"]
+        assert result.result["model"]["released"]
+        assert result.result["model"]["total"] == 3
+        assert result.result["model"]["result"] == "deploying"
 
         result = yield self.client.get_version(env_id, version)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             result = yield self.client.get_version(env_id, version)
             yield gen.sleep(0.1)
 
-        assert_equal(result.result["model"]["done"], len(resources))
+        assert result.result["model"]["done"] == len(resources)
 
-        assert_true(Provider.isset("agent1", "key1"))
-        assert_equal(Provider.get("agent1", "key1"), "value1")
-        assert_equal(Provider.get("agent1", "key2"), "value2")
-        assert_true(not Provider.isset("agent1", "key3"))
+        assert Provider.isset("agent1", "key1")
+        assert Provider.get("agent1", "key1") == "value1"
+        assert Provider.get("agent1", "key2") == "value2"
+        assert not Provider.isset("agent1", "key3")
 
     @gen_test()
     def test_snapshot_restore(self):
@@ -336,33 +335,33 @@ class testAgentServer(ServerTest):
                       }]
 
         result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         # deploy and wait until done
         result = yield self.client.release_version(env_id, version, True)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.get_version(env_id, version)
-        assert_equal(result.code, 200)
+        assert result.code == 200
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             result = yield self.client.get_version(env_id, version)
             yield gen.sleep(0.1)
 
-        assert_equal(result.result["model"]["done"], len(resources))
+        assert result.result["model"]["done"] == len(resources)
 
         # create a snapshot
         result = yield self.client.create_snapshot(env_id, "snap1")
-        assert_equal(result.code, 200)
+        assert result.code == 200
         snapshot_id = result.result["snapshot"]["id"]
 
         result = yield self.client.list_snapshots(env_id)
-        assert_equal(result.code, 200)
-        assert_equal(len(result.result["snapshots"]), 1)
-        assert_equal(result.result["snapshots"][0]["id"], snapshot_id)
+        assert result.code == 200
+        assert len(result.result["snapshots"]) == 1
+        assert result.result["snapshots"][0]["id"] == snapshot_id
 
         while result.result["snapshots"][0]["finished"] is None:
             result = yield self.client.list_snapshots(env_id)
-            assert_equal(result.code, 200)
+            assert result.code == 200
             yield gen.sleep(0.1)
 
         # Change the value of the resource
@@ -370,21 +369,21 @@ class testAgentServer(ServerTest):
 
         # try to do a restore
         result = yield self.client.restore_snapshot(env_id, snapshot_id)
-        assert_equal(result.code, 200)
+        assert result.code == 200
         restore_id = result.result["restore"]["id"]
 
         result = yield self.client.list_restores(env_id)
-        assert_equal(result.code, 200)
-        assert_equal(len(result.result["restores"]), 1)
+        assert result.code == 200
+        assert len(result.result["restores"]) == 1
 
         result = yield self.client.get_restore_status(env_id, restore_id)
-        assert_equal(result.code, 200)
+        assert result.code == 200
         while result.result["restore"]["finished"] is None:
             result = yield self.client.get_restore_status(env_id, restore_id)
-            assert_equal(result.code, 200)
+            assert result.code == 200
             yield gen.sleep(0.1)
 
-        assert_equal(Provider.get("agent1", "key"), "value")
+        assert Provider.get("agent1", "key") == "value"
 
     @gen_test
     def test_get_facts(self):
@@ -420,12 +419,12 @@ class testAgentServer(ServerTest):
                       }]
 
         result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
         result = yield self.client.release_version(env_id, version, True)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.get_param(env_id, "length", resource_id_wov)
-        assert_equal(result.code, 503, result.result["message"])
+        assert result.code == 503
 
         env = yield data.Environment.get_uuid(env_id)
 
@@ -437,7 +436,7 @@ class testAgentServer(ServerTest):
             yield gen.sleep(0.1)
 
         result = yield self.client.get_param(env_id, "key1", resource_id_wov)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
     @gen_test
     def test_get_set_param(self):
@@ -451,7 +450,7 @@ class testAgentServer(ServerTest):
         env_id = result.result["environment"]["id"]
 
         result = yield self.client.set_param(tid=env_id, id="key10", value="value10", source="user")
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
     @gen_test
     def test_unkown_parameters(self):
@@ -489,10 +488,10 @@ class testAgentServer(ServerTest):
         unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
         result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=unknowns,
                                                version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.release_version(env_id, version, True)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         yield self.server.renew_expired_facts()
 
@@ -506,7 +505,7 @@ class testAgentServer(ServerTest):
             yield gen.sleep(0.1)
 
         result = yield self.client.get_param(env_id, "length", resource_id_wov)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
     @gen_test()
     def test_fail(self):
@@ -576,27 +575,27 @@ class testAgentServer(ServerTest):
                       }]
 
         result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         # deploy and wait until done
         result = yield self.client.release_version(env_id, version, True)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.get_version(env_id, version)
-        assert_equal(result.code, 200)
+        assert result.code == 200
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             result = yield self.client.get_version(env_id, version)
             yield gen.sleep(0.1)
 
-        assert_equal(result.result["model"]["done"], len(resources))
+        assert result.result["model"]["done"] == len(resources)
 
         states = {x["id"]: x["status"] for x in result.result["resources"]}
 
-        assert_equal(states['test::Fail[agent1,key=key],v=%d' % version], "failed")
-        assert_equal(states['test::Resource[agent1,key=key2],v=%d' % version], "skipped")
-        assert_equal(states['test::Resource[agent1,key=key3],v=%d' % version], "skipped")
-        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version], "skipped")
-        assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version], "skipped")
+        assert states['test::Fail[agent1,key=key],v=%d' % version] == "failed"
+        assert states['test::Resource[agent1,key=key2],v=%d' % version] == "skipped"
+        assert states['test::Resource[agent1,key=key3],v=%d' % version] == "skipped"
+        assert states['test::Resource[agent1,key=key4],v=%d' % version] == "skipped"
+        assert states['test::Resource[agent1,key=key5],v=%d' % version] == "skipped"
 
     @gen_test(timeout=10000)
     def test_wait(self):
@@ -671,7 +670,7 @@ class testAgentServer(ServerTest):
         def waitForDone(version):
             # unhang waiters
             result = yield self.client.get_version(env_id, version)
-            assert_equal(result.code, 200)
+            assert result.code == 200
             while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
                 result = yield self.client.get_version(env_id, version)
                 if result.result["model"]["done"] > 0:
@@ -679,49 +678,49 @@ class testAgentServer(ServerTest):
                     waiter.notifyAll()
                     waiter.release()
                 yield gen.sleep(0.1)
-            assert_equal(result.result["model"]["done"], len(resources))
+            assert result.result["model"]["done"] == len(resources)
 
         @gen.coroutine
         def waitForResources(version, n):
             result = yield self.client.get_version(env_id, version)
-            assert_equal(result.code, 200)
+            assert result.code == 200
 
             while result.result["model"]["done"] < n:
                 result = yield self.client.get_version(env_id, version)
                 yield gen.sleep(0.1)
-            assert_equal(result.result["model"]["done"], n)
+            assert result.result["model"]["done"] == n
 
         version1, resources = makeVersion()
         result = yield self.client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         # deploy and wait until one is ready
         result = yield self.client.release_version(env_id, version1, True)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         yield waitForResources(version1, 2)
 
         version2, resources = makeVersion(3)
         result = yield self.client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         # deploy and wait until done
         result = yield self.client.release_version(env_id, version2, True)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         yield waitForDone(version2)
 
         result = yield self.client.get_version(env_id, version2)
-        assert_equal(result.code, 200)
+        assert result.code == 200
         for x in result.result["resources"]:
-            assert_equal(x["status"], "deployed")
+            assert x["status"] == "deployed"
 
         result = yield self.client.get_version(env_id, version1)
-        assert_equal(result.code, 200)
+        assert result.code == 200
         states = {x["id"]: x["status"] for x in result.result["resources"]}
 
-        assert_equal(states['test::Wait[agent1,key=key],v=%d' % version1], "deployed")
-        assert_equal(states['test::Resource[agent1,key=key2],v=%d' % version1], "")
-        assert_equal(states['test::Resource[agent1,key=key3],v=%d' % version1], "deployed")
-        assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version1], "deployed")
-        assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version1], "")
+        assert states['test::Wait[agent1,key=key],v=%d' % version1] == "deployed"
+        assert states['test::Resource[agent1,key=key2],v=%d' % version1] == ""
+        assert states['test::Resource[agent1,key=key3],v=%d' % version1] == "deployed"
+        assert states['test::Resource[agent1,key=key4],v=%d' % version1] == "deployed"
+        assert states['test::Resource[agent1,key=key5],v=%d' % version1] == ""

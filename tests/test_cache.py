@@ -18,11 +18,11 @@
 import unittest
 from time import sleep
 
-from nose.tools import assert_equal
-from nose.tools.nontrivial import raises
 from inmanta.agent.handler import cache
 from inmanta.agent.cache import AgentCache
 from inmanta.resources import resource, Resource, Id
+
+import pytest
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -39,7 +39,7 @@ class CacheTests(unittest.TestCase):
         cache = AgentCache()
         value = "test too"
         cache.cache_value("test", value)
-        assert_equal(value, cache.find("test"))
+        assert value == cache.find("test")
 
     def testTimout(self):
         cache = AgentCache()
@@ -47,43 +47,45 @@ class CacheTests(unittest.TestCase):
         cache.cache_value("test", value, timeout=0.1)
         cache.cache_value("test2", value)
 
-        assert_equal(value, cache.find("test"))
+        assert value == cache.find("test")
         sleep(1)
         try:
-            assert_equal(value, cache.find("test"))
+            assert value == cache.find("test")
             raise AssertionError("Should get exception")
         except KeyError:
             pass
-        assert_equal(value, cache.find("test2"))
 
-    @raises(KeyError)
+        assert value == cache.find("test2")
+
     def testBaseFail(self):
         cache = AgentCache()
         value = "test too"
-        assert_equal(value, cache.find("test"))
+        with pytest.raises(KeyError):
+            assert value == cache.find("test")
 
     def testResource(self):
         cache = AgentCache()
         value = "test too"
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
         cache.cache_value("test", value, resource=resource)
-        assert_equal(value, cache.find("test", resource=resource))
+        assert value == cache.find("test", resource=resource)
 
-    @raises(KeyError)
     def testResourceFail(self):
         cache = AgentCache()
         value = "test too"
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
         cache.cache_value("test", value, resource=resource)
-        assert_equal(value, cache.find("test"))
 
-    @raises(Exception)
+        with pytest.raises(KeyError):
+            assert value == cache.find("test")
+
     def testVersionClosed(self):
         cache = AgentCache()
         value = "test too"
         version = 200
-        cache.cache_value("test", value, version=version)
-        assert_equal(value, cache.find("test", version=version))
+        with pytest.raises(Exception):
+            cache.cache_value("test", value, version=version)
+            assert value == cache.find("test", version=version)
 
     def testVersion(self):
         cache = AgentCache()
@@ -91,7 +93,7 @@ class CacheTests(unittest.TestCase):
         version = 200
         cache.open_version(version)
         cache.cache_value("test", value, version=version)
-        assert_equal(value, cache.find("test", version=version))
+        assert value == cache.find("test", version=version)
 
     def testVersionClose(self):
         cache = AgentCache()
@@ -103,24 +105,25 @@ class CacheTests(unittest.TestCase):
         cache.cache_value("test4", value, version=version)
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
         cache.cache_value("testx", value, resource=resource)
-        assert_equal(value, cache.find("test", version=version))
-        assert_equal(value, cache.find("testx", resource=resource))
+        assert value == cache.find("test", version=version)
+        assert value == cache.find("testx", resource=resource)
         cache.close_version(version)
-        assert_equal(value, cache.find("testx", resource=resource))
+        assert value, cache.find("testx", resource=resource)
         try:
-            assert_equal(value, cache.find("test", version=version))
+            assert value == cache.find("test", version=version)
             raise AssertionError("Should get exception")
         except KeyError:
             pass
 
-    @raises(KeyError)
     def testVersionFail(self):
         cache = AgentCache()
         value = "test too"
         version = 200
         cache.open_version(version)
         cache.cache_value("test", value, version=version)
-        assert_equal(value, cache.find("test"))
+
+        with pytest.raises(KeyError):
+            assert value == cache.find("test")
 
     def testResourceAndVersion(self):
         cache = AgentCache()
@@ -129,7 +132,7 @@ class CacheTests(unittest.TestCase):
         version = 200
         cache.open_version(version)
         cache.cache_value("test", value, resource=resource, version=version)
-        assert_equal(value, cache.find("test", resource=resource, version=version))
+        assert value == cache.find("test", resource=resource, version=version)
 
     def testGetOrElse(self):
         called = []
@@ -144,15 +147,15 @@ class CacheTests(unittest.TestCase):
         value2 = "test too x"
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
         resourcev2 = Id("test::Resource", "test", "key", "test", 200).get_instance()
-        assert_equal(200, resourcev2.id.version)
+        assert 200 == resourcev2.id.version
         version = 200
         cache.open_version(version)
-        assert_equal(value, cache.get_or_else("test", creator, resource=resource, version=version, param=value))
-        assert_equal(value, cache.get_or_else("test", creator, resource=resource, version=version, param=value))
-        assert_equal(len(called), 1)
-        assert_equal(value, cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value))
-        assert_equal(len(called), 1)
-        assert_equal(value2, cache.get_or_else("test", creator, resource=resource, version=version, param=value2))
+        assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+        assert value == cache.get_or_else("test", creator, resource=resource, version=version, param=value)
+        assert len(called) == 1
+        assert value == cache.get_or_else("test", creator, resource=resourcev2, version=version, param=value)
+        assert len(called) == 1
+        assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
 
     def testDecorator(self):
 
@@ -175,20 +178,20 @@ class CacheTests(unittest.TestCase):
                 return "x2"
 
         test = DT(xcache)
-        assert_equal("x", test.testMethod())
-        assert_equal("x", test.testMethod())
-        assert_equal("x", test.testMethod())
-        assert_equal(1, test.count)
+        assert "x" == test.testMethod()
+        assert "x" == test.testMethod()
+        assert "x" == test.testMethod()
+        assert 1 == test.count
 
         xcache.open_version(1)
         xcache.open_version(2)
-        assert_equal("x2", test.testMethod2(version=1))
-        assert_equal("x2", test.testMethod2(version=1))
-        assert_equal(2, test.count)
-        assert_equal("x2", test.testMethod2(version=2))
-        assert_equal(3, test.count)
+        assert "x2" == test.testMethod2(version=1)
+        assert "x2" == test.testMethod2(version=1)
+        assert 2 == test.count
+        assert "x2" == test.testMethod2(version=2)
+        assert 3 == test.count
         xcache.close_version(1)
         xcache.open_version(1)
-        assert_equal("x2", test.testMethod2(version=1))
-        assert_equal("x2", test.testMethod2(version=1))
-        assert_equal(4, test.count)
+        assert "x2" == test.testMethod2(version=1)
+        assert "x2" == test.testMethod2(version=1)
+        assert 4 == test.count

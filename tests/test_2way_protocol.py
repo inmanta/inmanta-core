@@ -25,7 +25,6 @@ from inmanta import methods
 from inmanta.config import Config
 from tornado import gen
 from tornado.ioloop import IOLoop
-from nose.tools import assert_equal, assert_in, assert_true
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,10 +106,10 @@ def test_2way_protocol(logs=False):
     def do_call():
         client = protocol.Client("client")
         status = yield client.get_status(str(agent.environment))
-        assert_equal(status.code, 200)
-        assert_in("agents", status.result)
-        assert_true(len(status.result["agents"]), 1)
-        assert_equal(status.result["agents"][0]["status"], "ok")
+        assert status.code == 200
+        assert "agents" in status.result
+        assert len(status.result["agents"]) == 1
+        assert status.result["agents"][0]["status"], "ok"
 
         io_loop.stop()
 

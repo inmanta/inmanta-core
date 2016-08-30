@@ -18,18 +18,18 @@
 
 import re
 
-from nose import tools
 from inmanta.ast import Namespace
 from inmanta.ast.statements import define, Literal
 from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
-from nose.tools.nontrivial import raises
 from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineEntity
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
 from inmanta.ast.variables import Reference, AttributeReference
+
+import pytest
 
 
 def parse_code(model_code: str):
@@ -60,14 +60,14 @@ entity Other:
 end
 """)
 
-    tools.assert_equals(len(statements), 3, "Should return two statement")
+    assert len(statements) == 3
 
     stmt = statements[0]
-    tools.assert_is_instance(stmt, define.DefineEntity)
-    tools.assert_equals(stmt.name, "Test")
-    tools.assert_equals(stmt.parents, ["std::Entity"])
-    tools.assert_equals(len(stmt.attributes), 0)
-    tools.assert_equals(stmt.comment, None)
+    assert isinstance(stmt, define.DefineEntity)
+    assert stmt.name == "Test"
+    assert stmt.parents == ["std::Entity"]
+    assert len(stmt.attributes) == 0
+    assert stmt.comment is None
 
 
 def test_extend_entity():
@@ -78,10 +78,10 @@ entity Test extends Foo:
 end
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
 
     stmt = statements[0]
-    tools.assert_equals(stmt.parents, ["Foo"])
+    assert stmt.parents == ["Foo"]
 
 
 def test_complex_entity():
@@ -98,25 +98,25 @@ entity Test extends Foo, foo::sub::Bar:
 end
 """ % documentation)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
 
     stmt = statements[0]
-    tools.assert_equals(len(stmt.parents), 2)
-    tools.assert_equals(stmt.parents, ["Foo", "foo::sub::Bar"])
-    tools.assert_equals(stmt.comment.strip(), documentation)
-    tools.assert_equals(len(stmt.attributes), 3)
+    assert len(stmt.parents) == 2
+    assert stmt.parents == ["Foo", "foo::sub::Bar"]
+    assert stmt.comment.strip() == documentation
+    assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
-        tools.assert_is_instance(ad.type, str)
-        tools.assert_is_instance(ad.name, str)
+        assert isinstance(ad.type, str)
+        assert isinstance(ad.name, str)
 
-    tools.assert_equals(stmt.attributes[0].name, "hello")
-    tools.assert_equals(stmt.attributes[1].name, "bar")
-    tools.assert_equals(stmt.attributes[2].name, "ten")
+    assert stmt.attributes[0].name == "hello"
+    assert stmt.attributes[1].name == "bar"
+    assert stmt.attributes[2].name == "ten"
 
-    tools.assert_equals(stmt.attributes[1].default.execute(None, None, None), True)
+    assert stmt.attributes[1].default.execute(None, None, None)
 
-    tools.assert_equals(stmt.attributes[2].default.execute(None, None, None), 5)
+    assert stmt.attributes[2].default.execute(None, None, None) == 5
 
 
 def test_relation():
@@ -126,21 +126,21 @@ def test_relation():
 Test tests [0:] -- [5:10] Foo bars
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return four statements")
+    assert len(statements) == 1
     rel = statements[0]
 
-    tools.assert_equals(len(rel.left), 3)
-    tools.assert_equals(len(rel.right), 3)
+    assert len(rel.left) == 3
+    assert len(rel.right) == 3
 
-    tools.assert_equals(rel.left[0], "Test")
-    tools.assert_equals(rel.right[0], "Foo")
+    assert rel.left[0] == "Test"
+    assert rel.right[0] == "Foo"
 
-    tools.assert_equals(rel.left[1], "tests")
-    tools.assert_equals(rel.right[1], "bars")
+    assert rel.left[1] == "tests"
+    assert rel.right[1] == "bars"
 
-    tools.assert_equals(rel.left[2], (0, None))
-    tools.assert_equals(rel.right[2], (5, 10))
-    tools.assert_equals(statements[0].requires, None)
+    assert rel.left[2] == (0, None)
+    assert rel.right[2] == (5, 10)
+    assert statements[0].requires is None
 
 
 def test_relation_2():
@@ -150,21 +150,21 @@ def test_relation_2():
 Test tests [3] -- [:10] Foo bars
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return four statements")
+    assert len(statements) == 1
     rel = statements[0]
 
-    tools.assert_equals(len(rel.left), 3)
-    tools.assert_equals(len(rel.right), 3)
+    assert len(rel.left) == 3
+    assert len(rel.right) == 3
 
-    tools.assert_equals(rel.left[0], "Test")
-    tools.assert_equals(rel.right[0], "Foo")
+    assert rel.left[0] == "Test"
+    assert rel.right[0] == "Foo"
 
-    tools.assert_equals(rel.left[1], "tests")
-    tools.assert_equals(rel.right[1], "bars")
+    assert rel.left[1] == "tests"
+    assert rel.right[1] == "bars"
 
-    tools.assert_equals(rel.left[2], (3, 3))
-    tools.assert_equals(rel.right[2], (None, 10))
-    tools.assert_equals(statements[0].requires, None)
+    assert rel.left[2] == (3, 3)
+    assert rel.right[2] == (None, 10)
+    assert statements[0].requires is None
 
 
 def test_directional_relation():
@@ -174,15 +174,15 @@ def test_directional_relation():
 Test tests [0:] -> [5:10] Foo bars
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(statements[0].requires, None)
+    assert len(statements) == 1
+    assert statements[0].requires is None
 
     statements = parse_code("""
 Test tests [0:] <- [5:10] Foo bars
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(statements[0].requires, None)
+    assert len(statements) == 1
+    assert statements[0].requires is None
 
 
 def test_implementation():
@@ -193,10 +193,10 @@ implementation test for Test:
 end
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(len(statements[0].block.get_stmts()), 0)
-    tools.assert_equals(statements[0].name, "test")
-    tools.assert_is_instance(statements[0].entity, str)
+    assert len(statements) == 1
+    assert len(statements[0].block.get_stmts()) == 0
+    assert statements[0].name == "test"
+    assert isinstance(statements[0].entity, str)
 
     statements = parse_code("""
 implementation test for Test:
@@ -205,8 +205,8 @@ implementation test for Test:
 end
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(len(statements[0].block.get_stmts()), 2)
+    assert len(statements) == 1
+    assert len(statements[0].block.get_stmts()) == 2
 
 
 def test_implementation_with_for():
@@ -221,8 +221,8 @@ implementation test for Test:
 end
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
-    tools.assert_equals(len(statements[0].block.get_stmts()), 1)
+    assert len(statements) == 1
+    assert len(statements[0].block.get_stmts()) == 1
 
 
 def test_implements():
@@ -232,12 +232,12 @@ def test_implements():
 implement Test using test
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineImplement)
-    tools.assert_equals(stmt.entity, "Test")
-    tools.assert_equals(stmt.implementations, ["test"])
-    tools.assert_equals(str(stmt.select), "True")
+    assert isinstance(stmt, DefineImplement)
+    assert stmt.entity == "Test"
+    assert stmt.implementations == ["test"]
+    assert str(stmt.select) == "True"
 
 
 def test_implements_2():
@@ -247,14 +247,14 @@ def test_implements_2():
 implement Test using test, blah when (self > 5)
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements) == 1
     stmt = statements[0]
-    tools.assert_is_instance(stmt, DefineImplement)
-    tools.assert_equals(stmt.entity, "Test")
-    tools.assert_equals(stmt.implementations, ["test", "blah"])
-    tools.assert_is_instance(stmt.select, GreaterThan)
-    tools.assert_equals(stmt.select.children[0].name, 'self')
-    tools.assert_equals(stmt.select.children[1].value, 5)
+    assert isinstance(stmt, DefineImplement)
+    assert stmt.entity == "Test"
+    assert stmt.implementations == ["test", "blah"]
+    assert isinstance(stmt.select, GreaterThan)
+    assert stmt.select.children[0].name == 'self'
+    assert stmt.select.children[1].value == 5
 
 
 def test_implements_Selector():
@@ -264,11 +264,11 @@ def test_implements_Selector():
 implement Test using test when not (fg(self) and false)
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineImplement)
-    tools.assert_equals(stmt.entity, "Test")
-    tools.assert_equals(stmt.implementations, ["test"])
+    assert stmt.entity, "Test")
+    assert stmt.implementations, ["test"])
     tools.assert_is_instance(stmt.select, Not)
     tools.assert_is_instance(stmt.select.children[0], And)
     tools.assert_is_instance(stmt.select.children[0].children[0], FunctionCall)
@@ -280,10 +280,10 @@ def test_regex():
 a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0].value
     tools.assert_is_instance(stmt, Regex)
-    tools.assert_equals(stmt.children[1].value, re.compile(
+    assert stmt.children[1].value, re.compile(
         r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
 
 
@@ -292,13 +292,13 @@ def test_typedef():
 typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineTypeConstraint)
-    tools.assert_equals(stmt.name, "uuid")
-    tools.assert_equals(stmt.basetype, "string")
+    assert stmt.name, "uuid")
+    assert stmt.basetype, "string")
     tools.assert_is_instance(stmt.get_expression(), Regex)
-    tools.assert_equals(stmt.get_expression().children[1].value, re.compile(
+    assert stmt.get_expression().children[1].value, re.compile(
         r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
 
 
@@ -307,10 +307,10 @@ def test_typedef2():
 typedef ConfigFile as File(mode = 644, owner = "root", group = "root")
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineTypeDefault)
-    tools.assert_equals(stmt.name, "ConfigFile")
+    assert stmt.name, "ConfigFile")
     tools.assert_is_instance(stmt.ctor, Constructor)
 
 
@@ -319,11 +319,11 @@ def test_index():
 index File(host, path)
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineIndex)
-    tools.assert_equals(stmt.type, "File")
-    tools.assert_equals(stmt.attributes, ["host", "path"])
+    assert stmt.type, "File")
+    assert stmt.attributes, ["host", "path"])
 
 
 def test_ctr():
@@ -331,11 +331,11 @@ def test_ctr():
 File(host = 5, path = "Jos")
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Constructor)
-    tools.assert_equals(stmt.class_type, "File")
-    tools.assert_equals({k: v.value for k, v in stmt.attributes.items()}, {"host": 5, "path": "Jos"})
+    assert stmt.class_type, "File")
+    assert {k: v.value for k, v in stmt.attributes.items()}, {"host": 5, "path": "Jos"})
 
 
 def test_indexlookup():
@@ -343,11 +343,11 @@ def test_indexlookup():
 a=File[host = 5, path = "Jos"]
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0].value
     tools.assert_is_instance(stmt, IndexLookup)
-    tools.assert_equals(stmt.index_type, "File")
-    tools.assert_equals({k: v.value for k, v in stmt.query}, {"host": 5, "path": "Jos"})
+    assert stmt.index_type, "File")
+    assert {k: v.value for k, v in stmt.query}, {"host": 5, "path": "Jos"})
 
 
 def test_ctr_2():
@@ -355,11 +355,11 @@ def test_ctr_2():
 File( )
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Constructor)
-    tools.assert_equals(stmt.class_type, "File")
-    tools.assert_equals({k: v.value for k, v in stmt.attributes.items()}, {})
+    assert stmt.class_type, "File")
+    assert {k: v.value for k, v in stmt.attributes.items()}, {})
 
 
 def test_function():
@@ -367,10 +367,10 @@ def test_function():
 file( )
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, FunctionCall)
-    tools.assert_equals(stmt.name, "file")
+    assert stmt.name, "file")
 
 
 def test_list_Def():
@@ -378,11 +378,11 @@ def test_list_Def():
 a=["a]","b"]
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Assign)
     tools.assert_is_instance(stmt.value, CreateList)
-    tools.assert_equals([x.value for x in stmt.value.items], ["a]", "b"])
+    assert [x.value for x in stmt.value.items], ["a]", "b"])
 
 
 def test_booleans():
@@ -390,11 +390,11 @@ def test_booleans():
 a=true b=false
 """)
 
-    tools.assert_equals(len(statements), 2, "Should return one statement")
+    assert len(statements), 2, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Assign)
-    tools.assert_equals(stmt.value.value, True)
-    tools.assert_equals(statements[1].value.value, False)
+    assert stmt.value.value, True)
+    assert statements[1].value.value, False)
 
 
 def test_StringFormat():
@@ -402,12 +402,12 @@ def test_StringFormat():
 a="j{{o}}s"
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Assign)
     tools.assert_is_instance(stmt.value, StringFormat)
     tools.assert_is_instance(stmt.value._variables[0][0], Reference)
-    tools.assert_equals([x[0].name for x in stmt.value._variables], ["o"])
+    assert [x[0].name for x in stmt.value._variables], ["o"])
 
 
 def test_StringFormat_2():
@@ -415,15 +415,15 @@ def test_StringFormat_2():
 a="j{{c.d}}s"
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Assign)
     tools.assert_is_instance(stmt.value, StringFormat)
-    tools.assert_equals(len(stmt.value._variables), 1)
-    tools.assert_equals(len(stmt.value._variables[0]), 2)
+    assert len(stmt.value._variables), 1)
+    assert len(stmt.value._variables[0]), 2)
     tools.assert_is_instance(stmt.value._variables[0][0], AttributeReference)
-    tools.assert_equals(stmt.value._variables[0][0].instance.name, "c")
-    tools.assert_equals(stmt.value._variables[0][0].attribute, "d")
+    assert stmt.value._variables[0][0].instance.name, "c")
+    assert stmt.value._variables[0][0].attribute, "d")
 
 
 def test_AttributeReference():
@@ -431,13 +431,13 @@ def test_AttributeReference():
 a=a::b::c.d
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, Assign)
     tools.assert_is_instance(stmt.value, AttributeReference)
     tools.assert_is_instance(stmt.value.instance, Reference)
-    tools.assert_equals(stmt.value.instance.full_name, "a::b::c")
-    tools.assert_equals(stmt.value.attribute, "d")
+    assert stmt.value.instance.full_name, "a::b::c")
+    assert stmt.value.attribute, "d")
 
 
 def test_isDefined():
@@ -445,12 +445,12 @@ def test_isDefined():
 implement Test1 using tt when self.other is defined
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineImplement)
     tools.assert_is_instance(stmt.select, IsDefined)
-    tools.assert_equals(stmt.select.attr.name, 'self')
-    tools.assert_equals(stmt.select.name, 'other')
+    assert stmt.select.attr.name, 'self')
+    assert stmt.select.name, 'other')
 
 
 def test_isDefined_implicit_self():
@@ -458,12 +458,12 @@ def test_isDefined_implicit_self():
 implement Test1 using tt when other is defined
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineImplement)
     tools.assert_is_instance(stmt.select, IsDefined)
-    tools.assert_equals(stmt.select.attr.name, 'self')
-    tools.assert_equals(stmt.select.name, 'other')
+    assert stmt.select.attr.name, 'self')
+    assert stmt.select.name, 'other')
 
 
 def test_isDefined_short():
@@ -471,14 +471,14 @@ def test_isDefined_short():
 implement Test1 using tt when a.other is defined
 """)
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineImplement)
     tools.assert_is_instance(stmt.select, IsDefined)
     tools.assert_is_instance(stmt.select.attr, AttributeReference)
-    tools.assert_equals(stmt.select.attr.instance.name, 'self')
-    tools.assert_equals(stmt.select.attr.attribute, 'a')
-    tools.assert_equals(stmt.select.name, 'other')
+    assert stmt.select.attr.instance.name, 'self')
+    assert stmt.select.attr.attribute, 'a')
+    assert stmt.select.name, 'other')
 
 
 def test_defineListAttribute():
@@ -490,25 +490,25 @@ entity Jos:
   string[] floomx = ["a", "b"]
 end""")
 
-    tools.assert_equals(len(statements), 1, "Should return one statement")
+    assert len(statements), 1, "Should return one statement")
     stmt = statements[0]
     tools.assert_is_instance(stmt, DefineEntity)
-    tools.assert_equals(len(stmt.attributes), 4)
+    assert len(stmt.attributes), 4)
 
     def compareAttr(attr, name, type, defs):
-        tools.assert_equals(attr.name, name)
+        assert attr.name, name)
         defs(attr.default)
-        tools.assert_equals(attr.multi, True)
-        tools.assert_equals(attr.type, type)
+        assert attr.multi, True)
+        assert attr.type, type)
     compareAttr(stmt.attributes[0], "bar", "bool", tools.assert_is_none)
-    compareAttr(stmt.attributes[2], "floom", "string", lambda x: tools.assert_equals([], x.items))
+    compareAttr(stmt.attributes[2], "floom", "string", lambda x: assert [], x.items))
 
     def compareDefault(list):
         def comp(x):
-            tools.assert_equals(len(list), len(x.items))
+            assert len(list), len(x.items))
             for one, it in zip(list, x.items):
                 tools.assert_is_instance(it, Literal)
-                tools.assert_equals(it.value, one)
+                assert it.value, one)
         return comp
     compareAttr(stmt.attributes[1], "ips", "ip::ip", compareDefault(['a']))
     compareAttr(stmt.attributes[3], "floomx", "string", compareDefault(['a', 'b']))
@@ -523,16 +523,16 @@ b=""
 """)
 
 
-@raises(ParserException)
 def test_Bad():
-    parse_code("""
-    a = b.c
+    with pytest.raises(ParserException):
+        parse_code("""
+a = b.c
 a=a::b::c.
 """)
 
 
-@raises(ParserException)
 def test_Bad2():
-    parse_code("""
+    with pytest.raises(ParserException):
+        parse_code("""
 a=|
 """)
