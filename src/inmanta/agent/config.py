@@ -18,6 +18,7 @@
 
 from inmanta.config import *
 import logging
+from inmanta.protocol import TransportConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,7 +53,7 @@ agent_splay = \
     Option("config", "agent-splay", 600,
                      """The splaytime added to the runinterval.
 Set this to 0 to disable splaytime.
-     
+
 At startup the agent will choose a random number between 0 and "agent_splay.
 It will wait this number of second before performing the first deploy.
 Each subsequent deploy will start agent-interval seconds after the previous one.""", is_time)
@@ -60,6 +61,10 @@ Each subsequent deploy will start agent-interval seconds after the previous one.
 agent_antisplay = \
     Option("config", "agent-run-at-start", False,
            "run the agent at startup, even if a splay time is set", is_bool)
+
+heartbeat = \
+    Option("config", "heartbeat-interval", 10,
+           "Interval between subsequent heartbeats towards the server, lower number reduces load in the server", is_int)
 
 
 ##############################

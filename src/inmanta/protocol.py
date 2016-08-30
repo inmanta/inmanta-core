@@ -32,7 +32,7 @@ from collections import defaultdict
 import tornado.web
 from tornado import gen, queues, locks
 from inmanta import methods
-from inmanta.config import Config
+from inmanta.config import Config, Option, is_str, is_int, is_str_opt, is_bool
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
@@ -1354,3 +1354,28 @@ class ReturnClient(Client, metaclass=ClientMeta):
             return Result(code=500, result="")
 
         return Result(code=return_value["code"], result=return_value["result"])
+
+###############################
+# Transport Config
+###############################
+
+
+class TransportConfig(object):
+    """
+        A class to register the config options for Client classes
+    """
+
+    def __init__(self, name):
+        self.prefix = "%s_rest_transport" % name
+        self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
+        self.port = Option(self.prefix, "port", 8888, "Server port", is_int)
+        self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
+        self.ssl_ca_cert_file = Option(
+            self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt)
+        self.password = Option(
+            self.prefix, "password", None, "Password used to connect to the server", is_str_opt)
+        self.username = Option(
+            self.prefix, "username", None, "Username used to connect to the server", is_str_opt)
+
+TransportConfig("compiler")
+TransportConfig("client")
