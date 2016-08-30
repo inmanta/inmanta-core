@@ -22,10 +22,11 @@ import uuid
 
 import colorlog
 from inmanta import methods
-from inmanta.config import Config, TransportConfig
+from inmanta.config import Config
 from tornado import gen
 from tornado.ioloop import IOLoop
 from nose.tools import assert_equal, assert_in, assert_true
+from inmanta.protocol import TransportConfig
 
 LOGGER = logging.getLogger(__name__)
 
