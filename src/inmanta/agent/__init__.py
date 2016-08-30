@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.agent.agent import Agent
+# flake8: noqa: F401
                 self.cache.open_version(version)
                 provider.set_cache(self.cache)
 
@@ -25,3 +25,4 @@ from inmanta.agent.agent import Agent
 
 
 
+from inmanta.agent.agent import Agent

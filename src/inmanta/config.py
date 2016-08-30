@@ -61,11 +61,11 @@ class Config(object):
         """
             Get the entire compiler or get a value directly
         """
-        opt = cls.validate_option_request(section, name, default_value)
-
         cfg = cls._get_instance()
         if section is None:
             return cfg
+
+        opt = cls.validate_option_request(section, name, default_value)
 
         val = cfg.get(section, name, fallback=default_value)
         if not opt:
@@ -207,7 +207,7 @@ class Option(object):
 #############################
 # Config
 #############################
-
+# flake8: noqa: H904
 state_dir = \
     Option("config", "state_dir", "/var/lib/inmanta",
            "The directory where the server stores its state")
@@ -243,5 +243,10 @@ class TransportConfig(object):
         self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
         self.ssl_ca_cert_file = Option(
             self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt)
+        self.password = Option(
+            self.prefix, "password", None, "Password used to connect to the server", is_str_opt)
+        self.username = Option(
+            self.prefix, "username", None, "Username used to connect to the server", is_str_opt)
 
 TransportConfig("compiler")
+TransportConfig("client")

@@ -21,6 +21,7 @@ import logging
 
 LOGGER = logging.getLogger(__name__)
 
+# flake8: noqa: H904
 
 python_binary = \
     Option("config", "python_binary", "python",
