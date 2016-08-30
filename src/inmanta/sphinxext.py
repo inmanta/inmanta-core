@@ -13,10 +13,11 @@
 # based on oslo_config.sphinxext
 # http://docs.openstack.org/developer/oslo.config/sphinxext.html
 
+import importlib
+
 from docutils import nodes
 from docutils.parsers import rst
 from docutils.parsers.rst import directives
-
 from docutils.statemachine import ViewList
 from sphinx import addnodes
 from sphinx.directives import ObjectDescription
@@ -25,9 +26,7 @@ from sphinx.domains import ObjType
 from sphinx.roles import XRefRole
 from sphinx.util.nodes import make_refnode
 from sphinx.util.nodes import nested_parse_with_titles
-
 from inmanta.config import Config
-import importlib
 
 
 def _list_table(headers, data, title='', columns=None):

@@ -201,7 +201,7 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                                  code_loader=False)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
@@ -307,7 +307,7 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                                  code_loader=False)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
@@ -397,7 +397,7 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                                  code_loader=False)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
@@ -464,7 +464,7 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                                  code_loader=False)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
@@ -519,7 +519,7 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                                  code_loader=False, poolsize=10)
         self.agent.add_end_point_name("agent1")
         self.agent.start()
@@ -598,7 +598,7 @@ class testAgentServer(ServerTest):
         assert_equal(states['test::Resource[agent1,key=key4],v=%d' % version], "skipped")
         assert_equal(states['test::Resource[agent1,key=key5],v=%d' % version], "skipped")
 
-    @gen_test(timeout=10000)
+    @gen_test
     def test_wait(self):
         """
             Test results for a cancel
@@ -609,7 +609,7 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                                  code_loader=False, poolsize=10)
         self.agent.add_end_point_name("agent1")
         self.agent.start()

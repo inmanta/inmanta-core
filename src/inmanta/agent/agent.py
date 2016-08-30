@@ -30,7 +30,6 @@ from inmanta import env
 from inmanta import methods
 from inmanta import protocol
 from inmanta.agent.handler import Commander
-from inmanta.config import Config
 from inmanta.loader import CodeLoader
 from inmanta.protocol import Scheduler, AgentEndPoint
 from inmanta.resources import Resource, Id

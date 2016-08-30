@@ -16,4 +16,6 @@
     Contact: code@inmanta.com
 """
 
+# flake8: noqa: F401
+
 from inmanta.server.server import Server

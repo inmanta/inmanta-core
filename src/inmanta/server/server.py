@@ -44,7 +44,6 @@ from inmanta import protocol
 from inmanta.agent.io.remote import RemoteIO
 from inmanta.ast import type
 from inmanta.resources import Id, HostNotFoundException
-
 from inmanta.server import config as opt
 
 
