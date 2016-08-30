@@ -25,6 +25,10 @@ import uuid
 LOGGER = logging.getLogger(__name__)
 
 
+def _normalize_name(name: str):
+    return name.replace("_", "-")
+
+
 class Config(object):
     __instance = None
     __config_definition = defaultdict(lambda: {})
@@ -64,6 +68,7 @@ class Config(object):
         cfg = cls._get_instance()
         if section is None:
             return cfg
+        name = _normalize_name(name)
 
         opt = cls.validate_option_request(section, name, default_value)
 
@@ -85,6 +90,8 @@ class Config(object):
         """
             Override a value
         """
+        name = _normalize_name(name)
+
         if section not in cls._get_instance():
             cls._get_instance().add_section(section)
         cls._get_instance().set(section, name, value)
@@ -182,13 +189,13 @@ class Option(object):
         If it is a function, its doc string will be used to represent the value in documentation.
         and its return value as the actual default value
     :param documentation: the documentation for this option
-    :param validator: a function responsible for turning the string representation of the option into the correct type. 
+    :param validator: a function responsible for turning the string representation of the option into the correct type.
         Its docstring is used as representation for the type of the option.
     """
 
     def __init__(self, section, name, default, documentation, validator=is_str):
         self.section = section
-        self.name = name
+        self.name = _normalize_name(name)
         self.validator = validator
         self.documentation = documentation
         self.default = default
