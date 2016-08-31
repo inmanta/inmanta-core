@@ -353,11 +353,6 @@ class Exporter(object):
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
             return
-        try:
-            uuid.UUID(tid)
-        except ValueError:
-            LOGGER.exception("Invalid uuid configured for this environment.")
-            return
 
         self.deploy_code(tid, version)
 

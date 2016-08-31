@@ -97,7 +97,7 @@ def compile_project(options):
         Config.set("compiler_rest_transport", "ssl", "true")
 
     if options.ca_cert is not None:
-        Config.set("compiler_rest_transport", "ssl_ca_cert_file", options.ca_cert)
+        Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
     if options.profile:
         import cProfile
@@ -165,7 +165,7 @@ def export(options):
         Config.set("compiler_rest_transport", "ssl", "true")
 
     if options.ca_cert is not None:
-        Config.set("compiler_rest_transport", "ssl_ca_cert_file", options.ca_cert)
+        Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
     from inmanta.export import Exporter
 

@@ -21,6 +21,7 @@ from datetime import timedelta
 import dateutil.parser
 from time import sleep
 from shutil import rmtree
+from inmanta.config import TransportConfig
 
 
 LOGGER = logging.getLogger(__name__)
@@ -71,6 +72,7 @@ log-dir=%s/logs
 [server]
 fact-expire = 600
 fact-renew = 200
+no-recompile = true
 auto-recompile-wait = 10
 server_address= %s
 """ % (path, path, host))
@@ -117,6 +119,7 @@ class Connection(object):
 
     def __init__(self, server, auth=False, ssl=False):
         self.server = server
+        TransportConfig("autotest")
         Config.set("autotest_rest_transport", "host", self.server)
         Config.set("autotest_rest_transport", "port", "8888")
         Config.set("compiler_rest_transport", "host", self.server)
@@ -254,8 +257,9 @@ class Environment(object):
     def get_endpoints(self):
         result = yield self.connection._client.list_params(self.envid)
         result = unwrap(result)
+        print(result)
         reports = {x["name"]: x["value"]
-                   for x in result["parameters"] if x["metadata"] is not None and "type" in x["metadata"] and x["metadata"]["type"] == "report"}
+                   for x in result["parameters"] if "metadata" in x and x["metadata"] is not None and "type" in x["metadata"] and x["metadata"]["type"] == "report"}
         return reports
 
     @gen.coroutine
@@ -342,8 +346,11 @@ class Project(object):
 
         if env.ssl:
             args += ["--ssl", "--ssl-ca-cert", "/etc/pki/tls/certs/server.crt"]
-
-        subprocess.check_output(args, cwd=self.target, env=os.environ.copy())
+        try:
+            subprocess.check_output(args, cwd=self.target, env=os.environ.copy())
+        except CalledProcessError as e:
+            print(e.output)
+            raise e
 
     def export(self, env, logfile):
         Config.set("config", "environment", env.envid)
@@ -367,6 +374,10 @@ class Project(object):
         if env.ssl:
             args += ["--ssl", "--ssl-ca-cert", "/etc/pki/tls/certs/server.crt"]
 
-        out = subprocess.check_output(args, cwd=self.target, env=os.environ.copy(), stderr=subprocess.STDOUT)
-        out = out.decode("utf-8")
-        return re.search(r'Committed resources with version ([0-9]+)', out).group(1)
+        try:
+            out = subprocess.check_output(args, cwd=self.target, env=os.environ.copy(), stderr=subprocess.STDOUT)
+            out = out.decode("utf-8")
+            return re.search(r'Committed resources with version ([0-9]+)', out).group(1)
+        except CalledProcessError as e:
+            print(e.output.decode("utf-8"))
+            raise e

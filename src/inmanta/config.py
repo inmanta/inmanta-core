@@ -29,6 +29,13 @@ def _normalize_name(name: str):
     return name.replace("_", "-")
 
 
+class LenientConfigParser(ConfigParser):
+
+    def optionxform(self, name):
+        name = _normalize_name(name)
+        return super(LenientConfigParser, self).optionxform(name)
+
+
 class Config(object):
     __instance = None
     __config_definition = defaultdict(lambda: {})
@@ -42,7 +49,7 @@ class Config(object):
         """
         Load the configuration file
         """
-        config = ConfigParser(interpolation=Interpolation())
+        config = LenientConfigParser(interpolation=Interpolation())
 
         files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta",
                  ".inmanta.cfg"]
@@ -111,7 +118,7 @@ class Config(object):
             #raise Exception("Config name %s not defined in section %s" % (name, section))
             return
         opt = cls.__config_definition[section][name]
-        if not opt.get_default_value() == default_value:
+        if not opt.get_default_value() == opt.get_default_value():
             LOGGER.warn("Inconsistent default value for option %s.%s: defined as %s, got %s" %
                         (section, name, opt.default, default_value))
 
@@ -130,6 +137,8 @@ def is_time(value):
 
 def is_bool(value):
     """bool"""
+    if type(value) == bool:
+        return value
     return Config._get_instance()._convert_to_boolean(value)
 
 
@@ -203,7 +212,7 @@ class Option(object):
 
     def get(self):
         cfg = Config._get_instance()
-        out = cfg.get(self.section, self.name,  fallback=str(self.get_default_value()))
+        out = cfg.get(self.section, self.name,  fallback=self.get_default_value())
         return self.validate(out)
 
     def get_type(self):
@@ -250,3 +259,29 @@ def get_default_nodename():
 
 nodename = \
     Option("config", "node-name", get_default_nodename, "Force the hostname of this machine to a specific value", is_str)
+
+
+###############################
+# Transport Config
+###############################
+
+
+class TransportConfig(object):
+    """
+        A class to register the config options for Client classes
+    """
+
+    def __init__(self, name):
+        self.prefix = "%s_rest_transport" % name
+        self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
+        self.port = Option(self.prefix, "port", 8888, "Server port", is_int)
+        self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
+        self.ssl_ca_cert_file = Option(
+            self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt)
+        self.password = Option(
+            self.prefix, "password", None, "Password used to connect to the server", is_str_opt)
+        self.username = Option(
+            self.prefix, "username", None, "Username used to connect to the server", is_str_opt)
+
+TransportConfig("compiler")
+TransportConfig("client")
