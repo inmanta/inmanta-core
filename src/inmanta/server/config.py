@@ -118,15 +118,15 @@ server_version_to_keep = \
            """On boot and at regular intervals the server will purge versions that have not been deployed.
 This is the number of most recent undeployed versions to keep available.""", is_int)
 
-server_autostart = \
+server_autostart_on_start = \
     Option("server", "autostart-on-start", True,
-           "Automatically start agents when the server starts instead of only just in time.", is_list)
+           "Automatically start agents when the server starts instead of only just in time.", is_bool)
 
 server_agent_autostart = \
-    Option("server", "agent_autostart", "iaas_*",
+    Option("server", "agent-autostart", "iaas_*",
            """Which agents can the server start itself?
 Setting this value to * will match all agents.
-These agents are started when a dryrun or a deploy is requested.""")
+These agents are started when a dryrun or a deploy is requested.""", is_list)
 
 server_address = \
     Option("server", "server_address", "localhost",
@@ -136,6 +136,10 @@ This is required for example to inject the inmanta agent in virtual machines at 
 server_wait_after_param = \
     Option("server", "wait-after-param", 5,
            """Time to wait before recompile after new paramters have been received""", is_time)
+
+server_no_recompile = \
+    Option("server", "no-recompile", False,
+           """Prevent all server side compiles""", is_bool)
 
 #############################
 # Dashboard
@@ -148,3 +152,7 @@ dash_enable = \
 dash_path = \
     Option("dashboard", "path", None,
            "The path on the local file system where the dashboard can be found")
+
+timeout = \
+    Option("config", "timout", 2,
+           "Timeout for agent calls from server to agent", is_time)

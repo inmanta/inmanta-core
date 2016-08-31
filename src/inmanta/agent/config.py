@@ -18,7 +18,6 @@
 
 from inmanta.config import *
 import logging
-from inmanta.protocol import TransportConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ agent_antisplay = \
 
 heartbeat = \
     Option("config", "heartbeat-interval", 10,
-           "Interval between subsequent heartbeats towards the server, lower number reduces load in the server", is_int)
+           "Interval between subsequent heartbeats towards the server, lower number reduces load in the server", is_time)
 
 
 ##############################

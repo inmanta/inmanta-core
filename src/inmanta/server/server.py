@@ -91,7 +91,7 @@ class Server(protocol.ServerEndpoint):
 
         self._requires_agents = {}
 
-        if opt.server_autostart.get():
+        if opt.server_autostart_on_start.get():
             future = self.start_agents()
             self.add_future(future)
 
@@ -1005,7 +1005,7 @@ class Server(protocol.ServerEndpoint):
         return 200
 
     def _agent_matches(self, agent_name):
-        agent_globs = [x.strip() for x in opt.server_autostart.get()]
+        agent_globs = [x.strip() for x in opt.server_agent_autostart.get()]
 
         for agent_glob in agent_globs:
             if glob.fnmatch.fnmatchcase(agent_name, agent_glob):
@@ -1078,6 +1078,7 @@ agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
 python_binary=%(python_binary)s
+agent-splay=0
 
 [agent_rest_transport]
 port=%(port)s
@@ -1539,6 +1540,9 @@ ssl_ca_cert_file=%s
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
+        if opt.server_no_recompile.get():
+            LOGGER.info("Skipping compile due to no-recompile=True")
+            return
         last_recompile = self._recompiles[environment_id]
         wait_time = opt.server_autrecompile_wait.get()
         if last_recompile is self:

@@ -1010,6 +1010,8 @@ class Environment(object):
         self._agents.add(agent)
 
     def put_call(self, agent, call_spec):
+        import inmanta.server.config
+
         future = tornado.concurrent.Future()
         if agent in self._agent_node_map:
             LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], agent)
@@ -1019,7 +1021,7 @@ class Environment(object):
             call_spec["agent"] = agent
             q.put(call_spec)
 
-            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, int(Config.get("config", "timeout", 2)),
+            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, inmanta.server.config.timeout.get(),
                          "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], agent))
             self._replies[call_spec["reply_id"]] = future
         else:
@@ -1354,28 +1356,3 @@ class ReturnClient(Client, metaclass=ClientMeta):
             return Result(code=500, result="")
 
         return Result(code=return_value["code"], result=return_value["result"])
-
-###############################
-# Transport Config
-###############################
-
-
-class TransportConfig(object):
-    """
-        A class to register the config options for Client classes
-    """
-
-    def __init__(self, name):
-        self.prefix = "%s_rest_transport" % name
-        self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
-        self.port = Option(self.prefix, "port", 8888, "Server port", is_int)
-        self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
-        self.ssl_ca_cert_file = Option(
-            self.prefix, "ssl_ca_cert_file", None, "CA cert file used to validate the server certificate against", is_str_opt)
-        self.password = Option(
-            self.prefix, "password", None, "Password used to connect to the server", is_str_opt)
-        self.username = Option(
-            self.prefix, "username", None, "Username used to connect to the server", is_str_opt)
-
-TransportConfig("compiler")
-TransportConfig("client")
