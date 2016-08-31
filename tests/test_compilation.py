@@ -20,19 +20,19 @@ import unittest
 import tempfile
 import shutil
 import os
+import re
 from itertools import groupby
 import sys
 from io import StringIO
 
-from nose.tools import assert_equal, assert_regexp_matches, assert_is_not_none, assert_list_equal
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from nose.tools.nontrivial import raises
 from inmanta.parser import ParserException
+import pytest
 
 
 class CompilerBaseTest(object):
@@ -89,7 +89,6 @@ class SnippetTests(unittest.TestCase):
     def xtearDown(self):
         shutil.rmtree(self.project_dir)
 
-    @raises(DuplicateException)
     def testIssue90Compile(self):
         self.setUpForSnippet(""" import ip
 import std
@@ -100,7 +99,8 @@ odl1  = ip::Host(name="os-odl-1", os=redhat::centos7, ip="172.20.20.15")
 comp1 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.20")
 comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
 """)
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
     def testIssue92(self):
         self.setUpForSnippet("""
@@ -111,17 +111,15 @@ comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except TypeNotFoundException as e:
-            assert_equal(e.location.lnr, 2)
+            assert e.location.lnr == 2
 
-    @raises(TypeNotFoundException)
     def testIssue73(self):
         self.setUpForSnippet("""
 vm1 = std::floob()
 """)
+        with pytest.raises(TypeNotFoundException):
+            compiler.do_compile()
 
-        compiler.do_compile()
-
-    @raises(RuntimeException)
     def testOptionValues(self):
         self.setUpForSnippet("""
 entity Test1:
@@ -144,7 +142,8 @@ implement Test1 using tt when self.other.flag == false
 
 Test1()
 """)
-        compiler.do_compile()
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
 
     def testIsset(self):
         self.setUpForSnippet("""
@@ -195,7 +194,7 @@ std::print(t.test2.attribute)
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except RuntimeException as e:
-            assert_equal(e.location.lnr, 18)
+            assert e.location.lnr == 18
 
     def testIssue121_non_matching_index(self):
         self.setUpForSnippet("""
@@ -206,7 +205,7 @@ std::print(t.test2.attribute)
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except NotFoundException as e:
-            assert_equal(e.location.lnr, 2)
+            assert e.location.lnr == 2
 
     def testIssue122IndexInheritance(self):
         self.setUpForSnippet("""
@@ -245,9 +244,8 @@ Repository(host=h1, name="flens-demo",
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except TypingException as e:
-            assert_equal(e.location.lnr, 26)
+            assert e.location.lnr == 26
 
-    @raises(NotFoundException)
     def testIssue110Resolution(self):
         self.setUpForSnippet("""
 entity Test1:
@@ -262,8 +260,8 @@ end
 
 t = Test1()
 """)
-
-        compiler.do_compile()
+        with pytest.raises(NotFoundException):
+            compiler.do_compile()
 
     def testIssue120BadImport(self):
         self.setUpForSnippet("""import ip::ip""")
@@ -271,7 +269,7 @@ t = Test1()
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except ModuleNotFoundException as e:
-            assert_equal(e.location.lnr, 1)
+            assert e.location.lnr == 1
 
     def testIssue120BadImport_extra(self):
         self.setUpForSnippet("""import slorpf""")
@@ -279,7 +277,7 @@ t = Test1()
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except ModuleNotFoundException as e:
-            assert_equal(e.location.lnr, 1)
+            assert e.location.lnr == 1
 
     def testOrderOfExecution(self):
         self.setUpForSnippet("""
@@ -294,7 +292,7 @@ end
             sys.stdout = out
             compiler.do_compile()
             output = out.getvalue().strip()
-            assert_equal(output, '\n'.join([str(x) for x in range(10)]))
+            assert output == '\n'.join([str(x) for x in range(10)])
         finally:
             sys.stdout = saved_stdout
 
@@ -302,11 +300,10 @@ end
         self.setUpForSnippet("""
 f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
         """)
-        (types, scopes) = compiler.do_compile()
+        (types, _) = compiler.do_compile()
         instances = types["std::File"].get_all_instances()
-        assert_equal(instances[0].get_attribute("owner").get_value(), "wouter")
+        assert instances[0].get_attribute("owner").get_value() == "wouter"
 
-    @raises(DuplicateException)
     def testIssue135DuploRelations(self):
         self.setUpForSnippet("""
 entity Test1:
@@ -321,9 +318,9 @@ implement Test2 using std::none
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [0:1] -- [0:] Test2 test2
 """)
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
-    @raises(DuplicateException)
     def testIssue135DuploRelations2(self):
         self.setUpForSnippet("""
 entity Test1:
@@ -338,9 +335,9 @@ implement Test2 using std::none
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [1] -- [0:] Test2 floem
 """)
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
-    @raises(DuplicateException)
     def testIssue135DuploRelations3(self):
         self.setUpForSnippet("""
 entity Test1:
@@ -355,9 +352,9 @@ implement Test2 using std::none
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [1] -- [0:] Test1 test2
 """)
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
-    @raises(DuplicateException)
     def testIssue135DuploRelations4(self):
         self.setUpForSnippet("""
 entity Stdhost:
@@ -377,9 +374,9 @@ end
 Agent inmanta_agent   [1] -- [1] Oshost os_host
 Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
 """)
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
-    @raises(DuplicateException)
     def testIssue135DuploRelations5(self):
         self.setUpForSnippet("""
 entity Stdhost:
@@ -400,16 +397,16 @@ Oshost os_host [1] -- [1] Agent inmanta_agent
 
 Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
 """)
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
-    @raises(TypingException)
     def testIssue132RelationOnDefault(self):
         self.setUpForSnippet("""
 std::ConfigFile cfg [1] -- [1] std::File stuff
 """)
-        compiler.do_compile()
+        with pytest.raises(TypingException):
+            compiler.do_compile()
 
-    @raises(DuplicateException)
     def testIssue141(self):
         self.setUpForSnippet("""
 h = std::Host(name="test", os=std::linux)
@@ -419,7 +416,8 @@ entity SpecialService extends std::Service:
 end
 
 std::Host host [1] -- [0:] SpecialService services_list""")
-        compiler.do_compile()
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
     def testIssue140IndexError(self):
         try:
@@ -429,9 +427,8 @@ std::Host host [1] -- [0:] SpecialService services_list""")
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except NotFoundException as e:
-            assert_regexp_matches(str(e), 'No index defined on std::Service for this lookup:.*')
+            assert re.match('.*No index defined on std::Service for this lookup:.*', str(e))
 
-    @raises(DuplicateException)
     def testIssue134CollidingUmplementations(self):
 
         self.setUpForSnippet("""
@@ -439,10 +436,9 @@ implementation test for std::Entity:
 end
 implementation test for std::Entity:
 end""")
-        compiler.do_compile()
-        raise AssertionError("Should get exception")
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
 
-    @raises(RuntimeException)
     def testIssue126HangingStatements(self):
         self.setUpForSnippet("""entity LogFile:
 string name
@@ -462,10 +458,9 @@ LogCollector collectors [0:] -- [0:] LogFile logfiles
 
 c2 = LogCollector(name="c2", logfiles=lf1)
 """)
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
 
-        compiler.do_compile()
-
-    @raises(MultiException)
     def testIssue139Scheduler(self):
         self.setUpForSnippet("""import std
 
@@ -481,8 +476,8 @@ std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
 ref = std::Service[host=host, name="svc"]
 
 """)
-
-        compiler.do_compile()
+        with pytest.raises(MultiException):
+            compiler.do_compile()
 
     def testMtoN(self):
         self.setUpForSnippet("""
@@ -521,8 +516,7 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
 
         (types, _) = compiler.do_compile()
         for lf in types["__config__::LogFile"].get_all_instances():
-            assert_equal(lf.get_attribute("members").get_value(), len(lf.get_attribute("collectors").get_value()),
-                         "content of collectors attribute is not correct on %s" % lf.get_attribute("name").get_value())
+            assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
     def testListAtributes(self):
         self.setUpForSnippet("""
@@ -542,15 +536,15 @@ c = Jos(bar = [])
 d = Jos(bar = [], floom=["test","test2"])
 
 """)
-        (types, root) = compiler.do_compile()
+        (_, root) = compiler.do_compile()
 
         def check_jos(jos, bar, ips=["installed"], floom=[], floomx=["a", "b"], box="a"):
             jos = jos.get_value()
-            assert_list_equal(jos.get_attribute("bar").get_value(), bar)
-            assert_list_equal(jos.get_attribute("ips").get_value(), ips)
-            assert_list_equal(jos.get_attribute("floom").get_value(), floom)
-            assert_list_equal(jos.get_attribute("floomx").get_value(), floomx)
-            assert_equal(jos.get_attribute("box").get_value(), box)
+            assert jos.get_attribute("bar").get_value() == bar
+            assert jos.get_attribute("ips").get_value(), ips
+            assert jos.get_attribute("floom").get_value() == floom
+            assert jos.get_attribute("floomx").get_value() == floomx
+            assert jos.get_attribute("box").get_value() == box
 
         scope = root.get_child("__config__").scope
 
@@ -559,7 +553,6 @@ d = Jos(bar = [], floom=["test","test2"])
         check_jos(scope.lookup("c"), [])
         check_jos(scope.lookup("d"), [], floom=["test", "test2"])
 
-    @raises(ParserException)
     def testListAtributeTypeViolation1(self):
         self.setUpForSnippet("""
 entity Jos:
@@ -568,9 +561,9 @@ end
 implement Jos using std::none
 c = Jos()
 """)
-        compiler.do_compile()
+        with pytest.raises(ParserException):
+            compiler.do_compile()
 
-    @raises(RuntimeException)
     def testListAtributeTypeViolation2(self):
         self.setUpForSnippet("""
 entity Jos:
@@ -579,9 +572,9 @@ end
 implement Jos using std::none
 c = Jos()
 """)
-        compiler.do_compile()
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
 
-    @raises(RuntimeException)
     def testListAtributeTypeViolation3(self):
         self.setUpForSnippet("""
 entity Jos:
@@ -590,7 +583,8 @@ end
 implement Jos using std::none
 c = Jos(bar = ["X"])
 """)
-        compiler.do_compile()
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
@@ -600,12 +594,12 @@ class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_1")
 
     def test_compile(self):
-        (types, scopes) = compiler.do_compile()
+        (types, _) = compiler.do_compile()
         instances = types["__config__::Host"].get_all_instances()
-        assert_equal(len(instances), 1)
+        assert len(instances) == 1
         i = instances[0]
-        assert_equal(i.get_attribute("name").get_value(), "test1")
-        assert_equal(i.get_attribute("os").get_value().get_attribute("name").get_value(), "linux")
+        assert i.get_attribute("name").get_value() == "test1"
+        assert i.get_attribute("os").get_value().get_attribute("name").get_value() == "linux"
 
 
 class TestForCompile(CompilerBaseTest, unittest.TestCase):
@@ -615,9 +609,9 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_2")
 
     def test_compile(self):
-        (types, scopes) = compiler.do_compile()
+        (types, _) = compiler.do_compile()
         instances = types["__config__::ManagedDevice"].get_all_instances()
-        assert_equal(sorted([i.get_attribute("name").get_value() for i in instances]), [1, 2, 3, 4, 5])
+        assert sorted([i.get_attribute("name").get_value() for i in instances]) == [1, 2, 3, 4, 5]
 
 
 class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
@@ -626,9 +620,9 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index_collission")
 
-    @raises(RuntimeException)
     def test_compile(self):
-        compiler.do_compile()
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
 
 
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
@@ -638,10 +632,8 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_index")
 
     def test_compile(self):
-        (types, scopes) = compiler.do_compile()
+        (_, scopes) = compiler.do_compile()
         variables = {k: x.get_value() for k, x in scopes.get_child("__config__").scope.slots.items()}
-
-        import re
 
         p = re.compile(r'(f\d+h\d+)(a\d+)?')
 
@@ -654,8 +646,7 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
             first = v[0]
             firsts.append(first)
             for other in v[1:]:
-                assert_equal(first[2], other[2], "Variable %s%s should be equal to %s%s" %
-                             (first[0], first[1], other[0], other[1]))
+                assert first[2] == other[2]
 
         for i in range(len(firsts)):
             for j in range(len(firsts)):
@@ -670,9 +661,9 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
-    @raises(DoubleSetException)
     def test_compile(self):
-        compiler.do_compile()
+        with pytest.raises(DoubleSetException):
+            compiler.do_compile()
 
 
 class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
@@ -683,6 +674,5 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
 
     def test_compile(self):
         (types, _) = compiler.do_compile()
-        assert_is_not_none(types['std::Host'].get_all_instances()[0]
-                           .get_attribute("agent").get_value()
-                           .get_attribute("names").get_value())
+        assert (types['std::Host'].get_all_instances()[0].get_attribute("agent").get_value().
+                get_attribute("names").get_value() is not None)

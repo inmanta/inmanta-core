@@ -23,7 +23,6 @@ import unittest
 from unittest import mock
 
 from inmanta import module
-
 import pytest
 
 

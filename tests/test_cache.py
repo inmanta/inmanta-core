@@ -21,7 +21,6 @@ from time import sleep
 from inmanta.agent.handler import cache
 from inmanta.agent.cache import AgentCache
 from inmanta.resources import resource, Resource, Id
-
 import pytest
 
 

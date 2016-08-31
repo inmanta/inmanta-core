@@ -29,7 +29,6 @@ from inmanta import module
 from inmanta.config import Config
 from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo
 from inmanta.ast import CompilerException, ModuleNotFoundException
-
 import pytest
 
 

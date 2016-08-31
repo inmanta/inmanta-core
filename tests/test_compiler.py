@@ -28,7 +28,6 @@ from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
 from inmanta.ast.variables import Reference, AttributeReference
-
 import pytest
 
 
