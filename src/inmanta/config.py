@@ -285,3 +285,4 @@ class TransportConfig(object):
 
 TransportConfig("compiler")
 TransportConfig("client")
+cmdline_rest_transport = TransportConfig("cmdline_rest_transport")

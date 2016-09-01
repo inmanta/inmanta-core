@@ -28,6 +28,7 @@ from inmanta.config import Config
 from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
 from inmanta import protocol
+from inmanta.export import cfg_env
 
 LOGGER = logging.getLogger()
 
@@ -176,7 +177,7 @@ def export(options):
     if options.deploy:
         conn = protocol.Client("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
-        tid = Config.get("config", "environment", None)
+        tid = cfg_env.get()
         IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
 
 
