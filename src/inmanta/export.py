@@ -30,7 +30,7 @@ from inmanta import protocol
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id
-from inmanta.config import Config
+from inmanta.config import Config, Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.ast import RuntimeException
 from tornado.ioloop import IOLoop
@@ -39,6 +39,10 @@ from tornado import gen
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
+
+cfg_env = Option("config", "environment", None, "The environment this model is associated with", is_uuid_opt)
+cfg_export = Option("config", "export", "", "The list of exporters to use", is_list)
+cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
 class Exporter(object):
@@ -115,7 +119,7 @@ class Exporter(object):
             Run any additional export plug-ins
         """
         export = []
-        for pl in Config.get("config", "export", "").split(","):
+        for pl in cfg_export.get():
             export.append(pl.strip())
 
         for name in export:
@@ -163,7 +167,7 @@ class Exporter(object):
         """
             Determine the unknown handling policy for the given agent
         """
-        default_policy = Config.get("unknown_handler", "default", "prune-agent")
+        default_policy = cfg_unknown_handler.get()
 
         if "unknown_handler" not in Config._get_instance():
             return default_policy
@@ -349,7 +353,7 @@ class Exporter(object):
         """
             Commit the entire list of resource to the configurations server.
         """
-        tid = Config.get("config", "environment", None)
+        tid = cfg_env.get()
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
             return
