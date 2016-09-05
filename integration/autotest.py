@@ -45,9 +45,9 @@ def get_os_credentials():
     return out
 
 
-def setup(env):
+def setup(env, purge=False):
     # clone project
-    project = Project("git@git.inmanta.com:demo/impera-demo.git", "/tmp/autotest/demo")
+    project = Project("git@git.inmanta.com:demo/impera-demo.git", "/tmp/autotest/demo", purge)
     project.init()
 
     try:
@@ -163,15 +163,15 @@ def test_restore(env):
     http_client.close()
 
 
-def run_test(auth, ssl):
+def run_test(auth=False, ssl=False, purge_env=False, purge_project=False):
     with Server("/tmp/autotest/server", "172.17.3.106", auth=auth, ssl=ssl) as server:
         connection = Connection("172.17.3.106", auth, ssl)
         wait_async(connection)
 
-        env = Environment(connection, "autotest", "demo")
+        env = Environment(connection, "autotest", "demo", purge=purge_env)
         run_async(env.init)
 
-        setup(env)
+        setup(env, purge_project)
         LOGGER.info("Waiting 30s for service to become active")
         sleep(30)
         verify_endpoints(env)
@@ -181,4 +181,4 @@ def run_test(auth, ssl):
         LOGGER.info("Success")
 
 if __name__ == '__main__':
-    run_test(False, False)
+    run_test(purge_env=True, purge_project=False)
