@@ -642,12 +642,13 @@ class Agent(AgentEndPoint):
             resource_obj = Resource.deserialize(data)
 
             version = resource_obj.version
-            self.cache.open_version(version)
 
             provider = Commander.get_provider(self, resource_obj)
-            provider.set_cache(self.cache)
 
             try:
+                self.cache.open_version(version)
+                provider.set_cache(self.cache)
+
                 result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
                 parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
                               for name, value in result.items()]
@@ -656,13 +657,16 @@ class Agent(AgentEndPoint):
             except Exception:
                 LOGGER.exception("Unable to retrieve fact")
 
+            finally:
+                self.cache.close_version(version)
+
         except Exception:
             LOGGER.exception("Unable to find a handler for %s", resource["id"])
             return 500
+
         finally:
             if provider is not None:
                 provider.close()
-            self.cache.close_version(version)
         return 200
 
     def queue(self, operation, body):
