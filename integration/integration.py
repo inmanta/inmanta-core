@@ -20,6 +20,7 @@ import datetime
 from datetime import timedelta
 import dateutil.parser
 from time import sleep
+from shutil import rmtree
 
 
 LOGGER = logging.getLogger(__name__)
@@ -169,12 +170,13 @@ class SetForm(object):
 
 class Environment(object):
 
-    def __init__(self, connection, project, env):
+    def __init__(self, connection, project, env, purge=False):
         self.connection = connection
         self.project = project
         self.env = env
         self.auth = connection.auth
         self.ssl = connection.ssl
+        self.purge_if_exists = purge
 
     @gen.coroutine
     def init(self):
@@ -196,12 +198,25 @@ class Environment(object):
         if self.env in idx:
             envID = idx[self.env]["id"]
             LOGGER.info("found env %s %s", self.env, envID)
+            if self.purge_if_exists:
+                yield self._destroy(envID)
+                envID = yield self._create(projectID, self.env)
         else:
-            env = yield self.connection._client.create_environment(UUID(projectID), self.env)
-            envID = env.get_result()["environment"]["id"]
-            LOGGER.info("created env %s %s", self.project, projectID)
+            envID = yield self._create(projectID, self.env)
 
         self.envid = envID
+
+    @gen.coroutine
+    def _create(self, projectID, env_name):
+        env = yield self.connection._client.create_environment(UUID(projectID), env_name)
+        envID = env.get_result()["environment"]["id"]
+        LOGGER.info("created env %s %s", self.project, projectID)
+        return envID
+
+    @gen.coroutine
+    def _destroy(self, envID):
+        yield self.connection._client.clear_environment(envID)
+        yield self.connection._client.delete_environment(envID)
 
     @gen.coroutine
     def deploy(self, version):
@@ -240,7 +255,7 @@ class Environment(object):
         result = yield self.connection._client.list_params(self.envid)
         result = unwrap(result)
         reports = {x["name"]: x["value"]
-                   for x in result["parameters"] if "type" in x["metadata"] and x["metadata"]["type"] == "report"}
+                   for x in result["parameters"] if x["metadata"] is not None and "type" in x["metadata"] and x["metadata"]["type"] == "report"}
         return reports
 
     @gen.coroutine
@@ -284,11 +299,14 @@ class Environment(object):
 
 class Project(object):
 
-    def __init__(self, repo, target):
+    def __init__(self, repo, target, purge):
         self.repo = repo
         self.target = target
+        self.purge = purge
 
     def init(self):
+        if os.path.exists(self.target) and self.purge:
+            rmtree(self.target)
         makedirs(self.target, exist_ok=True)
         if not os.path.exists(os.path.join(self.target, ".git")):
             gitprovider.clone(self.repo, self.target)
