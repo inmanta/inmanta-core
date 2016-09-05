@@ -7,7 +7,7 @@ node {
 
     stage 'Unit Tests' 
         img = docker.image "fedora-python3"
-        img.inside("-u 1000:1000 -v ${pwd()}:/app") {
+        img.inside() {
             // Unit tests
             sh 'tox'
         } 
