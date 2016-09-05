@@ -983,12 +983,16 @@ class Session(object):
         An environment that segments agents connected to the server
     """
 
-    def __init__(self, sessionstore, io_loop, sid, hang_interval, timout):
+    def __init__(self, sessionstore, io_loop, sid, hang_interval, timout, tid, endpoint_names, nodename):
         self._sid = sid
         self._interval = hang_interval
         self._timeout = timout
         self._sessionstore = sessionstore
         self._seen = time.time()
+
+        self.tid = tid
+        self.endpoint_names = endpoint_names
+        self.nodename = nodename
 
         self._io_loop = io_loop
 
@@ -1113,7 +1117,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
     def new_session(self, sid, tid, endpoint_names, nodename):
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
-        return Session(self, self._io_loop, sid, self.interval * 3 / 4, self.interval)
+        return Session(self, self._io_loop, sid, self.interval * 3 / 4, self.interval, tid, endpoint_names, nodename)
 
     def expire(self, session: Session):
         LOGGER.debug("Expired session with id %s" % (session.get_id()))

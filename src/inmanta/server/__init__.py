@@ -187,59 +187,6 @@ class Server(protocol.ServerEndpoint):
         return dir_map
 
     @gen.coroutine
-    def _request_parameter(self, env, resource_id):
-        """
-            Request the value of a parameter from an agent
-        """
-        tid = str(env.uuid)
-
-        if resource_id is not None and resource_id != "":
-            # get the latest version
-            versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-
-            if len(versions) == 0:
-                return 404, {"message": "The environment associated with this parameter does not have any releases."}
-
-            version = versions[0]
-
-            # get the associated resource
-            resources = yield data.Resource.objects.filter(environment=env,  # @UndefinedVariable
-                                                           resource_id=resource_id).find_all()  # @UndefinedVariable
-
-            if len(resources) == 0:
-                return 404, {"message": "The resource parameter does not exist."}
-
-            resource = resources[0]
-
-            # get a resource version
-            rvs = yield data.ResourceVersion.objects.filter(environment=env,  # @UndefinedVariable
-                                                            model=version, resource=resource).find_all()  # @UndefinedVariable
-
-            if len(rvs) == 0:
-                return 404, {"message": "The resource has no recent version."}
-
-            # only request facts of a resource every _fact_resource_block time
-            now = time.time()
-            if (resource_id not in self._fact_resource_block_set or
-                    (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
-                yield self.agentmanager._ensure_agent(str(tid), resource.agent)
-                client = self.get_agent_client(tid, resource.agent)
-                if client is not None:
-                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
-                    self.add_future(future)
-
-                self._fact_resource_block_set[resource_id] = now
-
-            else:
-                LOGGER.debug("Ignore fact request for %s, last request was sent %d seconds ago.",
-                             resource_id, now - self._fact_resource_block_set[resource_id])
-
-            return 503, {"message": "Agents queried for resource parameter."}
-
-        return 404, {"message": "The parameter does not exist."}
-
-    @gen.coroutine
     def renew_expired_facts(self):
         """
             Send out requests to renew expired facts
@@ -260,7 +207,7 @@ class Server(protocol.ServerEndpoint):
             else:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
                              param.environment.uuid)
-                yield self._request_parameter(param.environment, param.resource_id)
+                yield self.agentmanager._request_parameter(param.environment, param.resource_id)
 
         unknown_parameters = yield data.UnknownParameter.objects.filter(resolved=False).find_all()  # @UndefinedVariable
         for u in unknown_parameters:
@@ -272,7 +219,7 @@ class Server(protocol.ServerEndpoint):
             else:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
                              u.environment.uuid)
-                self._request_parameter(u.environment, u.resource_id)
+                self.agentmanager._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 
@@ -287,7 +234,7 @@ class Server(protocol.ServerEndpoint):
                                                      name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         if len(params) == 0:
-            out = yield self._request_parameter(env, resource_id)
+            out = yield self.agentmanager._request_parameter(env, resource_id)
             return out
 
         param = params[0]
@@ -297,7 +244,7 @@ class Server(protocol.ServerEndpoint):
             return 200, {"parameter": params[0].to_dict()}
 
         LOGGER.info("Parameter %s of resource %s expired.", id, resource_id)
-        out = yield self._request_parameter(env, resource_id)
+        out = yield self.agentmanager._request_parameter(env, resource_id)
         return out
 
     @gen.coroutine
@@ -665,52 +612,17 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.NodeMethod.get_agent)
     @gen.coroutine
     def get_agent(self, id):
-        node = yield data.Node.get_by_hostname(id)
-        if node is None:
-            return 404
-
-        agents = yield data.Agent.objects.filter(node=node).find_all()  # @UndefinedVariable
-        agent_list = []
-        for agent in agents:
-            agent_dict = yield agent.to_dict()
-            agent_list.append(agent_dict)
-
-        return 200, {"node": node.to_dict(), "agents": agent_list}
+        yield self.agentmanager.get_agent_info(id)
 
     @protocol.handle(methods.NodeMethod.trigger_agent)
     @gen.coroutine
     def trigger_agent(self, tid, id):
-        env = yield data.Environment.get_uuid(tid)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
-        agent_env = self.get_env(tid)
-        for agent in agent_env.agents:
-            client = self.get_agent_client(tid, agent)
-            if client is not None:
-                future = client.trigger_agent(tid, agent)
-                self.add_future(future)
-
-        return 200
+        yield self.agentmanager.trigger_agent(tid, id)
 
     @protocol.handle(methods.NodeMethod.list_agents)
     @gen.coroutine
     def list_agent(self, environment):
-        response = []
-        nodes = yield data.Node.objects.find_all()  # @UndefinedVariable
-        for node in nodes:  # @UndefinedVariable
-            agents = yield data.Agent.objects.filter(node=node).find_all()  # @UndefinedVariable
-            node_dict = node.to_dict()
-            node_dict["agents"] = []
-            for agent in agents:
-                agent_dict = yield agent.to_dict()  # do this first, because it also loads all lazy references
-                if environment is None or agent.environment.uuid == environment:
-                    node_dict["agents"].append(agent_dict)
-
-            if len(node_dict["agents"]) > 0:
-                response.append(node_dict)
-
-        return 200, {"nodes": response, "servertime": datetime.datetime.now().isoformat()}
+        yield self.agentmanager.list_agent(environment)
 
     @protocol.handle(methods.ResourceMethod.get_resource)
     @gen.coroutine

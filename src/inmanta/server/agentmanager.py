@@ -30,6 +30,7 @@ import threading
 from inmanta import data
 from _collections import defaultdict
 import datetime
+import time
 
 
 LOGGER = logging.getLogger(__name__)
@@ -53,10 +54,6 @@ class AgentManager(object):
     def new_session(self, session, tid, endpoint_names, nodename):
         if not isinstance(tid, str):
             tid = str(tid)
-        # augment session
-        session.tid = tid
-        session.endpoint_names = endpoint_names
-        session.nodename = nodename
 
         # make index
         for endpoint in endpoint_names:
@@ -248,3 +245,103 @@ ssl_ca_cert_file=%s
                 yield gen.sleep(2)
 
                 LOGGER.debug("Started new agent with PID %s", proc.pid)
+
+    @gen.coroutine
+    def _request_parameter(self, env, resource_id):
+        """
+            Request the value of a parameter from an agent
+        """
+        tid = str(env.uuid)
+
+        if resource_id is not None and resource_id != "":
+            # get the latest version
+            versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
+                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
+
+            if len(versions) == 0:
+                return 404, {"message": "The environment associated with this parameter does not have any releases."}
+
+            version = versions[0]
+
+            # get the associated resource
+            resources = yield data.Resource.objects.filter(environment=env,  # @UndefinedVariable
+                                                           resource_id=resource_id).find_all()  # @UndefinedVariable
+
+            if len(resources) == 0:
+                return 404, {"message": "The resource parameter does not exist."}
+
+            resource = resources[0]
+
+            # get a resource version
+            rvs = yield data.ResourceVersion.objects.filter(environment=env,  # @UndefinedVariable
+                                                            model=version, resource=resource).find_all()  # @UndefinedVariable
+
+            if len(rvs) == 0:
+                return 404, {"message": "The resource has no recent version."}
+
+            # only request facts of a resource every _fact_resource_block time
+            now = time.time()
+            if (resource_id not in self._fact_resource_block_set or
+                    (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
+                yield self._ensure_agent(str(tid), resource.agent)
+                client = self.get_agent_client(tid, resource.agent)
+                if client is not None:
+                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
+                    self.add_future(future)
+
+                self._fact_resource_block_set[resource_id] = now
+
+            else:
+                LOGGER.debug("Ignore fact request for %s, last request was sent %d seconds ago.",
+                             resource_id, now - self._fact_resource_block_set[resource_id])
+
+            return 503, {"message": "Agents queried for resource parameter."}
+
+        return 404, {"message": "The parameter does not exist."}
+
+    @gen.coroutine
+    def get_agent_info(self, id):
+        node = yield data.Node.get_by_hostname(id)
+        if node is None:
+            return 404
+
+        agents = yield data.Agent.objects.filter(node=node).find_all()  # @UndefinedVariable
+        agent_list = []
+        for agent in agents:
+            agent_dict = yield agent.to_dict()
+            agent_list.append(agent_dict)
+
+        return 200, {"node": node.to_dict(), "agents": agent_list}
+
+    @gen.coroutine
+    def trigger_agent(self, tid, id):
+        env = yield data.Environment.get_uuid(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
+        agent_env = self.get_env(tid)
+        for agent in agent_env.agents:
+            client = self.get_agent_client(tid, agent)
+            if client is not None:
+                future = client.trigger_agent(tid, agent)
+                self.add_future(future)
+
+        return 200
+
+    @gen.coroutine
+    def list_agent(self, environment):
+        response = []
+        nodes = yield data.Node.objects.find_all()  # @UndefinedVariable
+        for node in nodes:  # @UndefinedVariable
+            agents = yield data.Agent.objects.filter(node=node).find_all()  # @UndefinedVariable
+            node_dict = node.to_dict()
+            node_dict["agents"] = []
+            for agent in agents:
+                agent_dict = yield agent.to_dict()  # do this first, because it also loads all lazy references
+                if environment is None or agent.environment.uuid == environment:
+                    node_dict["agents"].append(agent_dict)
+
+            if len(node_dict["agents"]) > 0:
+                response.append(node_dict)
+
+        return 200, {"nodes": response, "servertime": datetime.datetime.now().isoformat()}
