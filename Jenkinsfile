@@ -6,7 +6,7 @@ node {
         checkout scm
 
     stage 'Unit Tests' 
-        img = docker.image "python:3.5"
+        img = docker.image "fedora-python3"
         img.inside("-v ${pwd()}:/app") {
             sh 'pip install tox'
             // Unit tests
