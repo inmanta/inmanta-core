@@ -8,7 +8,6 @@ node {
     stage 'Unit Tests' 
         img = docker.image "fedora-python3"
         img.inside("-v ${pwd()}:/app") {
-            sh 'pip install tox'
             // Unit tests
             sh 'cd /app && tox'
         } 
