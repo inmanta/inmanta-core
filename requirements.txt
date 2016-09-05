@@ -13,3 +13,4 @@ ply
 ruamel.yaml
 virtualenv
 -e git://github.com/heynemann/motorengine.git#egg=motorengine
+mongobox

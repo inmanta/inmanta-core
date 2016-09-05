@@ -18,7 +18,6 @@
 
 from inmanta import protocol
 from server_test import ServerTest
-from nose.tools import assert_equal, assert_in
 from tornado.testing import gen_test
 
 
@@ -39,95 +38,95 @@ class testRestServer(ServerTest):
     @gen_test
     def test_project_api(self):
         result = yield self.client.create_project("project-test")
-        assert_equal(result.code, 200)
-        assert_in("project", result.result)
-        assert_in("id", result.result["project"])
+        assert result.code == 200
+        assert "project" in result.result
+        assert "id" in result.result["project"]
 
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_project("project-test")
-        assert_equal(result.code, 500)
+        assert result.code == 500
 
         result = yield self.client.list_projects()
-        assert_equal(result.code, 200)
-        assert_in("projects", result.result)
-        assert_equal(len(result.result["projects"]), 1)
+        assert result.code == 200
+        assert "projects" in result.result
+        assert len(result.result["projects"]) == 1
 
-        assert_equal(result.result["projects"][0]['id'], project_id)
+        assert result.result["projects"][0]['id'] == project_id
 
         result = yield self.client.get_project(id=project_id)
-        assert_equal(result.code, 200)
-        assert_in("project", result.result)
-        assert_equal(result.result["project"]['id'], project_id)
-        assert_equal(result.result["project"]['name'], "project-test")
+        assert result.code == 200
+        assert "project" in result.result
+        assert result.result["project"]['id'] == project_id
+        assert result.result["project"]['name'] == "project-test"
 
         result = yield self.client.modify_project(id=project_id, name="project-test2")
-        assert_equal(result.code, 200)
-        assert_in("project", result.result)
-        assert_equal(result.result["project"]['id'], project_id)
-        assert_equal(result.result["project"]['name'], "project-test2")
+        assert result.code == 200
+        assert "project" in result.result
+        assert result.result["project"]['id'] == project_id
+        assert result.result["project"]['name'] == "project-test2"
 
         result = yield self.client.get_project(id=project_id)
-        assert_equal(result.code, 200)
-        assert_in("project", result.result)
-        assert_equal(result.result["project"]['id'], project_id)
-        assert_equal(result.result["project"]['name'], "project-test2")
+        assert result.code == 200
+        assert "project" in result.result
+        assert result.result["project"]['id'] == project_id
+        assert result.result["project"]['name'] == "project-test2"
 
         result = yield self.client.delete_project(id=project_id)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.list_projects()
-        assert_equal(result.code, 200)
-        assert_in("projects", result.result)
-        assert_equal(len(result.result["projects"]), 0)
+        assert result.code == 200
+        assert "projects" in result.result
+        assert len(result.result["projects"]) == 0
 
     @gen_test
     def test_env_api(self):
         result = yield self.client.create_project("env-test")
-        assert_equal(result.code, 200)
-        assert_in("project", result.result)
-        assert_in("id", result.result["project"])
+        assert result.code == 200
+        assert "project" in result.result
+        assert "id" in result.result["project"]
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_environment(project_id=project_id, name="dev")
-        assert_equal(result.code, 200)
-        assert_in("environment", result.result)
-        assert_in("id", result.result["environment"])
-        assert_in("project", result.result["environment"])
-        assert_equal(project_id, result.result["environment"]["project"])
-        assert_equal("dev", result.result["environment"]["name"])
+        assert result.code == 200
+        assert "environment" in result.result
+        assert "id" in result.result["environment"]
+        assert "project" in result.result["environment"]
+        assert project_id == result.result["environment"]["project"]
+        assert "dev" == result.result["environment"]["name"]
 
         env_id = result.result["environment"]["id"]
 
         result = yield self.client.modify_environment(id=env_id, name="dev2")
-        assert_equal(result.code, 200)
-        assert_in("environment", result.result)
-        assert_equal(result.result["environment"]['id'], env_id)
-        assert_equal(result.result["environment"]['name'], "dev2")
+        assert result.code == 200
+        assert "environment" in result.result
+        assert result.result["environment"]['id'] == env_id
+        assert result.result["environment"]['name'] == "dev2"
 
         result = yield self.client.get_environment(id=env_id)
-        assert_equal(result.code, 200)
-        assert_in("environment", result.result)
-        assert_equal(result.result["environment"]['id'], env_id)
-        assert_equal(result.result["environment"]['project'], project_id)
-        assert_equal(result.result["environment"]['name'], "dev2")
+        assert result.code == 200
+        assert "environment" in result.result
+        assert result.result["environment"]['id'] == env_id
+        assert result.result["environment"]['project'] == project_id
+        assert result.result["environment"]['name'] == "dev2"
 
         project_result = yield self.client.get_project(id=project_id)
-        assert_equal(project_result.code, 200)
-        assert_in("project", project_result.result)
-        assert_in(env_id, project_result.result["project"]["environments"])
+        assert project_result.code == 200
+        assert "project" in project_result.result
+        assert env_id in project_result.result["project"]["environments"]
 
         result = yield self.client.list_environments()
-        assert_equal(result.code, 200)
-        assert_equal(len(result.result), 1)
+        assert result.code == 200
+        assert len(result.result) == 1
 
         result = yield self.client.delete_environment(id=env_id)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.list_environments()
-        assert_equal(result.code, 200)
-        assert_in("environments", result.result)
-        assert_equal(len(result.result["environments"]), 0)
+        assert result.code == 200
+        assert "environments" in result.result
+        assert len(result.result["environments"]) == 0
 
     @gen_test
     def test_project_cascade(self):
@@ -138,7 +137,7 @@ class testRestServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="prod")
 
         result = yield self.client.delete_project(project_id)
-        assert_equal(result.code, 200)
+        assert result.code == 200
 
         result = yield self.client.list_environments()
-        assert_equal(len(result.result["environments"]), 0)
+        assert len(result.result["environments"]) == 0

@@ -25,11 +25,11 @@ import subprocess
 import tempfile
 import unittest
 
-from nose.tools import raises, assert_true
 from inmanta import module
 from inmanta.config import Config
 from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo
 from inmanta.ast import CompilerException, ModuleNotFoundException
+import pytest
 
 
 def makemodule(reporoot, name, deps, project=False, imports=None,):
@@ -195,23 +195,22 @@ class testModuleTool(unittest.TestCase):
         repo = LocalFileRepo(testModuleTool.reporoot)
         coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
         result = repo.clone("mod1", coroot)
-        assert_true(result, "checkout failed")
-        assert_true(os.path.exists(os.path.join(coroot, "mod1", "module.yml")), "module.yml not found")
+        assert result
+        assert os.path.exists(os.path.join(coroot, "mod1", "module.yml"))
 
     def test_remoteRepo_good(self):
         repo = RemoteRepo("https://github.com/rmccue/")
         coroot = os.path.join(testModuleTool.tempdir, "clone_remote_good")
         result = repo.clone("test-repository", coroot)
-        assert_true(result, "checkout failed")
-        assert_true(os.path.exists(os.path.join(coroot, "test-repository", "README")), "test-repository not found")
+        assert result
+        assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
 
     def test_localRepo_bad(self):
         repo = LocalFileRepo(testModuleTool.reporoot)
         coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
         result = repo.clone("thatotherthing", coroot)
-        assert_true(not result, "checkout should have failed")
+        assert not result
 
-    @raises(ModuleNotFoundException)
     def test_BadCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "badproject")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "badproject")],
@@ -220,9 +219,9 @@ class testModuleTool(unittest.TestCase):
         os.curdir = coroot
         Config.load_config()
 
-        ModuleTool().execute("install", [])
+        with pytest.raises(ModuleNotFoundException):
+            ModuleTool().execute("install", [])
 
-    @raises(ModuleNotFoundException)
     def test_BadSetup(self):
         coroot = os.path.join(testModuleTool.tempdir, "badprojectx")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "badproject"), coroot],
@@ -236,7 +235,8 @@ class testModuleTool(unittest.TestCase):
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "mod2"), mod1],
                                 cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
 
-        ModuleTool().execute("verify", [])
+        with pytest.raises(ModuleNotFoundException):
+            ModuleTool().execute("verify", [])
 
     def test_complexCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "testproject")
@@ -249,13 +249,11 @@ class testModuleTool(unittest.TestCase):
         ModuleTool().execute("install", [])
         expected = ["mod1", "mod2", "mod3", "mod6"]
         for i in expected:
-            dir = os.path.join(coroot, "libs", i)
-            assert_true(os.path.exists(os.path.join(dir, "signal")),
-                        "could not find file: " + (os.path.join(dir, "signal")))
-            assert_true(not os.path.exists(os.path.join(dir, "badsignal")),
-                        "did find file: " + (os.path.join(dir, "badsignal")))
+            dirname = os.path.join(coroot, "libs", i)
+            assert os.path.exists(os.path.join(dirname, "signal"))
+            assert not os.path.exists(os.path.join(dirname, "badsignal"))
 
-        assert_true(not os.path.exists(os.path.join(coroot, "libs", "mod5")), "mod5 should not be present!")
+        assert not os.path.exists(os.path.join(coroot, "libs", "mod5"))
 
         # test all tools, perhaps isolate to other test case
         ModuleTool().execute("list", [])
@@ -263,7 +261,6 @@ class testModuleTool(unittest.TestCase):
         ModuleTool().execute("status", [])
         ModuleTool().execute("push", [])
 
-    @raises(CompilerException)
     def test_badDepCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "baddep")
         subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "baddep")],
@@ -272,7 +269,8 @@ class testModuleTool(unittest.TestCase):
         os.curdir = coroot
         Config.load_config()
 
-        ModuleTool().execute("install", [])
+        with pytest.raises(CompilerException):
+            ModuleTool().execute("install", [])
 
     def tearDown(self):
         self.log.removeHandler(self.handler)

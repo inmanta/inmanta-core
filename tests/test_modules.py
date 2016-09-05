@@ -23,7 +23,7 @@ import unittest
 from unittest import mock
 
 from inmanta import module
-from nose.tools import raises
+import pytest
 
 
 def test_module():
@@ -31,10 +31,10 @@ def test_module():
     module.Module(project=mock.Mock(), path=good_mod_dir)
 
 
-@raises(module.InvalidModuleException)
 def test_bad_module():
     bad_mod_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules", "mod2")
-    module.Module(project=mock.Mock(), path=bad_mod_dir)
+    with pytest.raises(module.InvalidModuleException):
+        module.Module(project=mock.Mock(), path=bad_mod_dir)
 
 
 class testModuleName(unittest.TestCase):

@@ -15,14 +15,11 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import protocol
-
 import random
 import base64
 
+from inmanta import protocol
 from server_test import ServerTest
-
-from nose.tools import assert_equal, assert_count_equal, assert_in
 from tornado.testing import gen_test
 
 
@@ -47,28 +44,28 @@ class testProtocolClient(ServerTest):
 
         # Check if the file exists
         result = yield self.client.stat_file(id="test" + file_name)
-        assert_equal(result.code, 404, "The test file should not exist yet")
+        assert result.code == 404
 
         # Create the file
         result = yield self.client.upload_file(id="test" + file_name, content=body)
-        assert_equal(result.code, 200, "The test file failed to upload")
+        assert result.code == 200
 
         # Get the file
         result = yield self.client.get_file(id="test" + file_name)
-        assert_equal(result.code, 200, "The test file failed to retrieve")
-        assert_in("content", result.result)
-        assert_equal(result.result["content"], body, "Retrieving the test file failed")
+        assert result.code == 200
+        assert "content" in result.result
+        assert result.result["content"] == body
 
         file_names = []
         for _n in range(1, 10):
             file_name = "test%d" % random.randint(0, 10000)
             file_names.append(file_name)
             result = yield self.client.upload_file(id=file_name, content="")
-            assert_equal(result.code, 200)
+            assert result.code == 200
 
         result = yield self.client.stat_files(files=file_names)
-        assert_count_equal(result.result["files"], [])
+        assert len(result.result["files"]) == 0
 
         other_files = ["testtest"]
         result = yield self.client.stat_files(files=file_names + other_files)
-        assert_count_equal(result.result["files"], other_files)
+        assert len(result.result["files"]) == len(other_files)
