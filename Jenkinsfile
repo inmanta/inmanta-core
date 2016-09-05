@@ -6,14 +6,14 @@ node {
 
     checkout scm
 
-    state 'Unit Tests'
+    stage 'Unit Tests'
 
    
-    state 'Integration'
+    stage 'Integration'
 
-    state 'Dist'
+    stage 'Dist'
 
-    state 'Package'
+    stage 'Package'
 
-    state 'Publish'
+    stage 'Publish'
 }
