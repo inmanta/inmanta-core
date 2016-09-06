@@ -1,13 +1,13 @@
 #!groovy
 
-stage('Checkout') {
-    node {
+node {
+    stage('Checkout') {
         checkout scm
-    }
-}
 
-stage('Unit Tests') {
-    node {
+        echo "My branch is: ${env.BRANCH_NAME}"
+    }
+
+    stage('Unit Tests') {
         docker.image("fedora:24").inside {
             sh "/bin/sleep 120"
         }
