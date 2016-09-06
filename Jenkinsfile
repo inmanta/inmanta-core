@@ -8,9 +8,8 @@ node {
     }
 
     stage('Unit Tests') {
-        img = docker.image("fedora-python3:24")
-        img.withRun {
-            sh "tox"
+        docker.image("python:3.5").withRun("-u root") {
+            sh "pip install tox"
         }
     }
 }
