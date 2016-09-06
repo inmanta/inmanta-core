@@ -8,11 +8,7 @@ node {
     }
 
     stage('Unit Tests') {
-        docker.image("fedora:24").inside {
-            sh "ls -l"
-            sh "id"
-            sh "sudo ls /root"
-        }
+        docker.image("fedora-python3").withRun("tox")
     }
 }
 
