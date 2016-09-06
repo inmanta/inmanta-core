@@ -9,7 +9,7 @@ node {
 
     stage('Unit Tests') {
         docker.image("fedora:24").inside {
-            sh "/bin/sleep 120"
+            sh "find ."
         }
     }
 }
