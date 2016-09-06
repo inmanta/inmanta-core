@@ -55,6 +55,7 @@ class ServerTest(MongoTestCase, AsyncTestCase):
         config.Config.set("compiler_rest_transport", "port", PORT)
         config.Config.set("client_rest_transport", "port", PORT)
         config.Config.set("cmdline_rest_transport", "port", PORT)
+        config.Config.set("main", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
 
         LOGGER.info("Starting server")
         mongo_port = os.getenv('MONGOBOX_PORT')

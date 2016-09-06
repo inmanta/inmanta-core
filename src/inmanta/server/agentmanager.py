@@ -32,6 +32,8 @@ from _collections import defaultdict
 import datetime
 import time
 from motorengine import connect, errors, DESCENDING
+import sys
+import subprocess
 
 
 LOGGER = logging.getLogger(__name__)
@@ -54,6 +56,8 @@ class AgentManager(object):
 
         self._fact_resource_block = factResourceBlock
         self._fact_resource_block_set = {}
+
+        self._server_storage = server._server_storage
 
     # From server
     def new_session(self, session, tid, endpoint_names, nodename):
@@ -84,6 +88,20 @@ class AgentManager(object):
     # To Server
     def add_future(self, future):
         self._server.add_future(future)
+
+    # utils
+    def _fork_inmanta(self, args, outfile, errfile, cwd=None):
+        """
+            For an inmanta process from the same code base as the current code
+        """
+        main = Config.get("main", "executable", os.path.abspath(sys.argv[0]))
+        inmanta_path = [sys.executable, main]
+        # handles can be closed, owned by child process,...s
+        with open(outfile, "wb+") as outhandle:
+            with open(errfile, "wb+") as errhandle:
+                # TODO: perhaps show in dashboard?
+                return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
+                                        stdout=outhandle, stderr=errhandle)
 
     @gen.coroutine
     def flush_agent_presence(self, tid, endpoint_names, nodename):
@@ -142,62 +160,10 @@ class AgentManager(object):
 
         return False
 
-    def _log_agent_output(self, environment_id, proc):
-        fds = {proc.stdout: open(os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id), "wb+"),
-               proc.stderr: open(os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id), "wb+")}
-
-        def check_io():
-            ready_to_read = select.select([proc.stdout, proc.stderr], [], [], 1000)[0]
-            for io in ready_to_read:
-                line = io.readline()
-                fds[io].write(line)
-
-        # keep checking stdout/stderr until the child exits
-        while proc.poll() is None:
-            check_io()
-
-        check_io()  # check again to catch anything after the process exits
-
-        for fd in fds.values():
-            fd.close()
-
-        return proc.wait()
-
-    @gen.coroutine
-    def _ensure_agent(self, environment_id: str, agent_name):
-        """
-            Ensure that the agent is running if required
-        """
-        if self._agent_matches(agent_name):
-            with (yield LOCK.acquire()):
-                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
-                agent_data = None
-                if environment_id in self._requires_agents:
-                    agent_data = self._requires_agents[environment_id]
-
-                    if agent_name in agent_data["agents"]:
-                        return
-
-                if agent_data is None:
-                    agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[environment_id] = agent_data
-
-                agent_data["agents"].add(agent_name)
-
-                agent_names = ",".join(agent_data["agents"])
-
-                agent_map = {}
-                for agent in agent_data["agents"]:
-                    try:
-                        gw = RemoteIO(agent)
-                        gw.close()
-                    except HostNotFoundException:
-                        agent_map[agent] = "localhost"
-
-                port = Config.get("server_rest_transport", "port", "8888")
-
-                # generate config file
-                config = """[config]
+    def _make_agent_config(self, environment_id, agent_names, agent_map):
+        port = Config.get("server_rest_transport", "port", "8888")
+    # generate config file
+        config = """[config]
 heartbeat-interval = 60
 state-dir=%(statedir)s
 
@@ -210,26 +176,67 @@ python_binary=%(python_binary)s
 port=%(port)s
 host=localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port,
-                    "python_binary": Config.get("config", "python_binary", "python"),
-                    "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()]),
-                    "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
+            "python_binary": Config.get("config", "python_binary", "python"),
+            "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
+            "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
 
-                user = Config.get("server", "username", None)
-                passwd = Config.get("server", "password", None)
-
-                if user is not None and passwd is not None:
-                    config += """
+        user = Config.get("server", "username", None)
+        passwd = Config.get("server", "password", None)
+        if user is not None and passwd is not None:
+            config += """
 username=%s
 password=%s
-""" % (user, passwd)
+    """ % (user, passwd)
 
-                ssl_cert = Config.get("server", "ssl_key_file", None)
-                ssl_ca = Config.get("server", "ssl_cert_file", None)
-                if ssl_ca is not None and ssl_cert is not None:
-                    config += """
+        ssl_cert = Config.get("server", "ssl_key_file", None)
+        ssl_ca = Config.get("server", "ssl_cert_file", None)
+        if ssl_ca is not None and ssl_cert is not None:
+            config += """
 ssl=True
 ssl_ca_cert_file=%s
-""" % (ssl_ca)
+    """ % (ssl_ca)
+
+        return config
+
+    @gen.coroutine
+    def _ensure_agent(self, environment_id: str, agent_name):
+        """
+            Ensure that the agent is running if required
+        """
+        if self._agent_matches(agent_name):
+            with (yield LOCK.acquire()):
+                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
+                agent_data = None
+                if environment_id in self._requires_agents:
+                    # already have a process for this env
+                    agent_data = self._requires_agents[environment_id]
+
+                    if agent_data["process"] is not None and agent_data["process"].poll() is not None:
+                        # but it is dead
+                        pass
+                    elif agent_name in agent_data["agents"]:
+                        # and it already has this agent
+                        # todo: check if alive
+                        return False
+
+                if agent_data is None:
+                    agent_data = {"agents": set(), "process": None}
+                    self._requires_agents[environment_id] = agent_data
+
+                agent_data["agents"].add(agent_name)
+
+                agent_names = ",".join(agent_data["agents"])
+
+                #todo: cache what is what
+                agent_map = {}
+                for agent in agent_data["agents"]:
+                    try:
+                        gw = RemoteIO(agent)
+                        gw.close()
+                    except HostNotFoundException:
+                        agent_map[agent] = "localhost"
+
+                config = self._make_agent_config(environment_id, agent_names, agent_map)
 
                 config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
                 if not os.path.exists(config_dir):
@@ -239,21 +246,24 @@ ssl_ca_cert_file=%s
                 with open(config_path, "w+") as fd:
                     fd.write(config)
 
-                proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"])
+                out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
+                err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
+                proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"], out, err)
 
                 if agent_data["process"] is not None:
                     LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
                     agent_data["process"].terminate()
 
                 # FIXME: include agent
-                threading.Thread(target=self._log_agent_output, args=(environment_id, proc)).start()
                 agent_data["process"] = proc
                 self._requires_agents[environment_id] = agent_data
                 # wait a bit here to make sure the agents registers with the server
                 # TODO: queue calls in agent work queue even if agent is not available
+                # TODO: wait for connection, instead of sleeping
                 yield gen.sleep(2)
 
                 LOGGER.debug("Started new agent with PID %s", proc.pid)
+                return True
 
     @gen.coroutine
     def _request_parameter(self, env, resource_id):

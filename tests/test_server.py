@@ -25,6 +25,7 @@ from inmanta import protocol, config
 from server_test import ServerTest
 from tornado.testing import gen_test
 from utils import retry_limited
+from tornado.gen import sleep
 
 
 class testRestServer(ServerTest):
@@ -48,15 +49,27 @@ class testRestServer(ServerTest):
         """
         self.server.start()
         result = yield self.client.create_project("env-test")
-        assert_equal(result.code, 200)
+        assert result.code == 200
         project_id = result.result["project"]["id"]
 
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.server.agentmanager._ensure_agent(env_id, "iaas_jos")
-        retry_limited(lambda: len(self.server._sessions) == 1, 10)
-        assert len(self.server._sessions)==1
+        res = yield self.server.agentmanager._ensure_agent(env_id, "iaas_jos")
+        assert res
+        yield retry_limited(lambda: len(self.server._sessions) == 1, 10)
+        assert len(self.server._sessions) == 1
+        res = yield self.server.agentmanager._ensure_agent(env_id, "iaas_jos")
+        assert not res
+        assert len(self.server._sessions) == 1
+
+        self.server.agentmanager._requires_agents[env_id]["process"].terminate()
+        yield sleep(1)
+        res = yield self.server.agentmanager._ensure_agent(env_id, "iaas_jos")
+        assert res
+        #todo: timeout
+        yield retry_limited(lambda: len(self.server._sessions) == 2, 10)
+        assert len(self.server._sessions) == 2
 
     @gen_test
     def test_version_removal(self):
@@ -230,4 +243,3 @@ class testRestServer(ServerTest):
         result = yield self.client.get_version(env_id, version)
         assert result.code == 200
         assert result.result["model"]["done"] == 2
-
