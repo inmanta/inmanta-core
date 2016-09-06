@@ -8,7 +8,7 @@ node {
     }
 
     stage('Unit Tests') {
-        img = docker.image("fedora-python3")
+        img = docker.image("fedora-python3:24")
         img.inside {
             sh "tox"
         }
