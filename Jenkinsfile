@@ -8,7 +8,7 @@ stage('Checkout') {
 
 stage('Unit Tests') {
     node {
-        img = docker.image "fedora-python3"
+        img = docker.image "fedora:latest"
         img.inside {
             sh "sleep 120"
         }
