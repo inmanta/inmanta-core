@@ -1071,7 +1071,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
     __methods__ = {}
 
-    def __init__(self, name, io_loop, transport=RESTTransport):
+    def __init__(self, name, io_loop, transport=RESTTransport, interval=60):
         super().__init__(io_loop, name)
         self._transport = transport
 
@@ -1081,7 +1081,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         self._heartbeat_cb = None
         self.agent_handles = {}
         self._sessions = {}
-        self.interval = 60
+        self.interval = interval
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
@@ -1190,6 +1190,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         self._env_id = None
 
         self.sessionid = uuid.uuid1()
+        self.running = True
 
     def get_environment(self):
         return self._env_id
@@ -1215,14 +1216,14 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         self._io_loop.add_callback(self.perform_heartbeat)
 
     def stop(self):
-        pass
+        self.running = False
 
     @gen.coroutine
     def perform_heartbeat(self):
         """
             Start a continuous heartbeat call
         """
-        while True:
+        while self.running:
             result = yield self._client.heartbeat(sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names,
                                                   nodename=self.node_name)
             if result.code == 200:
@@ -1265,9 +1266,6 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                             self._io_loop.add_future(call_result, submit_result)
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s", result.code, result.result)
-
-            yield gen.sleep(1)
-
 
 class ClientMeta(type):
     """

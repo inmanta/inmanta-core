@@ -75,8 +75,6 @@ class Server(protocol.ServerEndpoint):
 
         self._fact_expire = int(Config.get("server", "fact-expire", 3600))
         self._fact_renew = int(Config.get("server", "fact-renew", self._fact_expire / 3))
-        self._fact_resource_block = int(Config.get("server", "fact-resource_block", 60))
-        self._fact_resource_block_set = {}
 
         self.add_end_point_name(self.node_name)
 
@@ -87,7 +85,9 @@ class Server(protocol.ServerEndpoint):
 
         self._recompiles = defaultdict(lambda: None)
 
-        self.agentmanager = AgentManager(self)
+        self.agentmanager = AgentManager(self,
+                                         autostart=Config.getboolean("server", "autostart-on-start", True),
+                                         factResourceBlock=int(Config.get("server", "fact-resource_block", 60)))
 
         self.setup_dashboard()
 

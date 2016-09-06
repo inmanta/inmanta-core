@@ -31,6 +31,7 @@ from inmanta import data
 from _collections import defaultdict
 import datetime
 import time
+from motorengine import connect, errors, DESCENDING
 
 
 LOGGER = logging.getLogger(__name__)
@@ -42,15 +43,19 @@ class AgentManager(object):
     This class contains all server functionality related to the management of agents
     '''
 
-    def __init__(self, server):
+    def __init__(self, server, autostart=True, factResourceBlock=60):
         self._server = server
 
         self._requires_agents = {}
-        if Config.getboolean("server", "autostart-on-start", True):
+        if autostart:
             server.add_future(self.start_agents())
 
         self.tid_endpoint_to_session = defaultdict(list)
 
+        self._fact_resource_block = factResourceBlock
+        self._fact_resource_block_set = {}
+
+    # From server
     def new_session(self, session, tid, endpoint_names, nodename):
         if not isinstance(tid, str):
             tid = str(tid)
@@ -75,6 +80,10 @@ class AgentManager(object):
     def seen(self, session):
         # start async, let it run free
         self.flush_agent_presence(session.tid, session.endpoint_names, session.nodename)
+
+    # To Server
+    def add_future(self, future):
+        self._server.add_future(future)
 
     @gen.coroutine
     def flush_agent_presence(self, tid, endpoint_names, nodename):
