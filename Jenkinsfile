@@ -8,7 +8,7 @@ node {
     }
 
     stage('Unit Tests') {
-        docker.image("python:3.5").withRun("-u root") {
+        docker.image("python:3.5").withRun("-u root") { c ->
             sh "pip install tox"
         }
     }
