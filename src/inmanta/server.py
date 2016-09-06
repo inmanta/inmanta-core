@@ -46,6 +46,9 @@ from inmanta.ast import type
 from inmanta.config import Config
 from inmanta.resources import Id, HostNotFoundException
 
+from pympler import muppy
+from pympler import summary
+
 LOGGER = logging.getLogger(__name__)
 LOCK = locks.Lock()
 
@@ -96,6 +99,19 @@ class Server(protocol.ServerEndpoint):
 
         self.add_heartbeat_callback(self.heartbeat_cb)
         self.setup_dashboard()
+
+        io_loop.call_later(1, self.mem_baseline)
+        self.schedule(self.mem_dump, 30)
+
+    def mem_baseline(self):
+        self.baseline = summary.summarize(muppy.get_objects())
+        self.starttime = time.time()
+
+    def mem_dump(self):
+        sum2 = summary.summarize(muppy.get_objects())
+        diff = summary.get_diff(self.baseline, sum2)
+        print(time.time() - self.starttime)
+        summary.print_(diff)
 
     def setup_dashboard(self):
         """
