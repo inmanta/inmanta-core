@@ -88,7 +88,14 @@ class Exporter(object):
         """
             Returns a dict of instances for the given types
         """
-        return {t: [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()] for t in types}
+        proxies = {}
+        for t in types:
+            if self.types is not None and t in self.types:
+                proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
+            else:
+                proxies[t] = []
+
+        return proxies
 
     def _load_resources(self, types):
         """
