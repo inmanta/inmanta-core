@@ -169,13 +169,19 @@ def export(options):
 
     from inmanta.export import Exporter
 
+    exp = None
     try:
         (types, scopes) = do_compile()
-    except Exception:
+    except Exception as e:
+        exp = e
         types, scopes = (None, None)
 
     export = Exporter(options)
     version, _ = export.run(types, scopes)
+
+    if exp is not None:
+        raise exp
+
     if options.deploy:
         conn = protocol.Client("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
