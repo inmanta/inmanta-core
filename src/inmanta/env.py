@@ -103,8 +103,13 @@ class VirtualEnv(object):
         """
         if os.path.exists(requirements_file):
             cmd = [self.virtual_pip, "install", "-r", requirements_file]
-            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-            LOGGER.debug("%s: %s", cmd, output)
+            try:
+                output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+            except Exception as e:
+                LOGGER.debug("%s: %s", cmd, e.output.decode())
+                raise
+            else:
+                LOGGER.debug("%s: %s", cmd, output)
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
