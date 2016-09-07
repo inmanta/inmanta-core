@@ -169,7 +169,10 @@ def export(options):
 
     from inmanta.export import Exporter
 
-    (types, scopes) = do_compile()
+    try:
+        (types, scopes) = do_compile()
+    except Exception:
+        types, scopes = (None, None)
 
     export = Exporter(options)
     version, _ = export.run(types, scopes)
