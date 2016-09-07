@@ -45,7 +45,7 @@ class AgentManager(object):
     This class contains all server functionality related to the management of agents
     '''
 
-    def __init__(self, server, autostart=True, factResourceBlock=60):
+    def __init__(self, server, autostart=True, fact_back_off=60):
         self._server = server
 
         self._requires_agents = {}
@@ -54,7 +54,7 @@ class AgentManager(object):
 
         self.tid_endpoint_to_session = defaultdict(list)
 
-        self._fact_resource_block = factResourceBlock
+        self._fact_resource_block = fact_back_off
         self._fact_resource_block_set = {}
 
         self._server_storage = server._server_storage
@@ -70,7 +70,11 @@ class AgentManager(object):
 
     def expire(self, session):
         tid = session.tid
+        if not isinstance(tid, str):
+            tid = str(tid)
+
         for endpoint in session.endpoint_names:
+            print((tid, endpoint))
             self.tid_endpoint_to_session[(tid, endpoint)].remove(session)
 
     def get_agent_client(self, tid, endpoint):
@@ -84,6 +88,9 @@ class AgentManager(object):
     def seen(self, session):
         # start async, let it run free
         self.flush_agent_presence(session.tid, session.endpoint_names, session.nodename)
+
+    def stop(self):
+        self.terminate_agents()
 
     # To Server
     def add_future(self, future):
@@ -102,6 +109,8 @@ class AgentManager(object):
                 # TODO: perhaps show in dashboard?
                 return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
                                         stdout=outhandle, stderr=errhandle)
+
+    # DB book keeping
 
     @gen.coroutine
     def flush_agent_presence(self, tid, endpoint_names, nodename):
@@ -133,23 +142,79 @@ class AgentManager(object):
             agent.last_seen = now
             yield agent.save()
 
+    # Start/stop agents
+
     @gen.coroutine
-    def start_agents(self):
-        agents = yield data.Agent.objects.find_all()  # @UndefinedVariable
-        for agent in agents:
-            if self._agent_matches(agent.name):
-                yield agent.load_references()
-                env_id = str(agent.environment.uuid)
-                if env_id not in self._requires_agents:
+    def _ensure_agent(self, environment_id: str, agent_name):
+        """
+            Ensure that the agent is running if required
+        """
+        if self._agent_matches(agent_name):
+            with (yield LOCK.acquire()):
+                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
+                agent_data = None
+                if environment_id in self._requires_agents:
+                    # already have a process for this env
+                    agent_data = self._requires_agents[environment_id]
+
+                    if agent_data["process"] is not None and agent_data["process"].poll() is not None:
+                        # but it is dead
+                        pass
+                    elif agent_name in agent_data["agents"]:
+                        # and it already has this agent
+                        # todo: check if alive
+                        return False
+
+                if agent_data is None:
                     agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[env_id] = agent_data
+                    self._requires_agents[environment_id] = agent_data
 
-                self._requires_agents[env_id]["agents"].add(agent.name)
+                agent_data["agents"].add(agent_name)
 
-        for env_id in self._requires_agents.keys():
-            agent = list(self._requires_agents[env_id]["agents"])[0]
-            self._requires_agents[env_id]["agents"].remove(agent)
-            yield self._ensure_agent(str(env_id), agent)
+                agent_names = ",".join(agent_data["agents"])
+
+                # todo: cache what is what
+                agent_map = {}
+                for agent in agent_data["agents"]:
+                    try:
+                        gw = RemoteIO(agent)
+                        gw.close()
+                    except HostNotFoundException:
+                        agent_map[agent] = "localhost"
+
+                config = self._make_agent_config(environment_id, agent_names, agent_map)
+
+                config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
+                if not os.path.exists(config_dir):
+                    os.mkdir(config_dir)
+
+                config_path = os.path.join(config_dir, "agent.cfg")
+                with open(config_path, "w+") as fd:
+                    fd.write(config)
+
+                out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
+                err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
+                proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"], out, err)
+
+                if agent_data["process"] is not None:
+                    LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
+                    agent_data["process"].terminate()
+
+                # FIXME: include agent
+                agent_data["process"] = proc
+                self._requires_agents[environment_id] = agent_data
+                # wait a bit here to make sure the agents registers with the server
+                # TODO: queue calls in agent work queue even if agent is not available
+                # TODO: wait for connection, instead of sleeping
+                yield gen.sleep(2)
+
+                LOGGER.debug("Started new agent with PID %s", proc.pid)
+                return True
+
+    def terminate_agents(self):
+        for agent in self._requires_agents.values():
+            if agent["process"] is not None:
+                agent["process"].terminate()
 
     def _agent_matches(self, agent_name):
         agent_globs = [x.strip() for x in Config.get("server", "agent_autostart", "iaas_*").split(",")]
@@ -198,72 +263,7 @@ ssl_ca_cert_file=%s
 
         return config
 
-    @gen.coroutine
-    def _ensure_agent(self, environment_id: str, agent_name):
-        """
-            Ensure that the agent is running if required
-        """
-        if self._agent_matches(agent_name):
-            with (yield LOCK.acquire()):
-                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
-                agent_data = None
-                if environment_id in self._requires_agents:
-                    # already have a process for this env
-                    agent_data = self._requires_agents[environment_id]
-
-                    if agent_data["process"] is not None and agent_data["process"].poll() is not None:
-                        # but it is dead
-                        pass
-                    elif agent_name in agent_data["agents"]:
-                        # and it already has this agent
-                        # todo: check if alive
-                        return False
-
-                if agent_data is None:
-                    agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[environment_id] = agent_data
-
-                agent_data["agents"].add(agent_name)
-
-                agent_names = ",".join(agent_data["agents"])
-
-                #todo: cache what is what
-                agent_map = {}
-                for agent in agent_data["agents"]:
-                    try:
-                        gw = RemoteIO(agent)
-                        gw.close()
-                    except HostNotFoundException:
-                        agent_map[agent] = "localhost"
-
-                config = self._make_agent_config(environment_id, agent_names, agent_map)
-
-                config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
-                if not os.path.exists(config_dir):
-                    os.mkdir(config_dir)
-
-                config_path = os.path.join(config_dir, "agent.cfg")
-                with open(config_path, "w+") as fd:
-                    fd.write(config)
-
-                out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
-                err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
-                proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"], out, err)
-
-                if agent_data["process"] is not None:
-                    LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
-                    agent_data["process"].terminate()
-
-                # FIXME: include agent
-                agent_data["process"] = proc
-                self._requires_agents[environment_id] = agent_data
-                # wait a bit here to make sure the agents registers with the server
-                # TODO: queue calls in agent work queue even if agent is not available
-                # TODO: wait for connection, instead of sleeping
-                yield gen.sleep(2)
-
-                LOGGER.debug("Started new agent with PID %s", proc.pid)
-                return True
+    # Parameters
 
     @gen.coroutine
     def _request_parameter(self, env, resource_id):
@@ -315,8 +315,8 @@ ssl_ca_cert_file=%s
                              resource_id, now - self._fact_resource_block_set[resource_id])
 
             return 503, {"message": "Agents queried for resource parameter."}
-
-        return 404, {"message": "The parameter does not exist."}
+        else:
+            return 404, {"message": "resource_id parameter is required."}
 
     @gen.coroutine
     def get_agent_info(self, id):
@@ -364,3 +364,21 @@ ssl_ca_cert_file=%s
                 response.append(node_dict)
 
         return 200, {"nodes": response, "servertime": datetime.datetime.now().isoformat()}
+
+    @gen.coroutine
+    def start_agents(self):
+        agents = yield data.Agent.objects.find_all()  # @UndefinedVariable
+        for agent in agents:
+            if self._agent_matches(agent.name):
+                yield agent.load_references()
+                env_id = str(agent.environment.uuid)
+                if env_id not in self._requires_agents:
+                    agent_data = {"agents": set(), "process": None}
+                    self._requires_agents[env_id] = agent_data
+
+                self._requires_agents[env_id]["agents"].add(agent.name)
+
+        for env_id in self._requires_agents.keys():
+            agent = list(self._requires_agents[env_id]["agents"])[0]
+            self._requires_agents[env_id]["agents"].remove(agent)
+            yield self._ensure_agent(str(env_id), agent)

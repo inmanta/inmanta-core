@@ -26,6 +26,7 @@ from server_test import ServerTest
 from tornado.testing import gen_test
 from utils import retry_limited
 from tornado.gen import sleep
+import pytest
 
 
 class testRestServer(ServerTest):
@@ -43,6 +44,7 @@ class testRestServer(ServerTest):
         ServerTest.tearDown(self)
 
     @gen_test(timeout=20)
+    @pytest.mark.slowtest
     def test_autostart(self):
         """
             Test auto start of agent
@@ -67,9 +69,14 @@ class testRestServer(ServerTest):
         yield sleep(1)
         res = yield self.server.agentmanager._ensure_agent(env_id, "iaas_jos")
         assert res
-        #todo: timeout
-        yield retry_limited(lambda: len(self.server._sessions) == 2, 10)
-        assert len(self.server._sessions) == 2
+        yield retry_limited(lambda: len(self.server._sessions) == 1, 3)
+        assert len(self.server._sessions) == 1
+
+        # second agent for same env
+        res = yield self.server.agentmanager._ensure_agent(env_id, "iaas_josx")
+        assert res
+        yield sleep(3)
+        assert len(self.server._sessions) == 1
 
     @gen_test
     def test_version_removal(self):

@@ -845,3 +845,16 @@ class AgentRestore(Method):
             :param snapshot_id The id of the snapshot to restore
             :param resource A list of resources to restore
         """
+
+
+class AgentReporting(Method):
+    """
+        Reporting by the agent to the server
+    """
+    __method_name__ = "status"
+
+    @protocol(operation="GET")
+    def get_status(self):
+        """
+            Report status to the server
+        """

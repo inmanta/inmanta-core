@@ -58,7 +58,9 @@ class Server(protocol.ServerEndpoint):
     """
 
     def __init__(self, io_loop, database_host=None, database_port=None):
-        super().__init__("server", io_loop=io_loop)
+        agent_timeout = int(Config.get("server", "agent-timeout", 60))
+
+        super().__init__("server", io_loop=io_loop, interval=agent_timeout)
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
 
@@ -87,7 +89,7 @@ class Server(protocol.ServerEndpoint):
 
         self.agentmanager = AgentManager(self,
                                          autostart=Config.getboolean("server", "autostart-on-start", True),
-                                         factResourceBlock=int(Config.get("server", "fact-resource_block", 60)))
+                                         fact_back_off=int(Config.get("server", "fact-resource_block", 60)))
 
         self.setup_dashboard()
 
@@ -103,6 +105,11 @@ class Server(protocol.ServerEndpoint):
     def seen(self, session):
         self.agentmanager.seen(session)
         protocol.ServerEndpoint.seen(self, session)
+
+    def stop(self):
+        super().stop()
+        self.agentmanager.stop()
+        disconnect()
 
     def get_agent_client(self, tid, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -120,10 +127,6 @@ class Server(protocol.ServerEndpoint):
             return
 
         self._transport_instance.add_static_handler("dashboard", dashboard_path, start=True)
-
-    def stop(self):
-        disconnect()
-        super().stop()
 
     @gen.coroutine
     def _purge_versions(self):
