@@ -29,6 +29,8 @@ from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 from server_test import ServerTest
 import pytest
+from utils import retry_limited
+from inmanta.agent import reporting
 
 
 @pytest.mark.slowtest
@@ -41,9 +43,17 @@ def testagent_get_status(io_loop, server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = agent.Agent(io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
+    myagent = agent.Agent(io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
                         code_loader=False)
-    agent.add_end_point_name("agent1")
-    agent.start()
+    myagent.add_end_point_name("agent1")
+    myagent.start()
 
-    assert(server.agentmanager._sessions.values()[0].get_status()) == {}
+    yield retry_limited(lambda: len(server._sessions) == 1, 0.1)
+    clients = server._sessions.values()
+    assert len(clients) == 1
+    clients = [x for x in clients]
+    client = clients[0].get_client()
+    status = yield client.get_status()
+    status = status.get_result()
+    for name in reporting.reports.keys():
+        assert name in status and status[name] != "ERROR"

@@ -43,23 +43,25 @@ def mongo_db():
     del os.environ[port_envvar]
 
 
-@pytest.yield_fixture(scope="session", autouse=True)
+@pytest.yield_fixture(scope="function", autouse=True)
 def server(io_loop, mongo_db):
     state_dir = tempfile.mkdtemp()
 
+    PORT = "45678"
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("server_rest_transport", "port", mongo_db.port)
-    config.Config.set("agent_rest_transport", "port", mongo_db.port)
-    config.Config.set("compiler_rest_transport", "port", mongo_db.port)
-    config.Config.set("client_rest_transport", "port", mongo_db.port)
-    config.Config.set("cmdline_rest_transport", "port", mongo_db.port)
+    config.Config.set("server_rest_transport", "port", PORT)
+    config.Config.set("agent_rest_transport", "port", PORT)
+    config.Config.set("compiler_rest_transport", "port", PORT)
+    config.Config.set("client_rest_transport", "port", PORT)
+    config.Config.set("cmdline_rest_transport", "port", PORT)
     config.Config.set("main", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
 
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
+    server.start()
 
     yield server
 

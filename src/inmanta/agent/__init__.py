@@ -36,6 +36,7 @@ from inmanta.protocol import Scheduler, AgentEndPoint
 from inmanta.resources import Resource, Id
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
+from inmanta.agent.reporting import collect_report
 
 
 LOGGER = logging.getLogger(__name__)
@@ -686,4 +687,4 @@ class Agent(AgentEndPoint):
     @protocol.handle(methods.AgentReporting.get_status)
     @gen.coroutine
     def get_status(self):
-        return 200, {}
+        return 200, collect_report(self)
