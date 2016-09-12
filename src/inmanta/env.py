@@ -23,7 +23,7 @@ import tempfile
 import hashlib
 import logging
 
-import pkg_resources
+from pip._vendor import pkg_resources
 
 
 LOGGER = logging.getLogger(__name__)
@@ -85,24 +85,38 @@ class VirtualEnv(object):
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def install(self, requirements):
-        """
-            Install the given list of requirements in the virtual environment
-        """
-        cmd = [self.virtual_pip, "install"]
-        for require in requirements:
-            cmd.append(require)
-
-        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        LOGGER.debug("%s: %s", cmd, output)
-        pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-
-    def install_from_file(self, requirements_file: str) -> None:
+    def install(self, requirements_list: []) -> None:
         """
             Install requirements in the given requirements file
         """
-        if os.path.exists(requirements_file):
-            cmd = [self.virtual_pip, "install", "-r", requirements_file]
+        modules = {}
+        for req in requirements_list:
+            parsed_req = list(pkg_resources.parse_requirements(req))
+            if len(parsed_req) > 0:
+                item = parsed_req[0]
+                name = item.project_name
+                if item.url is not None:
+                    name = "%s#egg=%s" % (item.url, name)
+
+                if name not in modules:
+                    modules[name] = []
+
+                modules[name].extend(item.specs)
+
+        requirements_file = ""
+        for module, specs in modules.items():
+            if len(specs) == 0:
+                requirements_file += module + "\n"
+            else:
+                requirements_file += "%s %s\n" % (module, ", ".join(["%s %s" % (a, b) for a, b in specs]))
+
+        try:
+            fdnum, path = tempfile.mkstemp()
+            fd = os.fdopen(fdnum, "w+")
+            fd.write(requirements_file)
+            fd.close()
+
+            cmd = [self.virtual_pip, "install", "-r", path]
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except Exception as e:
@@ -110,6 +124,10 @@ class VirtualEnv(object):
                 raise
             else:
                 LOGGER.debug("%s: %s", cmd, output)
+
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
@@ -153,16 +171,7 @@ class VirtualEnv(object):
         if new_req_hash == current_hash and cache:
             return
 
-        try:
-            # create requirements file
-            requirements_file = tempfile.mktemp()
-            with open(requirements_file, "w+") as fd:
-                fd.write("\n".join(requirements_list))
-                fd.close()
-
-            self.install_from_file(requirements_file)
-            self._set_current_requirements_hash(new_req_hash)
-            for x in requirements_list:
-                self.__cache_done.add(x)
-        finally:
-            os.remove(requirements_file)
+        self.install(requirements_list)
+        self._set_current_requirements_hash(new_req_hash)
+        for x in requirements_list:
+            self.__cache_done.add(x)
