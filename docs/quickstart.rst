@@ -27,8 +27,8 @@ Next, grab the vagrant box from out git repo and let vagrant do the setup of the
 
 .. code-block:: sh
 
-    git clone git@git.inmanta.com:demo/tutorial-vagrant.git
-    cd tutorial-vagrant
+    git clone https://github.com/inmanta/quickstart-vagrant.git
+    cd quickstart-vagrant
     ./make_keys.sh
     vagrant up
     
