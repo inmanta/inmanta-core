@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from configparser import ConfigParser
+from configparser import ConfigParser, Interpolation
 import os
 
 
@@ -28,7 +28,7 @@ class Config(object):
         """
         Load the configuration file
         """
-        config = ConfigParser()
+        config = ConfigParser(interpolation=Interpolation())
 
         files = ["/etc/inmanta.cfg", os.path.expanduser("~/.inmanta.cfg"), ".inmanta",
                  ".inmanta.cfg"]

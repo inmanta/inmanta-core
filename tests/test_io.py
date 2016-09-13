@@ -167,6 +167,10 @@ def test_check_chown(io, testdir):
     user = pwd.getpwuid(os.getuid())[0]
     groups = [grp.getgrgid(g).gr_name for g in os.getgroups()]
 
+    if len(groups) == 0:
+        # fix for jenkins docker
+        groups = [user]
+
     io.chown(path, user)
     io.chown(path, user, groups[0])
     io.chown(path, None, groups[0])
