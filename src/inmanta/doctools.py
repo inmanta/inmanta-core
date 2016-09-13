@@ -18,11 +18,12 @@
 import glob
 import tempfile
 import os
+import uuid
+import sys
+
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta.config import Config
-import uuid
-import sys
 
 
 class CompilerFixture():
@@ -83,7 +84,7 @@ class CompilerFixture():
 
 
 def test_snippets():
-    """ Test all code snippets in *.snip files"""
+    """Test all code snippets in *.snip files."""
     here = os.getcwd()
     fixture = CompilerFixture()
     fail = False
