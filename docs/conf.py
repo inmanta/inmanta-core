@@ -93,7 +93,7 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#html_theme = 'bootstrap'
+#html_theme = 'bizstyle'
 #html_theme_path = sphinx_bootstrap_theme.get_html_theme_path()
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -139,7 +139,9 @@ html_static_path = ['_static']
 #html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-#html_sidebars = {}
+html_sidebars = {
+   '**': ['globaltoc.html', 'sourcelink.html', 'searchbox.html']
+}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.

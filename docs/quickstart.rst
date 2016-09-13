@@ -1,26 +1,19 @@
 .. vim: spell
 
-Getting started
+Quickstart
 ***************
 
-This tutorial gets you started with Inmanta. You will learn how to:
+This tutorial gets you started with Inmanta. 
+
+The objective of this tutorial is to set up a Drupal CMS.  
+
+Along the way, you will learn how to:
 
 * Use vagrant to make a basic Inmanta install
 * Create an Inmanta project
 * Use existing configuration modules
-* Create a configuration model to deploy a LAMP (Linux, Apache, MySQL and PHP) stack
+* Create a configuration model to deploy a LAMP stack (Linux, Apache, MySQL and PHP).
 * Deploy the configuration
-
-The Goal
-=========
-
-The goal of this tutorial is to set up a Drupal CMS, with all its dependencies automatically.  
-
-Drupal depends on:
-
-1. A web server to server Drupal
-2. A database server to store data in
-3. A database configured in the database server (with a username and password and the proper permissions configured)
 
 
 Setting up the tutorial
@@ -36,6 +29,7 @@ Next, grab the vagrant box from out git repo and let vagrant do the setup of the
 
     git clone git@git.inmanta.com:demo/tutorial-vagrant.git
     cd tutorial-vagrant
+    ./make_keys.sh
     vagrant up
     
 Vagrant will set up the Inmanta server and two VM's to experiment on.
@@ -75,7 +69,7 @@ Here we will create an Inmanta project ``quickstart`` with a basic configuration
     name: quickstart
     modulepath: libs
     downloadpath: libs
-    repo: git@git.inmanta.com:modules/
+    repo: https://github.com/inmanta/
     description: A quickstart project that installs a drupal website.
     EOF
 
@@ -124,15 +118,18 @@ First, create a new ``main.cf`` file:
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
-* On lines 1-6 we import all required packages.  
-* On line 9 we define the server on which we want to deploy Drupal. 
+* Lines 1-6 import all required packages.  
+* Line 9 defines on which we want to deploy Drupal. 
+
  * The *name* attribute is the hostname of the machine, which is later used to determine what configuration needs to be deployed on which machine. 
- * The *os* attribute defines which operating system this server runs.  
- * The *ip* attribute is the IP address of this host. Now, we define this attribute manually, later on we will let Inmanta manage this automatically.
+ * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
+ * The *ip* attribute is the IP address of this host. Now, we define this attribute manually, later on we will let Inmanta discover this automatically.
+
 * Lines 12 and 13 deploy an apache server and mysql server on our host.
-* Line 16 defines the name (hostname) of the web application, and line 18 defines the database used by Drupal.
-* Line 17 defines a database for our Drupal website.
-* Line 19 defines the actual Drupal application.
+* Line 16 defines the name (hostname) of the web application.
+* Lines 17-18 define a database for our Drupal website.
+* Lines 19-20 define the actual Drupal application.
+
 
 
 Deploy the configuration model
@@ -148,7 +145,7 @@ For the CLI:
     
 .. note::
 
-	The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to export to the correct project. Alternately, use options ``-e``, ``--server_address``, and ``--server_port``.
+	The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and export to the right environment.
 	
 Then compile the project and send it to the server:
 
@@ -356,3 +353,8 @@ configuration.
 
     inmanta -vvv export
 
+
+Next steps
+==============
+
+:doc:guides
