@@ -51,5 +51,32 @@ def main(argv=sys.argv[1:]):
     return myapp.run(argv)
 
 
+def get_parser():
+    from inmanta.client import InmantaCommand
+
+    myapp = Inmanta()
+    rp = myapp.parser
+    subparsers = rp.add_subparsers()
+
+    command_manager = myapp.command_manager
+    for name, ep in sorted(command_manager):
+        try:
+            factory = ep.load()
+        except Exception as err:
+            myapp.stdout.write('Could not load %r\n' % ep)
+            continue
+        try:
+            cmd = factory(myapp, None)
+            if cmd.deprecated:
+                continue
+        except Exception as err:
+            myapp.stdout.write('Could not instantiate %r: %s\n' % (ep, err))
+            continue
+        if isinstance(cmd, InmantaCommand):
+            cmd.get_parser(name, parser_override=subparsers)
+
+    return rp
+
+
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

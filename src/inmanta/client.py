@@ -43,8 +43,11 @@ class InmantaCommand(Command):
         self._client = None
         self._io_loop = IOLoop.current()
 
-    def get_parser(self, prog_name):
-        parser = super().get_parser(prog_name)
+    def get_parser(self, prog_name, parser_override=None):
+        if parser_override is not None:
+            parser = parser_override.add_parser(prog_name, help=self.get_description())
+        else:
+            parser = super().get_parser(prog_name)
         Config.load_config()
 
         parser.add_argument("--host", dest="host", help="The server hostname to connect to (default: localhost)",
