@@ -9,7 +9,7 @@ node {
 
     stage('Unit Tests') {
         docker.image("inmantaci/fedora-tox").inside {
-            sh "tox"
+            sh "pyenv local 3.4.5 3.5.2; ASYNC_TEST_TIMEOUT=60 tox"
         }
     }
 }
