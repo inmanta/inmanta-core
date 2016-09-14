@@ -274,6 +274,7 @@ Next, edit the ``lamp/module.yml`` file and add meta-data to it:
 
     name: lamp
     license: Apache 2.0
+    version: 0.1
 
 
 Configuration model
@@ -285,6 +286,12 @@ configuration module.
 .. code-block:: ruby
     :linenos:
 
+    import ip
+    import apache
+    import mysql
+    import web
+    import drupal
+    
     entity DrupalStack:
         string hostname
         string admin_user
@@ -334,10 +341,13 @@ required.
 
 .. code-block:: ruby
     :linenos:
-
+    import ip
+    import redhat
+    import lamp
+    
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora21, ip="192.168.33.101")
-    vm2=ip::Host(name="vm2", os=redhat::fedora21, ip="192.168.33.102")
+    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
+    vm2=ip::Host(name="vm2", os=redhat::fedora23, ip="192.168.33.102")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
                       admin_password="test", admin_email="admin@example.com", site_name="localhost")
