@@ -18,7 +18,6 @@
 import unittest
 import tempfile
 import os
-import importlib
 import shutil
 import sys
 import io
@@ -47,19 +46,16 @@ class ModuleTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         unittest.TestCase.setUpClass()
-        # Make sure that we are executed in a module
-        loader = importlib.find_loader(cls.__module__)
-        source_file = loader.get_filename(cls.__module__)
-        source_dir = os.path.dirname(source_file)
 
-        # find the module root
-        dir_path = source_dir.split(os.path.sep)
+        curdir = os.path.abspath(os.path.curdir)
+        # Make sure that we are executed in a module
+        dir_path = curdir.split(os.path.sep)
         while not os.path.exists(os.path.join("/", *dir_path, "module.yml")) and len(dir_path) > 0:
             dir_path.pop()
 
         if len(dir_path) == 0:
-            raise Exception("Module test case have to be saved in the module they are intented for. No module found for test "
-                            "case %d", source_file)
+            raise Exception("Module test case have to be saved in the module they are intended for. "
+                            "%s not part of module path" % curdir)
 
         cls._module_dir = os.path.join("/", *dir_path)
         cls._module_name = dir_path[-1]
@@ -123,7 +119,6 @@ license: Test License
 
         # compile the model
         test_project = module.Project(self._test_project_dir)
-        test_project.use_virtual_env()
         module.Project.set(test_project)
 
         try:
