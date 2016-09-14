@@ -35,10 +35,13 @@ class VirtualEnv(object):
     """
 
     def __init__(self, env_path):
+        LOGGER.info("Creating new virtual environment in %s", env_path)
         self.env_path = env_path
         self.virtual_python = None
         self.virtual_pip = None
         self.__cache_done = set()
+
+        self._old = {}
 
     def init_env(self):
         """
@@ -63,16 +66,19 @@ class VirtualEnv(object):
                 LOGGER.debug("Created a new virtualenv at %s", self.env_path)
             else:
                 LOGGER.error("Unable to create new virtualenv at %s (%s, %s)", self.env_path, out.decode(), err.decode())
+                return False
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
         self.virtual_pip = os.path.join(self.env_path, "bin", "pip")
+        return True
 
     def use_virtual_env(self):
         """
             Use the virtual environment
         """
-        self.init_env()
+        if not self.init_env():
+            raise Exception("Unable to init virtual environment")
 
         activate_file = os.path.join(self.env_path, "bin/activate_this.py")
         if os.path.exists(activate_file):
