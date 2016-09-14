@@ -32,7 +32,7 @@ from collections import defaultdict
 import tornado.web
 from tornado import gen, queues, locks
 from inmanta import methods
-from inmanta.config import Config, Option, is_str, is_int, is_str_opt, is_bool
+from inmanta.config import Config
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop

@@ -25,7 +25,7 @@ from inmanta import methods
 from inmanta.config import Config
 from tornado import gen
 from tornado.ioloop import IOLoop
-from inmanta.protocol import TransportConfig
+from inmanta.config import TransportConfig
 
 LOGGER = logging.getLogger(__name__)
 

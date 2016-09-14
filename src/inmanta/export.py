@@ -24,7 +24,6 @@ import os
 import time
 import glob
 import base64
-import uuid
 
 from inmanta import protocol
 from inmanta.agent.handler import Commander

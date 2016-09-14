@@ -17,12 +17,4 @@
 """
 
 # flake8: noqa: F401
-                self.cache.open_version(version)
-                provider.set_cache(self.cache)
-
-            finally:
-                self.cache.close_version(version)
-
-
-
 from inmanta.agent.agent import Agent
