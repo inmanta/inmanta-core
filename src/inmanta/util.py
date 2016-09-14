@@ -17,6 +17,12 @@
 """
 
 import functools
+import logging
+
+import pkg_resources
+from pkg_resources import DistributionNotFound
+
+LOGGER = logging.getLogger(__name__)
 
 
 def memoize(obj):
@@ -29,3 +35,13 @@ def memoize(obj):
         return cache[args]
 
     return memoizer
+
+
+def get_compiler_version():
+    try:
+        return pkg_resources.get_distribution("inmanta").version
+    except DistributionNotFound:
+        LOGGER.error(
+            "Could not find version number for the inmanta compiler." +
+            "Is inmanta installed? Use stuptools install or setuptools dev to install.")
+        return None

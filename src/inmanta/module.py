@@ -29,6 +29,9 @@ import inspect
 from pkg_resources import parse_version, parse_requirements
 import time
 from subprocess import CalledProcessError
+from tarfile import TarFile
+from io import BytesIO
+
 
 import yaml
 import inmanta
@@ -40,9 +43,8 @@ import ruamel.yaml
 from inmanta.parser import plyInmantaParser
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement
-from inmanta.util import memoize
+from inmanta.util import memoize, get_compiler_version
 from inmanta.ast.statements.define import DefineImport
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -74,6 +76,9 @@ class GitProvider:
         pass
 
     def get_all_tags(self, repo):
+        pass
+
+    def get_file_for_version(self, repo, tag, file):
         pass
 
 
@@ -114,6 +119,13 @@ class CLIGitProvider(GitProvider):
         return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"],
                                        cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
+    def get_file_for_version(self, repo, tag, file):
+        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file],
+                                       cwd=repo, stderr=subprocess.DEVNULL)
+        tf = TarFile(fileobj=BytesIO(data))
+        tfile = tf.next()
+        b = tf.extractfile(tfile)
+        return b.read().decode("utf-8")
 # try:
 #     import pygit2
 #     import re
@@ -725,17 +737,17 @@ class Module(ModuleLike):
         if fetch:
             gitprovider.fetch(path)
 
-        versions = cls.get_suitable_versions_for(modulename, requirements, path)
+        version = cls.get_suitable_version_for(modulename, requirements, path)
 
-        if len(versions) == 0:
+        if version is None:
             print("no suitable version found for module %s" % modulename)
         else:
-            gitprovider.checkout_tag(path, str(versions[0]))
+            gitprovider.checkout_tag(path, str(version))
 
         return Module(project, path)
 
     @classmethod
-    def get_suitable_versions_for(cls, modulename, requirements, path):
+    def get_suitable_version_for(cls, modulename, requirements, path):
         versions = gitprovider.get_all_tags(path)
 
         def try_parse(x):
@@ -750,7 +762,41 @@ class Module(ModuleLike):
         for r in requirements:
             versions = [x for x in r.specifier.filter(versions, True)]
 
-        return versions
+        comp_version = get_compiler_version()
+        if comp_version is not None:
+            comp_version = parse_version(comp_version)
+            return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
+        else:
+            return versions[0]
+
+    @classmethod
+    def __best_for_compiler_version(cls, modulename, versions, path, comp_version):
+        def get_cv_for(best):
+            cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
+            cfg = yaml.load(cfg)
+            if "compiler_version" not in cfg:
+                return None
+            return parse_version(cfg["compiler_version"])
+
+        best = versions[0]
+        atleast = get_cv_for(best)
+        if atleast is None or comp_version > atleast:
+            return best
+
+        # binary search
+        hi = len(versions)
+        lo = 1
+        while lo < hi:
+            mid = (lo + hi) // 2
+            atleast = get_cv_for(versions[mid])
+            if atleast is not None and atleast > comp_version:
+                lo = mid + 1
+            else:
+                hi = mid
+        if hi == len(versions):
+            LOGGER.warn("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
+            return None
+        return versions[lo]
 
     def is_versioned(self):
         """
@@ -1021,11 +1067,11 @@ class ModuleTool(object):
             version = str(mod.version)
             if name not in specs:
                 specs[name] = []
-            versions = Module.get_suitable_versions_for(name, specs[name], mod._path)
-            if len(versions) == 0:
+            versions = Module.get_suitable_version_for(name, specs[name], mod._path)
+            if versions is None:
                 reqv = "None"
             else:
-                reqv = str(versions[0])
+                reqv = str(versions)
 
             version_length = max(len(version), len(reqv), version_length)
 
