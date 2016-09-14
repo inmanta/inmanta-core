@@ -41,6 +41,8 @@ class VirtualEnv(object):
         self.virtual_pip = None
         self.__cache_done = set()
 
+        self._old = {}
+
     def init_env(self):
         """
             Init the virtual environment

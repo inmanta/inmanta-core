@@ -24,7 +24,7 @@ import pytest
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
 
-@pytest.yield_fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def mongo_db():
     mongobox = MongoBox()
     port_envvar = DEFAULT_PORT_ENVVAR

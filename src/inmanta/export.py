@@ -209,7 +209,7 @@ class Exporter(object):
             for host in hosts:
                 LOGGER.info(" - %s" % host)
 
-    def run(self, types, scopes):
+    def run(self, types, scopes, no_commit=False):
         """
         Run the export functions
         """
@@ -243,10 +243,10 @@ class Exporter(object):
             with open(self.options.json, "wb+") as fd:
                 fd.write(json.dumps(resources).encode("utf-8"))
 
-        elif len(self._resources) > 0 or len(unknown_parameters) > 0:
+        elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
             self.commit_resources(self._version, resources)
+            LOGGER.info("Committed resources with version %d" % self._version)
 
-        LOGGER.info("Committed resources with version %d" % self._version)
         return self._version, self._resources
 
     def get_variable(self, name):
