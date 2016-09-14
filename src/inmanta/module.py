@@ -411,6 +411,10 @@ class Project(ModuleLike):
         self.root_ns = Namespace("__root__")
 
         self.autostd = autostd
+        self._release_only = True
+        if "use_prerelease" in self._meta:
+            if self._meta["use_prerelease"]:
+                self._release_only = False
 
     @classmethod
     def get_project_dir(cls, cur_dir):
@@ -535,9 +539,9 @@ class Project(ModuleLike):
         else:
             reqs = self.collect_requirements()
             if module_name in reqs:
-                module = Module.install(self, module_name, reqs[module_name])
+                module = Module.install(self, module_name, reqs[module_name], self._release_only)
             else:
-                module = Module.install(self, module_name, parse_requirements(module_name))
+                module = Module.install(self, module_name, parse_requirements(module_name), self._release_only)
         self.modules[module_name] = module
         return module
 
@@ -694,7 +698,7 @@ class Module(ModuleLike):
     version = property(get_version)
 
     @classmethod
-    def install(cls, project, modulename, requirements, install=True):
+    def install(cls, project, modulename, requirements, install=True, release_only=True):
         """
            Install a module, return module object
         """
@@ -711,10 +715,10 @@ class Module(ModuleLike):
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s", modulename)
 
-        return cls.update(project, modulename, requirements, path, False)
+        return cls.update(project, modulename, requirements, path, False, release_only=release_only)
 
     @classmethod
-    def update(cls, project, modulename, requirements, path=None, fetch=True):
+    def update(cls, project, modulename, requirements, path=None, fetch=True, release_only=True):
         """
            Update a module, return module object
         """
@@ -725,7 +729,7 @@ class Module(ModuleLike):
         if fetch:
             gitprovider.fetch(path)
 
-        versions = cls.get_suitable_versions_for(modulename, requirements, path)
+        versions = cls.get_suitable_versions_for(modulename, requirements, path, release_only=release_only)
 
         if len(versions) == 0:
             print("no suitable version found for module %s" % modulename)
@@ -735,7 +739,7 @@ class Module(ModuleLike):
         return Module(project, path)
 
     @classmethod
-    def get_suitable_versions_for(cls, modulename, requirements, path):
+    def get_suitable_versions_for(cls, modulename, requirements, path, release_only=True):
         versions = gitprovider.get_all_tags(path)
 
         def try_parse(x):
@@ -748,7 +752,7 @@ class Module(ModuleLike):
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions, True)]
+            versions = [x for x in r.specifier.filter(versions, not release_only)]
 
         return versions
 
@@ -1021,7 +1025,7 @@ class ModuleTool(object):
             version = str(mod.version)
             if name not in specs:
                 specs[name] = []
-            versions = Module.get_suitable_versions_for(name, specs[name], mod._path)
+            versions = Module.get_suitable_versions_for(name, specs[name], mod._path, release_only=project._release_only)
             if len(versions) == 0:
                 reqv = "None"
             else:
@@ -1056,7 +1060,7 @@ class ModuleTool(object):
 
         for name, spec in specs.items():
             print("updating module: %s" % name)
-            Module.update(project, name, spec)
+            Module.update(project, name, spec, release_only=project._release_only)
 
     def install(self, project=None):
         """
