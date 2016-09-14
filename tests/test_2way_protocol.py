@@ -25,6 +25,7 @@ from inmanta import methods
 from inmanta.config import Config
 from tornado import gen
 from tornado.ioloop import IOLoop
+from inmanta.config import TransportConfig
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ from inmanta import protocol  # NOQA
 
 
 class Server(protocol.ServerEndpoint):
+
     @protocol.handle(StatusMethod.get_status)
     @gen.coroutine
     def get_status(self, tid):
@@ -60,6 +62,7 @@ class Server(protocol.ServerEndpoint):
 
 
 class Agent(protocol.AgentEndPoint):
+
     @protocol.handle(StatusMethod.get_agent_status)
     @gen.coroutine
     def get_agent_status(self, id):
@@ -91,6 +94,10 @@ def test_2way_protocol(logs=False):
         logging.root.handlers = []
         logging.root.addHandler(stream)
         logging.root.setLevel(logging.DEBUG)
+
+    # set config defaults
+    TransportConfig("server")
+    TransportConfig("agent")
 
     io_loop = IOLoop.current()
     Config.load_config()

@@ -27,7 +27,7 @@ from inmanta import protocol
 from cliff.lister import Lister
 from cliff.show import ShowOne
 from cliff.command import Command
-from inmanta.config import Config
+from inmanta.config import Config, cmdline_rest_transport
 from blessings import Terminal
 from tornado.ioloop import IOLoop
 
@@ -51,9 +51,9 @@ class InmantaCommand(Command):
         Config.load_config()
 
         parser.add_argument("--host", dest="host", help="The server hostname to connect to (default: localhost)",
-                            default=Config.get("cmdline_rest_transport", "host", "localhost"))
+                            default=cmdline_rest_transport.host.get())
         parser.add_argument("--port", dest="port", help="The server port to connect to (default: 8888)",
-                            default=int(Config.get("cmdline_rest_transport", "port", 8888)), type=int)
+                            default=cmdline_rest_transport.port.get(), type=int)
         parser = self.parser_config(parser)
         return parser
 
@@ -68,8 +68,8 @@ class InmantaCommand(Command):
             Do a request and return the response
         """
         type(self).log.debug("Calling method %s on server %s:%s with arguments %s" %
-                             (method_name, Config.get("cmdline_rest_transport", "host"),
-                              Config.get("cmdline_rest_transport", "port"), arguments))
+                             (method_name, cmdline_rest_transport.host.get(),
+                              cmdline_rest_transport.port.get(), arguments))
 
         if not hasattr(self._client, method_name):
             raise Exception("API call %s is not available." % method_name)

@@ -43,8 +43,9 @@ from inmanta import methods
 from inmanta import protocol
 from inmanta.agent.io.remote import RemoteIO
 from inmanta.ast import type
-from inmanta.config import Config
 from inmanta.resources import Id, HostNotFoundException
+from inmanta.server import config as opt
+
 
 LOGGER = logging.getLogger(__name__)
 LOCK = locks.Lock()
@@ -65,24 +66,24 @@ class Server(protocol.ServerEndpoint):
 
         self._db = None
         if database_host is None:
-            database_host = Config.get("database", "host", "localhost")
+            database_host = opt.db_host.get()
 
         if database_port is None:
-            database_port = Config.get("database", "port", 27017)
+            database_port = opt.db_port.get()
 
-        self._db = connect(Config.get("database", "name", "inmanta"), host=database_host, port=database_port)
-        LOGGER.info("Connected to mongodb database %s on %s:%d", Config.get("database", "name", "inmanta"),
+        self._db = connect(opt.db_name.get(), host=database_host, port=database_port)
+        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(),
                     database_host, database_port)
 
-        self._fact_expire = int(Config.get("server", "fact-expire", 3600))
-        self._fact_renew = int(Config.get("server", "fact-renew", self._fact_expire / 3))
-        self._fact_resource_block = int(Config.get("server", "fact-resource_block", 60))
+        self._fact_expire = opt.server_fact_expire.get()
+        self._fact_renew = opt.server_fact_renew.get()
+        self._fact_resource_block = opt.server_fact_resource_block.get()
         self._fact_resource_block_set = {}
 
         self.add_end_point_name(self.node_name)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
-        self.schedule(self._purge_versions, int(Config.get("server", "purge-versions-interval", 3600)))
+        self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
 
         self._io_loop.add_callback(self._purge_versions)
 
@@ -90,7 +91,7 @@ class Server(protocol.ServerEndpoint):
 
         self._requires_agents = {}
 
-        if Config.getboolean("server", "autostart-on-start", True):
+        if opt.server_autostart_on_start.get():
             future = self.start_agents()
             self.add_future(future)
 
@@ -101,10 +102,10 @@ class Server(protocol.ServerEndpoint):
         """
             If configured, set up tornado to serve the dashboard
         """
-        if not Config.getboolean("dashboard", "enabled", False):
+        if not opt.dash_enable.get():
             return
 
-        dashboard_path = Config.get("dashboard", "path")
+        dashboard_path = opt.dash_path.get()
         if dashboard_path is None:
             LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
             return
@@ -141,7 +142,7 @@ class Server(protocol.ServerEndpoint):
         envs = yield data.Environment.objects.find_all()  # @UndefinedVariable
         for env_item in envs:
             # get available versions
-            n_versions = int(Config.get("server", "available-versions-to-keep", 2))
+            n_versions = opt.server_version_to_keep.get()
             versions = yield data.ConfigurationModel.objects.filter(released=False,  # @UndefinedVariable
                                                                     environment=env_item).find_all()  # @UndefinedVariable
             if len(versions) > n_versions:
@@ -157,10 +158,7 @@ class Server(protocol.ServerEndpoint):
         """
             Check if the server storage is configured and ready to use.
         """
-        if "config" not in Config.get() or "state-dir" not in Config.get()["config"]:
-            raise Exception("The Inmanta server requires a state directory to be configured")
-
-        state_dir = Config.get()["config"]["state-dir"]
+        state_dir = opt.state_dir.get()
 
         if not os.path.exists(state_dir):
             os.mkdir(state_dir)
@@ -187,7 +185,7 @@ class Server(protocol.ServerEndpoint):
         if not os.path.exists(env_agent_dir):
             os.mkdir(env_agent_dir)
 
-        log_dir = Config.get("config", "log-dir", "/var/log/inmanta")
+        log_dir = opt.log_dir.get()
         if not os.path.isdir(log_dir):
             os.mkdir(log_dir)
         dir_map["logs"] = log_dir
@@ -363,7 +361,7 @@ class Server(protocol.ServerEndpoint):
 
         result = yield self._update_param(env, id, value, source, resource_id, metadata)
         if result:
-            self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+            self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
         if resource_id is None:
             resource_id = ""
@@ -393,7 +391,7 @@ class Server(protocol.ServerEndpoint):
                 recompile = True
 
         if recompile:
-            self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+            self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
         return 200
 
@@ -537,7 +535,7 @@ class Server(protocol.ServerEndpoint):
         new_record = yield data.FormRecord.get_uuid(id)
         record_dict = yield new_record.to_dict()
 
-        self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+        self._async_recompile(tid, False, opt.server_wait_after_param.get())
         return 200, {"record": record_dict}
 
     @protocol.handle(methods.FormRecords.create_record)
@@ -568,7 +566,7 @@ class Server(protocol.ServerEndpoint):
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
         yield record.save()
-        self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+        self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
         # need to query this again, to_dict with load_references only works on retrieved document and not on newly created
         record = yield data.FormRecord.get_uuid(record_id)
@@ -1007,7 +1005,7 @@ class Server(protocol.ServerEndpoint):
         return 200
 
     def _agent_matches(self, agent_name):
-        agent_globs = [x.strip() for x in Config.get("server", "agent_autostart", "iaas_*").split(",")]
+        agent_globs = [x.strip() for x in opt.server_agent_autostart.get()]
 
         for agent_glob in agent_globs:
             if glob.fnmatch.fnmatchcase(agent_name, agent_glob):
@@ -1041,6 +1039,8 @@ class Server(protocol.ServerEndpoint):
         """
             Ensure that the agent is running if required
         """
+        import inmanta.agent.config
+
         if self._agent_matches(agent_name):
             with (yield LOCK.acquire()):
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
@@ -1067,7 +1067,7 @@ class Server(protocol.ServerEndpoint):
                     except HostNotFoundException:
                         agent_map[agent] = "localhost"
 
-                port = Config.get("server_rest_transport", "port", "8888")
+                port = opt.transport_port.get()
 
                 # generate config file
                 config = """[config]
@@ -1078,17 +1078,18 @@ agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
 python_binary=%(python_binary)s
+agent-splay=0
 
 [agent_rest_transport]
 port=%(port)s
 host=localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port,
-                    "python_binary": Config.get("config", "python_binary", "python"),
+                    "python_binary": inmanta.agent.config.python_binary.get(),
                     "agent_map": ",".join(["%s=%s" % (k, v) for k, v in agent_map.items()]),
-                    "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
+                    "statedir": opt.state_dir.get()}
 
-                user = Config.get("server", "username", None)
-                passwd = Config.get("server", "password", None)
+                user = opt.server_username.get()
+                passwd = opt.server_password.get()
 
                 if user is not None and passwd is not None:
                     config += """
@@ -1096,8 +1097,8 @@ username=%s
 password=%s
 """ % (user, passwd)
 
-                ssl_cert = Config.get("server", "ssl_key_file", None)
-                ssl_ca = Config.get("server", "ssl_cert_file", None)
+                ssl_cert = opt.server_ssl_key.get()
+                ssl_ca = opt.server_ssl_cert.get()
                 if ssl_ca is not None and ssl_cert is not None:
                     config += """
 ssl=True
@@ -1539,8 +1540,11 @@ ssl_ca_cert_file=%s
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
+        if opt.server_no_recompile.get():
+            LOGGER.info("Skipping compile due to no-recompile=True")
+            return
         last_recompile = self._recompiles[environment_id]
-        wait_time = int(Config.get("server", "auto-recompile-wait", 600))
+        wait_time = opt.server_autrecompile_wait.get()
         if last_recompile is self:
             LOGGER.info("Already recompiling")
             return
@@ -1640,11 +1644,11 @@ ssl_ca_cert_file=%s
                 stages.append(result)
 
             LOGGER.info("Recompiling configuration model")
-            server_address = Config.get("server", "server_address", "localhost")
+            server_address = opt.server_address.get()
             result = yield self._run_compile_stage("Recompiling configuration model",
                                                    inmanta_path + ["-vvv", "export", "-e", str(environment_id),
                                                                    "--server_address", server_address, "--server_port",
-                                                                   Config.get("server_rest_transport", "port", "8888")],
+                                                                   opt.transport_port.get()],
                                                    project_dir, env=os.environ.copy())
             stages.append(result)
         finally:

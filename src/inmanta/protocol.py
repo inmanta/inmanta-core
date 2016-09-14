@@ -670,13 +670,10 @@ class RESTTransport(Transport):
             Load the configuration for the client
         """
         LOGGER.debug("Getting config in section %s", self.id)
-        port = 8888
-        if self.id in Config.get() and "port" in Config.get()[self.id]:
-            port = int(Config.get()[self.id]["port"])
 
-        host = "localhost"
-        if self.id in Config.get() and "host" in Config.get()[self.id]:
-            host = Config.get()[self.id]["host"]
+        port = Config.get(self.id, "port", 8888)
+
+        host = Config.get(self.id, "host", "localhost")
 
         if Config.getboolean(self.id, "ssl", False):
             protocol = "https"
@@ -1013,6 +1010,8 @@ class Environment(object):
         self._agents.add(agent)
 
     def put_call(self, agent, call_spec):
+        import inmanta.server.config
+
         future = tornado.concurrent.Future()
         if agent in self._agent_node_map:
             LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], agent)
@@ -1022,7 +1021,7 @@ class Environment(object):
             call_spec["agent"] = agent
             q.put(call_spec)
 
-            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, int(Config.get("config", "timeout", 2)),
+            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, inmanta.server.config.timeout.get(),
                          "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], agent))
             self._replies[call_spec["reply_id"]] = future
         else:
