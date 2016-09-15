@@ -16,9 +16,9 @@ The key characteristics of Inmanta are:
 Currently, the Inmanta project is mainly developed and maintained by Inmanta NV.
 
 ##Links
-* [community](http://inmanta.github.io)
-* [documentation](http://inmanta.readthedocs.io)
-* [quickstart](https://github.com/inmanta/quickstart-vagrant)
+* [Community](http://inmanta.github.io)
+* [Documentation](http://inmanta.readthedocs.io)
+* [Quickstart](https://github.com/inmanta/quickstart-vagrant)
 
 ## Install 
 
