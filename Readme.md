@@ -45,7 +45,7 @@ vagrant up
 Vagrant will set up the Inmanta server and two VMs to experiment on.
 When Vagrant is ready, you should be able to open the dashboard at http://127.0.0.1:8888.  
 
-To get a shell on the Inmanta Server:
+To get a shell on the Inmanta server:
 
     vagrant ssh server
 
@@ -69,11 +69,11 @@ Here we will create an Inmanta project called ``quickstart``, with a basic confi
     EOF
 
     
-The configuration file ``project.yml`` defines that re-usable modules are stored in ``libs``. 
+The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``. 
 
 In the next section we will use existing modules to deploy our LAMP stack.
 
-### Re-use existing modules
+### Reuse existing modules
 
 
 At GitHub, we host modules to setup and manage many systems. Our modules are available in the https://github.com/inmanta/ repositories.
