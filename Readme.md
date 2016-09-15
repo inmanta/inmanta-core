@@ -141,6 +141,10 @@ The first time you run this command may take a while, as all dependencies are do
 
 Go to your environment, and press Deploy.
 
+To immediately deploy the configuration model using the CLI, add the option ``-d``:
+
+    inmanta -vvv export -d
+
 ### Accessing your new Drupal server
 
 
