@@ -765,6 +765,8 @@ class Module(ModuleLike):
         comp_version = get_compiler_version()
         if comp_version is not None:
             comp_version = parse_version(comp_version)
+            # use base version, to make sure dev versions work as expected
+            comp_version = parse_version(comp_version.base_version)
             return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
         else:
             return versions[0]
