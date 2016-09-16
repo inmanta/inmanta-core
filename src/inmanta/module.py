@@ -337,6 +337,11 @@ class ModuleLike:
             reqs.append(req)
         return reqs
 
+INSTALL_RELEASES = "release"
+INSTALL_PRERELEASES = "prerelease"
+INSTALL_MASTER = "master"
+INSTALL_OPTS = [INSTALL_MASTER, INSTALL_PRERELEASES, INSTALL_RELEASES]
+
 
 class Project(ModuleLike):
     """
@@ -411,10 +416,13 @@ class Project(ModuleLike):
         self.root_ns = Namespace("__root__")
 
         self.autostd = autostd
-        self._release_only = True
-        if "use_prerelease" in self._meta:
-            if self._meta["use_prerelease"]:
-                self._release_only = False
+        self._install_mode = INSTALL_RELEASES
+        if "install_mode" in self._meta:
+            mode = self._meta["install_mode"]
+            if mode not in INSTALL_OPTS:
+                LOGGER.warning("Invallid value for install_mode, should be one of [%s]" % ','.join(INSTALL_OPTS))
+            else:
+                self._install_mode = mode
 
     @classmethod
     def get_project_dir(cls, cur_dir):
@@ -539,9 +547,9 @@ class Project(ModuleLike):
         else:
             reqs = self.collect_requirements()
             if module_name in reqs:
-                module = Module.install(self, module_name, reqs[module_name], self._release_only)
+                module = Module.install(self, module_name, reqs[module_name], self._install_mode)
             else:
-                module = Module.install(self, module_name, parse_requirements(module_name), self._release_only)
+                module = Module.install(self, module_name, parse_requirements(module_name), self._install_mode)
         self.modules[module_name] = module
         return module
 
@@ -698,7 +706,7 @@ class Module(ModuleLike):
     version = property(get_version)
 
     @classmethod
-    def install(cls, project, modulename, requirements, install=True, release_only=True):
+    def install(cls, project, modulename, requirements, install=True, install_mode=INSTALL_RELEASES):
         """
            Install a module, return module object
         """
@@ -715,10 +723,10 @@ class Module(ModuleLike):
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s", modulename)
 
-        return cls.update(project, modulename, requirements, path, False, release_only=release_only)
+        return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
 
     @classmethod
-    def update(cls, project, modulename, requirements, path=None, fetch=True, release_only=True):
+    def update(cls, project, modulename, requirements, path=None, fetch=True, install_mode=INSTALL_RELEASES):
         """
            Update a module, return module object
         """
@@ -729,14 +737,18 @@ class Module(ModuleLike):
         if fetch:
             gitprovider.fetch(path)
 
-        versions = cls.get_suitable_versions_for(modulename, requirements, path, release_only=release_only)
-
-        if len(versions) == 0:
-            print("no suitable version found for module %s" % modulename)
+        if install_mode == INSTALL_MASTER:
+            gitprovider.checkout(path, "master")
         else:
-            gitprovider.checkout_tag(path, str(versions[0]))
+            release_only = (install_mode == INSTALL_RELEASES)
+            versions = cls.get_suitable_versions_for(modulename, requirements, path, release_only=release_only)
 
-        return Module(project, path)
+            if len(versions) == 0:
+                print("no suitable version found for module %s" % modulename)
+            else:
+                gitprovider.checkout_tag(path, str(versions[0]))
+
+            return Module(project, path)
 
     @classmethod
     def get_suitable_versions_for(cls, modulename, requirements, path, release_only=True):
@@ -1025,11 +1037,17 @@ class ModuleTool(object):
             version = str(mod.version)
             if name not in specs:
                 specs[name] = []
-            versions = Module.get_suitable_versions_for(name, specs[name], mod._path, release_only=project._release_only)
-            if len(versions) == 0:
-                reqv = "None"
+
+            if project._install_mode == INSTALL_MASTER:
+                reqv = "master"
             else:
-                reqv = str(versions[0])
+                release_only = project._install_mode == INSTALL_RELEASES
+                versions = Module.get_suitable_versions_for(
+                    name, specs[name], mod._path, release_only=release_only)
+                if len(versions) == 0:
+                    reqv = "None"
+                else:
+                    reqv = str(versions[0])
 
             version_length = max(len(version), len(reqv), version_length)
 
@@ -1060,7 +1078,7 @@ class ModuleTool(object):
 
         for name, spec in specs.items():
             print("updating module: %s" % name)
-            Module.update(project, name, spec, release_only=project._release_only)
+            Module.update(project, name, spec, install_mode=project._install_mode)
 
     def install(self, project=None):
         """
