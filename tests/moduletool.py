@@ -28,8 +28,9 @@ import unittest
 from nose.tools import raises, assert_true
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo
+from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider
 from inmanta.ast import CompilerException, ModuleNotFoundException
+import ruamel.yaml
 
 
 def makemodule(reporoot, name, deps, project=False, imports=None,):
@@ -95,6 +96,18 @@ def addFile(modpath, file, content, msg, version=None):
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
         ModuleTool().commit(msg, version, False, True)
         os.curdir = ocd
+
+
+def addFileAndCompilerConstraint(modpath, file, content, msg, version, compiler_version):
+    cfgfile = os.path.join(modpath, "module.yml")
+    with open(cfgfile, "r") as fd:
+        cfg = ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
+
+    cfg["compiler_version"] = compiler_version
+
+    with open(cfgfile, "w") as fd:
+        fd.write(ruamel.yaml.dump(cfg, Dumper=ruamel.yaml.RoundTripDumper))
+    addFile(modpath, file, content, msg, version)
 
 
 def commitmodule(modpath, mesg):
@@ -163,8 +176,18 @@ class testModuleTool(unittest.TestCase):
         addFile(mod6, "signal", "present", "second commit", version="3.2")
         addFile(mod6, "badsignal", "present", "third commit")
 
+        mod7 = makemodule(reporoot, "mod7", [])
+        commitmodule(mod7, "first commit")
+        addFile(mod7, "nsignal", "present", "second commit", version="3.2")
+        addFile(mod7, "nsignal", "present", "third commit", version="3.2.1")
+        addFile(mod7, "signal", "present", "fourth commit", version="3.2.2")
+        addFileAndCompilerConstraint(mod7, "badsignal", "present", "fifth commit", version="4.0", compiler_version="1000000.4")
+        addFile(mod7, "badsignal", "present", "sixth commit", version="4.1")
+        addFileAndCompilerConstraint(mod7, "badsignal", "present", "fifth commit", version="4.2", compiler_version="1000000.5")
+        addFile(mod7, "badsignal", "present", "sixth commit", version="4.3")
+
         proj = makemodule(reporoot, "testproject",
-                          [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6"])
+                          [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"])
         # results in loading of 1,2,3,6
         commitmodule(proj, "first commit")
 
@@ -190,6 +213,13 @@ class testModuleTool(unittest.TestCase):
         self.log.addHandler(self.handler)
 
         Project._project = None
+
+    def test_file_co(self):
+        result = """name: mod6
+license: Apache 2.0
+version: '3.2'
+"""
+        assert result == gitprovider.get_file_for_version(os.path.join(testModuleTool.reporoot, "mod6"), "3.2", "module.yml")
 
     def test_localRepo_good(self):
         repo = LocalFileRepo(testModuleTool.reporoot)
@@ -247,7 +277,7 @@ class testModuleTool(unittest.TestCase):
         Config.load_config()
 
         ModuleTool().execute("install", [])
-        expected = ["mod1", "mod2", "mod3", "mod6"]
+        expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
         for i in expected:
             dir = os.path.join(coroot, "libs", i)
             assert_true(os.path.exists(os.path.join(dir, "signal")),
