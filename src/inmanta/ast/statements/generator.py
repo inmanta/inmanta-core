@@ -41,7 +41,8 @@ class SubConstructor(GeneratorStatement):
 
     def requires_emit(self, resolver, queue):
         try:
-            return self.implements.constraint.requires_emit(resolver, queue)
+            resv = resolver.for_namespace(self.implements.constraint.namespace)
+            return self.implements.constraint.requires_emit(resv, queue)
         except NotFoundException as e:
             e.set_statement(self.implements)
             raise e
