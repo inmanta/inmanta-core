@@ -750,7 +750,7 @@ class Module(ModuleLike):
             gitprovider.fetch(path)
 
         if install_mode == INSTALL_MASTER:
-            gitprovider.checkout(path, "master")
+            gitprovider.checkout_tag(path, "master")
         else:
             release_only = (install_mode == INSTALL_RELEASES)
             version = cls.get_suitable_version_for(modulename, requirements, path, release_only=release_only)
