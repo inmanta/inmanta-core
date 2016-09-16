@@ -592,6 +592,18 @@ c = Jos(bar = ["X"])
 """)
         compiler.do_compile()
 
+    def testIssue164FQNInWhen(self):
+        self.setUpForSnippet("""
+import ubuntu
+implementation linux for std::HostConfig:
+end
+
+implement std::HostConfig using linux when host.os == ubuntu::ubuntu1404
+
+std::Host(name="vm1", os=ubuntu::ubuntu1404)
+""")
+        compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
