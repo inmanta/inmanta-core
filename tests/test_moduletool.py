@@ -27,12 +27,13 @@ import unittest
 
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo
+from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
+import ruamel.yaml
 
 
-def makemodule(reporoot, name, deps, project=False, imports=None,):
+def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -54,6 +55,8 @@ modulepath: libs
 downloadpath: libs
 repo: %s""" % reporoot)
 
+        if install_mode is not None:
+            projectfile.write("\ninstall_mode: %s" % install_mode)
         if len(deps) != 0:
             projectfile.write("\nrequires:")
             for req in deps:
@@ -95,6 +98,18 @@ def addFile(modpath, file, content, msg, version=None):
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
         ModuleTool().commit(msg, version, False, True)
         os.curdir = ocd
+
+
+def addFileAndCompilerConstraint(modpath, file, content, msg, version, compiler_version):
+    cfgfile = os.path.join(modpath, "module.yml")
+    with open(cfgfile, "r") as fd:
+        cfg = ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
+
+    cfg["compiler_version"] = compiler_version
+
+    with open(cfgfile, "w") as fd:
+        fd.write(ruamel.yaml.dump(cfg, Dumper=ruamel.yaml.RoundTripDumper))
+    addFile(modpath, file, content, msg, version)
 
 
 def commitmodule(modpath, mesg):
@@ -163,8 +178,24 @@ class testModuleTool(unittest.TestCase):
         addFile(mod6, "signal", "present", "second commit", version="3.2")
         addFile(mod6, "badsignal", "present", "third commit")
 
+        mod7 = makemodule(reporoot, "mod7", [])
+        commitmodule(mod7, "first commit")
+        addFile(mod7, "nsignal", "present", "second commit", version="3.2")
+        addFile(mod7, "nsignal", "present", "third commit", version="3.2.1")
+        addFile(mod7, "signal", "present", "fourth commit", version="3.2.2")
+        addFileAndCompilerConstraint(mod7, "badsignal", "present", "fifth commit", version="4.0", compiler_version="1000000.4")
+        addFile(mod7, "badsignal", "present", "sixth commit", version="4.1")
+        addFileAndCompilerConstraint(mod7, "badsignal", "present", "fifth commit", version="4.2", compiler_version="1000000.5")
+        addFile(mod7, "badsignal", "present", "sixth commit", version="4.3")
+
+        mod8 = makemodule(reporoot, "mod8", [])
+        commitmodule(mod8, "first commit")
+        addFile(mod8, "signal", "present", "second commit", version="3.2")
+        addFile(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
+        addFile(mod8, "mastersignal", "present", "last commit")
+
         proj = makemodule(reporoot, "testproject",
-                          [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6"])
+                          [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"])
         # results in loading of 1,2,3,6
         commitmodule(proj, "first commit")
 
@@ -173,6 +204,12 @@ class testModuleTool(unittest.TestCase):
 
         baddep = makemodule(reporoot, "baddep", [("badmod", None), ("mod2", ">2016")], True)
         commitmodule(baddep, "first commit")
+
+        devproject = makemodule(reporoot, "devproject", project=True, imports=["mod8"], install_mode=INSTALL_PRERELEASES)
+        commitmodule(devproject, "first commit")
+
+        masterproject = makemodule(reporoot, "masterproject", project=True, imports=["mod8"], install_mode=INSTALL_MASTER)
+        commitmodule(masterproject, "first commit")
 
     @classmethod
     def tearDownClass(cls):
@@ -190,6 +227,13 @@ class testModuleTool(unittest.TestCase):
         self.log.addHandler(self.handler)
 
         Project._project = None
+
+    def test_file_co(self):
+        result = """name: mod6
+license: Apache 2.0
+version: '3.2'
+"""
+        assert result == gitprovider.get_file_for_version(os.path.join(testModuleTool.reporoot, "mod6"), "3.2", "module.yml")
 
     def test_localRepo_good(self):
         repo = LocalFileRepo(testModuleTool.reporoot)
@@ -247,7 +291,7 @@ class testModuleTool(unittest.TestCase):
         Config.load_config()
 
         ModuleTool().execute("install", [])
-        expected = ["mod1", "mod2", "mod3", "mod6"]
+        expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
         for i in expected:
             dirname = os.path.join(coroot, "libs", i)
             assert os.path.exists(os.path.join(dirname, "signal"))
@@ -271,6 +315,34 @@ class testModuleTool(unittest.TestCase):
 
         with pytest.raises(CompilerException):
             ModuleTool().execute("install", [])
+
+    def test_MasterCheckout(self):
+        coroot = os.path.join(testModuleTool.tempdir, "masterproject")
+        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "masterproject")],
+                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        os.chdir(coroot)
+        os.curdir = coroot
+        Config.load_config()
+
+        ModuleTool().execute("install", [])
+
+        dirname = os.path.join(coroot, "libs", "mod8")
+        assert os.path.exists(os.path.join(dirname, "devsignal"))
+        assert os.path.exists(os.path.join(dirname, "mastersignal"))
+
+    def test_DevCheckout(self):
+        coroot = os.path.join(testModuleTool.tempdir, "devproject")
+        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "devproject")],
+                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        os.chdir(coroot)
+        os.curdir = coroot
+        Config.load_config()
+
+        ModuleTool().execute("install", [])
+
+        dirname = os.path.join(coroot, "libs", "mod8")
+        assert os.path.exists(os.path.join(dirname, "devsignal"))
+        assert not os.path.exists(os.path.join(dirname, "mastersignal"))
 
     def tearDown(self):
         self.log.removeHandler(self.handler)
