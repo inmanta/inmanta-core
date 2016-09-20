@@ -1,6 +1,6 @@
 # Use release 0 for prerelease version.
 %define release 1
-%define version 2016.4
+%define version 2016.4.1
 
 %define sourceversion %{version}%{?buildid}
 
