@@ -776,7 +776,10 @@ class Module(ModuleLike):
             cfg = yaml.load(cfg)
             if "compiler_version" not in cfg:
                 return None
-            return parse_version(cfg["compiler_version"])
+            v = cfg["compiler_version"]
+            if isinstance(v, (int, float)):
+                v = str(v)
+            return parse_version(v)
 
         best = versions[0]
         atleast = get_cv_for(best)
