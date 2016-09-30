@@ -85,12 +85,16 @@ class GitProvider:
 class CLIGitProvider(GitProvider):
 
     def clone(self, src, dest):
+        env = os.environ.copy()
+        env["GIT_ASKPASS"] = "true"
         subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, env={"GIT_ASKPASS": "true"})
+                              stderr=subprocess.DEVNULL, env=env)
 
     def fetch(self, repo):
+        env = os.environ.copy()
+        env["GIT_ASKPASS"] = "true"
         subprocess.check_call(["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, env={"GIT_ASKPASS": "true"})
+                              stderr=subprocess.DEVNULL, env=env)
 
     def status(self, repo):
         return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
