@@ -1,5 +1,5 @@
-Install guide
-=================
+Install Inmanta
+****************
 
 For Ubuntu 14.04 (trusty) and Fedora 21, follow the instructions below. For other distributions,
 install from `source <https://github.com/inmanta>`_. The
@@ -49,5 +49,5 @@ Apt might warn about unauthenticated packages, because the packages in our repos
 signed.
 
 
-From Source
+From source
 ------------
