@@ -15,9 +15,8 @@ Along the way, you will learn how to:
 * Create a configuration model to deploy a LAMP stack (Linux, Apache, MySQL and PHP)
 * Deploy the configuration
 
-
 Setting up the tutorial
-=========================
+_________________________
 
 To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_. 
 
@@ -60,27 +59,28 @@ To get a shell on the Inmanta server:
         vagrant ssh-config >ssh-cfg
         ssh -F ssh-cfg server -A
 
+Automatically deploying Drupal
+_______________________________
+    
+At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
+For the CLI, go to the next section. For the Dashboard, go to :ref:`dashboard`.
 
-Create an Inmanta project
-==========================
+
+
+.. _cli:
+Single machine deployment using the CLI
+=======================================
 
 An Inmanta project bundles modules that contain configuration information. A project is nothing more
 than a directory with a project.yml file, which contains parameters such as the location to search for
 modules and where to find the server. 
 
-Here we will create an Inmanta project ``quickstart`` with a basic configuration file.
+Here we will get a project from github.
 
 .. code-block:: sh
 
-    mkdir quickstart
+    git clone -b seed https://github.com/inmanta/quickstart.git
     cd quickstart
-    cat > project.yml <<EOF
-    name: quickstart
-    modulepath: libs
-    downloadpath: libs
-    repo: https://github.com/inmanta/
-    description: A quickstart project that installs a Drupal CMS.
-    EOF
 
     
 The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``. 
@@ -88,7 +88,7 @@ The configuration file ``project.yml`` defines that reusable modules are stored 
 In the next section we will use existing modules to deploy our LAMP stack.
 
 Reuse existing modules
-=======================
+------------------------------
 
 At GitHub, we host modules to setup and manage many systems. Our modules are available in the https://github.com/inmanta/ repositories.
 
@@ -96,7 +96,7 @@ When you use an import statement in your model, Inmanta downloads these modules 
 
 
 The configuration model
-=======================
+------------------------------
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
@@ -142,12 +142,9 @@ First, create a new ``main.cf`` file:
 
 
 Deploy the configuration model
-------------------------------
+-------------------------------
 
-To deploy the project, we must first register it with the management server, by creating a project and an environment. This can be done via the dashboard, or via the CLI. 
-
-Using the CLI:
-^^^^^^^^^^^^^^
+To deploy the project, we must first register it with the management server, by creating a project and an environment. 
 
 .. code-block:: sh
 
@@ -162,39 +159,23 @@ Then compile the project and send it to the server:
 
 .. code-block:: sh 
 
-    inmanta -vvv  export
+    inmanta -vvv  export -d
     
 The first time you run this command may take a while, as all dependencies are downloaded.  
+To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 
-.. todo:: deploy using -d option?
+.. note:: 
 
-Using the dashboard:
-^^^^^^^^^^^^^^^^^^^^
-
-#. Go to the `dashboard <http://127.0.0.1:8888>`_.
-#. Create a new project with the name ``test`` by clicking *Add new project*.
-#. Go into the new project and create a new environment by clicking *Add new environment*:
-
-    * Select the ``test`` project.
-    * Give the environment a name, e.g. ``test``.
-    * Specify the repo: ``/home/vagrant/quickstart``.
-    * Specify the branch, e.g. ``master``.
-    
-#. Go into your new environment...
-#. When it is done, press *Deploy*.
-
-.. todo:: how to compile using the dashboard (because it didn't work for me)
-
-.. todo:: there is no button called "Deploy"!
+    The ``-d`` option instructs the server to immediately start the deploy. 
 
 Accessing your new Drupal server
----------------------------------
+----------------------------------
 
 When the installation is done, you can access your new Drupal server at `http://localhost:8080/ <http://localhost:8080/>`_.
 
 
-Managing multiple machines
-==========================
+Multi-machine deployment using the CLI
+=======================================
 
 The real power of Inmanta appears when you want to manage more than one machine. In this section we will
 move the MySQL server from ``vm1`` to a second virtual machine called ``vm2``.
@@ -237,20 +218,41 @@ to an IP address we provide this address directly with the -i parameter.
 
 .. code-block:: sh 
 
-    inmanta -vvv  export
+    inmanta -vvv export -d
 
 
 If you browse to the drupal site again, the database should be empty once more.
 
+
+.. _dashboard:
+
+Using the dashboard:
+==========================
+
+#. Go to the `dashboard <http://127.0.0.1:8888>`_.
+#. Create a new project with the name ``test`` by clicking *Add new project*.
+#. Go into the new project and create a new environment by clicking *Add new environment*:
+
+    * Select the ``test`` project.
+    * Give the environment a name, e.g. ``test``.
+    * Specify the repo: ``https://github.com/inmanta/quickstart``.
+    * Specify the branch: ``master``.
+    
+#. Go into your new environment...
+#. Press *Update & Recompile*...
+#. When it is done, press *Deploy*.
+#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/ <http://localhost:8080/>`_.
+
+
 Create your own modules
-=======================
+_______________________
 
 Inmanta enables developers of a configuration model to make it modular and
 reusable. In this section we create a configuration module that defines how to
 deploy a LAMP stack with a Drupal site in a two- or three-tiered deployment.
 
 Module layout
--------------
+==========================
 A configuration module requires a specific layout:
 
     * The name of the module is determined by the top-level directory. Within this
@@ -308,7 +310,7 @@ Next, edit the ``lamp/module.yml`` file and add meta-data to it:
 
 
 Configuration model
--------------------
+==========================
 
 In ``lamp/model/_init.cf`` we define the configuration model that defines the *lamp*
 configuration module.
@@ -363,7 +365,7 @@ configuration module.
 * On line 27, the *implement* statement links the implementation to the entity.
 
 The composition
----------------
+==========================
 
 With our new LAMP module we can reduce the amount of required configuration code in the ``main.cf`` file
 by using more *reusable* configuration code. Only three lines of site-specific configuration code are
@@ -385,7 +387,7 @@ required.
 
 
 Deploy the changes
-------------------
+==========================
 
 Deploy the changes as before and nothing should change because it generates exactly the same
 configuration.
@@ -396,6 +398,6 @@ configuration.
 
 
 Next steps
-==============
+___________________
 
 :doc:`guides`
