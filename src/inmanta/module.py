@@ -49,7 +49,7 @@ from inmanta.ast.statements.define import DefineImport
 LOGGER = logging.getLogger(__name__)
 
 
-class InvalidModuleException(CompilerException):
+class InvalidModuleException(Exception):
     """
         This exception is raised if a module is invalid
     """
@@ -581,7 +581,7 @@ class Project(ModuleLike):
                     module = Module.install(self, module_name, parse_requirements(module_name), install_mode=self._install_mode)
             self.modules[module_name] = module
             return module
-        except Exception as e:
+        except Exception:
             raise InvalidModuleException("Could not load module %s" % module_name)
 
     def load_plugins(self) -> None:
@@ -984,7 +984,7 @@ class Module(ModuleLike):
                 print()
             else:
                 print("Module %s (%s) has no changes" % (self._meta["name"], self._path))
-        except:
+        except Exception:
             print("Failed to get status of module")
             LOGGER.exception("Failed to get status of module %s")
 
@@ -1127,7 +1127,7 @@ class ModuleTool(object):
                         reqv = "None"
                     else:
                         reqv = str(versions)
-            except:
+            except Exception:
                 LOGGER.exception("Problem getting version for module %s" % name)
                 reqv = "ERROR"
 
@@ -1162,7 +1162,7 @@ class ModuleTool(object):
             print("updating module: %s" % name)
             try:
                 Module.update(project, name, spec, install_mode=project._install_mode)
-            except:
+            except Exception:
                 LOGGER.exception("Failed to update module")
 
     def install(self, project=None):

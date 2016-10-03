@@ -24,16 +24,14 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from subprocess import CalledProcessError
 
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES,\
-    GitProvider, InvalidModuleException
+from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import ruamel.yaml
-from subprocess import CalledProcessError
-from inmanta import compiler
 
 
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
