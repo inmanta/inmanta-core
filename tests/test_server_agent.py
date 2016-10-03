@@ -317,7 +317,8 @@ class testAgentServer(ServerTest):
         result = yield self.client.create_environment(project_id=project_id, name="dev")
         env_id = result.result["environment"]["id"]
 
-        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id,
+                                 agent_map={"agent1": "localhost", "agent2": "localhost"},
                                  code_loader=False)
         self.agent.add_end_point_name("agent1")
         self.agent.add_end_point_name("agent2")
