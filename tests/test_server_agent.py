@@ -168,6 +168,17 @@ class Wait(ResourceHandler):
         waiter.acquire()
         waiter.wait()
         waiter.release()
+        changes = self.list_changes(resource)
+        if "purged" in changes:
+            if changes["purged"][1]:
+                Provider.delete(resource.id.get_agent_name(), resource.key)
+            else:
+                Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+
+        if "value" in changes:
+            Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+
+        return changes
 
 
 class testAgentServer(ServerTest):
@@ -294,6 +305,94 @@ class testAgentServer(ServerTest):
         assert Provider.get("agent1", "key1") == "value1"
         assert Provider.get("agent1", "key2") == "value2"
         assert not Provider.isset("agent1", "key3")
+
+    @gen_test
+    def test_dual_agent(self):
+        """
+            dryrun and deploy a configuration model
+        """
+        result = yield self.client.create_project("env-test")
+        project_id = result.result["project"]["id"]
+
+        result = yield self.client.create_environment(project_id=project_id, name="dev")
+        env_id = result.result["environment"]["id"]
+
+        self.agent = agent.Agent(self.io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
+                                 code_loader=False)
+        self.agent.add_end_point_name("agent1")
+        self.agent.add_end_point_name("agent2")
+        self.agent.start()
+
+        Provider.set("agent1", "key1", "incorrect_value")
+        Provider.set("agent2", "key1", "incorrect_value")
+
+        version = int(time.time())
+
+        resources = [{'key': 'key1',
+                      'value': 'value1',
+                      'id': 'test::Wait[agent1,key=key1],v=%d' % version,
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      'requires': []
+                      },
+                     {'key': 'key2',
+                      'value': 'value1',
+                      'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      'requires': ['test::Wait[agent1,key=key1],v=%d' % version]
+                      },
+                     {'key': 'key1',
+                      'value': 'value2',
+                      'id': 'test::Wait[agent2,key=key1],v=%d' % version,
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      'requires': []
+                      },
+                     {'key': 'key2',
+                      'value': 'value2',
+                      'id': 'test::Wait[agent2,key=key2],v=%d' % version,
+                      'purged': False,
+                      'state_id': '',
+                      'allow_restore': True,
+                      'allow_snapshot': True,
+                      'requires': ['test::Wait[agent2,key=key1],v=%d' % version]
+                      }]
+
+        result = yield self.client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert result.code == 200
+
+        # do a deploy
+        result = yield self.client.release_version(env_id, version, True)
+        assert result.code == 200
+
+        assert not result.result["model"]["deployed"]
+        assert result.result["model"]["released"]
+        assert result.result["model"]["total"] == 4
+
+        result = yield self.client.get_version(env_id, version)
+        assert result.code == 200
+
+        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            result = yield self.client.get_version(env_id, version)
+            waiter.acquire()
+            waiter.notifyAll()
+            waiter.release()
+            yield gen.sleep(0.1)
+
+        assert result.result["model"]["done"] == len(resources)
+
+        assert Provider.isset("agent1", "key1")
+        assert Provider.get("agent1", "key1") == "value1"
+        assert Provider.get("agent2", "key1") == "value2"
+        assert Provider.get("agent1", "key2") == "value1"
+        assert Provider.get("agent2", "key2") == "value2"
 
     @gen_test()
     def test_snapshot_restore(self):

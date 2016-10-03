@@ -175,10 +175,11 @@ class ResourceAction(object):
 
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id):
+    def __init__(self, agent, env_id, cache):
         self.generation = {}
         self._env_id = env_id
         self.agent = agent
+        self.cache = cache
 
     def reload(self, resources):
         for ra in self.generation.values():
@@ -186,7 +187,7 @@ class ResourceScheduler(object):
         self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
         dummy = ResourceAction(self, None)
         for r in self.generation.values():
-            r.execute(dummy, self.generation, self.agent.cache)
+            r.execute(dummy, self.generation, self.cache)
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
     def dump(self):
@@ -220,7 +221,9 @@ class Agent(AgentEndPoint):
             if env_id is None:
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(env_id)
-        self._nq = ResourceScheduler(self, env_id)
+
+        self._nqs = {}
+        self._cache = {}
 
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
@@ -258,7 +261,11 @@ class Agent(AgentEndPoint):
 
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
-        self.cache = AgentCache()
+    def add_end_point_name(self, name):
+        AgentEndPoint.add_end_point_name(self, name)
+        cache = AgentCache()
+        self._nqs[name] = ResourceScheduler(self, self._env_id, cache)
+        self._cache[name] = cache
 
     def is_local(self, agent_name):
         """
@@ -340,7 +347,7 @@ class Agent(AgentEndPoint):
             except TypeError as e:
                 LOGGER.error("Failed to receive update", e)
 
-            self._nq.reload(resources)
+            self._nqs[agent].reload(resources)
 
     @protocol.handle(methods.AgentDryRun.do_dryrun)
     @gen.coroutine
@@ -367,7 +374,7 @@ class Agent(AgentEndPoint):
 
         yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
-        self.cache.open_version(version)
+        self._cache[agent].open_version(version)
 
         for res in result.result["resources"]:
             provider = None
@@ -379,7 +386,7 @@ class Agent(AgentEndPoint):
 
                 try:
                     provider = Commander.get_provider(self, resource)
-                    provider.set_cache(self.cache)
+                    provider.set_cache(self._cache[agent])
                 except Exception:
                     LOGGER.exception("Unable to find a handler for %s" % resource.id)
                     self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
@@ -397,7 +404,7 @@ class Agent(AgentEndPoint):
                 if provider is not None:
                     provider.close()
 
-        self.cache.close_version(version)
+        self._cache[agent].close_version(version)
 
         return 200
 
@@ -454,7 +461,7 @@ class Agent(AgentEndPoint):
                                 [res[1]["id_fields"]["entity_type"] for res in resources])
 
         version = resources[0][1]["id_fields"]["version"]
-        self.cache.open_version(version)
+        self._cache[agent].open_version(version)
 
         for restore, resource in resources:
             start = datetime.datetime.now()
@@ -464,7 +471,7 @@ class Agent(AgentEndPoint):
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
                 provider = Commander.get_provider(self, resource_obj)
-                provider.set_cache(self.cache)
+                provider.set_cache(self._cache[agent])
 
                 if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
                     yield self._client.update_restore(tid=tid, id=restore_id, resource_id=str(resource_obj.id),
@@ -493,7 +500,7 @@ class Agent(AgentEndPoint):
             finally:
                 if provider is not None:
                     provider.close()
-        self.cache.close_version(version)
+        self._cache[agent].close_version(version)
 
         return 200
 
@@ -512,7 +519,7 @@ class Agent(AgentEndPoint):
                                 [res["id_fields"]["entity_type"] for res in resources])
 
         version = resources[0]["id_fields"]["version"]
-        self.cache.open_version(version)
+        self._cache[agent].open_version(version)
 
         for resource in resources:
             start = datetime.datetime.now()
@@ -522,7 +529,7 @@ class Agent(AgentEndPoint):
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
                 provider = Commander.get_provider(self, resource_obj)
-                provider.set_cache(self.cache)
+                provider.set_cache(self._cache[agent])
 
                 if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
                     yield self._client.update_snapshot(tid=tid, id=snapshot_id,
@@ -572,7 +579,7 @@ class Agent(AgentEndPoint):
                 if provider is not None:
                     provider.close()
 
-        self.cache.close_version(version)
+        self._cache[agent].close_version(version)
         return 200
 
     def status(self, operation, body):
@@ -582,16 +589,23 @@ class Agent(AgentEndPoint):
         if operation is None:
             id = Id.parse_id(body["id"])
             resource = id.get_instance()
+            agent = id.get_agent_name()
+
+            if agent not in self._cache[agent]:
+                LOGGER.exception("Agent unknown" % resource)
+                return 500
+
+            cache = self._cache[agent]
 
             if resource is None:
                 return 500
 
             version = id.get_version()
-            self.cache.open_version(version)
+            cache.open_version(version)
 
             try:
                 provider = Commander.get_provider(self, resource)
-                provider.set_cache(self.cache)
+                provider.set_cache(cache)
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s" % resource)
                 return 500
@@ -603,7 +617,7 @@ class Agent(AgentEndPoint):
                 LOGGER.exception("Unable to check status of %s" % resource)
                 return 500
 
-            self.cache.close_version(version)
+            cache.close_version(version)
 
         else:
             return 501
@@ -625,8 +639,8 @@ class Agent(AgentEndPoint):
             provider = Commander.get_provider(self, resource_obj)
 
             try:
-                self.cache.open_version(version)
-                provider.set_cache(self.cache)
+                self._cache[agent].open_version(version)
+                provider.set_cache(self._cache[agent])
                 result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
                 parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
                               for name, value in result.items()]
@@ -635,7 +649,7 @@ class Agent(AgentEndPoint):
             except Exception:
                 LOGGER.exception("Unable to retrieve fact")
             finally:
-                self.cache.close_version(version)
+                self._cache[agent].close_version(version)
 
         except Exception:
             LOGGER.exception("Unable to find a handler for %s", resource["id"])
@@ -644,17 +658,3 @@ class Agent(AgentEndPoint):
             if provider is not None:
                 provider.close()
         return 200
-
-    def queue(self, operation, body):
-        """
-            Return the current items in the queue
-        """
-        return 200, {"queue": ["%s" % (x.id) for x in self._nq.generation.values()]}
-
-    def info(self, operation, body):
-        """
-            Return statistics about this agent
-        """
-        return 200, {"threads": [x.name for x in enumerate()],
-                     "queue length": self._queue.size(),
-                     "queue ready length": self._queue.ready_size()}
