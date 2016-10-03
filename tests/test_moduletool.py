@@ -35,6 +35,7 @@ import ruamel.yaml
 from subprocess import CalledProcessError
 from inmanta import compiler
 
+
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
@@ -227,6 +228,13 @@ class testModuleTool(unittest.TestCase):
         masterproject = makemodule(reporoot, "masterproject", project=True, imports=["mod8"], install_mode=INSTALL_MASTER)
         commitmodule(masterproject, "first commit")
 
+        nover = makemodule(reporoot, "nover", [])
+        commitmodule(nover, "first commit")
+        addFile(nover, "signal", "present", "second commit")
+
+        noverproject = makemodule(reporoot, "noverproject", project=True, imports=["nover"])
+        commitmodule(noverproject, "first commit")
+
     @classmethod
     def tearDownClass(cls):
         super(testModuleTool, cls).tearDownClass()
@@ -358,6 +366,16 @@ version: '3.2'
                 ModuleTool().execute("install", [])
         finally:
             module.gitprovider = gp
+
+    def test_for_repo_without_versions(self):
+        coroot = os.path.join(testModuleTool.tempdir, "noverproject")
+        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "noverproject")],
+                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        os.chdir(coroot)
+        os.curdir = coroot
+        Config.load_config()
+
+        ModuleTool().execute("install", [])
 
     def test_badDepCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "baddep")

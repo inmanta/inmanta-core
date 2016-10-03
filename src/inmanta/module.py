@@ -818,6 +818,9 @@ class Module(ModuleLike):
                 v = str(v)
             return parse_version(v)
 
+        if not versions:
+            return None
+
         best = versions[0]
         atleast = get_cv_for(best)
         if atleast is None or comp_version > atleast:
