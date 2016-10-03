@@ -27,11 +27,13 @@ import unittest
 
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
+from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES,\
+    GitProvider, InvalidModuleException
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import ruamel.yaml
-
+from subprocess import CalledProcessError
+from inmanta import compiler
 
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
     path = os.path.join(reporoot, name)
@@ -125,6 +127,20 @@ def startbranch(modpath, branch):
 
 def addTag(modpath, tag):
     subprocess.check_output(["git", "tag", tag], cwd=modpath, stderr=subprocess.STDOUT)
+
+
+class BadModProvider(object):
+
+    def __init__(self, parent, badname):
+        self.parent = parent
+        self.badname = badname
+
+    def __getattr__(self, method_name):
+        def delegator(*args, **kw):
+            if args[0] == self.badname:
+                raise CalledProcessError(128, "XX")
+            return getattr(self.parent, method_name)(*args, **kw)
+        return delegator
 
 
 class testModuleTool(unittest.TestCase):
@@ -304,6 +320,44 @@ version: '3.2'
         ModuleTool().execute("update", [])
         ModuleTool().execute("status", [])
         ModuleTool().execute("push", [])
+
+    def test_for_git_failures(self):
+        coroot = os.path.join(testModuleTool.tempdir, "testproject2")
+        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject"), "testproject2"],
+                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        os.chdir(coroot)
+        os.curdir = coroot
+        Config.load_config()
+
+        ModuleTool().execute("install", [])
+
+        gp = module.gitprovider
+        module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
+        try:
+            # test all tools, perhaps isolate to other test case
+            ModuleTool().execute("install", [])
+            ModuleTool().execute("list", [])
+            ModuleTool().execute("update", [])
+            ModuleTool().execute("status", [])
+            ModuleTool().execute("push", [])
+        finally:
+            module.gitprovider = gp
+
+    def test_install_for_git_failures(self):
+        coroot = os.path.join(testModuleTool.tempdir, "testproject3")
+        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject"), "testproject3"],
+                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        os.chdir(coroot)
+        os.curdir = coroot
+        Config.load_config()
+
+        gp = module.gitprovider
+        module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
+        try:
+            with pytest.raises(ModuleNotFoundException):
+                ModuleTool().execute("install", [])
+        finally:
+            module.gitprovider = gp
 
     def test_badDepCheckout(self):
         coroot = os.path.join(testModuleTool.tempdir, "baddep")
