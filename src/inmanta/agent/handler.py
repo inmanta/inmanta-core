@@ -53,6 +53,24 @@ class SkipResource(Exception):
 
 
 def cache(f=None, ignore=[], timeout=5000, forVersion=True):
+    """
+        decorator for methods in resource handlers to provide caching
+
+        this decorator works similar to memoization:
+        when the decorate method is called, its return value is cached, 
+        for subsequent calls, the cached value is used instead of the actual value
+
+        The name of the method + the arguments of the method form the cache key
+
+        If an argument named version is present and forVersion is True,
+        the cache entry is flushed after this version has been deployed
+        If an argument named resource is present,
+        it is assumed to be a resource and its ID is used, without the version information
+
+        :param timeout the number of second this cache entry should live
+        :param forVersion if true, this value is evicted from the cache when this deploy is ready
+        :param ignore a list of argument names that should not be part of the cache key
+    """
 
     def actual(f):
         myignore = set(ignore)
