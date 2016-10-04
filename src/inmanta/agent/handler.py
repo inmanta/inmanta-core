@@ -57,7 +57,7 @@ def cache(f=None, ignore=[], timeout=5000, forVersion=True):
         decorator for methods in resource handlers to provide caching
 
         this decorator works similar to memoization:
-        when the decorate method is called, its return value is cached, 
+        when the decorate method is called, its return value is cached,
         for subsequent calls, the cached value is used instead of the actual value
 
         The name of the method + the arguments of the method form the cache key
