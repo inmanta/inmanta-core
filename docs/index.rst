@@ -39,12 +39,9 @@ Contents
 Additional resources
 --------------------
 
-.. todo:: create mailing lists
-
 * `Inmanta User Mailinglist <https://groups.google.com/forum/#!forum/inmanta-users>`_
 * `Inmanta Developer Mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
 * `Inmanta Twitter <https://twitter.com/inmanta_com>`_
-* `Inmanta Community Portal <http://inmanta.github.io>`_ 
 
 
 .. todolist::

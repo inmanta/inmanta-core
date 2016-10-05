@@ -63,11 +63,12 @@ Automatically deploying Drupal
 _______________________________
     
 At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
-For the CLI, go to the next section. For the Dashboard, go to :ref:`dashboard`.
+For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
 
 
 
 .. _cli:
+
 Single machine deployment using the CLI
 =======================================
 
@@ -224,7 +225,7 @@ to an IP address we provide this address directly with the -i parameter.
 If you browse to the drupal site again, the database should be empty once more.
 
 
-.. _dashboard:
+.. _qsdashboard:
 
 Using the dashboard:
 ==========================
