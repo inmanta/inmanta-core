@@ -1,28 +1,28 @@
 .. _index:
 
-Inmanta's documentation
-========================
+Inmanta Documentation
+***********************
 
 .. welcome
 
-Welcome to the Inmanta Documentation!
+Welcome to the Inmanta documentation!
 
 .. what
 
- Inmanta brings Infrastructure as Code up to a whole new level.
+Inmanta is an automation and orchestration tool to efficiently deploy and manage your software services, including all (inter)dependencies to other services and the underpinning infrastructure. It eliminates the complexity of managing large-scale, heterogeneous infrastructures and highly distributed systems.
 
-The Inmanta management server(IMS) is a tool to setup, configure and maintain infrastructure as code. It work from a single source, which can be tested, versioned, evolved and reused. It eliminates the complexity of managing large, heterogeneous infrastructures.
+.. key characteristics
 
-.. todo:: extend description
+The key characteristics of Inmanta are:
 
-.. strong points
+* **Integrated**: Inmanta integrates configuration management and orchestration into a single tool, taking infrastructure as code to a whole new level.
+* **Powerful configuration model**: Infrastructure and application services are described using a high-level configuration model that allows the definition of (an unlimited amount of) your own entities and abstraction levels. It works from a single source, which can be tested, versioned, evolved and reused.
+* **Dependency management**: Inmanta's configuration model describes all the relations between and dependencies to other services, packages, underpinning platforms and infrastructure services. This enables efficient deployment as well as provides an holistic view on your applications, environments and infrastructure.
+* **End-to-end compliance**: The architecture of your software service drives the configuration, guaranteeing consistency across the entire stack and throughout distributed systems at any time. This compliance with the architecture can be achieved thanks to the integrated management approach and the configuration model using dependencies.
 
-.. todo:: add some advantages
+Currently, the Inmanta project is mainly developed and maintained by `Inmanta NV <https://www.inmanta.com>`_.
 
-
-The Inmanta management server (IMS) is mainly developed by Inmanta NV. At Inmanta NV, we are currently going through the process of opensourcing the IMS.
-
-For new and updates, see http://inmanta.github.io
+For news and updates, go to http://inmanta.github.io.
 
 Contents
 --------
@@ -30,7 +30,8 @@ Contents
 .. toctree::
     :maxdepth: 2
 
-    intro
+    quickstart
+    install
     guides
     modules
     docs
@@ -38,12 +39,9 @@ Contents
 Additional resources
 --------------------
 
-.. todo:: create mailing lists
-
-* `Inmanta user mailinglist <https://groups.google.com/forum/#!forum/inmanta-users>`_
-* `Inmanta developer mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
+* `Inmanta User Mailinglist <https://groups.google.com/forum/#!forum/inmanta-users>`_
+* `Inmanta Developer Mailinglist <https://groups.google.com/forum/#!forum/inmanta-devel>`_
 * `Inmanta Twitter <https://twitter.com/inmanta_com>`_
-* `Inmanta Community Portal <http://inmanta.github.io>`_ 
 
 
 .. todolist::

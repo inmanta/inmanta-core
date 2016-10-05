@@ -1,2 +1,2 @@
-Module guides
+Module Guides
 ==============

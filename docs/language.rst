@@ -1,4 +1,4 @@
-Language reference
+Language Reference
 ******************
 
 The Inmanta language is a declarative language to model the configuration of an infrastructure. 
