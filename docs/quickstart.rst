@@ -40,8 +40,9 @@ When Vagrant is ready, you should be able to open the dashboard at http://127.0.
     
     .. code-block:: sh
     
-        config.ssh.username = "vagrant"
-        config.ssh.password = "vagrant"
+        config.ssh.insert_key = false
+        
+    Notice that you are using a default key, this is insecure.
 
 To get a shell on the Inmanta server:
 
@@ -49,15 +50,6 @@ To get a shell on the Inmanta server:
 
     vagrant ssh server
     
-    
-.. warning::
-
-    When using modules from a private git repo, use the following commands to enable agent forwarding.
-    
-    .. code-block:: sh
-
-        vagrant ssh-config >ssh-cfg
-        ssh -F ssh-cfg server -A
 
 Automatically deploying Drupal
 _______________________________
@@ -101,7 +93,7 @@ The configuration model
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-First, create a new ``main.cf`` file:
+First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 
 .. code-block:: ruby
     :linenos:
@@ -150,7 +142,7 @@ To deploy the project, we must first register it with the management server, by 
 .. code-block:: sh
 
     inmanta-cli project-create -n test
-    inmanta-cli environment-create  -n test -p test -r $(pwd) -b master --save
+    inmanta-cli environment-create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
     
 .. note::
 
@@ -167,6 +159,7 @@ To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 
 .. note:: 
 
+    The ``-vvv``option sets the output of the compiler to very verbose.
     The ``-d`` option instructs the server to immediately start the deploy. 
 
 Accessing your new Drupal server
@@ -222,7 +215,7 @@ to an IP address we provide this address directly with the -i parameter.
     inmanta -vvv export -d
 
 
-If you browse to the drupal site again, the database should be empty once more.
+If you browse to the Drupal site again, the database should be empty once more.
 
 
 .. _qsdashboard:
@@ -235,13 +228,13 @@ Using the dashboard:
 #. Go into the new project and create a new environment by clicking *Add new environment*:
 
     * Select the ``test`` project.
-    * Give the environment a name, e.g. ``test``.
+    * Give the environment a name, e.g. ``env-quickstart``.
     * Specify the repo: ``https://github.com/inmanta/quickstart``.
     * Specify the branch: ``master``.
     
-#. Go into your new environment...
-#. Press *Update & Recompile*...
-#. When it is done, press *Deploy*.
+#. Go into your new environment.
+#. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded).
+#. When it is done, press the play button of the new version, or go into the new version and press *Deploy*.
 #. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/ <http://localhost:8080/>`_.
 
 
