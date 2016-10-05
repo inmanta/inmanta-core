@@ -206,16 +206,18 @@ MySQL server is assigned to vm2.
 Deploy the configuration model
 ------------------------------
 
-Deploy the new configuration model by invoking a local deploy on vm1 and a
-remote deploy on vm2. Because the vm2 name that is used in the configuration model does not resolve
-to an IP address we provide this address directly with the -i parameter.
+To deploy the configuration model, compile the project and send it to the server:
 
 .. code-block:: sh 
 
     inmanta -vvv export -d
 
 
-If you browse to the Drupal site again, the database should be empty once more.
+If you browse to the Drupal site again, the database should be empty once more. 
+
+.. note::
+    
+    When moving the database, a new database is created. I.e. the content of the database is not migrated automatically.
 
 
 .. _qsdashboard:
@@ -388,7 +390,7 @@ configuration.
 
 .. code-block:: sh
 
-    inmanta -vvv export
+    inmanta -vvv export -d
 
 
 Next steps
