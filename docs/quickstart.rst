@@ -165,7 +165,7 @@ To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 Accessing your new Drupal server
 ----------------------------------
 
-When the installation is done, you can access your new Drupal server at `http://localhost:8080/ <http://localhost:8080/>`_.
+When the installation is done, you can access your new Drupal server at `http://127.0.0.1:8080/ <http://127.0.0.1:8080/>`_.
 
 
 Multi-machine deployment using the CLI
