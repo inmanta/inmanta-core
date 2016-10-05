@@ -114,6 +114,49 @@ class CacheTests(unittest.TestCase):
         except KeyError:
             pass
 
+    def testTimoutAndVersion(self):
+        cache = AgentCache()
+        version = 200
+
+        cache.open_version(version)
+        value = "test too"
+        cache.cache_value("test", value, version=version, timeout=0.3)
+        cache.cache_value("testx", value)
+
+        assert value == cache.find("test", version=version)
+        assert value == cache.find("testx")
+
+        sleep(1)
+        assert value == cache.find("testx")
+
+        cache.close_version(version)
+        assert value == cache.find("testx")
+
+        with pytest.raises(KeyError):
+            cache.find("test", version=version)
+        assert value == cache.find("testx")
+
+    def testVersionAndTimout(self):
+        cache = AgentCache()
+        version = 200
+
+        cache.open_version(version)
+        value = "test too"
+        cache.cache_value("test", value, version=version, timeout=0.3)
+        cache.cache_value("testx", value)
+
+        assert value == cache.find("test", version=version)
+        assert value == cache.find("testx")
+
+        cache.close_version(version)
+        assert value == cache.find("testx")
+
+        sleep(1)
+        assert value == cache.find("testx")
+
+        with pytest.raises(KeyError):
+            cache.find("test", version=version)
+
     def testVersionFail(self):
         cache = AgentCache()
         value = "test too"

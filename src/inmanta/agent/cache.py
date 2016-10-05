@@ -88,7 +88,11 @@ class AgentCache():
             return
 
         for x in self.keysforVersion[version]:
-            del self.cache[x]
+            try:
+                del self.cache[x]
+            except KeyError:
+                # already gone
+                pass
         del self.counterforVersion[version]
         del self.keysforVersion[version]
 
@@ -96,7 +100,11 @@ class AgentCache():
         now = time.time()
         while now > self.nextAction and len(self.timerqueue) > 0:
             item = self.timerqueue.pop(0)
-            del self.cache[item.key]
+            try:
+                del self.cache[item.key]
+            except KeyError:
+                # already gone
+                pass
             if len(self.timerqueue) > 0:
                 self.nextAction = self.timerqueue[0].time
             else:
