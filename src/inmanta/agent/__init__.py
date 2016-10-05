@@ -670,20 +670,6 @@ class Agent(AgentEndPoint):
                 provider.close()
         return 200
 
-    def queue(self, operation, body):
-        """
-            Return the current items in the queue
-        """
-        return 200, {"queue": ["%s" % (x.id) for x in self._nq.generation.values()]}
-
-    def info(self, operation, body):
-        """
-            Return statistics about this agent
-        """
-        return 200, {"threads": [x.name for x in enumerate()],
-                     "queue length": self._queue.size(),
-                     "queue ready length": self._queue.ready_size()}
-
     @protocol.handle(methods.AgentReporting.get_status)
     @gen.coroutine
     def get_status(self):

@@ -54,7 +54,9 @@ class AgentManager(object):
 
         self.tid_endpoint_to_session = defaultdict(list)
 
+        # back-off timer for fact requests
         self._fact_resource_block = fact_back_off
+        # per resource time of last fact request
         self._fact_resource_block_set = {}
 
         self._server_storage = server._server_storage
@@ -74,7 +76,6 @@ class AgentManager(object):
             tid = str(tid)
 
         for endpoint in session.endpoint_names:
-            print((tid, endpoint))
             self.tid_endpoint_to_session[(tid, endpoint)].remove(session)
 
     def get_agent_client(self, tid, endpoint):
