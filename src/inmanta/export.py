@@ -24,13 +24,12 @@ import os
 import time
 import glob
 import base64
-import uuid
 
 from inmanta import protocol
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id
-from inmanta.config import Config
+from inmanta.config import Config, Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.ast import RuntimeException
 from tornado.ioloop import IOLoop
@@ -39,6 +38,10 @@ from tornado import gen
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
+
+cfg_env = Option("config", "environment", None, "The environment this model is associated with", is_uuid_opt)
+cfg_export = Option("config", "export", "", "The list of exporters to use", is_list)
+cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
 class Exporter(object):
@@ -88,7 +91,14 @@ class Exporter(object):
         """
             Returns a dict of instances for the given types
         """
-        return {t: [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()] for t in types}
+        proxies = {}
+        for t in types:
+            if self.types is not None and t in self.types:
+                proxies[t] = [DynamicProxy.return_value(i) for i in self.types[t].get_all_instances()]
+            else:
+                proxies[t] = []
+
+        return proxies
 
     def _load_resources(self, types):
         """
@@ -108,7 +118,7 @@ class Exporter(object):
             Run any additional export plug-ins
         """
         export = []
-        for pl in Config.get("config", "export", "").split(","):
+        for pl in cfg_export.get():
             export.append(pl.strip())
 
         for name in export:
@@ -156,7 +166,7 @@ class Exporter(object):
         """
             Determine the unknown handling policy for the given agent
         """
-        default_policy = Config.get("unknown_handler", "default", "prune-agent")
+        default_policy = cfg_unknown_handler.get()
 
         if "unknown_handler" not in Config._get_instance():
             return default_policy
@@ -202,7 +212,7 @@ class Exporter(object):
             for host in hosts:
                 LOGGER.info(" - %s" % host)
 
-    def run(self, types, scopes):
+    def run(self, types, scopes, no_commit=False):
         """
         Run the export functions
         """
@@ -236,10 +246,10 @@ class Exporter(object):
             with open(self.options.json, "wb+") as fd:
                 fd.write(json.dumps(resources).encode("utf-8"))
 
-        elif len(self._resources) > 0 or len(unknown_parameters) > 0:
+        elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
             self.commit_resources(self._version, resources)
+            LOGGER.info("Committed resources with version %d" % self._version)
 
-        LOGGER.info("Committed resources with version %d" % self._version)
         return self._version, self._resources
 
     def get_variable(self, name):
@@ -342,14 +352,9 @@ class Exporter(object):
         """
             Commit the entire list of resource to the configurations server.
         """
-        tid = Config.get("config", "environment", None)
+        tid = cfg_env.get()
         if tid is None:
             LOGGER.error("The environment for this model should be set!")
-            return
-        try:
-            uuid.UUID(tid)
-        except ValueError:
-            LOGGER.exception("Invalid uuid configured for this environment.")
             return
 
         self.deploy_code(tid, version)

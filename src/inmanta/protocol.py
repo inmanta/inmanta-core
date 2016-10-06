@@ -670,13 +670,10 @@ class RESTTransport(Transport):
             Load the configuration for the client
         """
         LOGGER.debug("Getting config in section %s", self.id)
-        port = 8888
-        if self.id in Config.get() and "port" in Config.get()[self.id]:
-            port = int(Config.get()[self.id]["port"])
 
-        host = "localhost"
-        if self.id in Config.get() and "host" in Config.get()[self.id]:
-            host = Config.get()[self.id]["host"]
+        port = Config.get(self.id, "port", 8888)
+
+        host = Config.get(self.id, "host", "localhost")
 
         if Config.getboolean(self.id, "ssl", False):
             protocol = "https"
@@ -1021,6 +1018,8 @@ class Session(object):
         self._seen = time.time()
 
     def put_call(self, call_spec):
+        import inmanta.server.config
+
         future = tornado.concurrent.Future()
 
         LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], self._sid)
@@ -1028,7 +1027,7 @@ class Session(object):
         q = self._queue
         call_spec["reply_id"] = uuid.uuid4()
         q.put(call_spec)
-        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, int(Config.get("config", "timeout", 2)),
+        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, inmanta.server.config.timeout.get(),
                      "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"],  self._sid))
         self._replies[call_spec["reply_id"]] = future
 
@@ -1266,6 +1265,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                             self._io_loop.add_future(call_result, submit_result)
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s", result.code, result.result)
+
 
 class ClientMeta(type):
     """

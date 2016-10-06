@@ -104,13 +104,13 @@ class FunctionUnit(Waiter):
         requires = {k: v.get_value() for (k, v) in self.requires.items()}
         try:
             self.function.resume(requires, self.resolver, self.queue_scheduler, self.result)
+            self.done = True
         except UnsetException as e:
             LOGGER.debug("Unset value in python code in plugin %s." % self.function.function)
             self.await(e.get_result_variable())
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e
-        self.done = True
 
     def __repr__(self):
         return repr(self.function)

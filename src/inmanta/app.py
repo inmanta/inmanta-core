@@ -28,6 +28,7 @@ from inmanta.config import Config
 from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
 from inmanta import protocol
+from inmanta.export import cfg_env
 
 LOGGER = logging.getLogger()
 
@@ -97,7 +98,7 @@ def compile_project(options):
         Config.set("compiler_rest_transport", "ssl", "true")
 
     if options.ca_cert is not None:
-        Config.set("compiler_rest_transport", "ssl_ca_cert_file", options.ca_cert)
+        Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
     if options.profile:
         import cProfile
@@ -165,18 +166,27 @@ def export(options):
         Config.set("compiler_rest_transport", "ssl", "true")
 
     if options.ca_cert is not None:
-        Config.set("compiler_rest_transport", "ssl_ca_cert_file", options.ca_cert)
+        Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
     from inmanta.export import Exporter
 
-    (types, scopes) = do_compile()
+    exp = None
+    try:
+        (types, scopes) = do_compile()
+    except Exception as e:
+        exp = e
+        types, scopes = (None, None)
 
     export = Exporter(options)
     version, _ = export.run(types, scopes)
+
+    if exp is not None:
+        raise exp
+
     if options.deploy:
         conn = protocol.Client("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
-        tid = Config.get("config", "environment", None)
+        tid = cfg_env.get()
         IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
 
 

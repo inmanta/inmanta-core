@@ -1,0 +1,39 @@
+#!/bin/bash
+
+hostname {{ name }}
+setenforce 0
+
+cat > /etc/yum.repos.d/inmanta.repo <<EOF
+[config]
+[inmanta]
+name=Inmanta
+baseurl=https://packages.inmanta.com/rpms/inmanta/master/fedora/
+enabled=1
+gpgcheck=0
+
+[inmanta-deps]
+name=Inmanta deps
+baseurl=https://packages.inmanta.com/rpms/deps/fedora/
+enabled=1
+gpgcheck=0
+EOF
+
+dnf install -y python3-inmanta-agent
+
+cat > /etc/inmanta/agent.cfg <<EOF
+[config]
+heartbeat-interval = 60
+fact-expire = 60
+state-dir=/var/lib/inmanta
+
+environment={{ env_id }}
+agent-names=\$node-name
+
+[agent_rest_transport]
+port={{port}}
+host={{env_server}}
+EOF
+
+systemctl start inmanta-agent
+systemctl enable inmanta-agent
+

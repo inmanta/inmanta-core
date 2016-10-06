@@ -23,7 +23,6 @@ import os
 File containing auto reporting functionality for the agent
 """
 import platform
-import netifaces
 import resource
 
 LOGGER = logging.getLogger(__name__)
@@ -62,6 +61,7 @@ reports["hostname"] = report_hostname
 
 
 def report_ips(agent):
+    import netifaces
     alladdresses = [netifaces.ifaddresses(i) for i in netifaces.interfaces()]
     v4 = [[y['addr'] for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]]
     v6 = [[y['addr'] for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]]

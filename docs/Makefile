@@ -41,6 +41,10 @@ help:
 	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
 
 
+
+dev: 
+	$(SPHINXBUILD) -b html -D todo_include_todos=1 $(ALLSPHINXOPTS) $(BUILDDIR)/html
+
 clean:
 	-rm -rf $(BUILDDIR)/*
 

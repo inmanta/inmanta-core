@@ -29,6 +29,9 @@ import inspect
 from pkg_resources import parse_version, parse_requirements
 import time
 from subprocess import CalledProcessError
+from tarfile import TarFile
+from io import BytesIO
+
 
 import yaml
 import inmanta
@@ -40,9 +43,8 @@ import ruamel.yaml
 from inmanta.parser import plyInmantaParser
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement
-from inmanta.util import memoize
+from inmanta.util import memoize, get_compiler_version
 from inmanta.ast.statements.define import DefineImport
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -76,14 +78,23 @@ class GitProvider:
     def get_all_tags(self, repo):
         pass
 
+    def get_file_for_version(self, repo, tag, file):
+        pass
+
 
 class CLIGitProvider(GitProvider):
 
     def clone(self, src, dest):
-        subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env = os.environ.copy()
+        env["GIT_ASKPASS"] = "true"
+        subprocess.check_call(["git", "clone", src, dest], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, env=env)
 
     def fetch(self, repo):
-        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        env = os.environ.copy()
+        env["GIT_ASKPASS"] = "true"
+        subprocess.check_call(["git", "fetch", "--tags"], cwd=repo, stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, env=env)
 
     def status(self, repo):
         return subprocess.check_output(["git", "status", "--porcelain"], cwd=repo).decode("utf-8")
@@ -112,6 +123,13 @@ class CLIGitProvider(GitProvider):
         return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"],
                                        cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
+    def get_file_for_version(self, repo, tag, file):
+        data = subprocess.check_output(["git", "archive", "--format=tar", tag, file],
+                                       cwd=repo, stderr=subprocess.DEVNULL)
+        tf = TarFile(fileobj=BytesIO(data))
+        tfile = tf.next()
+        b = tf.extractfile(tfile)
+        return b.read().decode("utf-8")
 # try:
 #     import pygit2
 #     import re
@@ -335,6 +353,11 @@ class ModuleLike:
             reqs.append(req)
         return reqs
 
+INSTALL_RELEASES = "release"
+INSTALL_PRERELEASES = "prerelease"
+INSTALL_MASTER = "master"
+INSTALL_OPTS = [INSTALL_MASTER, INSTALL_PRERELEASES, INSTALL_RELEASES]
+
 
 class Project(ModuleLike):
     """
@@ -409,6 +432,13 @@ class Project(ModuleLike):
         self.root_ns = Namespace("__root__")
 
         self.autostd = autostd
+        self._install_mode = INSTALL_RELEASES
+        if "install_mode" in self._meta:
+            mode = self._meta["install_mode"]
+            if mode not in INSTALL_OPTS:
+                LOGGER.warning("Invallid value for install_mode, should be one of [%s]" % ','.join(INSTALL_OPTS))
+            else:
+                self._install_mode = mode
 
     @classmethod
     def get_project_dir(cls, cur_dir):
@@ -533,9 +563,9 @@ class Project(ModuleLike):
         else:
             reqs = self.collect_requirements()
             if module_name in reqs:
-                module = Module.install(self, module_name, reqs[module_name])
+                module = Module.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
             else:
-                module = Module.install(self, module_name, parse_requirements(module_name))
+                module = Module.install(self, module_name, parse_requirements(module_name), install_mode=self._install_mode)
         self.modules[module_name] = module
         return module
 
@@ -692,7 +722,7 @@ class Module(ModuleLike):
     version = property(get_version)
 
     @classmethod
-    def install(cls, project, modulename, requirements, install=True):
+    def install(cls, project, modulename, requirements, install=True, install_mode=INSTALL_RELEASES):
         """
            Install a module, return module object
         """
@@ -709,10 +739,10 @@ class Module(ModuleLike):
             if not result:
                 raise InvalidModuleException("could not locate module with name: %s", modulename)
 
-        return cls.update(project, modulename, requirements, path, False)
+        return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
 
     @classmethod
-    def update(cls, project, modulename, requirements, path=None, fetch=True):
+    def update(cls, project, modulename, requirements, path=None, fetch=True, install_mode=INSTALL_RELEASES):
         """
            Update a module, return module object
         """
@@ -723,17 +753,21 @@ class Module(ModuleLike):
         if fetch:
             gitprovider.fetch(path)
 
-        versions = cls.get_suitable_versions_for(modulename, requirements, path)
-
-        if len(versions) == 0:
-            print("no suitable version found for module %s" % modulename)
+        if install_mode == INSTALL_MASTER:
+            gitprovider.checkout_tag(path, "master")
         else:
-            gitprovider.checkout_tag(path, str(versions[0]))
+            release_only = (install_mode == INSTALL_RELEASES)
+            version = cls.get_suitable_version_for(modulename, requirements, path, release_only=release_only)
+
+            if version is None:
+                print("no suitable version found for module %s" % modulename)
+            else:
+                gitprovider.checkout_tag(path, str(version))
 
         return Module(project, path)
 
     @classmethod
-    def get_suitable_versions_for(cls, modulename, requirements, path):
+    def get_suitable_version_for(cls, modulename, requirements, path, release_only=True):
         versions = gitprovider.get_all_tags(path)
 
         def try_parse(x):
@@ -746,9 +780,48 @@ class Module(ModuleLike):
         versions = sorted(versions, reverse=True)
 
         for r in requirements:
-            versions = [x for x in r.specifier.filter(versions, True)]
+            versions = [x for x in r.specifier.filter(versions, not release_only)]
 
-        return versions
+        comp_version = get_compiler_version()
+        if comp_version is not None:
+            comp_version = parse_version(comp_version)
+            # use base version, to make sure dev versions work as expected
+            comp_version = parse_version(comp_version.base_version)
+            return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
+        else:
+            return versions[0]
+
+    @classmethod
+    def __best_for_compiler_version(cls, modulename, versions, path, comp_version):
+        def get_cv_for(best):
+            cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
+            cfg = yaml.load(cfg)
+            if "compiler_version" not in cfg:
+                return None
+            v = cfg["compiler_version"]
+            if isinstance(v, (int, float)):
+                v = str(v)
+            return parse_version(v)
+
+        best = versions[0]
+        atleast = get_cv_for(best)
+        if atleast is None or comp_version > atleast:
+            return best
+
+        # binary search
+        hi = len(versions)
+        lo = 1
+        while lo < hi:
+            mid = (lo + hi) // 2
+            atleast = get_cv_for(versions[mid])
+            if atleast is not None and atleast > comp_version:
+                lo = mid + 1
+            else:
+                hi = mid
+        if hi == len(versions):
+            LOGGER.warn("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
+            return None
+        return versions[lo]
 
     def is_versioned(self):
         """
@@ -1019,11 +1092,17 @@ class ModuleTool(object):
             version = str(mod.version)
             if name not in specs:
                 specs[name] = []
-            versions = Module.get_suitable_versions_for(name, specs[name], mod._path)
-            if len(versions) == 0:
-                reqv = "None"
+
+            if project._install_mode == INSTALL_MASTER:
+                reqv = "master"
             else:
-                reqv = str(versions[0])
+                release_only = project._install_mode == INSTALL_RELEASES
+                versions = Module.get_suitable_version_for(
+                    name, specs[name], mod._path, release_only=release_only)
+                if versions is None:
+                    reqv = "None"
+                else:
+                    reqv = str(versions)
 
             version_length = max(len(version), len(reqv), version_length)
 
@@ -1054,7 +1133,7 @@ class ModuleTool(object):
 
         for name, spec in specs.items():
             print("updating module: %s" % name)
-            Module.update(project, name, spec)
+            Module.update(project, name, spec, install_mode=project._install_mode)
 
     def install(self, project=None):
         """

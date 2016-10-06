@@ -41,9 +41,10 @@ from inmanta import data
 from inmanta import methods
 from inmanta import protocol
 from inmanta.ast import type
-from inmanta.config import Config
 from inmanta.resources import Id, HostNotFoundException
 from inmanta.server.agentmanager import AgentManager
+from inmanta.server import config as opt
+
 
 LOGGER = logging.getLogger(__name__)
 LOCK = locks.Lock()
@@ -58,7 +59,7 @@ class Server(protocol.ServerEndpoint):
     """
 
     def __init__(self, io_loop, database_host=None, database_port=None):
-        agent_timeout = int(Config.get("server", "agent-timeout", 60))
+        agent_timeout = opt.timeout.get()
 
         super().__init__("server", io_loop=io_loop, interval=agent_timeout)
         LOGGER.info("Starting server endpoint")
@@ -66,30 +67,30 @@ class Server(protocol.ServerEndpoint):
 
         self._db = None
         if database_host is None:
-            database_host = Config.get("database", "host", "localhost")
+            database_host = opt.db_host.get()
 
         if database_port is None:
-            database_port = Config.get("database", "port", 27017)
+            database_port = opt.db_port.get()
 
-        self._db = connect(Config.get("database", "name", "inmanta"), host=database_host, port=database_port)
-        LOGGER.info("Connected to mongodb database %s on %s:%d", Config.get("database", "name", "inmanta"),
+        self._db = connect(opt.db_name.get(), host=database_host, port=database_port)
+        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(),
                     database_host, database_port)
 
-        self._fact_expire = int(Config.get("server", "fact-expire", 3600))
-        self._fact_renew = int(Config.get("server", "fact-renew", self._fact_expire / 3))
+        self._fact_expire = opt.server_fact_expire.get()
+        self._fact_renew = opt.server_fact_renew.get()
 
         self.add_end_point_name(self.node_name)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
-        self.schedule(self._purge_versions, int(Config.get("server", "purge-versions-interval", 3600)))
+        self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
 
         self._io_loop.add_callback(self._purge_versions)
 
         self._recompiles = defaultdict(lambda: None)
 
         self.agentmanager = AgentManager(self,
-                                         autostart=Config.getboolean("server", "autostart-on-start", True),
-                                         fact_back_off=int(Config.get("server", "fact-resource_block", 60)))
+                                         autostart=opt.server_autostart_on_start.get(),
+                                         fact_back_off=opt.server_fact_resource_block.get())
 
         self.setup_dashboard()
 
@@ -118,10 +119,10 @@ class Server(protocol.ServerEndpoint):
         """
             If configured, set up tornado to serve the dashboard
         """
-        if not Config.getboolean("dashboard", "enabled", False):
+        if not opt.dash_enable.get():
             return
 
-        dashboard_path = Config.get("dashboard", "path")
+        dashboard_path = opt.dash_path.get()
         if dashboard_path is None:
             LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
             return
@@ -136,7 +137,7 @@ class Server(protocol.ServerEndpoint):
         envs = yield data.Environment.objects.find_all()  # @UndefinedVariable
         for env_item in envs:
             # get available versions
-            n_versions = int(Config.get("server", "available-versions-to-keep", 2))
+            n_versions = opt.server_version_to_keep.get()
             versions = yield data.ConfigurationModel.objects.filter(released=False,  # @UndefinedVariable
                                                                     environment=env_item).find_all()  # @UndefinedVariable
             if len(versions) > n_versions:
@@ -152,10 +153,7 @@ class Server(protocol.ServerEndpoint):
         """
             Check if the server storage is configured and ready to use.
         """
-        if "config" not in Config.get() or "state-dir" not in Config.get()["config"]:
-            raise Exception("The Inmanta server requires a state directory to be configured")
-
-        state_dir = Config.get()["config"]["state-dir"]
+        state_dir = opt.state_dir.get()
 
         if not os.path.exists(state_dir):
             os.mkdir(state_dir)
@@ -182,7 +180,7 @@ class Server(protocol.ServerEndpoint):
         if not os.path.exists(env_agent_dir):
             os.mkdir(env_agent_dir)
 
-        log_dir = Config.get("config", "log-dir", "/var/log/inmanta")
+        log_dir = opt.log_dir.get()
         if not os.path.isdir(log_dir):
             os.mkdir(log_dir)
         dir_map["logs"] = log_dir
@@ -305,7 +303,7 @@ class Server(protocol.ServerEndpoint):
 
         result = yield self._update_param(env, id, value, source, resource_id, metadata)
         if result:
-            self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+            self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
         if resource_id is None:
             resource_id = ""
@@ -335,7 +333,7 @@ class Server(protocol.ServerEndpoint):
                 recompile = True
 
         if recompile:
-            self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+            self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
         return 200
 
@@ -479,7 +477,7 @@ class Server(protocol.ServerEndpoint):
         new_record = yield data.FormRecord.get_uuid(id)
         record_dict = yield new_record.to_dict()
 
-        self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+        self._async_recompile(tid, False, opt.server_wait_after_param.get())
         return 200, {"record": record_dict}
 
     @protocol.handle(methods.FormRecords.create_record)
@@ -510,7 +508,7 @@ class Server(protocol.ServerEndpoint):
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
         yield record.save()
-        self._async_recompile(tid, False, int(Config.get("server", "wait-after-param", 5)))
+        self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
         # need to query this again, to_dict with load_references only works on retrieved document and not on newly created
         record = yield data.FormRecord.get_uuid(record_id)
@@ -1293,8 +1291,11 @@ class Server(protocol.ServerEndpoint):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
+        if opt.server_no_recompile.get():
+            LOGGER.info("Skipping compile due to no-recompile=True")
+            return
         last_recompile = self._recompiles[environment_id]
-        wait_time = int(Config.get("server", "auto-recompile-wait", 600))
+        wait_time = opt.server_autrecompile_wait.get()
         if last_recompile is self:
             LOGGER.info("Already recompiling")
             return
@@ -1394,11 +1395,11 @@ class Server(protocol.ServerEndpoint):
                 stages.append(result)
 
             LOGGER.info("Recompiling configuration model")
-            server_address = Config.get("server", "server_address", "localhost")
+            server_address = opt.server_address.get()
             result = yield self._run_compile_stage("Recompiling configuration model",
                                                    inmanta_path + ["-vvv", "export", "-e", str(environment_id),
                                                                    "--server_address", server_address, "--server_port",
-                                                                   Config.get("server_rest_transport", "port", "8888")],
+                                                                   opt.transport_port.get()],
                                                    project_dir, env=os.environ.copy())
             stages.append(result)
         finally:

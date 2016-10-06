@@ -25,12 +25,6 @@ from inmanta import methods
 from inmanta.config import Config
 from tornado import gen
 from tornado.ioloop import IOLoop
-import pytest
-from tornado.test.testing_test import GenTest
-from tornado.testing import gen_test
-import time
-from tornado.gen import sleep
-from utils import retry_limited
 
 LOGGER = logging.getLogger(__name__)
 
@@ -52,11 +46,6 @@ from inmanta import protocol  # NOQA
 
 
 class Server(protocol.ServerEndpoint):
-
-    def __init__(self, name, io_loop, interval=60):
-        protocol.ServerEndpoint.__init__(self, name, io_loop, interval=interval)
-        self.expires = 0
-
     @protocol.handle(StatusMethod.get_status)
     @gen.coroutine
     def get_status(self, tid):
@@ -69,21 +58,15 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"agents": status_list}
 
-    def expire(self, session):
-        protocol.ServerEndpoint.expire(self, session)
-        print(session._sid)
-        self.expires += 1
-
 
 class Agent(protocol.AgentEndPoint):
-
     @protocol.handle(StatusMethod.get_agent_status)
     @gen.coroutine
     def get_agent_status(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
 
-def test_2way_protocol(io_loop, logs=False):
+def test_2way_protocol(logs=False):
     if logs:
         # set logging to sensible defaults
         formatter = colorlog.ColoredFormatter(
@@ -109,6 +92,7 @@ def test_2way_protocol(io_loop, logs=False):
         logging.root.addHandler(stream)
         logging.root.setLevel(logging.DEBUG)
 
+    io_loop = IOLoop.current()
     Config.load_config()
     server = Server("server", io_loop)
     server.start()
@@ -136,60 +120,6 @@ def test_2way_protocol(io_loop, logs=False):
     except KeyboardInterrupt:
         io_loop.stop()
 
-
-@gen.coroutine
-def check_sessions(sessions):
-    for s in sessions:
-        a = yield s.client.get_agent_status("X")
-        assert a.get_result()['status'] == 'ok'
-
-
-@pytest.mark.slowtest
-@pytest.mark.gen_test
-def test_timeout(io_loop):
-    # start server
-    Config.load_config()
-    server = Server("server", io_loop, interval=2)
-    server.start()
-
-    env = uuid.uuid4()
-
-    # agent 1
-    agent = Agent("agent", io_loop)
-    agent.add_end_point_name("agent")
-    agent.set_environment(env)
-    agent.start()
-
-    # wait till up
-    yield retry_limited(lambda: len(server._sessions) == 1, 0.1)
-    assert len(server._sessions) == 1
-
-    # agent 2
-    agent2 = Agent("agent", io_loop)
-    agent2.add_end_point_name("agent")
-    agent2.set_environment(env)
-    agent2.start()
-
-    # wait till up
-    yield retry_limited(lambda: len(server._sessions) == 2, 0.1)
-    assert len(server._sessions) == 2
-
-    # see if it stays up
-    yield(check_sessions(server._sessions.values()))
-    yield sleep(2)
-    assert len(server._sessions) == 2
-    yield(check_sessions(server._sessions.values()))
-
-    # take it down
-    agent2.stop()
-
-    # timout
-    yield sleep(2)
-    # check if down
-    assert len(server._sessions) == 1
-    print(server._sessions)
-    yield(check_sessions(server._sessions.values()))
-    assert server.expires == 1
 
 if __name__ == "__main__":
     test_2way_protocol(logs=True)

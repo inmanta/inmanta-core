@@ -18,7 +18,7 @@
 
 
 from tornado import gen, ioloop
-from inmanta.config import Config
+from inmanta.config import Config, executable
 import glob
 import os
 import select
@@ -34,6 +34,7 @@ import time
 from motorengine import connect, errors, DESCENDING
 import sys
 import subprocess
+from inmanta.server.config import server_agent_autostart
 
 
 LOGGER = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ class AgentManager(object):
         """
             For an inmanta process from the same code base as the current code
         """
-        main = Config.get("main", "executable", os.path.abspath(sys.argv[0]))
+        main = executable.get()
         inmanta_path = [sys.executable, main]
         # handles can be closed, owned by child process,...s
         with open(outfile, "wb+") as outhandle:
@@ -218,7 +219,7 @@ class AgentManager(object):
                 agent["process"].terminate()
 
     def _agent_matches(self, agent_name):
-        agent_globs = [x.strip() for x in Config.get("server", "agent_autostart", "iaas_*").split(",")]
+        agent_globs = server_agent_autostart.get()
 
         for agent_glob in agent_globs:
             if glob.fnmatch.fnmatchcase(agent_name, agent_glob):

@@ -78,7 +78,7 @@ class SnippetTests(unittest.TestCase):
             modulepath: %s
             downloadpath: %s
             version: 1.0
-            repo: ['git@git.inmanta.com:modules/', 'git@git.inmanta.com:config/']"""
+            repo: ['https://github.com/inmanta/']"""
                 % (self.__class__.libs, self.__class__.libs))
 
         with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
@@ -88,19 +88,6 @@ class SnippetTests(unittest.TestCase):
 
     def xtearDown(self):
         shutil.rmtree(self.project_dir)
-
-    def testIssue90Compile(self):
-        self.setUpForSnippet(""" import ip
-import std
-import redhat
-
-ctrl1 = ip::Host(name="os-ctrl-1", os=redhat::centos7, ip="172.20.20.10")
-odl1  = ip::Host(name="os-odl-1", os=redhat::centos7, ip="172.20.20.15")
-comp1 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.20")
-comp2 = ip::Host(name="os-comp-1", os=redhat::centos7, ip="172.20.20.21")
-""")
-        with pytest.raises(DuplicateException):
-            compiler.do_compile()
 
     def testIssue92(self):
         self.setUpForSnippet("""
@@ -229,9 +216,7 @@ end
 
 implement Repository using redhatRepo
 
-import redhat
-
-h1 = std::Host(name="test", os=redhat::fedora23)
+h1 = std::Host(name="test", os=std::linux)
 
 Repository(host=h1, name="flens-demo",
                            baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
@@ -244,7 +229,7 @@ Repository(host=h1, name="flens-demo",
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except TypingException as e:
-            assert e.location.lnr == 26
+            assert e.location.lnr == 24
 
     def testIssue110Resolution(self):
         self.setUpForSnippet("""
@@ -585,6 +570,18 @@ c = Jos(bar = ["X"])
 """)
         with pytest.raises(RuntimeException):
             compiler.do_compile()
+
+    def testIssue164FQNInWhen(self):
+        self.setUpForSnippet("""
+import ubuntu
+implementation linux for std::HostConfig:
+end
+
+implement std::HostConfig using linux when host.os == ubuntu::ubuntu1404
+
+std::Host(name="vm1", os=ubuntu::ubuntu1404)
+""")
+        compiler.do_compile()
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
