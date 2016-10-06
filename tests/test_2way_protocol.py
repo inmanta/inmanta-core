@@ -24,6 +24,11 @@ import colorlog
 from inmanta import methods
 from inmanta.config import Config
 from tornado import gen
+import pytest
+from inmanta.config import TransportConfig
+import time
+from tornado.gen import sleep
+from utils import retry_limited
 from tornado.ioloop import IOLoop
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +38,7 @@ class StatusMethod(methods.Method):
     __method_name__ = "status"
 
     @methods.protocol(operation="GET", index=True, mt=True)
-    def get_status(self, tid: uuid.UUID):
+    def get_statusX(self, tid: uuid.UUID):
         pass
 
     @methods.protocol(operation="GET", id=True)
@@ -46,9 +51,14 @@ from inmanta import protocol  # NOQA
 
 
 class Server(protocol.ServerEndpoint):
-    @protocol.handle(StatusMethod.get_status)
+
+    def __init__(self, name, io_loop, interval=60):
+        protocol.ServerEndpoint.__init__(self, name, io_loop, interval=interval)
+        self.expires = 0
+
+    @protocol.handle(StatusMethod.get_statusX)
     @gen.coroutine
-    def get_status(self, tid):
+    def get_statusX(self, tid):
         status_list = []
         for session in self._sessions.values():
             client = session.get_client()
@@ -58,8 +68,14 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"agents": status_list}
 
+    def expire(self, session):
+        protocol.ServerEndpoint.expire(self, session)
+        print(session._sid)
+        self.expires += 1
+
 
 class Agent(protocol.AgentEndPoint):
+
     @protocol.handle(StatusMethod.get_agent_status)
     @gen.coroutine
     def get_agent_status(self, id):
@@ -105,11 +121,84 @@ def test_2way_protocol(logs=False):
     @gen.coroutine
     def do_call():
         client = protocol.Client("client")
-        status = yield client.get_status(str(agent.environment))
+        status = yield client.get_statusX(str(agent.environment))
         assert status.code == 200
         assert "agents" in status.result
         assert len(status.result["agents"]) == 1
         assert status.result["agents"][0]["status"], "ok"
+        server.stop()
+        client.stop()
+        io_loop.stop()
+
+    io_loop.add_callback(do_call)
+    io_loop.add_timeout(io_loop.time() + 2, lambda: io_loop.stop())
+    try:
+        io_loop.start()
+    except KeyboardInterrupt:
+        io_loop.stop()
+    server.stop()
+    agent.stop()
+
+@gen.coroutine
+def check_sessions(sessions):
+    for s in sessions:
+        a = yield s.client.get_agent_status("X")
+        assert a.get_result()['status'] == 'ok'
+
+
+@pytest.mark.slowtest
+def test_timeout():
+
+    io_loop = IOLoop.current()
+    Config.load_config()
+
+    # start server
+    Config.load_config()
+    server = Server("server", io_loop, interval=2)
+    server.start()
+
+    env = uuid.uuid4()
+
+    # agent 1
+    agent = Agent("agent", io_loop)
+    agent.add_end_point_name("agent")
+    agent.set_environment(env)
+    agent.start()
+
+    @gen.coroutine
+    def do_call():
+        # wait till up
+        yield retry_limited(lambda: len(server._sessions) == 1, 0.1)
+        assert len(server._sessions) == 1
+
+        # agent 2
+        agent2 = Agent("agent", io_loop)
+        agent2.add_end_point_name("agent")
+        agent2.set_environment(env)
+        agent2.start()
+
+        # wait till up
+        yield retry_limited(lambda: len(server._sessions) == 2, 0.1)
+        assert len(server._sessions) == 2
+
+        # see if it stays up
+        yield(check_sessions(server._sessions.values()))
+        yield sleep(2)
+        assert len(server._sessions) == 2
+        yield(check_sessions(server._sessions.values()))
+
+        # take it down
+        agent2.stop()
+
+        # timout
+        yield sleep(2)
+        # check if down
+        assert len(server._sessions) == 1
+        print(server._sessions)
+        yield(check_sessions(server._sessions.values()))
+        assert server.expires == 1
+        agent.stop()
+        server.stop()
 
         io_loop.stop()
 
@@ -119,7 +208,5 @@ def test_2way_protocol(logs=False):
         io_loop.start()
     except KeyboardInterrupt:
         io_loop.stop()
-
-
-if __name__ == "__main__":
-    test_2way_protocol(logs=True)
+    server.stop()
+    agent.stop()

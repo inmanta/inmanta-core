@@ -21,51 +21,38 @@ import base64
 from inmanta import protocol
 from server_test import ServerTest
 from tornado.testing import gen_test
+import pytest
 
 
-class testProtocolClient(ServerTest):
-    def __init__(self, methodName='runTest'):
-        super().__init__(methodName)
-        self.client = None
+@pytest.mark.gen_test
+def test_client_files(client):
+    file_name = str(random.randint(0, 10000))
+    body = base64.b64encode(b"Hello world\n").decode("ascii")
 
-    def setUp(self):
-        ServerTest.setUp(self)
-        self.server.start()
-        # start the client
-        self.client = protocol.Client("client")
+    # Check if the file exists
+    result = yield client.stat_file(id="test" + file_name)
+    assert result.code == 404
 
-    def tearDown(self):
-        ServerTest.tearDown(self)
+    # Create the file
+    result = yield client.upload_file(id="test" + file_name, content=body)
+    assert result.code == 200
 
-    @gen_test
-    def test_client_files(self):
-        file_name = str(random.randint(0, 10000))
-        body = base64.b64encode(b"Hello world\n").decode("ascii")
+    # Get the file
+    result = yield client.get_file(id="test" + file_name)
+    assert result.code == 200
+    assert "content" in result.result
+    assert result.result["content"] == body
 
-        # Check if the file exists
-        result = yield self.client.stat_file(id="test" + file_name)
-        assert result.code == 404
-
-        # Create the file
-        result = yield self.client.upload_file(id="test" + file_name, content=body)
+    file_names = []
+    for _n in range(1, 10):
+        file_name = "test%d" % random.randint(0, 10000)
+        file_names.append(file_name)
+        result = yield client.upload_file(id=file_name, content="")
         assert result.code == 200
 
-        # Get the file
-        result = yield self.client.get_file(id="test" + file_name)
-        assert result.code == 200
-        assert "content" in result.result
-        assert result.result["content"] == body
+    result = yield client.stat_files(files=file_names)
+    assert len(result.result["files"]) == 0
 
-        file_names = []
-        for _n in range(1, 10):
-            file_name = "test%d" % random.randint(0, 10000)
-            file_names.append(file_name)
-            result = yield self.client.upload_file(id=file_name, content="")
-            assert result.code == 200
-
-        result = yield self.client.stat_files(files=file_names)
-        assert len(result.result["files"]) == 0
-
-        other_files = ["testtest"]
-        result = yield self.client.stat_files(files=file_names + other_files)
-        assert len(result.result["files"]) == len(other_files)
+    other_files = ["testtest"]
+    result = yield client.stat_files(files=file_names + other_files)
+    assert len(result.result["files"]) == len(other_files)
