@@ -1,0 +1,18 @@
+execnet
+tornado
+colorlog
+pyyaml
+urllib3
+six
+sphinx-argparse
+sphinx
+cliff <= 2.0.0
+blessings
+python-dateutil
+ply
+ruamel.yaml
+virtualenv
+-e git://github.com/heynemann/motorengine.git#egg=motorengine
+mongobox
+pytest
+pytest-tornado
