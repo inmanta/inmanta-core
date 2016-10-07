@@ -23,11 +23,11 @@ https://copr.fedorainfracloud.org/coprs/bartvanbrabant/inmanta/
 
 Install inmanta tool, server or agent or all:
 
-`
-$ sudo dnf install python3-inmanta
-$ sudo dnf install python3-inmanta-server
-$ sudo dnf install python3-inmanta-agent
-`
+.. code-block:: sh
+
+  $ sudo dnf install python3-inmanta
+  $ sudo dnf install python3-inmanta-server
+  $ sudo dnf install python3-inmanta-agent
 
 The first package contains all the code and the commands. The server and the agent packages install
 config files and systemd unit files.
@@ -39,24 +39,25 @@ collection of Redhat.
 
 First install the rh-python34 software collection (https://www.softwarecollections.org/en/scls/rhscl/rh-python34/)
 
-`
-$ sudo yum install centos-release-scl
-$ sudo yum install rh-python34
-`
+.. code-block:: sh
+
+  $ sudo yum install centos-release-scl
+  $ sudo yum install rh-python34
 
 Enable the inmanta-scl copr repo:
-`
-cd /etc/yum.repos.d
-wget https://copr.fedorainfracloud.org/coprs/bartvanbrabant/inmanta-scl/repo/epel-7/bartvanbrabant-inmanta-scl-epel-7.repo
-`
+
+.. code-block:: sh
+
+  $ cd /etc/yum.repos.d
+  $ wget https://copr.fedorainfracloud.org/coprs/bartvanbrabant/inmanta-scl/repo/epel-7/bartvanbrabant-inmanta-scl-epel-7.repo
 
 Install inmanta tool, server or agent or all:
 
-`
-$ sudo dnf install rh-python34-python-inmanta
-$ sudo dnf install rh-python34-python-inmanta-server
-$ sudo dnf install rh-python34-python-inmanta-agent
-`
+.. code-block:: sh
+  
+  $ sudo dnf install rh-python34-python-inmanta
+  $ sudo dnf install rh-python34-python-inmanta-server
+  $ sudo dnf install rh-python34-python-inmanta-agent
 
 The first package contains all the code and the commands. The server and the agent packages install
 config files and systemd unit files.
