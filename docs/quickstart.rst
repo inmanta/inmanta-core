@@ -5,16 +5,11 @@ Quickstart
 
 This tutorial gets you started with Inmanta. 
 
-The objective of this tutorial is to set up a Drupal CMS.  
-
-Along the way, you will learn how to:
-
-* Use vagrant to make a basic Inmanta install
-* Create an Inmanta project
-* Use existing configuration modules
-* Create a configuration model to deploy a LAMP stack (Linux, Apache, MySQL and PHP)
-* Deploy the configuration
-
+Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments. 
+In this guide, we go for a less complex setup: install the Drupal CMS on two VM's. 
+First, we use vagrant to setup a basic environment with two empty VM's and an Inmanta Server.
+Then, we use Inmanta to install Drupal on these VM's.
+ 
 Setting up the tutorial
 _________________________
 
@@ -87,6 +82,7 @@ At GitHub, we host modules to setup and manage many systems. Our modules are ava
 
 When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically. 
 
+.. _qsconfigmodel:
 
 The configuration model
 ------------------------------
@@ -94,6 +90,7 @@ The configuration model
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
 First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
+
 
 .. code-block:: ruby
     :linenos:
@@ -235,9 +232,18 @@ Using the dashboard:
     * Specify the branch: ``master``.
     
 #. Go into your new environment.
-#. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded).
-#. When it is done, press the play button of the new version, or go into the new version and press *Deploy*.
-#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/ <http://localhost:8080/>`_.
+#. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded). 
+
+    * Now the Inmanta Server downloads the configuration model from github. It also downloads all required modules. These modules contain the instructions to install specific parts of the setup such as for example `mysql` or `drupal` itself. To see the source go `here <https://github.com/inmanta/quickstart>`_, for a more in depth explanation :ref:`see above <qsconfigmodel>`.
+    * When this is done, it compiles all modules together to a new deployment plan. 
+
+#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it. You now get a list of all configuration items in this configuration. 
+#. Press *Deploy* to start rolling out this version.
+
+    * an agent is now started that SSH's into the virtual machines and starts deploying the drupal server. 
+    * it will install the required software and configure it.
+
+#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://127.0.0.1:8080/ <http://127.0.0.1:8080/>`_.
 
 
 Create your own modules

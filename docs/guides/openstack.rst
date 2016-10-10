@@ -39,14 +39,21 @@ Creating machines
 Getting the agent on the machine
 ----------------------------------
 
+Once the machines are created, we want to inject the inmanta agent into them, and configure it to connect back to the management server. 
+Do do this, we use the cloud-init facility of OpenStack. 
+
+To inject the agent into fedora machines, you can use the following script:
+
+.. literalinclude:: ../examples/user_data.tmpl
+   :language: bash
 
 
 
 Pushing config to the machine
 ----------------------------------
 
+To install config::
 
-config::
     #put a file on the machine
     std::ConfigFile(hosts = host1, path="/tmp/test", content="I did it!")
 
@@ -54,16 +61,13 @@ config::
 Actual usage
 ----------------------------------
 
-Creating instances of ``vm::Host`` is not practival: it takes too many parameters and they are often the same.
+Creating instances of ``vm::Host``, as shown above is not practival: it takes too many parameters and polutes the model.
+Instead, we use the capabilities of Inmanta to encapsulate this complexity.
 
-Models using an IaaS are built around two user defined types: a custom infrastructure object and a custom host object.
+When building larger models, it is best to create your own ``Host`` type. This type encapsulates all settings that are the same for all hosts.
+Addtionally, if there is some shared infrastructure (such as the ``vm::IaaS`` object, monitoring clusters, shared networks, global parameters,...) it is best to make an infrastructure object. 
 
-* The infrastructure object collects all system wide config (such as the ``vm::IaaS`` object, monitoring cluster, networks, global parameters,...)
-* The host object contains all settings that are the same for all hosts.
-
-For example: 
-
-.. todo:: add link to source
+For example (full source is at https://github.com/inmanta/inmanta/tree/master/docs/examples/openstackclean)
 
 We can reduce the main file to:
 
@@ -75,7 +79,7 @@ With the following module:
 .. literalinclude:: ../examples/openstackclean/libs/mymodule/model/_init.cf
    :language: ruby
    
-If this were not an example, we would still make the following changes:
+If this were not an example, we would make the following changes:
 
 * hardcode the ``image_id`` and ``os`` (and perhaps ``flavor``) into the defintion of ``myhost``. 
 * the parameters on top would be moved to either a :doc:`form <forms>` or filled in directly into the constructor.
