@@ -140,6 +140,7 @@ class testModuleTool(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super(testModuleTool, cls).setUpClass()
+        cls.oldcwd = os.getcwd()
         cls.tempdir = tempfile.mkdtemp()
 
         reporoot = os.path.join(cls.tempdir, "repos")
@@ -215,6 +216,7 @@ class testModuleTool(unittest.TestCase):
     def tearDownClass(cls):
         super(testModuleTool, cls).tearDownClass()
         shutil.rmtree(cls.tempdir)
+        os.chdir(cls.oldcwd)
 
     def setUp(self):
         self.stream = StringIO()
