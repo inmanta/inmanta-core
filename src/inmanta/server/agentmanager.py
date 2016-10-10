@@ -17,24 +17,24 @@
 """
 
 
-from tornado import gen, ioloop
+from tornado import gen
+from tornado import locks
+from motorengine import DESCENDING
+
 from inmanta.config import Config, executable
+from inmanta.agent.io.remote import RemoteIO
+from inmanta.resources import HostNotFoundException
+from inmanta import data
+from inmanta.server.config import server_agent_autostart
+
+import logging
 import glob
 import os
-import select
-from tornado import locks
-import logging
-from inmanta.agent.io.remote import RemoteIO
-from inmanta.resources import Id, HostNotFoundException
-import threading
-from inmanta import data
 from _collections import defaultdict
 import datetime
 import time
-from motorengine import connect, errors, DESCENDING
 import sys
 import subprocess
-from inmanta.server.config import server_agent_autostart
 
 
 LOGGER = logging.getLogger(__name__)

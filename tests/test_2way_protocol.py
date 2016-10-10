@@ -25,8 +25,6 @@ from inmanta import methods
 from inmanta.config import Config
 from tornado import gen
 import pytest
-from inmanta.config import TransportConfig
-import time
 from tornado.gen import sleep
 from utils import retry_limited
 from tornado.ioloop import IOLoop
@@ -138,6 +136,7 @@ def test_2way_protocol(logs=False):
         io_loop.stop()
     server.stop()
     agent.stop()
+
 
 @gen.coroutine
 def check_sessions(sessions):

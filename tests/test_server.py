@@ -17,13 +17,7 @@
 """
 
 import time
-import random
-import string
-import os
 
-from inmanta import protocol, config
-from server_test import ServerTest
-from tornado.testing import gen_test
 from utils import retry_limited
 from tornado.gen import sleep
 import pytest

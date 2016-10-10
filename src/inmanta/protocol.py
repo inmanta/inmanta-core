@@ -1028,7 +1028,7 @@ class Session(object):
         call_spec["reply_id"] = uuid.uuid4()
         q.put(call_spec)
         _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, inmanta.server.config.timeout.get(),
-                     "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"],  self._sid))
+                     "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], self._sid))
         self._replies[call_spec["reply_id"]] = future
 
         return future
@@ -1151,7 +1151,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             env = self._sessions[sid]
             env.set_reply(reply_id, data)
             return 200
-        except:
+        except Exception:
             LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
 
     def get_security_policy(self):
@@ -1223,7 +1223,9 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Start a continuous heartbeat call
         """
         while self.running:
-            result = yield self._client.heartbeat(sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names,
+            result = yield self._client.heartbeat(sid=str(self.sessionid),
+                                                  tid=str(self._env_id),
+                                                  endpoint_names=self.end_point_names,
                                                   nodename=self.node_name)
             if result.code == 200:
                 if result.result is not None:

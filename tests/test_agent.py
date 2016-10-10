@@ -15,19 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from collections import defaultdict
-import time
-import json
-from threading import Condition
-
-
-from tornado.testing import gen_test
-from tornado import gen
-
-from inmanta import protocol, agent, data
-from inmanta.agent.handler import provider, ResourceHandler
-from inmanta.resources import resource, Resource
-from server_test import ServerTest
+from inmanta import protocol, agent
 import pytest
 from utils import retry_limited
 from inmanta.agent import reporting
@@ -43,8 +31,11 @@ def testagent_get_status(io_loop, server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    myagent = agent.Agent(io_loop, hostname="node1", env_id=env_id, agent_map="agent1=localhost",
-                        code_loader=False)
+    myagent = agent.Agent(io_loop,
+                          hostname="node1",
+                          env_id=env_id,
+                          agent_map="agent1=localhost",
+                          code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()
 

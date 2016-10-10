@@ -18,9 +18,6 @@
 import random
 import base64
 
-from inmanta import protocol
-from server_test import ServerTest
-from tornado.testing import gen_test
 import pytest
 
 

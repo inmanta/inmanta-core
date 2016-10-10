@@ -21,13 +21,11 @@ import json
 from threading import Condition
 
 
-from tornado.testing import gen_test
 from tornado import gen
 
-from inmanta import protocol, agent, data
+from inmanta import agent, data
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
-from server_test import ServerTest
 import pytest
 from inmanta.agent.agent import Agent
 
@@ -182,6 +180,7 @@ class Wait(ResourceHandler):
 
         return changes
 
+
 @pytest.mark.gen_test
 def test_dryrun_and_deploy(io_loop, server, client):
     """
@@ -194,7 +193,7 @@ def test_dryrun_and_deploy(io_loop, server, client):
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
-                             code_loader=False)
+                  code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -287,7 +286,7 @@ def test_dryrun_and_deploy(io_loop, server, client):
     assert Provider.get("agent1", "key1") == "value1"
     assert Provider.get("agent1", "key2") == "value2"
     assert not Provider.isset("agent1", "key3")
-    
+
     agent.stop()
 
 
@@ -303,8 +302,8 @@ def test_dual_agent(io_loop, server, client):
     env_id = result.result["environment"]["id"]
 
     myagent = agent.Agent(io_loop, hostname="node1", env_id=env_id,
-                             agent_map={"agent1": "localhost", "agent2": "localhost"},
-                             code_loader=False)
+                          agent_map={"agent1": "localhost", "agent2": "localhost"},
+                          code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     myagent.start()
@@ -379,13 +378,12 @@ def test_dual_agent(io_loop, server, client):
     assert Provider.get("agent2", "key1") == "value2"
     assert Provider.get("agent1", "key2") == "value1"
     assert Provider.get("agent2", "key2") == "value2"
-    
+
     myagent.stop()
-    
 
 
 @pytest.mark.gen_test
-def test_snapshot_restore(client, server,io_loop):
+def test_snapshot_restore(client, server, io_loop):
     """
         create a snapshot and restore it again
     """
@@ -396,7 +394,7 @@ def test_snapshot_restore(client, server,io_loop):
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
-                             code_loader=False)
+                  code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -474,8 +472,9 @@ def test_snapshot_restore(client, server,io_loop):
 
     assert Provider.get("agent1", "key") == "value"
 
+
 @pytest.mark.gen_test
-def test_get_facts(client, server,io_loop):
+def test_get_facts(client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
@@ -486,7 +485,7 @@ def test_get_facts(client, server,io_loop):
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
-                             code_loader=False)
+                  code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -527,8 +526,9 @@ def test_get_facts(client, server,io_loop):
     result = yield client.get_param(env_id, "key1", resource_id_wov)
     assert result.code == 200
 
+
 @pytest.mark.gen_test
-def test_get_set_param(client, server,io_loop):
+def test_get_set_param(client, server, io_loop):
     """
         Test getting and setting params
     """
@@ -541,8 +541,9 @@ def test_get_set_param(client, server,io_loop):
     result = yield client.set_param(tid=env_id, id="key10", value="value10", source="user")
     assert result.code == 200
 
+
 @pytest.mark.gen_test
-def test_unkown_parameters(client, server,io_loop):
+def test_unkown_parameters(client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
@@ -553,7 +554,7 @@ def test_unkown_parameters(client, server,io_loop):
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
-                             code_loader=False)
+                  code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -576,7 +577,7 @@ def test_unkown_parameters(client, server,io_loop):
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
     result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=unknowns,
-                                           version_info={})
+                                      version_info={})
     assert result.code == 200
 
     result = yield client.release_version(env_id, version, True)
@@ -596,8 +597,9 @@ def test_unkown_parameters(client, server,io_loop):
     result = yield client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 200
 
+
 @pytest.mark.gen_test()
-def test_fail(client, server,io_loop):
+def test_fail(client, server, io_loop):
     """
         Test results when a step fails
     """
@@ -608,7 +610,7 @@ def test_fail(client, server,io_loop):
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
-                             code_loader=False, poolsize=10)
+                  code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -686,8 +688,9 @@ def test_fail(client, server,io_loop):
     assert states['test::Resource[agent1,key=key4],v=%d' % version] == "skipped"
     assert states['test::Resource[agent1,key=key5],v=%d' % version] == "skipped"
 
+
 @pytest.mark.gen_test
-def test_wait(client, server,io_loop):
+def test_wait(client, server, io_loop):
     """
         Test results for a cancel
     """
@@ -698,7 +701,7 @@ def test_wait(client, server,io_loop):
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
-                             code_loader=False, poolsize=10)
+                  code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
 

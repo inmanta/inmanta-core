@@ -17,15 +17,15 @@
 """
 
 import os
-
-from mongobox import MongoBox
-import pytest
 import tempfile
 import random
 import string
+import shutil
+
+from mongobox import MongoBox
+import pytest
 from inmanta import config
 import pymongo
-import shutil
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -85,7 +85,9 @@ def server(io_loop, mongo_db, mongo_client):
     shutil.rmtree(state_dir)
 
 
-@pytest.fixture(scope="function", params=[(True, True), (True, False), (False, True), (False, False)], ids=["SSL and Auth", "SSL", "Auth", "Normal"])
+@pytest.fixture(scope="function",
+                params=[(True, True), (True, False), (False, True), (False, False)],
+                ids=["SSL and Auth", "SSL", "Auth", "Normal"])
 def server_multi(io_loop, mongo_db, mongo_client, request):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()

@@ -20,14 +20,12 @@ import base64
 from collections import defaultdict
 import datetime
 import difflib
-import glob
 import json
 import logging
 import os
 import re
 import subprocess
 import sys
-import threading
 import time
 import uuid
 
@@ -41,7 +39,7 @@ from inmanta import data
 from inmanta import methods
 from inmanta import protocol
 from inmanta.ast import type
-from inmanta.resources import Id, HostNotFoundException
+from inmanta.resources import Id
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
 
@@ -96,7 +94,7 @@ class Server(protocol.ServerEndpoint):
 
     def new_session(self, sid, tid, endpoint_names, nodename):
         session = protocol.ServerEndpoint.new_session(self, sid, tid, endpoint_names, nodename)
-        self.agentmanager.new_session(session,  tid, endpoint_names, nodename)
+        self.agentmanager.new_session(session, tid, endpoint_names, nodename)
         return session
 
     def expire(self, session):

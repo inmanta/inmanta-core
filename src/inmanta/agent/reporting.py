@@ -35,7 +35,7 @@ def collect_report(agent):
     for name, report in reports.items():
         try:
             out[name] = report(agent)
-        except:
+        except Exception:
             out[name] = "ERROR"
             LOGGER.exception("could generate report for entry: %s" % name)
 
@@ -108,5 +108,6 @@ def report_resources(agent):
            "nvcsw": ru.ru_nvcsw,
            "nivcsw": ru.ru_nivcsw
            }
+    return out
 
 reports["resources"] = report_resources
