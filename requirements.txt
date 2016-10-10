@@ -16,3 +16,4 @@ https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz
 mongobox
 pytest
 pytest-tornado
+sphinx_rtd_theme

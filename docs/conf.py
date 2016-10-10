@@ -105,6 +105,11 @@ pygments_style = 'sphinx'
     # Values: "3" (default) or "2" (in quotes)
 #    'bootstrap_version': "3",
 #}
+import sphinx_rtd_theme
+
+html_theme = "sphinx_rtd_theme"
+
+html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 # Add any paths that contain custom themes here, relative to this directory.
 #html_theme_path = []
