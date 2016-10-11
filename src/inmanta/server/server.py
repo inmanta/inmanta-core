@@ -1036,8 +1036,6 @@ class Server(protocol.ServerEndpoint):
 
     @gen.coroutine
     def _ensure_agents(self, environment_id: str, agents):
-        import inmanta.agent.config
-
         agents = [agent for agent in agents if self._agent_matches(agent)]
         if len(agents) > 0:
             with (yield LOCK.acquire()):
