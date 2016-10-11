@@ -25,7 +25,7 @@ from tornado import gen
 
 
 def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
-             mt=False):
+             mt=False, timeout=None, reverse=False):
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.
@@ -39,6 +39,8 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
                            will forward it to all other clients as well.
         :param mt Is this a multi-tenant call? If it is multi-tenant a tenant id is required. This id is transported as an
                   HTTP header. The method that has mt=True, should have an attribute tid
+        :param timeout nr of seconds before request it terminated
+        :param reverse This is a call from the Server to the Agent
     """
     properties = {
         "index": index,
@@ -49,6 +51,8 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
         "data_type": data_type,
         "destination": destination,
         "mt": mt,
+        "timeout": timeout,
+        "reverse": reverse
     }
 
     def wrapper(func):
@@ -427,7 +431,7 @@ class AgentDryRun(Method):
     """
     __method_name__ = "agent_dryrun"
 
-    @protocol(operation="POST", mt=True, id=True)
+    @protocol(operation="POST", mt=True, id=True, reverse=True, timeout=5)
     def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
         """
             Do a dryrun on an agent
@@ -534,7 +538,7 @@ class AgentParameterMethod(Method):
     """
     __method_name__ = "agent_parameter"
 
-    @protocol(operation="POST", mt=True)
+    @protocol(operation="POST", mt=True, reverse=True, timeout=5)
     def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
         """
             Get all parameters/facts known by the agents for the given resource
@@ -650,7 +654,7 @@ class NodeMethod(Method):
             :return The requested node
         """
 
-    @protocol(operation="POST", id=True, mt=True)
+    @protocol(operation="POST", id=True, mt=True, reverse=True, timeout=5)
     def trigger_agent(self, tid: uuid.UUID, id: str):
         """
             Request an agent to reload resources
@@ -771,7 +775,7 @@ class AgentSnapshot(Method):
     """
     __method_name__ = "agent_snapshot"
 
-    @protocol(operation="POST", mt=True)
+    @protocol(operation="POST", mt=True, reverse=True, timeout=5)
     def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -834,7 +838,7 @@ class AgentRestore(Method):
     """
     __method_name__ = "agent_restore"
 
-    @protocol(operation="POST", mt=True)
+    @protocol(operation="POST", mt=True, reverse=True, timeout=5)
     def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -853,7 +857,7 @@ class AgentReporting(Method):
     """
     __method_name__ = "status"
 
-    @protocol(operation="GET")
+    @protocol(operation="GET", reverse=True, timeout=5)
     def get_status(self):
         """
             Report status to the server

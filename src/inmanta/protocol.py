@@ -1017,7 +1017,7 @@ class Session(object):
     def seen(self):
         self._seen = time.time()
 
-    def put_call(self, call_spec):
+    def put_call(self, call_spec, timeout=10):
         import inmanta.server.config
 
         future = tornado.concurrent.Future()
@@ -1027,7 +1027,7 @@ class Session(object):
         q = self._queue
         call_spec["reply_id"] = uuid.uuid4()
         q.put(call_spec)
-        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, inmanta.server.config.timeout.get(),
+        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, timeout,
                      "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], self._sid))
         self._replies[call_spec["reply_id"]] = future
 
@@ -1339,8 +1339,9 @@ class ReturnClient(Client, metaclass=ClientMeta):
         url, method, headers, body = self._transport_instance.build_call(protocol_properties, args, kwargs)
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
+        timeout = protocol_properties["timeout"]
         try:
-            return_value = yield self.session.put_call(call_spec)
+            return_value = yield self.session.put_call(call_spec, timeout=timeout)
         except gen.TimeoutError:
             return Result(code=500, result="")
 
