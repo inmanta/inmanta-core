@@ -28,6 +28,7 @@ from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
 from inmanta.agent.agent import Agent
+from utils import retry_limited
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -196,6 +197,7 @@ def test_dryrun_and_deploy(io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key2", "incorrect_value")
     Provider.set("agent1", "key3", "value")
@@ -307,6 +309,7 @@ def test_dual_agent(io_loop, server, client):
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     myagent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key1", "incorrect_value")
     Provider.set("agent2", "key1", "incorrect_value")
@@ -397,6 +400,7 @@ def test_snapshot_restore(client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key", "value")
 
@@ -488,6 +492,7 @@ def test_get_facts(client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key", "value")
 
@@ -557,6 +562,7 @@ def test_unkown_parameters(client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key", "value")
 
@@ -613,6 +619,7 @@ def test_fail(client, server, io_loop):
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key", "value")
 
@@ -704,6 +711,7 @@ def test_wait(client, server, io_loop):
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     Provider.set("agent1", "key", "value")
 

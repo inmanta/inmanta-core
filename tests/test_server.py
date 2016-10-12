@@ -21,6 +21,7 @@ import time
 from utils import retry_limited
 from tornado.gen import sleep
 import pytest
+from inmanta.agent.agent import Agent
 
 
 @pytest.mark.gen_test(timeout=30)
@@ -94,7 +95,7 @@ def test_version_removal(server):
 
 @pytest.mark.gen_test(timeout=30)
 @pytest.mark.slowtest
-def test_get_resource_for_agent(server_multi):
+def test_get_resource_for_agent(io_loop, server_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -108,6 +109,10 @@ def test_get_resource_for_agent(server_multi):
 
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, "localhost", {"nvblah": "localhost"}, env_id=env_id)
+    agent.start()
+    aclient = agent._client
 
     version = 1
 
@@ -165,11 +170,11 @@ def test_get_resource_for_agent(server_multi):
     assert result.result["model"]["released"]
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_resources_for_agent(env_id, "vm1.dev.inmanta.com")
+    result = yield aclient.get_resources_for_agent(env_id, "vm1.dev.inmanta.com")
     assert result.code == 200
     assert len(result.result["resources"]) == 3
 
-    result = yield client.resource_updated(env_id,
+    result = yield aclient.resource_updated(env_id,
                                            "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
                                            "INFO", "deploy", "", "deployed", {})
     assert result.code == 200
@@ -178,7 +183,7 @@ def test_get_resource_for_agent(server_multi):
     assert result.code == 200
     assert result.result["model"]["done"] == 1
 
-    result = yield client.resource_updated(env_id,
+    result = yield aclient.resource_updated(env_id,
                                            "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
                                            "INFO", "deploy", "", "deployed", {})
     assert result.code == 200

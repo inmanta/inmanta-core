@@ -96,7 +96,7 @@ class ResourceHandler(object):
 
     def get_client(self):
         if self._client is None:
-            self._client = protocol.Client("agent", self._ioloop)
+            self._client = protocol.AgentClient("agent", self._agent.sessionid, self._ioloop)
         return self._client
 
     def pre(self, resource):

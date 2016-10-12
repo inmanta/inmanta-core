@@ -25,7 +25,7 @@ from tornado import gen
 
 
 def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
-             mt=False, timeout=None, reverse=False):
+             mt=False, timeout=None, api=None, server_agent=False, agent_server=False, validate_sid=None):
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.
@@ -40,8 +40,16 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
         :param mt Is this a multi-tenant call? If it is multi-tenant a tenant id is required. This id is transported as an
                   HTTP header. The method that has mt=True, should have an attribute tid
         :param timeout nr of seconds before request it terminated
-        :param reverse This is a call from the Server to the Agent
+        :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
+        :param server_agent This is a call from the Server to the Agent
+        :param agent_server This is a call from the Agent to the Server
+        :param validate_sid This call requires a valid session, true by default if agent_server and not api
     """
+    if api is None:
+        api = not server_agent and not agent_server
+    if validate_sid is None:
+        validate_sid = agent_server and not api
+
     properties = {
         "index": index,
         "id": id,
@@ -52,7 +60,10 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
         "destination": destination,
         "mt": mt,
         "timeout": timeout,
-        "reverse": reverse
+        "api": api,
+        "server_agent": server_agent,
+        "agent_server": agent_server,
+        "validate_sid": validate_sid
     }
 
     def wrapper(func):
@@ -200,7 +211,7 @@ class HeartBeatMethod(Method):
     """
     __method_name__ = "heartbeat"
 
-    @protocol(operation="POST", mt=True)
+    @protocol(operation="POST", mt=True, agent_server=True, validate_sid=False)
     def heartbeat(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str):
         """
             Send a heartbeat to the server
@@ -209,9 +220,11 @@ class HeartBeatMethod(Method):
             :param tid The environment this node and its agents belongs to
             :param endpoint_names The names of the endpoints on this node
             :param nodename The name of the node from which the heart beat comes
+
+            also registered as API method, because it is called with an invalid SID the first time
         """
 
-    @protocol(operation="PUT")
+    @protocol(operation="PUT", agent_server=True)
     def heartbeat_reply(self, sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
         """
             Send a reply back to the server
@@ -228,7 +241,7 @@ class FileMethod(Method):
     """
     __method_name__ = "file"
 
-    @protocol(operation="PUT", id=True, data_type="blob")
+    @protocol(operation="PUT", id=True, data_type="blob", api=True, agent_server=True)
     def upload_file(self, id: str, content: str):
         """
             Upload a new file
@@ -245,7 +258,7 @@ class FileMethod(Method):
             :param id The id of the file to check
         """
 
-    @protocol(operation="GET", id=True, data_type="blob")
+    @protocol(operation="GET", id=True, data_type="blob", api=True, agent_server=True)
     def get_file(self, id: str):
         """
             Retrieve a file
@@ -279,7 +292,7 @@ class ResourceMethod(Method):
             :param logs Include the logs in the response
         """
 
-    @protocol(operation="GET", mt=True, index=True)
+    @protocol(operation="GET", mt=True, index=True, agent_server=True)
     def get_resources_for_agent(self, tid: uuid.UUID, agent: str, version: int=None):
         """
             Return the most recent state for the resources associated with agent, or the version requested
@@ -299,7 +312,7 @@ class ResourceMethod(Method):
             :param id Get the status of the resource with the given id from the agent
         """
 
-    @protocol(operation="POST", mt=True, id=True)
+    @protocol(operation="POST", mt=True, id=True, agent_server=True)
     def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, status: str, extra_data: dict):
         """
             Send a resource update to the server
@@ -412,7 +425,7 @@ class DryRunMethod(Method):
             :param id The version dryrun to report
         """
 
-    @protocol(operation="PUT", mt=True, id=True)
+    @protocol(operation="PUT", mt=True, id=True, agent_server=True)
     def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
         """
             Store dryrun results at the server
@@ -431,7 +444,7 @@ class AgentDryRun(Method):
     """
     __method_name__ = "agent_dryrun"
 
-    @protocol(operation="POST", mt=True, id=True, reverse=True, timeout=5)
+    @protocol(operation="POST", mt=True, id=True, server_agent=True, timeout=5)
     def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
         """
             Do a dryrun on an agent
@@ -517,7 +530,7 @@ class ParametersMethod(Method):
     """
     __method_name__ = "parameters"
 
-    @protocol(operation="PUT", mt=True, index=True)
+    @protocol(operation="PUT", mt=True, index=True, agent_server=True)
     def set_parameters(self, tid: uuid.UUID, parameters: list):
         """
             Set a parameter on the server
@@ -538,7 +551,7 @@ class AgentParameterMethod(Method):
     """
     __method_name__ = "agent_parameter"
 
-    @protocol(operation="POST", mt=True, reverse=True, timeout=5)
+    @protocol(operation="POST", mt=True, server_agent=True, timeout=5)
     def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
         """
             Get all parameters/facts known by the agents for the given resource
@@ -654,7 +667,7 @@ class NodeMethod(Method):
             :return The requested node
         """
 
-    @protocol(operation="POST", id=True, mt=True, reverse=True, timeout=5)
+    @protocol(operation="POST", id=True, mt=True, server_agent=True, timeout=5)
     def trigger_agent(self, tid: uuid.UUID, id: str):
         """
             Request an agent to reload resources
@@ -681,7 +694,7 @@ class CodeMethod(Method):
             :param sources The source files that contain handlers and inmanta plug-ins
         """
 
-    @protocol(operation="GET", id=True, mt=True)
+    @protocol(operation="GET", id=True, mt=True, agent_server=True)
     def get_code(self, tid: uuid.UUID, id: int, resource: str):
         """
             Get the code for a given version of the configuration model
@@ -746,7 +759,7 @@ class Snapshot(Method):
             Request a new snapshot
         """
 
-    @protocol(operation="PUT", mt=True, id=True)
+    @protocol(operation="PUT", mt=True, id=True, agent_server=True)
     def update_snapshot(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, snapshot_data: str, error: bool, success: bool,
                         start: datetime.datetime, stop: datetime.datetime, size: int, msg: str=None):
         """
@@ -775,7 +788,7 @@ class AgentSnapshot(Method):
     """
     __method_name__ = "agent_snapshot"
 
-    @protocol(operation="POST", mt=True, reverse=True, timeout=5)
+    @protocol(operation="POST", mt=True, server_agent=True, timeout=5)
     def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -802,7 +815,7 @@ class RestoreSnapshot(Method):
             :param snapshot The id of the snapshot to restore
         """
 
-    @protocol(operation="POST", mt=True, id=True)
+    @protocol(operation="POST", mt=True, id=True, agent_server=True)
     def update_restore(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, success: bool, error: bool, msg: str,
                        start: datetime.datetime, stop: datetime.datetime):
         """
@@ -838,7 +851,7 @@ class AgentRestore(Method):
     """
     __method_name__ = "agent_restore"
 
-    @protocol(operation="POST", mt=True, reverse=True, timeout=5)
+    @protocol(operation="POST", mt=True, server_agent=True, timeout=5)
     def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -857,8 +870,37 @@ class AgentReporting(Method):
     """
     __method_name__ = "status"
 
-    @protocol(operation="GET", reverse=True, timeout=5)
+    @protocol(operation="GET", server_agent=True, timeout=5)
     def get_status(self):
         """
             Report status to the server
+        """
+
+
+class AgentState(Method):
+    """
+        Methods to allow the server to set the agents state
+    """
+    @protocol(operation="POST", server_agent=True, timeout=5)
+    def set_state(self, enabled: bool, current_version: int):
+        """
+            Set the state of the agent.
+        """
+
+
+class AgentRecovery(Method):
+    """
+        Methods for the agent to get its initial state from the server
+    """
+
+    @protocol(operation="GET", mt=True)
+    def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
+        """
+            Get the state for this agent.
+
+            returns a map
+            {
+             enabled: bool,
+             current_version: int
+            }
         """

@@ -529,6 +529,15 @@ class RESTTransport(Transport):
 
                     headers[INMANTA_MT_HEADER] = message["tid"]
 
+            validate_sid = config[0]["validate_sid"]
+            if validate_sid:
+                if 'sid' not in message:
+                    return self.return_error_msg(500,
+                                                 "This is an agent to server call, it should contain an agent session id",
+                                                 headers)
+                elif not self.validate_sid(message['sid']):
+                    return self.return_error_msg(500, "The sid %s is not valid." % message['sid'], headers)
+
             # validate message against the arguments
             argspec = inspect.getfullargspec(config[2])
             args = argspec.args
@@ -565,6 +574,11 @@ class RESTTransport(Transport):
                         except (ValueError, TypeError):
                             return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
                                                          (arg, arg_type, message[arg].__class__), headers)
+
+            if config[0]["agent_server"]:
+                if 'sid' in all_fields:
+                    del message['sid']
+                    all_fields.remove('sid')
 
             if len(all_fields) > 0 and argspec.varkw is None:
                 return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
@@ -797,6 +811,9 @@ class RESTTransport(Transport):
                 except Exception as e:
                     LOGGER.error("Login failed: %s", str(e))
 
+    def validate_sid(self, sid):
+        return self.endpoint.validate_sid(sid)
+
 
 class handle(object):
     """
@@ -1018,8 +1035,6 @@ class Session(object):
         self._seen = time.time()
 
     def put_call(self, call_spec, timeout=10):
-        import inmanta.server.config
-
         future = tornado.concurrent.Future()
 
         LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], self._sid)
@@ -1100,6 +1115,11 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         if self._transport_instance is not None:
             self._transport_instance.stop_endpoint()
             LOGGER.debug("Stopped %s", self._transport_instance)
+
+    def validate_sid(self, sid):
+        if isinstance(sid, str):
+            sid = uuid.UUID(sid)
+        return sid in self._sessions
 
     def get_or_create_session(self, sid, tid, endpoint_names, nodename):
         if isinstance(sid, str):
@@ -1210,7 +1230,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
-        self._client = Client(self.name, self._transport)
+        self._client = AgentClient(self.name, self.sessionid, transport=self._transport)
         # self._sched.add_action(self.perform_heartbeat, self._heart_beat_interval, True)
         self._io_loop.add_callback(self.perform_heartbeat)
 
@@ -1319,6 +1339,37 @@ class Client(Endpoint, metaclass=ClientMeta):
             Execute the rpc call
         """
         protocol_properties["method_name"] = get_method_name(protocol_properties)
+        result = yield self._transport_instance.call(protocol_properties, args, kwargs)
+        return result
+
+
+class AgentClient(Endpoint, metaclass=ClientMeta):
+    """
+        A client that communicates with end-point based on its configuration
+    """
+
+    def __init__(self, name, sid, ioloop=None, transport=RESTTransport):
+        if ioloop is None:
+            ioloop = IOLoop.current()
+        Endpoint.__init__(self, ioloop, name)
+        self._transport = transport
+        self._transport_instance = None
+        self._sid = sid
+
+        LOGGER.debug("Start transport for client %s", self.name)
+        tr = Transport.create(self._transport, self)
+        self._transport_instance = tr
+
+    @gen.coroutine
+    def _call(self, args, kwargs, protocol_properties):
+        """
+            Execute the rpc call
+        """
+        protocol_properties["method_name"] = get_method_name(protocol_properties)
+
+        if 'sid' not in kwargs:
+            kwargs['sid'] = self._sid
+
         result = yield self._transport_instance.call(protocol_properties, args, kwargs)
         return result
 
