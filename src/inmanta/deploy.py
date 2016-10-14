@@ -18,9 +18,10 @@
 import os
 import logging
 import random
+import sys
 
 from mongobox import mongobox
-from tornado import gen
+from tornado import gen, process
 from inmanta import module, config, server, agent, protocol
 
 
@@ -42,6 +43,8 @@ class Deploy(object):
         self._environment_id = None
 
         self._io_loop = io_loop
+
+        self._agent_ready = False
 
     def _ensure_dir(self, path):
         if not os.path.exists(path):
@@ -109,6 +112,20 @@ class Deploy(object):
             return False
 
         return result.result["environment"]["id"]
+
+    @gen.coroutine
+    def _latest_version(self, environment_id):
+        result = yield self._client.list_versions(tid=environment_id)
+        if result.code != 200:
+            LOGGER.error("Unable to get all version of environment %s", environment_id)
+            return None
+
+        if "versions" in result.result and len(result.result["versions"]) > 0:
+            versions = [x["version"] for x in result.result["versions"]]
+            sorted(versions)
+            return versions[0]
+
+        return None
 
     @gen.coroutine
     def setup_project(self):
@@ -183,6 +200,7 @@ class Deploy(object):
         self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=False)
         self._agent.start()
 
+        self._agent_ready = True
         return True
 
     def setup_server(self):
@@ -202,6 +220,51 @@ class Deploy(object):
             return False
 
         return True
+
+    @gen.coroutine
+    def export(self):
+        """
+            Export a version to the embedded server
+        """
+        while not self._agent_ready:
+            yield gen.sleep(0.5)
+
+        inmanta_path = [sys.executable, os.path.abspath(sys.argv[0])]
+
+        cmd = inmanta_path + ["-vvv", "export", "-e", str(self._environment_id), "--server_address", "localhost",
+                              "--server_port", str(self._server_port)]
+
+        sub_process = process.Subprocess(cmd, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM)
+
+        log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
+                                              gen.Task(sub_process.stderr.read_until_close),
+                                              sub_process.wait_for_exit(raise_error=False)]
+
+        agents = yield self.deploy()
+        return True
+
+    @gen.coroutine
+    def get_agents_of_for_model(self, version):
+        version_result = yield self._client.get_version(tid=self._environment_id, id=version)
+        if version_result.code != 200:
+            LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
+            return []
+
+        agents = set([x["id_fields"]["agent_name"] for x in version_result.result["resources"]])
+        return list(agents)
+
+    @gen.coroutine
+    def deploy(self):
+        version = yield self._latest_version(self._environment_id)
+        if version is None:
+            return []
+
+        agents = yield self.get_agents_of_for_model(version)
+        for agent in agents:
+            self._agent.add_end_point_name(agent)
+
+        # release the version!
+        yield self._client.release_version(tid=self._environment_id, id=version, push=True)
 
     def stop(self):
         if self._agent is not None:

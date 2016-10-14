@@ -152,6 +152,7 @@ def deploy(options):
 
     io_loop.add_future(run.setup_project(), handle_result)
     io_loop.add_future(run.setup_agent(), handle_result)
+    io_loop.add_future(run.export(), handle_result)
 
     try:
         io_loop.start()
