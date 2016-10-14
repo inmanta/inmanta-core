@@ -3,12 +3,12 @@
 Quickstart
 ***************
 
-This tutorial gets you started with Inmanta. 
+This tutorial gets you started with the Inmanta orchestration tool. 
 
 Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments. 
-In this guide, we go for a less complex setup: install the Drupal CMS on two VM's. 
-First, we use vagrant to setup a basic environment with two empty VM's and an Inmanta Server.
-Then, we use Inmanta to install Drupal on these VM's.
+In this guide, we go for a less complex setup: install the Drupal CMS on two VMs. 
+First, we use vagrant to setup a basic environment with two empty VMs and an Inmanta server.
+Then, we use Inmanta to install Drupal on these VMs.
  
 Setting up the tutorial
 _________________________
@@ -118,7 +118,7 @@ First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 
 
 * Lines 1-6 import all required packages.  
-* Line 9 defines on which we want to deploy Drupal. 
+* Line 9 defines on which machine we want to deploy Drupal. 
 
  * The *name* attribute is the host name of the machine, which is later used to determine what configuration needs to be deployed on which machine. 
  * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
@@ -143,7 +143,7 @@ To deploy the project, we must first register it with the management server, by 
     
 .. note::
 
-	The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and export to the right environment.
+	The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
 	
 Then compile the project and send it to the server:
 
@@ -214,12 +214,12 @@ If you browse to the Drupal site again, the database should be empty once more.
 
 .. note::
     
-    When moving the database, a new database is created. I.e. the content of the database is not migrated automatically.
+    When moving the database, a new database is created, thus the content of the old database is not migrated automatically.
 
 
 .. _qsdashboard:
 
-Using the dashboard:
+Using the dashboard
 ==========================
 
 #. Go to the `dashboard <http://127.0.0.1:8888>`_.
@@ -234,14 +234,14 @@ Using the dashboard:
 #. Go into your new environment.
 #. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded). 
 
-    * Now the Inmanta Server downloads the configuration model from github. It also downloads all required modules. These modules contain the instructions to install specific parts of the setup such as for example `mysql` or `drupal` itself. To see the source go `here <https://github.com/inmanta/quickstart>`_, for a more in depth explanation :ref:`see above <qsconfigmodel>`.
-    * When this is done, it compiles all modules together to a new deployment plan. 
+    * Now the Inmanta server downloads the configuration model from GitHub. It also downloads all required modules (i.e. dependencies). These modules contain the instructions to install specific parts of the setup such as for example `mysql` or `drupal` itself. To see the source go `here <https://github.com/inmanta/quickstart>`_, for a more in-depth explanation :ref:`see above <qsconfigmodel>`.
+    * When this is done, it compiles all modules and integrates them into a new deployment plan. 
 
-#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it. You now get a list of all configuration items in this configuration. 
+#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it. This shows a list of all configuration items in this configuration. 
 #. Press *Deploy* to start rolling out this version.
 
-    * an agent is now started that SSH's into the virtual machines and starts deploying the drupal server. 
-    * it will install the required software and configure it.
+    * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server. 
+    * It will automatically install the required software and configure it properly.
 
 #. When the deployment is done, you can find your freshly deployed Drupal instance at `http://127.0.0.1:8080/ <http://127.0.0.1:8080/>`_.
 
