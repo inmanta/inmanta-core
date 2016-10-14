@@ -32,7 +32,7 @@ from collections import defaultdict
 import tornado.web
 from tornado import gen, queues, locks
 from inmanta import methods
-from inmanta.config import Config
+from inmanta.config import Config, nodename
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
@@ -680,7 +680,7 @@ class RESTTransport(Transport):
         else:
             protocol = "http"
 
-        LOGGER.debug("Using %s:%s", host, port)
+        LOGGER.debug("Using %s:%d", host, port)
         return "%s://%s:%d" % (protocol, host, port)
 
     def build_call(self, properties, args, kwargs={}):
@@ -906,7 +906,7 @@ class Endpoint(object):
 
     def __init__(self, io_loop, name):
         self._name = name
-        self._node_name = self.set_node_name()
+        self._node_name = nodename.get()
         self._end_point_names = []
         self._io_loop = io_loop
 
@@ -940,16 +940,6 @@ class Endpoint(object):
 
     name = property(lambda self: self._name)
     end_point_names = property(get_end_point_names)
-
-    def set_node_name(self):
-        """
-            This determines the name of the machine this endpoint is running on
-        """
-        node_name = Config.get("config", "node-name", None)
-        if node_name is None:
-            node_name = self._get_hostname()
-
-        return node_name
 
     def _get_hostname(self):
         """
