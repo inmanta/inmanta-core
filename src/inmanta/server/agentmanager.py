@@ -31,14 +31,80 @@ import logging
 import glob
 import os
 from _collections import defaultdict
-import datetime
+from datetime import datetime
 import time
 import sys
 import subprocess
+from inmanta.protocol import Session
+from inmanta.data import AgentProcess, AgentInstance, Agent, Environment
+import uuid
 
 
 LOGGER = logging.getLogger(__name__)
 LOCK = locks.Lock()
+
+
+"""
+Model in server         On Agent
+
++---------------+        +----------+
+|               |        |          |
+|  ENVIRONMENT  |   +---->  PROC    |
+|               |   |    |          |
++------+--------+   |    +----+-----+
+       |            |         |
+       |            |         |
++------v--------+   |    +----v-------------+
+|               |   |    |                  |
+|  AGENT        |   |    |   AGENT INSTANCE |
+|               |   |    |                  |
++------+--------+   |    +------------------+
+       |            |
+       |            |
++------v--------+   |
+|               |   |
+|  SESSION      +---+
+|               |
++---------------+
+
+
+todo: 
+ 1-create data model in DB
+ 2-create API
+ 
+
+exposed APIS
+
+list agent-processes
+list agent-process endpoints
+get agent-process report
+
+list agents (api)
+pause agent (api)
+get agent state (api)
+ - paused / down / up
+
+set primary agent (api)
+ - endpoint
+
+get agent state (internal)
+ - enabled / disabled, current version
+set agent state (on agent)
+ - enabled / disabled, current version
+
+procedures:
+ select primary agent (on failover)
+  - acquire lock
+  - send disable to old primary
+  - set state on new primary
+  - release lock
+
+TODO:
+  agent failover modes (max 1, min 1, ....)
+
+
+
+"""
 
 
 class AgentManager(object):
@@ -53,8 +119,6 @@ class AgentManager(object):
         if autostart:
             server.add_future(self.start_agents())
 
-        self.tid_endpoint_to_session = defaultdict(list)
-
         # back-off timer for fact requests
         self._fact_resource_block = fact_back_off
         # per resource time of last fact request
@@ -62,34 +126,34 @@ class AgentManager(object):
 
         self._server_storage = server._server_storage
 
+        # session lock
+        self.session_lock = locks.Lock()
+        # all sessions
+        self.sessions = {}
+        # live sessions
+        self.tid_endpoint_to_session = {}
+
     # From server
-    def new_session(self, session, tid, endpoint_names, nodename):
-        if not isinstance(tid, str):
-            tid = str(tid)
+    def new_session(self, session: Session):
+        self.add_future(self.register_session(session, datetime.now()))
 
-        # make index
-        for endpoint in endpoint_names:
-            self.tid_endpoint_to_session[(tid, endpoint)].append(session)
-
-    def expire(self, session):
-        tid = session.tid
-        if not isinstance(tid, str):
-            tid = str(tid)
-
-        for endpoint in session.endpoint_names:
-            self.tid_endpoint_to_session[(tid, endpoint)].remove(session)
+    def expire(self, session: Session):
+        self.add_future(self.expire_session(session, datetime.now()))
 
     def get_agent_client(self, tid, endpoint):
         if not isinstance(tid, str):
             tid = str(tid)
-        sessions = self.tid_endpoint_to_session[(tid, endpoint)]
-        if not sessions:
-            return None
-        return sessions[0].get_client()
+        key = (tid, endpoint)
+        if key in self.tid_endpoint_to_session:
+            return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
+        return None
 
-    def seen(self, session):
+    def seen(self, session, endpoint_names):
+        if set(session.endpoint_names) != set(endpoint_names):
+            LOGGER.warning("Agent endpoint set changed, this should not occur, update ignored (was %s is %s)" %
+                           (set(session.endpoint_names), set(endpoint_names)))
         # start async, let it run free
-        self.flush_agent_presence(session.tid, session.endpoint_names, session.nodename)
+        self.add_future(self.flush_agent_presence(session, datetime.now()))
 
     def stop(self):
         self.terminate_agents()
@@ -97,6 +161,129 @@ class AgentManager(object):
     # To Server
     def add_future(self, future):
         self._server.add_future(future)
+
+    # Agent Management
+
+    @gen.coroutine
+    def register_session(self, session: Session, now):
+        with (yield self.session_lock.acquire()):
+            tid = session.tid
+            sid = session.id
+            nodename = session.nodename
+
+            self.sessions[sid] = session
+
+            env = yield data.Environment.get_uuid(tid)
+            if env is None:
+                LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
+                return
+
+            proc = yield AgentProcess(uuid=uuid.uuid4(),
+                                      hostname=nodename,
+                                      environment=env,
+                                      first_seen=now,
+                                      last_seen=now,
+                                      sid=sid).save()
+
+            for nh in session.endpoint_names:
+                LOGGER.debug("Seen agent %s on %s", nh, nodename)
+                yield data.AgentInstance(uuid=uuid.uuid4(),
+                                         tid=tid,
+                                         process=proc,
+                                         name=nh).save()
+            yield self.verify_reschedule(env, session.endpoint_names)
+
+    @gen.coroutine
+    def expire_session(self, session: Session, now):
+        with (yield self.session_lock.aquire()):
+
+            tid = session.tid
+            sid = session.id
+
+            env = yield data.Environment.get_uuid(tid)
+            if env is None:
+                LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
+                return
+
+            aps = AgentProcess.get_by_sid(sid=sid).find_all()
+
+            aps.expired = now
+            aps.sid = None
+
+            yield aps.save
+
+            for ai in AgentInstance.objects.filter(process=aps):
+                ai.expired = now
+                yield ai.save()
+
+            yield self.verify_reschedule(env, session.endpoint_names)
+
+    @gen.coroutine
+    def flush_agent_presence(self, session: Session, now):
+        tid = session.tid
+        sid = session.id
+
+        env = yield data.Environment.get_uuid(tid)
+        if env is None:
+            LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
+            return
+
+        aps = AgentProcess.get_by_sid(sid=sid).find_all()
+        aps.last_seen = now
+        aps.save()
+
+    @gen.coroutine
+    def verify_reschedule(self, env, enpoints):
+        """
+             only call under session lock
+        """
+        tid = env.uuid
+        no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
+        agents = yield [Agent.get(env, endpoint) for endpoint in no_primary]
+        needswork = [agent for agent in agents if agent is not None and not agent.paused]
+        for agent in needswork:
+            yield self.reschedule(env, agent)
+
+    @gen.coroutine
+    def reschedule(self, env, agent):
+        """
+             only call under session lock
+        """
+        tid = env.uuid
+        instances = yield AgentInstance.activeFor(tid, agent.name)
+        for instance in instances:
+            yield instance.load_references()
+            sid = instance.process.sid
+            if sid not in self.sessions:
+                LOGGER.warn("session marked as live in DB, but not found. sid: %s" % sid)
+            else:
+                yield self._setPrimary(env, agent, instance, self.sessions[sid])
+                # todo: mark as online
+                return
+        # todo: mark as offline
+
+    @gen.coroutine
+    def _setPrimary(self, env: Environment, agent: Agent, instance: AgentInstance, session: Session):
+        self.tid_endpoint_to_session[(env.uuid, agent.name)] = session
+        agent.primary = instance
+        yield agent.save()
+        self.add_future(session.get_client().set_state(agent.name, True, 0))
+
+    @gen.coroutine
+    def clean_db(self):
+        """
+             only call under session lock
+        """
+        procs = yield AgentProcess.get_live()
+
+        for proc in procs:
+            proc.expired = datetime.now()
+            yield proc.save()
+
+        ais = yield AgentInstance.active()
+        for ai in ais:
+            ai.expired = datetime.now()
+            yield ai.save()
 
     # utils
     def _fork_inmanta(self, args, outfile, errfile, cwd=None):
@@ -112,47 +299,14 @@ class AgentManager(object):
                 return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
                                         stdout=outhandle, stderr=errhandle)
 
-    # DB book keeping
-
-    @gen.coroutine
-    def flush_agent_presence(self, tid, endpoint_names, nodename):
-        env = yield data.Environment.get_uuid(tid)
-        if env is None:
-            LOGGER.warning("The given environment id %s does not exist!", tid)
-            return
-
-        now = datetime.datetime.now()
-
-        node = yield data.Node.get_by_hostname(nodename)
-        if node is not None:
-            node.last_seen = now
-            node.save()
-
-        else:
-            node = data.Node(hostname=nodename, last_seen=now)
-            yield node.save()
-
-        for nh in endpoint_names:
-            LOGGER.debug("Seen agent %s on %s", nh, nodename)
-            agents = yield data.Agent.objects.filter(name=nh, node=node, environment=env).find_all()  # @UndefinedVariable
-            if len(agents) == 0:
-                agent = data.Agent(name=nh, node=node, environment=env)
-
-            else:
-                agent = agents[0]
-
-            agent.last_seen = now
-            yield agent.save()
-
     # Start/stop agents
-
     @gen.coroutine
     def _ensure_agent(self, environment_id: str, agent_name):
         """
             Ensure that the agent is running if required
         """
         if self._agent_matches(agent_name):
-            with (yield LOCK.acquire()):
+            with (yield LOCK.aquire()):
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
                 agent_data = None
                 if environment_id in self._requires_agents:

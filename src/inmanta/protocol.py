@@ -1130,7 +1130,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             self._sessions[sid] = session
         else:
             session = self._sessions[sid]
-            self.seen(session)
+            self.seen(session, endpoint_names)
 
         return session
 
@@ -1142,7 +1142,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         LOGGER.debug("Expired session with id %s" % (session.get_id()))
         del self._sessions[session.id]
 
-    def seen(self, session: Session):
+    def seen(self, session: Session, endpoint_names: list):
         LOGGER.debug("Seen session with id %s" % (session.get_id()))
         session.seen()
 

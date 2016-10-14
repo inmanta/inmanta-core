@@ -642,42 +642,6 @@ class FormRecords(Method):
         """
 
 
-class NodeMethod(Method):
-    """
-        Get a list of all agents
-    """
-    __method_name__ = "agent"
-
-    @protocol(operation="GET", index=True)
-    def list_agents(self, environment: uuid.UUID=None):
-        """
-            Return a list of all nodes and the agents for these nodes
-
-            :param environment An optional environment. If set, only the agents that belong to this environment are returned
-            :return A list of nodes
-        """
-
-    @protocol(operation="GET", id=True, mt=True)
-    def get_agent(self, tid: uuid.UUID, id: str):
-        """
-            Return the node and the agents on this node for the given id
-
-            :param tid The environment this agent is defined in
-            :param id The name of the agent
-            :return The requested node
-        """
-
-    @protocol(operation="POST", id=True, mt=True, server_agent=True, timeout=5)
-    def trigger_agent(self, tid: uuid.UUID, id: str):
-        """
-            Request an agent to reload resources
-
-            :param tid The environment this agent is defined in
-            :param id The name of the agent
-            :return The requested node
-        """
-
-
 class CodeMethod(Method):
     """
         Upload code to the server
@@ -864,6 +828,42 @@ class AgentRestore(Method):
         """
 
 
+class NodeMethod(Method):
+    """
+        Get a list of all agents
+    """
+    __method_name__ = "agent"
+
+    @protocol(operation="GET", index=True)
+    def list_agents(self, environment: uuid.UUID=None):
+        """
+            Return a list of all nodes and the agents for these nodes
+
+            :param environment An optional environment. If set, only the agents that belong to this environment are returned
+            :return A list of nodes
+        """
+
+    @protocol(operation="GET", id=True, mt=True)
+    def get_agent(self, tid: uuid.UUID, id: str):
+        """
+            Return the node and the agents on this node for the given id
+
+            :param tid The environment this agent is defined in
+            :param id The name of the agent
+            :return The requested node
+        """
+
+    @protocol(operation="POST", id=True, mt=True, server_agent=True, timeout=5)
+    def trigger_agent(self, tid: uuid.UUID, id: str):
+        """
+            Request an agent to reload resources
+
+            :param tid The environment this agent is defined in
+            :param id The name of the agent
+            :return The requested node
+        """
+
+
 class AgentReporting(Method):
     """
         Reporting by the agent to the server
@@ -882,7 +882,7 @@ class AgentState(Method):
         Methods to allow the server to set the agents state
     """
     @protocol(operation="POST", server_agent=True, timeout=5)
-    def set_state(self, enabled: bool, current_version: int):
+    def set_state(self, agent: str, enabled: bool, current_version: int):
         """
             Set the state of the agent.
         """
@@ -893,7 +893,7 @@ class AgentRecovery(Method):
         Methods for the agent to get its initial state from the server
     """
 
-    @protocol(operation="GET", mt=True)
+    @protocol(operation="GET", mt=True, agent_server=True)
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
         """
             Get the state for this agent.

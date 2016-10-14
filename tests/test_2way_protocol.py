@@ -39,7 +39,7 @@ class StatusMethod(methods.Method):
     def get_statusX(self, tid: uuid.UUID):
         pass
 
-    @methods.protocol(operation="GET", id=True)
+    @methods.protocol(operation="GET", id=True, server_agent=True, timeout=10)
     def get_agent_status(self, id):
         pass
 

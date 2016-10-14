@@ -175,8 +175,8 @@ def test_get_resource_for_agent(io_loop, server_multi):
     assert len(result.result["resources"]) == 3
 
     result = yield aclient.resource_updated(env_id,
-                                           "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
-                                           "INFO", "deploy", "", "deployed", {})
+                                            "std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version,
+                                            "INFO", "deploy", "", "deployed", {})
     assert result.code == 200
 
     result = yield client.get_version(env_id, version)
@@ -184,8 +184,8 @@ def test_get_resource_for_agent(io_loop, server_multi):
     assert result.result["model"]["done"] == 1
 
     result = yield aclient.resource_updated(env_id,
-                                           "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
-                                           "INFO", "deploy", "", "deployed", {})
+                                            "std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version,
+                                            "INFO", "deploy", "", "deployed", {})
     assert result.code == 200
 
     result = yield client.get_version(env_id, version)

@@ -101,9 +101,9 @@ class Server(protocol.ServerEndpoint):
         self.agentmanager.expire(session)
         protocol.ServerEndpoint.expire(self, session)
 
-    def seen(self, session):
-        self.agentmanager.seen(session)
-        protocol.ServerEndpoint.seen(self, session)
+    def seen(self, session, endpoint_names):
+        self.agentmanager.seen(session, endpoint_names)
+        protocol.ServerEndpoint.seen(self, session, endpoint_names)
 
     def stop(self):
         super().stop()
