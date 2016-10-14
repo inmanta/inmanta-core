@@ -187,7 +187,7 @@ class InmantaCommand(Command):
 
     def take_action(self, parsed_args):
         Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
+        Config.set("cmdline_rest_transport", "port", parsed_args.port)
         self._client = protocol.Client("cmdline")
         return self.run_action(parsed_args)
 
@@ -542,7 +542,7 @@ class VersionReport(InmantaCommand, Command):
         term = Terminal()
         agents = defaultdict(lambda: defaultdict(lambda: []))
         for res in result["resources"]:
-            if (len(res["actions"]) > 0 and len(res["actions"][0]["data"]) > 0) or parsed_args.details:
+            if (len(res["actions"]) > 0 and res["actions"][0]["data"] is not None and len(res["actions"][0]["data"]) > 0) or parsed_args.details:
                 agents[res["id_fields"]["agent_name"]][res["id_fields"]["entity_type"]].append(res)
 
         for agent in sorted(agents.keys()):
