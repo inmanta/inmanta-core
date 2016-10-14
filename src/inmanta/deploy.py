@@ -108,7 +108,7 @@ class Deploy(object):
             LOGGER.error("Unable to create environment %s", environment_name)
             return False
 
-        return True
+        return result.result["environment"]["id"]
 
     @gen.coroutine
     def setup_project(self):
