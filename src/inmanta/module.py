@@ -487,7 +487,7 @@ class Project(ModuleLike):
         os.chdir(project._path)
         plugins.PluginMeta.clear()
 
-    def _load_freeze(self, freeze_file: str) -> {}:
+    def _load_freeze(self, freeze_file: str) -> dict:
         """
             Load the versions defined in the freeze file
         """
