@@ -187,7 +187,7 @@ class InmantaCommand(Command):
 
     def take_action(self, parsed_args):
         Config.set("cmdline_rest_transport", "host", parsed_args.host)
-        Config.set("cmdline_rest_transport", "port", parsed_args.port)
+        Config.set("cmdline_rest_transport", "port", str(parsed_args.port))
         self._client = protocol.Client("cmdline")
         return self.run_action(parsed_args)
 
