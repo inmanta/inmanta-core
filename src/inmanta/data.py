@@ -175,7 +175,7 @@ class AgentProcess(IdDocument):
     first_seen = DateTimeField(required=True)
     last_seen = DateTimeField()
     expired = DateTimeField()
-    sid = UUIDField()
+    sid = UUIDField(required=True, sparse=True)
 
     @gen.coroutine
     def to_dict(self):
@@ -200,7 +200,7 @@ class AgentProcess(IdDocument):
     @classmethod
     @gen.coroutine
     def get_by_sid(cls, sid):
-        objects = yield cls.objects.filter(uuid=sid).find_all()
+        objects = yield cls.objects.filter(sid=sid).find_all()
         if len(objects) == 0:
             return None
         elif len(objects) > 1:

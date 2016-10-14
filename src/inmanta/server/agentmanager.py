@@ -195,26 +195,32 @@ class AgentManager(object):
 
     @gen.coroutine
     def expire_session(self, session: Session, now):
-        with (yield self.session_lock.aquire()):
+        with (yield self.session_lock.acquire()):
 
             tid = session.tid
             sid = session.id
+
+            del self.sessions[sid]
 
             env = yield data.Environment.get_uuid(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
                 return
 
-            aps = AgentProcess.get_by_sid(sid=sid).find_all()
+            aps = yield AgentProcess.get_by_sid(sid=sid)
 
             aps.expired = now
-            aps.sid = None
 
-            yield aps.save
+            yield aps.save()
 
-            for ai in AgentInstance.objects.filter(process=aps):
+            instances = yield AgentInstance.objects.filter(process=aps).find_all()
+            for ai in instances:
                 ai.expired = now
                 yield ai.save()
+
+            for endpoint in session.endpoint_names:
+                if (tid, endpoint) in self.tid_endpoint_to_session and self.tid_endpoint_to_session[(tid, endpoint)] == session:
+                    del self.tid_endpoint_to_session[(tid, endpoint)]
 
             yield self.verify_reschedule(env, session.endpoint_names)
 
@@ -228,7 +234,7 @@ class AgentManager(object):
             LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
             return
 
-        aps = AgentProcess.get_by_sid(sid=sid).find_all()
+        aps = yield AgentProcess.get_by_sid(sid=sid)
         aps.last_seen = now
         aps.save()
 
@@ -251,6 +257,7 @@ class AgentManager(object):
         """
         tid = env.uuid
         instances = yield AgentInstance.activeFor(tid, agent.name)
+        agent.last_failover = datetime.now()
         for instance in instances:
             yield instance.load_references()
             sid = instance.process.sid
@@ -260,7 +267,8 @@ class AgentManager(object):
                 yield self._setPrimary(env, agent, instance, self.sessions[sid])
                 # todo: mark as online
                 return
-        # todo: mark as offline
+        agent.primary = None
+        yield agent.save()
 
     @gen.coroutine
     def _setPrimary(self, env: Environment, agent: Agent, instance: AgentInstance, session: Session):
@@ -271,19 +279,22 @@ class AgentManager(object):
 
     @gen.coroutine
     def clean_db(self):
-        """
-             only call under session lock
-        """
-        procs = yield AgentProcess.get_live()
+        with (yield self.session_lock.acquire()):
+            procs = yield AgentProcess.get_live()
 
-        for proc in procs:
-            proc.expired = datetime.now()
-            yield proc.save()
+            for proc in procs:
+                proc.expired = datetime.now()
+                yield proc.save()
 
-        ais = yield AgentInstance.active()
-        for ai in ais:
-            ai.expired = datetime.now()
-            yield ai.save()
+            ais = yield AgentInstance.active()
+            for ai in ais:
+                ai.expired = datetime.now()
+                yield ai.save()
+
+            agents = yield Agent.objects.find_all()
+            for agent in agents:
+                agent.primary = None
+                yield agent.save()
 
     # utils
     def _fork_inmanta(self, args, outfile, errfile, cwd=None):
