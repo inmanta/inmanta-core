@@ -23,6 +23,7 @@ from inmanta.server.agentmanager import AgentManager
 from motorengine.connection import connect, disconnect
 from inmanta.data import Environment, Agent
 from tornado import gen
+from inmanta.protocol import Result
 
 
 class Collector():
@@ -162,7 +163,7 @@ def assertEqualIsh(minimal, actual):
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_API_list_agent_process(motorengine):
+def test_API(motorengine):
     env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
     env = yield env.save()
     env2 = Environment(uuid=uuid4(), name="testenv2", project_id=uuid4())
@@ -189,16 +190,17 @@ def test_API_list_agent_process(motorengine):
     code, all_agents = yield am.list_agent_processes(None)
     assert code == 200
 
-    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1', 'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
-                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2', 'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
+    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1', 'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
+                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2', 'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
 
     assertEqualIsh(shouldbe, all_agents)
+    agentid = all_agents['processes'][0]['id']
 
     code, all_agents = yield am.list_agent_processes(env.uuid)
     assert code == 200
 
-    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1', 'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
-                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2', 'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
+    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1', 'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
+                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2', 'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
 
     assertEqualIsh(shouldbe, all_agents)
 
@@ -208,6 +210,17 @@ def test_API_list_agent_process(motorengine):
     shouldbe = {'processes': []}
 
     assertEqualIsh(shouldbe, all_agents)
+
+    @gen.coroutine
+    def dummy_status():
+        return Result(False, 200, "X")
+
+    ts1.get_client().get_status.side_effect = dummy_status
+    report = yield am.get_agent_process_report(agentid)
+    assert (200, "X") == report
+
+    report = yield am.get_agent_process_report(uuid4())
+    assert 404 == report[0]
 
 
 @pytest.mark.gen_test(timeout=30)

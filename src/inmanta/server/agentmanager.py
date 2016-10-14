@@ -74,10 +74,6 @@ todo:
 
 exposed APIS
 
-list agent-processes
-list agent-process endpoints
-get agent-process report
-
 list agents (api)
 pause agent (api)
 get agent state (api)
@@ -345,6 +341,19 @@ class AgentManager(object):
             processes.append(dict)
         return 200, {"processes": processes}
 
+    @gen.coroutine
+    def get_agent_process_report(self, apid:UUID):
+        ap = yield AgentProcess.get_uuid(apid)
+        if ap is None:
+            return 404,  {"message": "The given AgentProcess id does not exist!"}
+        sid = ap.sid
+        if sid not in self.sessions:
+            return 404,  {"message": "The given AgentProcess is not live!"}
+        client = self.sessions[sid].get_client()
+        result = yield client.get_status()
+        return result.code, result.get_result()
+    
+    
     # Start/stop agents
     @gen.coroutine
     def _ensure_agent(self, environment_id: str, agent_name):

@@ -180,7 +180,8 @@ class AgentProcess(IdDocument):
     @gen.coroutine
     def to_dict(self):
         yield self.load_references()
-        out = {"hostname": self.hostname,
+        out = {"id": self.uuid,
+               "hostname": self.hostname,
                "environment": str(self.environment.uuid),
                "first_seen": self.first_seen.isoformat(),
                "last_seen": self.last_seen.isoformat()}
