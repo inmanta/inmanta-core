@@ -69,7 +69,6 @@ Model in server         On Agent
 
 
 todo:
- 1-create data model in DB
  2-create API
 
 
@@ -324,6 +323,27 @@ class AgentManager(object):
                 # TODO: perhaps show in dashboard?
                 return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
                                         stdout=outhandle, stderr=errhandle)
+
+    # External APIS
+
+    @gen.coroutine
+    def list_agent_processes(self, tid):
+        if tid is not None:
+            env = yield data.Environment.get_uuid(tid)
+            if env is None:
+                return 404, {"message": "The given environment id does not exist!"}
+            aps = yield AgentProcess.get_live_by_env(env)
+        else:
+            aps = yield AgentProcess.get_live()
+
+        processes = []
+        for p in aps:
+            dict = yield p.to_dict()
+            ais = yield AgentInstance.objects.filter(process=p).find_all()
+            ais = [ai.name for ai in ais]
+            dict["endpoints"] = ais
+            processes.append(dict)
+        return 200, {"processes": processes}
 
     # Start/stop agents
     @gen.coroutine

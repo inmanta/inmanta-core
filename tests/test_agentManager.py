@@ -33,6 +33,13 @@ class Collector():
     def __call__(self, arg):
         self.values.append(arg)
 
+    @gen.coroutine
+    def proccess(self):
+        while len(self.values) > 0:
+            x = self.values
+            self.values = []
+            yield x
+
 
 @gen.coroutine
 def emptyFuture(*args):
@@ -62,8 +69,7 @@ class MockSession(object):
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_primary_selection(mongo_db):
-    connect("test_inmanta", host="127.0.0.1", port=mongo_db.port)
+def test_primary_selection(motorengine):
 
     env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
     env = yield env.save()
@@ -99,17 +105,10 @@ def test_primary_selection(mongo_db):
         yield assert_agent("agent2", s2, sid2)
         yield assert_agent("agent3", s3, sid3)
 
-    @gen.coroutine
-    def proccess():
-        while len(futures.values) > 0:
-            x = futures.values
-            futures.values = []
-            yield x
-
     # one session
     ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", True, 0)
     ts1.get_client().reset_mock()
@@ -117,14 +116,14 @@ def test_primary_selection(mongo_db):
 
     # alive
     am.seen(ts1, ["agent1", "agent2"])
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
     ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", True, 0)
     ts2.get_client().reset_mock()
@@ -132,7 +131,7 @@ def test_primary_selection(mongo_db):
 
     # expire first
     am.expire(ts1)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", True, 0)
     ts2.get_client().reset_mock()
@@ -140,16 +139,79 @@ def test_primary_selection(mongo_db):
 
     # expire second
     am.expire(ts2)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 0
     yield assert_agents("paused", "down", "down")
-    disconnect()
+
+
+UNKWN = object()
+
+
+def assertEqualIsh(minimal, actual):
+    if isinstance(minimal, dict):
+        for k in minimal.keys():
+            assertEqualIsh(minimal[k], actual[k])
+    elif isinstance(minimal, list):
+        assert len(minimal) == len(actual)
+        for (m, a) in zip(minimal, actual):
+            assertEqualIsh(m, a)
+    elif minimal is UNKWN:
+        return
+    else:
+        assert minimal == actual
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_DB_Clean(mongo_db):
-    connect("test_inmanta", host="127.0.0.1", port=mongo_db.port)
+def test_API_list_agent_process(motorengine):
+    env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
+    env = yield env.save()
+    env2 = Environment(uuid=uuid4(), name="testenv2", project_id=uuid4())
+    env2 = yield env2.save()
+    yield Agent(environment=env, name="agent1", paused=True).save()
+    yield Agent(environment=env, name="agent2", paused=False).save()
+    yield Agent(environment=env, name="agent3", paused=False).save()
+    yield Agent(environment=env2, name="agent4", paused=False).save()
 
+    server = Mock()
+    futures = Collector()
+    server.add_future.side_effect = futures
+    am = AgentManager(server, False)
+
+    # one session
+    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    am.new_session(ts1)
+    # second session
+    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    am.new_session(ts2)
+    yield futures.proccess()
+    assert len(am.sessions) == 2
+
+    code, all_agents = yield am.list_agent_processes(None)
+    assert code == 200
+
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1', 'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2', 'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
+
+    assertEqualIsh(shouldbe, all_agents)
+
+    code, all_agents = yield am.list_agent_processes(env.uuid)
+    assert code == 200
+
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1', 'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2', 'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
+
+    assertEqualIsh(shouldbe, all_agents)
+
+    code, all_agents = yield am.list_agent_processes(env2.uuid)
+    assert code == 200
+
+    shouldbe = {'processes': []}
+
+    assertEqualIsh(shouldbe, all_agents)
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_DB_Clean(motorengine):
     env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
     env = yield env.save()
     yield Agent(environment=env, name="agent1", paused=True).save()
@@ -184,17 +246,10 @@ def test_DB_Clean(mongo_db):
         yield assert_agent("agent2", s2, sid2)
         yield assert_agent("agent3", s3, sid3)
 
-    @gen.coroutine
-    def proccess():
-        while len(futures.values) > 0:
-            x = futures.values
-            futures.values = []
-            yield x
-
     # one session
     ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", True, 0)
     ts1.get_client().reset_mock()
@@ -202,14 +257,14 @@ def test_DB_Clean(mongo_db):
 
     # alive
     am.seen(ts1, ["agent1", "agent2"])
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
     ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", True, 0)
     ts2.get_client().reset_mock()
@@ -217,7 +272,7 @@ def test_DB_Clean(mongo_db):
 
     # expire first
     am.expire(ts1)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", True, 0)
     ts2.get_client().reset_mock()
@@ -230,7 +285,7 @@ def test_DB_Clean(mongo_db):
     # one session
     ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     ts1.get_client().set_state.assert_called_with("agent2", True, 0)
     ts1.get_client().reset_mock()
@@ -238,14 +293,14 @@ def test_DB_Clean(mongo_db):
 
     # alive
     am.seen(ts1, ["agent1", "agent2"])
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
     ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 2
     ts2.get_client().set_state.assert_called_with("agent3", True, 0)
     ts2.get_client().reset_mock()
@@ -253,7 +308,7 @@ def test_DB_Clean(mongo_db):
 
     # expire first
     am.expire(ts1)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", True, 0)
     ts2.get_client().reset_mock()
@@ -261,7 +316,6 @@ def test_DB_Clean(mongo_db):
 
     # expire second
     am.expire(ts2)
-    yield proccess()
+    yield futures.proccess()
     assert len(am.sessions) == 0
     yield assert_agents("paused", "down", "down")
-    disconnect()

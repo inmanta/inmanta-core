@@ -199,6 +199,12 @@ class AgentProcess(IdDocument):
 
     @classmethod
     @gen.coroutine
+    def get_live_by_env(cls, env):
+        nodes = yield cls.objects.filter(expired__is_null=True, environment=env).find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
     def get_by_sid(cls, sid):
         objects = yield cls.objects.filter(sid=sid).find_all()
         if len(objects) == 0:
