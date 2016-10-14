@@ -15,40 +15,18 @@
 
     Contact: bart@inmanta.com
 """
-import os
 import uuid
-
-from mongobox.unittest import MongoTestCase
-from motorengine.connection import connect, disconnect
-from inmanta import data
-from tornado.testing import AsyncTestCase, gen_test
 import datetime
+
+from inmanta import data
 from inmanta.data import AgentInstance, Agent
+import pytest
 
 
-class MotorEngineTestCase(MongoTestCase, AsyncTestCase):
+@pytest.mark.usefixtures("motorengine")
+class TestProjectTestCase:
 
-    def setUp(self):
-        MongoTestCase.setUp(self)
-        AsyncTestCase.setUp(self)
-
-        mongo_port = os.getenv('MONGOBOX_PORT')
-        if mongo_port is None:
-            raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
-
-        connect(db="inmanta", host="localhost", port=int(mongo_port), io_loop=self.io_loop)
-
-    def tearDown(self):
-        MongoTestCase.tearDown(self)
-        AsyncTestCase.tearDown(self)
-
-        self.purge_database()
-        disconnect()
-
-
-class testProjectTestCase(MotorEngineTestCase):
-
-    @gen_test
+    @pytest.mark.gen_test
     def testProject(self):
         project = data.Project(name="test", uuid=uuid.uuid4())
         project = yield project.save()
@@ -61,7 +39,7 @@ class testProjectTestCase(MotorEngineTestCase):
         assert project != other
         assert project.uuid == other.uuid
 
-    @gen_test
+    @pytest.mark.gen_test
     def testEnvironment(self):
         project = data.Project(name="test", uuid=uuid.uuid4())
         project = yield project.save()
@@ -78,7 +56,7 @@ class testProjectTestCase(MotorEngineTestCase):
         assert len(projects) == 0
         assert len(envs) == 0
 
-    @gen_test
+    @pytest.mark.gen_test
     def testAgentProcess(self):
         project = data.Project(name="test", uuid=uuid.uuid4())
         project = yield project.save()
@@ -95,9 +73,9 @@ class testProjectTestCase(MotorEngineTestCase):
                                       sid=uuid.uuid4())
         agentProc = yield agentProc.save()
 
-        agi1 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi1")
+        agi1 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi1", tid=env.uuid)
         agi1 = yield agi1.save()
-        agi2 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi2")
+        agi2 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi2", tid=env.uuid)
         agi2 = yield agi2.save()
 
         agent = Agent(environment=env, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1)
@@ -109,4 +87,3 @@ class testProjectTestCase(MotorEngineTestCase):
         yield agent.load_references()
         yield agent.primary.load_references()
         assert agent.primary.process.uuid == agentProc.uuid
-

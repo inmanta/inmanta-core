@@ -26,6 +26,7 @@ from mongobox import MongoBox
 import pytest
 from inmanta import config
 import pymongo
+from motorengine.connection import connect, disconnect
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -55,6 +56,15 @@ def mongo_client(mongo_db):
 
 
 @pytest.fixture(scope="function")
+def motorengine(mongo_db, mongo_client, io_loop):
+    c = connect(db="inmanta", host="localhost", port=int(mongo_db.port), io_loop=io_loop)
+    yield c
+    disconnect()
+    for db_name in mongo_client.database_names():
+        mongo_client.drop_database(db_name)
+
+
+@pytest.fixture(scope="function")
 def server(io_loop, mongo_db, mongo_client):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
@@ -70,7 +80,7 @@ def server(io_loop, mongo_db, mongo_client):
     config.Config.set("client_rest_transport", "port", PORT)
     config.Config.set("cmdline_rest_transport", "port", PORT)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
-    config.Config.set("server", "agent-timeout", "2")
+    # config.Config.set("server", "agent-timeout", "2")
 
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
     server.start()

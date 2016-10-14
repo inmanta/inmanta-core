@@ -28,6 +28,8 @@ import subprocess
 import sys
 import time
 import uuid
+from uuid import UUID
+
 
 import dateutil
 from motorengine import connect, errors, DESCENDING
@@ -94,7 +96,7 @@ class Server(protocol.ServerEndpoint):
 
     def new_session(self, sid, tid, endpoint_names, nodename):
         session = protocol.ServerEndpoint.new_session(self, sid, tid, endpoint_names, nodename)
-        self.agentmanager.new_session(session, tid, endpoint_names, nodename)
+        self.agentmanager.new_session(session)
         return session
 
     def expire(self, session):
@@ -110,7 +112,7 @@ class Server(protocol.ServerEndpoint):
         self.agentmanager.stop()
         disconnect()
 
-    def get_agent_client(self, tid, endpoint):
+    def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
 
     def setup_dashboard(self):
@@ -793,12 +795,14 @@ class Server(protocol.ServerEndpoint):
         all_resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
         resources_dict = {x.resource_id: x for x in all_resources}
 
+        agents = set()
         rv_list = []
         ra_list = []
         for res_dict in resources:
             resource_obj = Id.parse_id(res_dict['id'])
             resource_id = resource_obj.resource_str()
 
+            agents.add(resource_obj.get_agent_name())
             if resource_id in resources_dict:
                 res_obj = resources_dict[resource_id]
                 res_obj.version_latest = version
@@ -874,6 +878,9 @@ class Server(protocol.ServerEndpoint):
                                        version=version, metadata=uk["metadata"])
             yield up.save()
 
+        for agent in agents:
+            yield self.agentmanager.ensure_agent_registered(env, agent)
+
         LOGGER.debug("Successfully stored version %d" % version)
 
         return 200
@@ -940,7 +947,6 @@ class Server(protocol.ServerEndpoint):
             yield rv.resource.load_references()
             agents.add(rv.resource.agent)
 
-        tid = str(tid)
         for agent in agents:
             yield self.agentmanager._ensure_agent(str(tid), agent)
             client = self.get_agent_client(tid, agent)

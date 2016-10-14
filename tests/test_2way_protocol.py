@@ -22,7 +22,6 @@ import uuid
 
 import colorlog
 from inmanta import methods
-from inmanta.config import Config
 from tornado import gen
 import pytest
 from tornado.gen import sleep
@@ -81,6 +80,12 @@ class Agent(protocol.AgentEndPoint):
 
 
 def test_2way_protocol(logs=False):
+
+    from inmanta.config import Config
+
+    import inmanta.agent.config  # nopep8
+    import inmanta.server.config  # nopep8
+
     if logs:
         # set logging to sensible defaults
         formatter = colorlog.ColoredFormatter(
@@ -125,7 +130,6 @@ def test_2way_protocol(logs=False):
         assert len(status.result["agents"]) == 1
         assert status.result["agents"][0]["status"], "ok"
         server.stop()
-        client.stop()
         io_loop.stop()
 
     io_loop.add_callback(do_call)
@@ -147,6 +151,10 @@ def check_sessions(sessions):
 
 @pytest.mark.slowtest
 def test_timeout():
+
+    from inmanta.config import Config
+    import inmanta.agent.config  # nopep8
+    import inmanta.server.config  # nopep8
 
     io_loop = IOLoop.current()
     Config.load_config()

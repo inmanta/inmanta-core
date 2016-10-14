@@ -15,18 +15,12 @@
 
     Contact: code@inmanta.com
 """
-
-import time
-
-from utils import retry_limited
-from tornado.gen import sleep
-import pytest
 from unittest.mock import Mock
-from inmanta.server.agentmanager import AgentManager
-from datetime import date, datetime
 from uuid import uuid4, UUID
+
+import pytest
+from inmanta.server.agentmanager import AgentManager
 from motorengine.connection import connect, disconnect
-from conftest import DEFAULT_PORT_ENVVAR
 from inmanta.data import Environment, Agent
 from tornado import gen
 
@@ -45,7 +39,7 @@ def emptyFuture(*args):
     pass
 
 
-class TestSession(object):
+class MockSession(object):
     """
         An environment that segments agents connected to the server
     """
@@ -113,7 +107,7 @@ def test_primary_selection(mongo_db):
             yield x
 
     # one session
-    ts1 = TestSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     yield proccess()
     assert len(am.sessions) == 1
@@ -128,7 +122,7 @@ def test_primary_selection(mongo_db):
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
-    ts2 = TestSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     yield proccess()
     assert len(am.sessions) == 2
@@ -198,7 +192,7 @@ def test_DB_Clean(mongo_db):
             yield x
 
     # one session
-    ts1 = TestSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     yield proccess()
     assert len(am.sessions) == 1
@@ -213,7 +207,7 @@ def test_DB_Clean(mongo_db):
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
-    ts2 = TestSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     yield proccess()
     assert len(am.sessions) == 2
@@ -229,12 +223,12 @@ def test_DB_Clean(mongo_db):
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
-    #failover
+    # failover
     am = AgentManager(server, False)
     yield am.clean_db()
 
     # one session
-    ts1 = TestSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     yield proccess()
     assert len(am.sessions) == 1
@@ -249,7 +243,7 @@ def test_DB_Clean(mongo_db):
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
-    ts2 = TestSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     yield proccess()
     assert len(am.sessions) == 2

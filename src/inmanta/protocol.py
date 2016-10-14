@@ -510,6 +510,8 @@ class RESTTransport(Transport):
     def _execute_call(self, kwargs, http_method, config, message, request_headers):
         headers = {"Content-Type": "application/json"}
         try:
+            if kwargs is None:
+                raise Exception()
             # create message that contains all arguments (id, query args and body)
             if "id" in kwargs and (message is None or "id" not in message):
                 message["id"] = kwargs["id"]

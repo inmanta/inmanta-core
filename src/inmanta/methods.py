@@ -881,6 +881,8 @@ class AgentState(Method):
     """
         Methods to allow the server to set the agents state
     """
+    __method_name__ = "agentstate"
+
     @protocol(operation="POST", server_agent=True, timeout=5)
     def set_state(self, agent: str, enabled: bool, current_version: int):
         """
@@ -892,6 +894,7 @@ class AgentRecovery(Method):
     """
         Methods for the agent to get its initial state from the server
     """
+    __method_name__ = "agentrecovery"
 
     @protocol(operation="GET", mt=True, agent_server=True)
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):

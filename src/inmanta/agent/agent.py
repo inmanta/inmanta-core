@@ -664,3 +664,8 @@ class Agent(AgentEndPoint):
     @gen.coroutine
     def get_status(self):
         return 200, collect_report(self)
+
+    @protocol.handle(methods.AgentState.set_state)
+    @gen.coroutine
+    def set_state(self, agent: str, enabled: bool, current_version: int):
+        return 200

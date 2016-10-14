@@ -26,18 +26,18 @@ from inmanta.agent.io.remote import RemoteIO
 from inmanta.resources import HostNotFoundException
 from inmanta import data
 from inmanta.server.config import server_agent_autostart
+from inmanta.protocol import Session
+from inmanta.data import AgentProcess, AgentInstance, Agent, Environment
 
 import logging
 import glob
 import os
-from _collections import defaultdict
 from datetime import datetime
 import time
 import sys
 import subprocess
-from inmanta.protocol import Session
-from inmanta.data import AgentProcess, AgentInstance, Agent, Environment
 import uuid
+from uuid import UUID
 
 
 LOGGER = logging.getLogger(__name__)
@@ -68,10 +68,10 @@ Model in server         On Agent
 +---------------+
 
 
-todo: 
+todo:
  1-create data model in DB
  2-create API
- 
+
 
 exposed APIS
 
@@ -140,9 +140,9 @@ class AgentManager(object):
     def expire(self, session: Session):
         self.add_future(self.expire_session(session, datetime.now()))
 
-    def get_agent_client(self, tid, endpoint):
-        if not isinstance(tid, str):
-            tid = str(tid)
+    def get_agent_client(self, tid: UUID, endpoint):
+        if isinstance(tid, str):
+            tid = UUID(tid)
         key = (tid, endpoint)
         if key in self.tid_endpoint_to_session:
             return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
@@ -163,6 +163,22 @@ class AgentManager(object):
         self._server.add_future(future)
 
     # Agent Management
+
+    @gen.coroutine
+    def ensure_agent_registered(self, env: Environment, nodename: str):
+        with (yield self.session_lock.acquire()):
+            agent = yield Agent.get(env, nodename)
+            if agent is not None:
+                return agent
+            else:
+                agent = yield self.create_default_agent(env, nodename)
+                return agent
+
+    @gen.coroutine
+    def create_default_agent(self, env: Environment, nodename: str):
+        saved = yield Agent(environment=env, name=nodename, paused=False).save()
+        yield self.verify_reschedule(env, [nodename])
+        return saved
 
     @gen.coroutine
     def register_session(self, session: Session, now):
@@ -265,7 +281,6 @@ class AgentManager(object):
                 LOGGER.warn("session marked as live in DB, but not found. sid: %s" % sid)
             else:
                 yield self._setPrimary(env, agent, instance, self.sessions[sid])
-                # todo: mark as online
                 return
         agent.primary = None
         yield agent.save()
@@ -317,7 +332,7 @@ class AgentManager(object):
             Ensure that the agent is running if required
         """
         if self._agent_matches(agent_name):
-            with (yield LOCK.aquire()):
+            with (yield LOCK.acquire()):
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
                 agent_data = None
                 if environment_id in self._requires_agents:
@@ -470,7 +485,7 @@ ssl_ca_cert_file=%s
             if (resource_id not in self._fact_resource_block_set or
                     (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
                 yield self._ensure_agent(str(tid), resource.agent)
-                client = self.get_agent_client(tid, resource.agent)
+                client = self.get_agent_client(env.uuid, resource.agent)
                 if client is not None:
                     future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
                     self.add_future(future)
