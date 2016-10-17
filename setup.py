@@ -13,14 +13,14 @@ requires=[
         'ruamel.yaml',
         'virtualenv',
         'motorengine == 0.9.1dev0',
-        'mongobox',
-        'pytest-tornado']
+        'blessings',
+        'mongobox']
 
 setup(
     name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2016.4.3",
+    version="2016.4.4",
     description="Inmanta Deployment Platform",
     author="Inmanta",
     author_email="code@inmanta.com",
@@ -33,7 +33,8 @@ setup(
     dependency_links=['https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz#egg=motorengine-0.9.1dev0'],
     install_requires=requires,
     tests_requires=requires + [
-        "pytest"
+        "pytest",
+        "pytest-tornado"
     ],
     setup_requires=['tox-setuptools', 'tox'],
 

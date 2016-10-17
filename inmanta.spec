@@ -1,6 +1,6 @@
 # Use release 0 for prerelease version.
 %define release 1
-%define version 2016.4.3
+%define version 2016.4.4
 
 %define sourceversion %{version}%{?buildid}
 
@@ -56,6 +56,7 @@ Requires:       python3-pymongo
 Requires:       python3-motorengine
 Requires:       python3-devel
 Requires:       python3-cliff
+Requires:       python3-blessings
 Requires:       python3-ruamel-yaml
 %endif
 
