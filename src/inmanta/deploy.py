@@ -19,10 +19,12 @@ import os
 import logging
 import random
 import sys
+import datetime
 
+import blessings
 from mongobox import mongobox
 from tornado import gen, process
-from inmanta import module, config, server, agent, protocol
+from inmanta import module, config, server, agent, protocol, client
 
 
 LOGGER = logging.getLogger(__name__)
@@ -45,6 +47,12 @@ class Deploy(object):
         self._io_loop = io_loop
 
         self._agent_ready = False
+
+        loud_logger = logging.getLogger("inmanta.protocol")
+        loud_logger.propagate = False
+
+        loud_logger = logging.getLogger("tornado")
+        loud_logger.propagate = False
 
     def _ensure_dir(self, path):
         if not os.path.exists(path):
@@ -197,7 +205,7 @@ class Deploy(object):
             yield gen.sleep(0.5)
 
         # start the agent
-        self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=False)
+        self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=True)
         self._agent.start()
 
         self._agent_ready = True
@@ -239,8 +247,7 @@ class Deploy(object):
         log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
                                               gen.Task(sub_process.stderr.read_until_close),
                                               sub_process.wait_for_exit(raise_error=False)]
-
-        agents = yield self.deploy()
+        yield self.deploy()
         return True
 
     @gen.coroutine
@@ -254,6 +261,21 @@ class Deploy(object):
         return list(agents)
 
     @gen.coroutine
+    def get_active_agents(self):
+        agent_result = yield self._client.list_agents()
+        if agent_result.code != 200:
+            LOGGER.error("Unable to retrieve active agent list")
+            return []
+
+        if len(agent_result.result["nodes"]) == 0:
+            return []
+
+        agents = agent_result.result["nodes"][0]["agents"]
+        server_time = datetime.datetime.strptime(agent_result.result["nodes"][0]["last_seen"], client.ISOFMT)
+        return [x["name"] for x in agents
+                if datetime.datetime.strptime(x["last_seen"], client.ISOFMT) + datetime.timedelta(0, x["interval"]) > server_time]
+
+    @gen.coroutine
     def deploy(self):
         version = yield self._latest_version(self._environment_id)
         if version is None:
@@ -263,8 +285,50 @@ class Deploy(object):
         for agent in agents:
             self._agent.add_end_point_name(agent)
 
+        active_agents = []
+        while len([True for a in agents if a in active_agents]) == 0:
+            active_agents = yield self.get_active_agents()
+            yield gen.sleep(1)
+
         # release the version!
         yield self._client.release_version(tid=self._environment_id, id=version, push=True)
+        yield self.progress_report(version)
+
+    @gen.coroutine
+    def _get_deploy_stats(self, version):
+        version_result = yield self._client.get_version(tid=self._environment_id, id=version)
+        if version_result.code != 200:
+            LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
+            return []
+
+        total = 0
+        deployed = 0
+        ready = {}
+
+        for res in version_result.result["resources"]:
+            total += 1
+            if res["status"] != "":
+                deployed += 1
+                ready[res["id"]] = res["status"]
+
+        return total, deployed, ready
+
+    @gen.coroutine
+    def progress_report(self, version):
+        print("Starting deploy")
+        current_ready = set()
+        total = 0
+        deployed = -1
+        while total > deployed:
+            total, deployed, ready = yield self._get_deploy_stats(version)
+
+            new = ready.keys() - current_ready
+
+            print("[%d / %d]" % (deployed, total))
+            yield gen.sleep(1)
+
+        print("Deploy ready")
+        raise KeyboardInterrupt()
 
     def stop(self):
         if self._agent is not None:

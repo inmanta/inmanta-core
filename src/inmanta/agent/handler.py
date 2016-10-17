@@ -331,6 +331,7 @@ class Commander(object):
                 io = cache.find(key_name, version=resource_id.version)
             except KeyError:
                 io = get_io(agent_name)
+                # TODO: do not add expire to remoteio!!
                 cache.cache_value(key_name, io, version=resource_id.version)
 
         available = []
