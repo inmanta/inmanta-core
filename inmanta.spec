@@ -1,5 +1,5 @@
 # Use release 0 for prerelease version.
-%define release 1
+%define release 5
 %define version 2016.4.4
 
 %define sourceversion %{version}%{?buildid}
@@ -43,6 +43,7 @@ Requires:       %scl_require_package rh-python34 python-ruamel-yaml
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  python3-ply
+BuildRequires:  python3-sphinx
 
 Requires:       python3
 Requires:       python3-tornado
@@ -51,7 +52,7 @@ Requires:       python3-execnet
 Requires:       python3-colorlog
 Requires:       python3-ply
 Requires:       python3-PyYAML
-Requires:       python-virtualenv
+Requires:       python3-virtualenv
 Requires:       python3-pymongo
 Requires:       python3-motorengine
 Requires:       python3-devel

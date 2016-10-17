@@ -3,18 +3,15 @@ from setuptools import setup, find_packages
 requires=[
         'cliff <= 2.0.0',
         'execnet',
-        'tornado >= 4.3',
+        'tornado',
         'colorlog',
         'urllib3',
-        'sphinx-argparse',
         'python-dateutil',
-        'sphinx',
         'ply',
         'ruamel.yaml',
         'virtualenv',
         'motorengine == 0.9.1dev0',
-        'blessings',
-        'mongobox']
+        'blessings']
 
 setup(
     name="inmanta",
@@ -33,10 +30,9 @@ setup(
     dependency_links=['https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz#egg=motorengine-0.9.1dev0'],
     install_requires=requires,
     tests_requires=requires + [
-        "pytest",
-        "pytest-tornado"
+        'mongobox'
     ],
-    setup_requires=['tox-setuptools', 'tox'],
+    setup_requires=['tox-setuptools', 'tox', 'sphinx', 'sphinx-argparse'],
 
     entry_points={
     'console_scripts': [
