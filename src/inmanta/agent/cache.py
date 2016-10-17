@@ -177,7 +177,7 @@ class AgentCache():
             if a kwarg named version is found and forVersion is true, the value is cached only for that particular version
 
 
-            :param forVersion: wheter to use the version attribute to attach this value to the resource
+            :param forVersion: whether to use the version attribute to attach this value to the resource
 
         """
         acceptable = set(["resource"])
