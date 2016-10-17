@@ -16,6 +16,8 @@
     Contact: code@inmanta.com
 """
 
+import threading
+
 from execnet import multi, gateway_bootstrap
 from . import local
 from inmanta import resources
@@ -26,11 +28,11 @@ class RemoteIO(object):
     """
         This class provides handler IO methods
     """
-
     def is_remote(self):
         return True
 
     def __init__(self, host):
+        self._lock = threading.Lock()
         python_path = cfg.python_binary.get()
         try:
             self._gw = multi.makegateway("ssh=root@%s//python=%s" % (host, python_path))
@@ -38,10 +40,12 @@ class RemoteIO(object):
             raise resources.HostNotFoundException(hostname=host, user="root", error=e)
 
     def _execute(self, function_name, *args):
-        ch = self._gw.remote_exec(local)
-        ch.send((function_name, args))
-        result = ch.receive()
-        ch.close()
+        with self._lock:
+            ch = self._gw.remote_exec(local)
+            ch.send((function_name, args))
+            result = ch.receive()
+            ch.close()
+
         return result
 
     def read_binary(self, path):
@@ -53,8 +57,7 @@ class RemoteIO(object):
 
     def __getattr__(self, name):
         """
-            Proxy a function call to the local version on the otherside of the
-            channel.
+            Proxy a function call to the local version on the other side of the channel.
         """
         def call(*args):
             result = self._execute(name, *args)
@@ -64,3 +67,6 @@ class RemoteIO(object):
 
     def close(self):
         self._gw.exit()
+
+    def __del__(self):
+        self.close()
