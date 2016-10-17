@@ -74,7 +74,6 @@ todo:
 
 exposed APIS
 
-list agents (api)
 pause agent (api)
 get agent state (api)
  - paused / down / up
@@ -352,6 +351,22 @@ class AgentManager(object):
         client = self.sessions[sid].get_client()
         result = yield client.get_status()
         return result.code, result.get_result()
+
+    @gen.coroutine
+    def list_agents(self, tid):
+        if tid is not None:
+            env = yield data.Environment.get_uuid(tid)
+            if env is None:
+                return 404, {"message": "The given environment id does not exist!"}
+            ags = yield Agent.by_env(env)
+        else:
+            ags = yield Agent.objects.find_all()
+
+        agents = []
+        for p in ags:
+            dict = yield p.to_dict()
+            agents.append(dict)
+        return 200, {"agents": agents}
 
     # Start/stop agents
     @gen.coroutine

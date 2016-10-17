@@ -225,6 +225,25 @@ def test_API(motorengine):
     report = yield am.get_agent_process_report(uuid4())
     assert 404 == report[0]
 
+    code, all_agents = yield am.list_agents(None)
+    assert code == 200
+    shouldbe = {'agents': [{'name': 'agent1', 'paused': True, 'last_failover': '', 'primary': '',
+                            'environment': str(env.uuid), "state": "paused"},
+                           {'name': 'agent2', 'paused': False, 'last_failover': UNKWN,
+                               'primary': UNKWN, 'environment': str(env.uuid), "state": "up"},
+                           {'name': 'agent3', 'paused': False, 'last_failover': UNKWN,
+                               'primary': UNKWN, 'environment': str(env.uuid), "state": "up"},
+                           {'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
+                            'environment': str(env2.uuid), "state": "down"}]}
+    assertEqualIsh(shouldbe, all_agents)
+
+    code, all_agents = yield am.list_agents(env2.uuid)
+    assert code == 200
+    shouldbe = {
+        'agents': [{'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
+                    'environment': str(env2.uuid), "state": "down"}]}
+    assertEqualIsh(shouldbe, all_agents)
+
 
 @pytest.mark.gen_test(timeout=30)
 def test_DB_Clean(motorengine):

@@ -273,11 +273,22 @@ class Agent(Document):
     @gen.coroutine
     def to_dict(self):
         yield self.load_references()
+        if self.last_failover is None:
+            fo = ""
+        else:
+            fo = self.last_failover.isoformat()
+
+        if self.primary is None:
+            prim = ""
+        else:
+            prim = str(self.primary.uuid)
+
         return {"environment": str(self.environment.uuid),
                 "name": self.name,
-                "last_failover": self.last_failover.isoformat(),
+                "last_failover": fo,
                 "paused": self.paused,
-                "primary": str(self.primary.uuid)
+                "primary": prim,
+                "state": self.get_status()
                 }
 
     @classmethod
@@ -290,6 +301,12 @@ class Agent(Document):
             raise Exception("Multiple objects with the same unique id found!")
         else:
             return objects[0]
+
+    @classmethod
+    @gen.coroutine
+    def by_env(cls, env):
+        nodes = yield cls.objects.filter(environment=env).find_all()
+        return nodes
 
 
 class Report(Document):
