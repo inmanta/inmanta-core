@@ -22,8 +22,8 @@ import inspect
 import logging
 import base64
 
-from inmanta.agent.io import get_io
-from inmanta import protocol
+from inmanta.agent.io import get_io, remote
+from inmanta import protocol, resources
 from tornado import ioloop
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
@@ -330,9 +330,20 @@ class Commander(object):
             try:
                 io = cache.find(key_name, version=resource_id.version)
             except KeyError:
-                io = get_io(agent_name)
+                print(agent_name)
+                try:
+                    io = get_io(agent_name)
+                except (remote.CannotLoginException, resources.HostNotFoundException):
+                    # Unable to login, show an error and ignore this agent
+                    LOGGER.error("Unable to login to host %s (for resource %s)", agent_name, resource_id)
+                    io = None
+
                 # TODO: do not add expire to remoteio!!
                 cache.cache_value(key_name, io, version=resource_id.version)
+
+            if io is None:
+                # Skip this resource
+                raise Exception("No handler available for %s" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:

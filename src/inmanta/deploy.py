@@ -21,7 +21,6 @@ import random
 import sys
 import datetime
 
-import blessings
 from mongobox import mongobox
 from tornado import gen, process
 from inmanta import module, config, server, agent, protocol, client
@@ -81,6 +80,7 @@ class Deploy(object):
         config.Config.set("compiler_rest_transport", "port", str(self._server_port))
         config.Config.set("client_rest_transport", "port", str(self._server_port))
         config.Config.set("cmdline_rest_transport", "port", str(self._server_port))
+        config.Config.set("server", "agent-autostart", "nomatch!")
 
         # start the server
         self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop)
@@ -212,7 +212,7 @@ class Deploy(object):
         yield self._wait(lambda: self._environment_id is not None, "environment setup")
 
         # start the agent
-        self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=True)
+        self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=True, poolsize=5)
         self._agent.start()
 
         self._agent_ready = True
@@ -289,7 +289,8 @@ class Deploy(object):
         agents = agent_result.result["nodes"][0]["agents"]
         server_time = datetime.datetime.strptime(agent_result.result["nodes"][0]["last_seen"], client.ISOFMT)
         return [x["name"] for x in agents
-                if datetime.datetime.strptime(x["last_seen"], client.ISOFMT) + datetime.timedelta(0, x["interval"]) > server_time]
+                if datetime.datetime.strptime(x["last_seen"], client.ISOFMT) +
+                datetime.timedelta(0, x["interval"]) > server_time]
 
     @gen.coroutine
     def deploy(self, dry_run):
