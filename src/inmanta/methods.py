@@ -884,7 +884,7 @@ class AgentState(Method):
     __method_name__ = "agentstate"
 
     @protocol(operation="POST", server_agent=True, timeout=5)
-    def set_state(self, agent: str, enabled: bool, current_version: int):
+    def set_state(self, agent: str, enabled: bool):
         """
             Set the state of the agent.
         """
@@ -903,7 +903,6 @@ class AgentRecovery(Method):
 
             returns a map
             {
-             enabled: bool,
-             current_version: int
+             enabled: bool
             }
         """

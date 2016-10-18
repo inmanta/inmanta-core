@@ -22,9 +22,13 @@ from utils import retry_limited
 from tornado.gen import sleep
 import pytest
 from inmanta.agent.agent import Agent
+from inmanta.data import Environment
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
-@pytest.mark.gen_test(timeout=30)
+@pytest.mark.gen_test(timeout=60)
 @pytest.mark.slowtest
 def test_autostart(server):
     """
@@ -41,16 +45,22 @@ def test_autostart(server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
+    env = yield Environment.get_uuid(env_id)
+
+    yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
+    yield server.agentmanager.ensure_agent_registered(env, "iaas_josx")
+
     res = yield server.agentmanager._ensure_agent(env_id, "iaas_jos")
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server._sessions) == 1, 15)
     assert len(server._sessions) == 1
     res = yield server.agentmanager._ensure_agent(env_id, "iaas_jos")
     assert not res
     assert len(server._sessions) == 1
 
+    LOGGER.warn("Killing agent")
     server.agentmanager._requires_agents[env_id]["process"].terminate()
-    yield sleep(1)
+    yield retry_limited(lambda: len(server._sessions) == 0, 15)
     res = yield server.agentmanager._ensure_agent(env_id, "iaas_jos")
     assert res
     yield retry_limited(lambda: len(server._sessions) == 1, 3)
@@ -59,7 +69,50 @@ def test_autostart(server):
     # second agent for same env
     res = yield server.agentmanager._ensure_agent(env_id, "iaas_josx")
     assert res
-    yield sleep(3)
+    yield retry_limited(lambda: len(server._sessions) == 1, 15)
+    assert len(server._sessions) == 1
+
+
+@pytest.mark.gen_test(timeout=60)
+@pytest.mark.slowtest
+def test_autostart_batched(server):
+    """
+        Test auto start of agent
+    """
+    from inmanta import protocol
+
+    client = protocol.Client("client")
+
+    result = yield client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    env = yield Environment.get_uuid(env_id)
+
+    yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
+    yield server.agentmanager.ensure_agent_registered(env, "iaas_josx")
+
+    res = yield server.agentmanager._ensure_agents(env_id, ["iaas_jos", "iaas_josx"])
+    assert res
+    yield retry_limited(lambda: len(server._sessions) == 1, 15)
+    assert len(server._sessions) == 1
+    res = yield server.agentmanager._ensure_agent(env_id, "iaas_jos")
+    assert not res
+    assert len(server._sessions) == 1
+
+    res = yield server.agentmanager._ensure_agents(env_id, ["iaas_jos", "iaas_josx"])
+    assert not res
+    assert len(server._sessions) == 1
+
+    LOGGER.warn("Killing agent")
+    server.agentmanager._requires_agents[env_id]["process"].terminate()
+    yield retry_limited(lambda: len(server._sessions) == 0, 15)
+    res = yield server.agentmanager._ensure_agents(env_id, ["iaas_jos", "iaas_josx"])
+    assert res
+    yield retry_limited(lambda: len(server._sessions) == 1, 3)
     assert len(server._sessions) == 1
 
 

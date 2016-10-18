@@ -22,6 +22,7 @@ import logging
 import pkg_resources
 from pkg_resources import DistributionNotFound
 
+
 LOGGER = logging.getLogger(__name__)
 
 

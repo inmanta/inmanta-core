@@ -110,7 +110,7 @@ def test_primary_selection(motorengine):
     am.new_session(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", True, 0)
+    ts1.get_client().set_state.assert_called_with("agent2", True)
     ts1.get_client().reset_mock()
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
@@ -125,7 +125,7 @@ def test_primary_selection(motorengine):
     am.new_session(ts2)
     yield futures.proccess()
     assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", True, 0)
+    ts2.get_client().set_state.assert_called_with("agent3", True)
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
@@ -133,7 +133,7 @@ def test_primary_selection(motorengine):
     am.expire(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", True, 0)
+    ts2.get_client().set_state.assert_called_with("agent2", True)
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
@@ -286,7 +286,7 @@ def test_DB_Clean(motorengine):
     am.new_session(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", True, 0)
+    ts1.get_client().set_state.assert_called_with("agent2", True)
     ts1.get_client().reset_mock()
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
@@ -301,7 +301,7 @@ def test_DB_Clean(motorengine):
     am.new_session(ts2)
     yield futures.proccess()
     assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", True, 0)
+    ts2.get_client().set_state.assert_called_with("agent3", True)
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
@@ -309,7 +309,7 @@ def test_DB_Clean(motorengine):
     am.expire(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", True, 0)
+    ts2.get_client().set_state.assert_called_with("agent2", True)
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
@@ -322,7 +322,7 @@ def test_DB_Clean(motorengine):
     am.new_session(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
-    ts1.get_client().set_state.assert_called_with("agent2", True, 0)
+    ts1.get_client().set_state.assert_called_with("agent2", True)
     ts1.get_client().reset_mock()
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
@@ -337,7 +337,7 @@ def test_DB_Clean(motorengine):
     am.new_session(ts2)
     yield futures.proccess()
     assert len(am.sessions) == 2
-    ts2.get_client().set_state.assert_called_with("agent3", True, 0)
+    ts2.get_client().set_state.assert_called_with("agent3", True)
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
@@ -345,7 +345,7 @@ def test_DB_Clean(motorengine):
     am.expire(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
-    ts2.get_client().set_state.assert_called_with("agent2", True, 0)
+    ts2.get_client().set_state.assert_called_with("agent2", True)
     ts2.get_client().reset_mock()
     yield assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 

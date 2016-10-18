@@ -1021,7 +1021,7 @@ class Session(object):
     def check_expire(self):
         ttw = self._timeout + self._seen - time.time()
         if ttw < 0:
-            self.expire()
+            self.expire(self._seen - time.time())
         else:
             self._io_loop.call_later(ttw, self.check_expire)
 
@@ -1030,8 +1030,8 @@ class Session(object):
 
     id = property(get_id)
 
-    def expire(self):
-        self._sessionstore.expire(self)
+    def expire(self, timeout):
+        self._sessionstore.expire(self, timeout)
 
     def seen(self):
         self._seen = time.time()
@@ -1140,8 +1140,8 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
         return Session(self, self._io_loop, sid, self.interval * 3 / 4, self.interval, tid, endpoint_names, nodename)
 
-    def expire(self, session: Session):
-        LOGGER.debug("Expired session with id %s" % (session.get_id()))
+    def expire(self, session: Session, timeout):
+        LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
         del self._sessions[session.id]
 
     def seen(self, session: Session, endpoint_names: list):

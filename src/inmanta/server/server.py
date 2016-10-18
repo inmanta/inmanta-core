@@ -47,7 +47,7 @@ from inmanta.server import config as opt
 
 
 LOGGER = logging.getLogger(__name__)
-LOCK = locks.Lock()
+agent_lock = locks.Lock()
 
 
 class Server(protocol.ServerEndpoint):
@@ -99,9 +99,9 @@ class Server(protocol.ServerEndpoint):
         self.agentmanager.new_session(session)
         return session
 
-    def expire(self, session):
+    def expire(self, session, timeout):
         self.agentmanager.expire(session)
-        protocol.ServerEndpoint.expire(self, session)
+        protocol.ServerEndpoint.expire(self, session, timeout)
 
     def seen(self, session, endpoint_names):
         self.agentmanager.seen(session, endpoint_names)
@@ -625,6 +625,11 @@ class Server(protocol.ServerEndpoint):
     def list_agent(self, environment):
         yield self.agentmanager.list_agent(environment)
 
+    @protocol.handle(methods.AgentRecovery.get_state)
+    @gen.coroutine
+    def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
+        return (yield self.agentmanager.get_state(tid, sid, agent))
+
     @protocol.handle(methods.ResourceMethod.get_resource)
     @gen.coroutine
     def get_resource_state(self, tid, id, logs):
@@ -909,8 +914,9 @@ class Server(protocol.ServerEndpoint):
                 yield rv.resource.load_references()
                 agents.add(rv.resource.agent)
 
+            yield self.agentmanager._ensure_agents(str(tid), agents)
+
             for agent in agents:
-                yield self.agentmanager._ensure_agent(str(tid), agent)
                 client = self.get_agent_client(tid, agent)
                 if client is not None:
                     future = client.trigger_agent(tid, agent)
@@ -919,6 +925,7 @@ class Server(protocol.ServerEndpoint):
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, id, tid)
 
         model_dict = yield model.to_dict()
+
         return 200, {"model": model_dict}
 
     @protocol.handle(methods.DryRunMethod.dryrun_request)
@@ -947,8 +954,9 @@ class Server(protocol.ServerEndpoint):
             yield rv.resource.load_references()
             agents.add(rv.resource.agent)
 
+        yield self.agentmanager._ensure_agents(str(tid), agents)
+
         for agent in agents:
-            yield self.agentmanager._ensure_agent(str(tid), agent)
             client = self.get_agent_client(tid, agent)
             if client is not None:
                 future = client.do_dryrun(tid, dryrun_id, agent, id)
@@ -1078,7 +1086,7 @@ class Server(protocol.ServerEndpoint):
                                  timestamp=now, status=status)
         yield ra.save()
 
-        with (yield LOCK.acquire()):
+        with (yield agent_lock.acquire()):
             yield resv.load_references()
             model = resv.model
             rid = resv.rid
@@ -1553,7 +1561,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        with (yield LOCK.acquire()):
+        with (yield agent_lock.acquire()):
             snapshot = yield data.Snapshot.get_uuid(id)
             if snapshot is None:
                 return 404, {"message": "Snapshot with id %s does not exist!" % id}
@@ -1701,7 +1709,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        with (yield LOCK.acquire()):
+        with (yield agent_lock.acquire()):
             restore = yield data.SnapshotRestore.get_uuid(id)
             rr = yield (data.ResourceRestore.objects.  # @UndefinedVariable
                         filter(environment=env, restore=restore, resource_id=resource_id).find_all())  # @UndefinedVariable
