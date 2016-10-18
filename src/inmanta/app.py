@@ -142,17 +142,7 @@ def deploy(options):
 
     io_loop = IOLoop.current()
     run = deploy.Deploy(io_loop)
-    run.setup_server()
-
-    def handle_result(x):
-        if not x.result() or x.exception() is not None:
-            IOLoop.current().stop()
-            run.stop()
-            sys.exit(1)
-
-    io_loop.add_future(run.setup_project(), handle_result)
-    io_loop.add_future(run.setup_agent(), handle_result)
-    io_loop.add_future(run.export(), handle_result)
+    run.run(options)
 
     try:
         io_loop.start()

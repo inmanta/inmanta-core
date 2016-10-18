@@ -198,11 +198,18 @@ class Deploy(object):
         return True
 
     @gen.coroutine
-    def setup_agent(self):
+    def _wait(self, condition, name=""):
         tries = 0
-        while tries < MAX_TRIES and self._environment_id is None:
+        while tries < MAX_TRIES and not condition():
             tries += 1
             yield gen.sleep(0.5)
+
+        if not condition():
+            raise Exception("Timeout while waiting for %s" % name)
+
+    @gen.coroutine
+    def setup_agent(self):
+        yield self._wait(lambda: self._environment_id is not None, "environment setup")
 
         # start the agent
         self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=True)
@@ -230,12 +237,11 @@ class Deploy(object):
         return True
 
     @gen.coroutine
-    def export(self):
+    def export(self, dry_run):
         """
             Export a version to the embedded server
         """
-        while not self._agent_ready:
-            yield gen.sleep(0.5)
+        yield self._wait(lambda: self._agent_ready, "agent to start")
 
         inmanta_path = [sys.executable, os.path.abspath(sys.argv[0])]
 
@@ -247,7 +253,17 @@ class Deploy(object):
         log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
                                               gen.Task(sub_process.stderr.read_until_close),
                                               sub_process.wait_for_exit(raise_error=False)]
-        yield self.deploy()
+
+        if returncode > 0:
+            print("An error occurred while compiling the model:")
+            if len(log_out) > 0:
+                print(log_out.decode())
+            if len(log_err) > 0:
+                print(log_err.decode())
+
+            return False
+
+        yield self.deploy(dry_run)
         return True
 
     @gen.coroutine
@@ -276,7 +292,7 @@ class Deploy(object):
                 if datetime.datetime.strptime(x["last_seen"], client.ISOFMT) + datetime.timedelta(0, x["interval"]) > server_time]
 
     @gen.coroutine
-    def deploy(self):
+    def deploy(self, dry_run):
         version = yield self._latest_version(self._environment_id)
         if version is None:
             return []
@@ -291,8 +307,14 @@ class Deploy(object):
             yield gen.sleep(1)
 
         # release the version!
-        yield self._client.release_version(tid=self._environment_id, id=version, push=True)
-        yield self.progress_report(version)
+        if not dry_run:
+            yield self._client.release_version(tid=self._environment_id, id=version, push=True)
+            yield self.progress_deploy_report(version)
+
+        else:
+            result = yield self._client.dryrun_request(tid=self._environment_id, id=version)
+            dryrun_id = result.result["dryrun"]["id"]
+            yield self.progress_dryrun_report(dryrun_id)
 
     @gen.coroutine
     def _get_deploy_stats(self, version):
@@ -314,7 +336,7 @@ class Deploy(object):
         return total, deployed, ready
 
     @gen.coroutine
-    def progress_report(self, version):
+    def progress_deploy_report(self, version):
         print("Starting deploy")
         current_ready = set()
         total = 0
@@ -323,12 +345,87 @@ class Deploy(object):
             total, deployed, ready = yield self._get_deploy_stats(version)
 
             new = ready.keys() - current_ready
+            current_ready = ready
+
+            # if we already printed progress, move cursor one line up
+            if deployed >= 0:
+                sys.stdout.write('\033[1A')
+                sys.stdout.flush()
+
+            for res in new:
+                print("%s - %s" % (res, ready[res]))
 
             print("[%d / %d]" % (deployed, total))
             yield gen.sleep(1)
 
         print("Deploy ready")
         raise KeyboardInterrupt()
+
+    @gen.coroutine
+    def _get_dryrun_status(self, dryrun_id):
+        result = yield self._client.dryrun_report(self._environment_id, dryrun_id)
+
+        if result.code != 200:
+            raise Exception("Unable to get dryrun report")
+
+        data = result.result["dryrun"]
+        return data["total"], data["todo"], data["resources"]
+
+    @gen.coroutine
+    def progress_dryrun_report(self, dryrun_id):
+        print("Starting dryrun")
+
+        current_ready = set()
+        total = 0
+        todo = 1
+        while todo > 0:
+            # if we already printed progress, move cursor one line up
+            if len(current_ready) > 0:
+                sys.stdout.write('\033[1A')
+                sys.stdout.flush()
+
+            total, todo, ready = yield self._get_dryrun_status(dryrun_id)
+
+            new = ready.keys() - current_ready
+            current_ready = ready
+
+            for res in new:
+                changes = ready[res]["changes"]
+                if len(changes) == 0:
+                    print("%s - no changes" % res)
+                else:
+                    print("%s:" % res)
+                    for field, values in changes.items():
+                        if field == "hash":
+                            diff_result = yield self._client.diff(a=values[0], b=values[1])
+                            if diff_result.code == 200:
+                                print("  - content:")
+                                diff_value = diff_result.result
+                                print("    " + "    ".join(diff_value["diff"]))
+                        else:
+                            print("  - %s:" % field)
+                            print("    from: %s" % values[0])
+                            print("    to:   %s" % values[1])
+
+                        print("")
+
+            print("[%d / %d]" % (total - todo, total))
+            yield gen.sleep(1)
+
+        raise KeyboardInterrupt()
+
+    def run(self, options):
+        self.setup_server()
+
+        def handle_result(x):
+            if not x.result() or x.exception() is not None:
+                self._io_loop.stop()
+                self.stop()
+                sys.exit(1)
+
+        self._io_loop.add_future(self.setup_project(), handle_result)
+        self._io_loop.add_future(self.setup_agent(), handle_result)
+        self._io_loop.add_future(self.export(dry_run=options.dryrun), handle_result)
 
     def stop(self):
         if self._agent is not None:
