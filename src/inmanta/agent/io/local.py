@@ -131,7 +131,6 @@ class BashIO(object):
         data = result.communicate()
 
         if result.returncode > 0:
-            print(data, result.returncode)
             raise FileNotFoundError()
 
         return data[0].decode().strip()

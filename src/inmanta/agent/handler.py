@@ -330,7 +330,6 @@ class Commander(object):
             try:
                 io = cache.find(key_name, version=resource_id.version)
             except KeyError:
-                print(agent_name)
                 try:
                     io = get_io(agent_name)
                 except (remote.CannotLoginException, resources.HostNotFoundException):
