@@ -70,11 +70,10 @@ Model in server         On Agent
 
 
 todo:
- - exposed APIS
  - Test deploy loop (deploy without notify)
+ - clean up config parameters
 
 todo 2:
-
 
 pause agent (api)
 

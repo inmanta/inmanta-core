@@ -31,14 +31,21 @@ def retry_limited(fun, timeout):
 UNKWN = object()
 
 
-def assertEqualIsh(minimal, actual):
+def assertEqualIsh(minimal, actual, sortby=[]):
     if isinstance(minimal, dict):
         for k in minimal.keys():
-            assertEqualIsh(minimal[k], actual[k])
+            assertEqualIsh(minimal[k], actual[k], sortby)
     elif isinstance(minimal, list):
         assert len(minimal) == len(actual), "list not equal %s != %s" % (minimal, actual)
+        if len(sortby) > 0:
+            def keyfunc(val):
+                if not isinstance(val, dict):
+                    return val
+                key = [str(val[x]) for x in sortby if x in val]
+                return '_'.join(key)
+            actual = sorted(actual, key=keyfunc)
         for (m, a) in zip(minimal, actual):
-            assertEqualIsh(m, a)
+            assertEqualIsh(m, a, sortby)
     elif minimal is UNKWN:
         return
     else:

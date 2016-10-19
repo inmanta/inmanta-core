@@ -180,11 +180,11 @@ def test_API(motorengine):
                                'environment': str(env.uuid)},
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
-                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
+                               [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
+                                {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
                                'environment': str(env.uuid)}]}
 
-    assertEqualIsh(shouldbe, all_agents)
+    assertEqualIsh(shouldbe, all_agents, ['hostname', 'name'])
     agentid = all_agents['processes'][0]['id']
 
     code, all_agents = yield am.list_agent_processes(env.uuid)

@@ -502,7 +502,7 @@ def test_server_agent_api(client, server, io_loop):
                                   {'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent2', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
                                    'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}]},
-                   result.result)
+                   result.result, ['name'])
 
     agentid = result.result["processes"][0]["id"]
     endpointid = result.result["processes"][0]["endpoints"][0]["id"]

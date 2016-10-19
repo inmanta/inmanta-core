@@ -511,7 +511,7 @@ class RESTTransport(Transport):
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None:
-                raise Exception()
+                raise Exception("This method is unknown! This should not occur!")
             # create message that contains all arguments (id, query args and body)
             if "id" in kwargs and (message is None or "id" not in message):
                 message["id"] = kwargs["id"]
