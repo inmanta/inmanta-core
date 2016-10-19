@@ -12,7 +12,9 @@ python-dateutil
 ply
 ruamel.yaml
 virtualenv
--e git://github.com/heynemann/motorengine.git#egg=motorengine
+https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz
 mongobox
+pytest
 pytest-tornado
 netifaces
+sphinx_rtd_theme

@@ -1,6 +1,6 @@
 .. vim: spell
 
-Command reference
+Command Reference
 ******************
 
 All inmanta commands and services are started by the ``inmanta`` command. This page provides an

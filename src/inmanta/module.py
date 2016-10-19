@@ -81,6 +81,18 @@ class GitProvider:
     def get_file_for_version(self, repo, tag, file):
         pass
 
+    def checkout_tag(self, repo, tag):
+        pass
+
+    def commit(self, repo, message, commit_all, add=[]):
+        pass
+
+    def tag(self, repo, tag):
+        pass
+
+    def push(self, repo):
+        pass
+
 
 class CLIGitProvider(GitProvider):
 
@@ -475,7 +487,7 @@ class Project(ModuleLike):
         os.chdir(project._path)
         plugins.PluginMeta.clear()
 
-    def _load_freeze(self, freeze_file: str) -> {}:
+    def _load_freeze(self, freeze_file: str) -> dict:
         """
             Load the versions defined in the freeze file
         """
@@ -557,17 +569,20 @@ class Project(ModuleLike):
         return self._load_file(main_ns, os.path.join(self.project_path, "main.cf"))
 
     def load_module(self, module_name):
-        path = self.resolver.path_for(module_name)
-        if path is not None:
-            module = Module(self, path)
-        else:
-            reqs = self.collect_requirements()
-            if module_name in reqs:
-                module = Module.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
+        try:
+            path = self.resolver.path_for(module_name)
+            if path is not None:
+                module = Module(self, path)
             else:
-                module = Module.install(self, module_name, parse_requirements(module_name), install_mode=self._install_mode)
-        self.modules[module_name] = module
-        return module
+                reqs = self.collect_requirements()
+                if module_name in reqs:
+                    module = Module.install(self, module_name, reqs[module_name], install_mode=self._install_mode)
+                else:
+                    module = Module.install(self, module_name, parse_requirements(module_name), install_mode=self._install_mode)
+            self.modules[module_name] = module
+            return module
+        except Exception:
+            raise InvalidModuleException("Could not load module %s" % module_name)
 
     def load_plugins(self) -> None:
         """
@@ -803,9 +818,12 @@ class Module(ModuleLike):
                 v = str(v)
             return parse_version(v)
 
+        if not versions:
+            return None
+
         best = versions[0]
         atleast = get_cv_for(best)
-        if atleast is None or comp_version > atleast:
+        if atleast is None or comp_version >= atleast:
             return best
 
         # binary search
@@ -953,18 +971,22 @@ class Module(ModuleLike):
         """
             Run a git status on this module
         """
-        output = gitprovider.status(self._path)
+        try:
+            output = gitprovider.status(self._path)
 
-        files = [x.strip() for x in output.split("\n") if x != ""]
+            files = [x.strip() for x in output.split("\n") if x != ""]
 
-        if len(files) > 0:
-            print("Module %s (%s)" % (self._meta["name"], self._path))
-            for f in files:
-                print("\t%s" % f)
+            if len(files) > 0:
+                print("Module %s (%s)" % (self._meta["name"], self._path))
+                for f in files:
+                    print("\t%s" % f)
 
-            print()
-        else:
-            print("Module %s (%s) has no changes" % (self._meta["name"], self._path))
+                print()
+            else:
+                print("Module %s (%s) has no changes" % (self._meta["name"], self._path))
+        except Exception:
+            print("Failed to get status of module")
+            LOGGER.exception("Failed to get status of module %s")
 
     def push(self):
         """
@@ -1087,22 +1109,27 @@ class ModuleTool(object):
         names = sorted(project.modules.keys())
         specs = project.collect_imported_requirements()
         for name in names:
+
             name_length = max(len(name), name_length)
             mod = Project.get().modules[name]
             version = str(mod.version)
             if name not in specs:
                 specs[name] = []
 
-            if project._install_mode == INSTALL_MASTER:
-                reqv = "master"
-            else:
-                release_only = project._install_mode == INSTALL_RELEASES
-                versions = Module.get_suitable_version_for(
-                    name, specs[name], mod._path, release_only=release_only)
-                if versions is None:
-                    reqv = "None"
+            try:
+                if project._install_mode == INSTALL_MASTER:
+                    reqv = "master"
                 else:
-                    reqv = str(versions)
+                    release_only = project._install_mode == INSTALL_RELEASES
+                    versions = Module.get_suitable_version_for(
+                        name, specs[name], mod._path, release_only=release_only)
+                    if versions is None:
+                        reqv = "None"
+                    else:
+                        reqv = str(versions)
+            except Exception:
+                LOGGER.exception("Problem getting version for module %s" % name)
+                reqv = "ERROR"
 
             version_length = max(len(version), len(reqv), version_length)
 
@@ -1133,7 +1160,10 @@ class ModuleTool(object):
 
         for name, spec in specs.items():
             print("updating module: %s" % name)
-            Module.update(project, name, spec, install_mode=project._install_mode)
+            try:
+                Module.update(project, name, spec, install_mode=project._install_mode)
+            except Exception:
+                LOGGER.exception("Failed to update module")
 
     def install(self, project=None):
         """

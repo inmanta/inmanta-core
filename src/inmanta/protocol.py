@@ -696,7 +696,7 @@ class RESTTransport(Transport):
         else:
             protocol = "http"
 
-        LOGGER.debug("Using %s:%s", host, port)
+        LOGGER.debug("Using %s:%d", host, port)
         return "%s://%s:%d" % (protocol, host, port)
 
     def build_call(self, properties, args, kwargs={}):
@@ -925,7 +925,7 @@ class Endpoint(object):
 
     def __init__(self, io_loop, name):
         self._name = name
-        self._node_name = self.set_node_name()
+        self._node_name = nodename.get()
         self._end_point_names = []
         self._io_loop = io_loop
 
@@ -959,13 +959,6 @@ class Endpoint(object):
 
     name = property(lambda self: self._name)
     end_point_names = property(get_end_point_names)
-
-    def set_node_name(self):
-        """
-            This determines the name of the machine this endpoint is running on
-        """
-        node_name = nodename.get()
-        return node_name
 
     def _get_hostname(self):
         """

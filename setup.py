@@ -1,5 +1,23 @@
 from setuptools import setup, find_packages
 
+requires=[
+        'cliff <= 2.0.0',
+        'execnet',
+        'tornado >= 4.3',
+        'colorlog',
+        'urllib3',
+        'sphinx-argparse',
+        'python-dateutil',
+        'sphinx',
+        'ply',
+        'ruamel.yaml',
+        'virtualenv',
+        'motorengine == 0.9.1dev0',
+        'mongobox',
+        'pytest-tornado',
+        'sphinx_rtd_theme',
+        'netifaces']
+
 setup(
     name="inmanta",
     package_dir={"" : "src"},
@@ -14,7 +32,12 @@ setup(
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
-    install_requires=['cliff <= 2.0.0'],
+    dependency_links=['https://github.com/inmanta/motorengine/tarball/inmanta#egg=motorengine-0.9.1dev0'],
+    install_requires=requires,
+    tests_requires=requires + [
+        "pytest"
+    ],
+    setup_requires=['tox-setuptools', 'tox'],
 
     entry_points={
     'console_scripts': [

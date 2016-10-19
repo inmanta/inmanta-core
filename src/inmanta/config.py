@@ -19,7 +19,7 @@
 from configparser import ConfigParser, Interpolation
 import os
 import logging
-from _collections import defaultdict
+from collections import defaultdict
 import uuid
 import sys
 
@@ -112,11 +112,11 @@ class Config(object):
     def validate_option_request(cls, section, name, default_value):
         if section not in cls.__config_definition:
             LOGGER.warn("Config section %s not defined" % (section))
-            #raise Exception("Config section %s not defined" % (section))
+            # raise Exception("Config section %s not defined" % (section))
             return
         if name not in cls.__config_definition[section]:
             LOGGER.warn("Config name %s not defined in section %s" % (name, section))
-            #raise Exception("Config name %s not defined in section %s" % (name, section))
+            # raise Exception("Config name %s not defined in section %s" % (name, section))
             return
         opt = cls.__config_definition[section][name]
         if not opt.get_default_value() == opt.get_default_value():
@@ -213,7 +213,7 @@ class Option(object):
 
     def get(self):
         cfg = Config._get_instance()
-        out = cfg.get(self.section, self.name,  fallback=self.get_default_value())
+        out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
 
     def get_type(self):
@@ -299,3 +299,4 @@ class TransportConfig(object):
 TransportConfig("compiler")
 TransportConfig("client")
 cmdline_rest_transport = TransportConfig("cmdline")
+
