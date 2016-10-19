@@ -498,10 +498,10 @@ def test_server_agent_api(client, server, io_loop):
     assert result.code == 200
     assertEqualIsh({'processes': [{'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent1', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
-                                   'hostname': 'oceanus.inmanta.com', 'first_seen': UNKWN, 'last_seen': UNKWN},
+                                   'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN},
                                   {'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent2', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
-                                   'hostname': 'oceanus.inmanta.com', 'first_seen': UNKWN, 'last_seen': UNKWN}]},
+                                   'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}]},
                    result.result)
 
     agentid = result.result["processes"][0]["id"]
