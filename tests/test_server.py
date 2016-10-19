@@ -17,13 +17,12 @@
 """
 
 import time
+import logging
 
 from utils import retry_limited
-from tornado.gen import sleep
 import pytest
 from inmanta.agent.agent import Agent
 from inmanta.data import Environment
-import logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +70,43 @@ def test_autostart(server):
     assert res
     yield retry_limited(lambda: len(server._sessions) == 1, 15)
     assert len(server._sessions) == 1
+
+
+@pytest.mark.gen_test(timeout=60)
+@pytest.mark.slowtest
+def test_autostart_dual_env(server):
+    """
+        Test auto start of agent
+    """
+    from inmanta import protocol
+
+    client = protocol.Client("client")
+
+    result = yield client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="devx")
+    env_id2 = result.result["environment"]["id"]
+
+    env = yield Environment.get_uuid(env_id)
+    env2 = yield Environment.get_uuid(env_id2)
+
+    yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
+    yield server.agentmanager.ensure_agent_registered(env2, "iaas_jos")
+
+    res = yield server.agentmanager._ensure_agent(env_id, "iaas_jos")
+    assert res
+    yield retry_limited(lambda: len(server._sessions) == 1, 15)
+    assert len(server._sessions) == 1
+
+    res = yield server.agentmanager._ensure_agent(env_id2, "iaas_jos")
+    assert res
+    yield retry_limited(lambda: len(server._sessions) == 2, 15)
+    assert len(server._sessions) == 2
 
 
 @pytest.mark.gen_test(timeout=60)

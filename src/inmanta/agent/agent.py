@@ -359,7 +359,7 @@ class Agent(AgentEndPoint):
         yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
         yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
-    @protocol.handle(methods.NodeMethod.trigger_agent)
+    @protocol.handle(methods.AgentState.trigger)
     @gen.coroutine
     def trigger_update(self, tid, id):
         """

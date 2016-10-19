@@ -610,20 +610,25 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"diff": list(diff)}
 
-    @protocol.handle(methods.NodeMethod.get_agent)
+    @protocol.handle(methods.NodeMethod.get_agent_process)
     @gen.coroutine
-    def get_agent(self, id):
-        yield self.agentmanager.get_agent_info(id)
+    def get_agent_process(self, id):
+        return (yield self.agentmanager.get_agent_process_report(id))
 
-    @protocol.handle(methods.NodeMethod.trigger_agent)
+    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent)
     @gen.coroutine
     def trigger_agent(self, tid, id):
         yield self.agentmanager.trigger_agent(tid, id)
 
-    @protocol.handle(methods.NodeMethod.list_agents)
+    @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine
-    def list_agent(self, environment):
-        yield self.agentmanager.list_agent(environment)
+    def list_agent_processes(self, environment):
+        return (yield self.agentmanager.list_agent_processes(environment))
+
+    @protocol.handle(methods.ServerAgentApiMethod.list_agents)
+    @gen.coroutine
+    def list_agents(self, tid: UUID=None):
+        return (yield self.agentmanager.list_agents(tid))
 
     @protocol.handle(methods.AgentRecovery.get_state)
     @gen.coroutine
@@ -919,7 +924,7 @@ class Server(protocol.ServerEndpoint):
             for agent in agents:
                 client = self.get_agent_client(tid, agent)
                 if client is not None:
-                    future = client.trigger_agent(tid, agent)
+                    future = client.trigger(tid, agent)
                     self.add_future(future)
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, id, tid)

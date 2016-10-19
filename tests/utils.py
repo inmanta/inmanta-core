@@ -26,3 +26,20 @@ def retry_limited(fun, timeout):
     start = time.time()
     while time.time() - start < timeout and not fun():
         yield sleep(0.1)
+
+
+UNKWN = object()
+
+
+def assertEqualIsh(minimal, actual):
+    if isinstance(minimal, dict):
+        for k in minimal.keys():
+            assertEqualIsh(minimal[k], actual[k])
+    elif isinstance(minimal, list):
+        assert len(minimal) == len(actual), "list not equal %s != %s" % (minimal, actual)
+        for (m, a) in zip(minimal, actual):
+            assertEqualIsh(m, a)
+    elif minimal is UNKWN:
+        return
+    else:
+        assert minimal == actual

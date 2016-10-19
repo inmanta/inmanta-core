@@ -243,7 +243,7 @@ class Environment(object):
     @gen.coroutine
     def waitForAgents(self, total):
         while True:
-            result = yield self.connection._client.list_agents(self.envid)
+            result = yield self.connection._client.list_agent_processes(self.envid)
             result = unwrap(result)
             now = dateutil.parser.parse(result["servertime"])
             agents = [y for x in result["nodes"] for y in x["agents"]]

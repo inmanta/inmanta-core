@@ -92,7 +92,7 @@ def server(io_loop, mongo_db, mongo_client):
     for db_name in mongo_client.database_names():
         mongo_client.drop_database(db_name)
     # end fix
-    #shutil.rmtree(state_dir)
+    shutil.rmtree(state_dir)
 
 
 @pytest.fixture(scope="function",

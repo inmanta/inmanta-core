@@ -20,7 +20,6 @@ import time
 import json
 from threading import Condition
 
-
 from tornado import gen
 
 from inmanta import agent, data
@@ -28,7 +27,8 @@ from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
 from inmanta.agent.agent import Agent
-from utils import retry_limited
+from utils import retry_limited, assertEqualIsh, UNKWN
+import uuid
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -475,6 +475,79 @@ def test_snapshot_restore(client, server, io_loop):
         yield gen.sleep(0.1)
 
     assert Provider.get("agent1", "key") == "value"
+
+
+@pytest.mark.gen_test
+def test_server_agent_api(client, server, io_loop):
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+    agent = Agent(io_loop, env_id=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.start()
+
+    agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
+                  code_loader=False)
+    agent.start()
+
+    yield retry_limited(lambda: len(server._sessions) == 2, 10)
+
+    result = yield client.list_agent_processes(env_id)
+    assert result.code == 200
+    assertEqualIsh({'processes': [{'expired': None, 'environment': env_id, 'endpoints':
+                                   [{'name': 'agent1', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
+                                   'hostname': 'oceanus.inmanta.com', 'first_seen': UNKWN, 'last_seen': UNKWN},
+                                  {'expired': None, 'environment': env_id, 'endpoints':
+                                   [{'name': 'agent2', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
+                                   'hostname': 'oceanus.inmanta.com', 'first_seen': UNKWN, 'last_seen': UNKWN}]},
+                   result.result)
+
+    agentid = result.result["processes"][0]["id"]
+    endpointid = result.result["processes"][0]["endpoints"][0]["id"]
+
+    result = yield client.get_agent_process(id=agentid)
+    assert result.code == 200
+
+    result = yield client.get_agent_process(id=uuid.uuid4())
+    assert result.code == 404
+
+    version = int(time.time())
+
+    resources = [{'key': 'key',
+                  'value': 'value',
+                  'id': 'test::Resource[agent1,key=key],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key2',
+                  'value': 'value',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }]
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    result = yield client.list_agents(tid=env_id)
+    assert result.code == 200
+
+    shouldbe = {'agents': [
+        {'last_failover': UNKWN, 'environment': env_id, 'paused': False,
+         'primary': endpointid, 'name': 'agent1', 'state': 'up'}]}
+
+    assertEqualIsh(shouldbe, result.result)
+
+    result = yield client.list_agents(tid=uuid.uuid4())
+    assert result.code == 404
 
 
 @pytest.mark.gen_test

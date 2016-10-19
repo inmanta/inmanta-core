@@ -28,6 +28,7 @@ from inmanta import data
 from inmanta.server.config import server_agent_autostart
 from inmanta.protocol import Session
 from inmanta.data import AgentProcess, AgentInstance, Agent, Environment
+from inmanta.asyncutil import retry_limited
 
 import logging
 import glob
@@ -38,8 +39,6 @@ import sys
 import subprocess
 import uuid
 from uuid import UUID
-from inmanta.asyncutil import retry_limited
-from tornado.gen import sleep
 
 
 LOGGER = logging.getLogger(__name__)
@@ -71,31 +70,20 @@ Model in server         On Agent
 
 
 todo:
- 2-create API
+ - exposed APIS
+ - Test deploy loop (deploy without notify)
 
+todo 2:
 
-exposed APIS
 
 pause agent (api)
-get agent state (api)
- - paused / down / up
 
 set primary agent (api)
  - endpoint
 
-get agent state (internal)
- - enabled / disabled, current version
-set agent state (on agent)
- - enabled / disabled, current version
+Test deploy with paused agents
 
-procedures:
- select primary agent (on failover)
-  - acquire lock
-  - send disable to old primary
-  - set state on new primary
-  - release lock
-
-TODO:
+TODO 3:
   agent failover modes (max 1, min 1, ....)
 
 
@@ -338,8 +326,11 @@ class AgentManager(object):
         for p in aps:
             dict = yield p.to_dict()
             ais = yield AgentInstance.objects.filter(process=p).find_all()
-            ais = [ai.name for ai in ais]
-            dict["endpoints"] = ais
+            oais = []
+            for ai in ais:
+                a = yield ai.to_dict()
+                oais.append(a)
+            dict["endpoints"] = oais
             processes.append(dict)
         return 200, {"processes": processes}
 
@@ -375,6 +366,8 @@ class AgentManager(object):
     @gen.coroutine
     def _ensure_agents(self, environment_id: str, agents):
         agents = [agent for agent in agents if self._agent_matches(agent)]
+        started = False
+        needsstart = False
         if len(agents) > 0:
             with (yield agent_lock.acquire()):
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
@@ -388,8 +381,15 @@ class AgentManager(object):
 
                 for agent in agents:
                     agent_data["agents"].add(agent)
+                    with (yield self.session_lock.acquire()):
+                        agent = self.get_agent_client(environment_id, agent)
+                        if agent is None:
+                            needsstart = True
 
-                yield self.__do_start_agent(agent_data, environment_id)
+                if needsstart:
+                    res = yield self.__do_start_agent(agent_data, environment_id)
+                    started |= res
+            return started
         else:
             return False
 
@@ -611,7 +611,7 @@ ssl_ca_cert_file=%s
         for agent in agent_env.agents:
             client = self.get_agent_client(tid, agent)
             if client is not None:
-                future = client.trigger_agent(tid, agent)
+                future = client.trigger(tid, agent)
                 self.add_future(future)
 
         return 200

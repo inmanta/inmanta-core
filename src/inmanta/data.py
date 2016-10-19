@@ -207,7 +207,7 @@ class AgentProcess(IdDocument):
     @classmethod
     @gen.coroutine
     def get_by_sid(cls, sid):
-        objects = yield cls.objects.filter(sid=sid).find_all()
+        objects = yield cls.objects.filter(expired__is_null=True, sid=sid).find_all()
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
@@ -232,7 +232,8 @@ class AgentInstance(IdDocument):
     def to_dict(self):
         yield self.load_references()
         return {"process": str(self.process.uuid),
-                "name": self.name}
+                "name": self.name,
+                "id": self.uuid}
 
     @classmethod
     @gen.coroutine

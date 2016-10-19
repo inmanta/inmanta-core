@@ -23,6 +23,7 @@ from inmanta.server.agentmanager import AgentManager
 from inmanta.data import Environment, Agent
 from tornado import gen
 from inmanta.protocol import Result
+from utils import assertEqualIsh, UNKWN
 
 
 class Collector():
@@ -144,23 +145,6 @@ def test_primary_selection(motorengine):
     yield assert_agents("paused", "down", "down")
 
 
-UNKWN = object()
-
-
-def assertEqualIsh(minimal, actual):
-    if isinstance(minimal, dict):
-        for k in minimal.keys():
-            assertEqualIsh(minimal[k], actual[k])
-    elif isinstance(minimal, list):
-        assert len(minimal) == len(actual)
-        for (m, a) in zip(minimal, actual):
-            assertEqualIsh(m, a)
-    elif minimal is UNKWN:
-        return
-    else:
-        assert minimal == actual
-
-
 @pytest.mark.gen_test(timeout=30)
 def test_API(motorengine):
     env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
@@ -190,9 +174,15 @@ def test_API(motorengine):
     assert code == 200
 
     shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
-                               'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
+                               'last_seen': UNKWN, 'endpoints':
+                               [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
+                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
+                               'environment': str(env.uuid)},
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
-                               'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
+                               'last_seen': UNKWN, 'endpoints':
+                               [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
+                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
+                               'environment': str(env.uuid)}]}
 
     assertEqualIsh(shouldbe, all_agents)
     agentid = all_agents['processes'][0]['id']
@@ -201,9 +191,15 @@ def test_API(motorengine):
     assert code == 200
 
     shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
-                               'last_seen': UNKWN, 'endpoints': ['agent1', 'agent2'], 'environment': str(env.uuid)},
+                               'last_seen': UNKWN, 'endpoints':
+                               [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
+                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
+                               'environment': str(env.uuid)},
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
-                               'last_seen': UNKWN, 'endpoints': ['agent3', 'agent2'], 'environment': str(env.uuid)}]}
+                               'last_seen': UNKWN, 'endpoints':
+                               [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
+                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
+                               'environment': str(env.uuid)}]}
 
     assertEqualIsh(shouldbe, all_agents)
 

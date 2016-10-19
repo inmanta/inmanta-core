@@ -832,10 +832,10 @@ class NodeMethod(Method):
     """
         Get a list of all agents
     """
-    __method_name__ = "agent"
+    __method_name__ = "agentproc"
 
     @protocol(operation="GET", index=True)
-    def list_agents(self, environment: uuid.UUID=None):
+    def list_agent_processes(self, environment: uuid.UUID=None):
         """
             Return a list of all nodes and the agents for these nodes
 
@@ -843,24 +843,38 @@ class NodeMethod(Method):
             :return A list of nodes
         """
 
-    @protocol(operation="GET", id=True, mt=True)
-    def get_agent(self, tid: uuid.UUID, id: str):
+    @protocol(operation="GET", id=True,)
+    def get_agent_process(self, id: uuid.UUID):
         """
-            Return the node and the agents on this node for the given id
+            Return a detailed report for a node
 
-            :param tid The environment this agent is defined in
-            :param id The name of the agent
+            :param agentid The id of the node
             :return The requested node
         """
 
-    @protocol(operation="POST", id=True, mt=True, server_agent=True, timeout=5)
+
+class ServerAgentApiMethod(Method):
+    """
+        Get a list of all agents
+    """
+    __method_name__ = "agent"
+
+    @protocol(operation="POST", id=True, mt=True, api=True, timeout=5)
     def trigger_agent(self, tid: uuid.UUID, id: str):
         """
-            Request an agent to reload resources
+            Request the server to reload an agent
 
             :param tid The environment this agent is defined in
             :param id The name of the agent
             :return The requested node
+        """
+
+    @protocol(operation="POST", mt=True, api=True, timeout=5)
+    def list_agents(self, tid: uuid.UUID):
+        """
+            List all agent for an environment
+
+            :param tid The environment the agents are defined in
         """
 
 
@@ -887,6 +901,16 @@ class AgentState(Method):
     def set_state(self, agent: str, enabled: bool):
         """
             Set the state of the agent.
+        """
+
+    @protocol(operation="POST", id=True, mt=True, server_agent=True, timeout=5)
+    def trigger(self, tid: uuid.UUID, id: str):
+        """
+            Request an agent to reload resources
+
+            :param tid The environment this agent is defined in
+            :param id The name of the agent
+            :return The requested node
         """
 
 
