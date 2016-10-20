@@ -231,7 +231,7 @@ def test_API(motorengine):
                                'primary': UNKWN, 'environment': str(env.uuid), "state": "up"},
                            {'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
                             'environment': str(env2.uuid), "state": "down"}]}
-    assertEqualIsh(shouldbe, all_agents)
+    assertEqualIsh(shouldbe, all_agents, ['name'])
 
     code, all_agents = yield am.list_agents(env2.uuid)
     assert code == 200
