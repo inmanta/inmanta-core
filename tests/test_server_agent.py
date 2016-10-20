@@ -492,7 +492,8 @@ def test_server_agent_api(client, server, io_loop):
                   code_loader=False)
     agent.start()
 
-    yield retry_limited(lambda: len(server._sessions) == 2, 10)
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    assert len(server.agentmanager.sessions) == 2
 
     result = yield client.list_agent_processes(env_id)
     assert result.code == 200
