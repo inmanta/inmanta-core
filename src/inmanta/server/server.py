@@ -59,9 +59,7 @@ class Server(protocol.ServerEndpoint):
     """
 
     def __init__(self, io_loop, database_host=None, database_port=None):
-        agent_timeout = opt.timeout.get()
-
-        super().__init__("server", io_loop=io_loop, interval=agent_timeout)
+        super().__init__("server", io_loop=io_loop, interval=opt.agent_timeout.get(), hangtime=opt.agent_hangtime.get())
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
 

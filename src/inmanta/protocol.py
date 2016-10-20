@@ -454,6 +454,7 @@ class RESTTransport(Transport):
         self._handlers = []
         self.token = None
         self.token_lock = locks.Lock()
+        self.connection_timout = 120
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -759,7 +760,7 @@ class RESTTransport(Transport):
         try:
             if body is not None:
                 body = json_encode(body)
-            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=120,
+            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=self.connection_timout,
                                   request_timeout=120, ca_certs=ca_certs)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
@@ -1077,7 +1078,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
     __methods__ = {}
 
-    def __init__(self, name, io_loop, transport=RESTTransport, interval=60):
+    def __init__(self, name, io_loop, transport=RESTTransport, interval=60, hangtime=None):
         super().__init__(io_loop, name)
         self._transport = transport
 
@@ -1088,6 +1089,9 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         self.agent_handles = {}
         self._sessions = {}
         self.interval = interval
+        if hangtime is None:
+            hangtime = interval * 3 / 4
+        self.hangtime = hangtime
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
@@ -1128,7 +1132,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
     def new_session(self, sid, tid, endpoint_names, nodename):
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
-        return Session(self, self._io_loop, sid, self.interval * 3 / 4, self.interval, tid, endpoint_names, nodename)
+        return Session(self, self._io_loop, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     def expire(self, session: Session, timeout):
         LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
@@ -1191,17 +1195,17 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
-    def __init__(self, name, io_loop, heartbeat_interval=10, transport=RESTTransport):
+    def __init__(self, name, io_loop, timeout=120, transport=RESTTransport):
         super().__init__(io_loop, name)
         self._transport = transport
         self._client = None
-        self._heart_beat_interval = heartbeat_interval
         self._sched = Scheduler(self._io_loop)
 
         self._env_id = None
 
         self.sessionid = uuid.uuid1()
         self.running = True
+        self.server_timeout = timeout
 
     def get_environment(self):
         return self._env_id
@@ -1222,8 +1226,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
-        self._client = AgentClient(self.name, self.sessionid, transport=self._transport)
-        # self._sched.add_action(self.perform_heartbeat, self._heart_beat_interval, True)
+        self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
         self._io_loop.add_callback(self.perform_heartbeat)
 
     def stop(self):
@@ -1340,7 +1343,7 @@ class AgentClient(Endpoint, metaclass=ClientMeta):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, sid, ioloop=None, transport=RESTTransport):
+    def __init__(self, name, sid, ioloop=None, transport=RESTTransport, timeout=120):
         if ioloop is None:
             ioloop = IOLoop.current()
         Endpoint.__init__(self, ioloop, name)

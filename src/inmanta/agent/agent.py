@@ -207,7 +207,7 @@ class Agent(AgentEndPoint):
     """
 
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
-        super().__init__("agent", io_loop, cfg.heartbeat.get())
+        super().__init__("agent", io_loop, timeout=cfg.server_timeout)
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()

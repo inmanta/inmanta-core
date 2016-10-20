@@ -153,6 +153,15 @@ dash_path = \
     Option("dashboard", "path", None,
            "The path on the local file system where the dashboard can be found")
 
-timeout = \
+agent_timeout = \
     Option("server", "agent-timeout", 2,
-           "Timeout for agent calls from server to agent", is_time)
+           "Time before an agent is considered to be offline", is_time)
+
+
+def default_hangtime():
+    """ server.agent-timeout*3/4 """
+    return str(int(agent_timeout.get() * 3 / 4))
+
+agent_hangtime = \
+    Option("server", "agent-hold", default_hangtime,
+           "Maximal time the server will hold an agent heartbeat call", is_time)

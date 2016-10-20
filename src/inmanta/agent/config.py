@@ -61,9 +61,9 @@ agent_antisplay = \
     Option("config", "agent-run-at-start", False,
            "run the agent at startup, even if a splay time is set", is_bool)
 
-heartbeat = \
-    Option("config", "heartbeat-interval", 10,
-           "Interval between subsequent heartbeats towards the server, lower number reduces load in the server", is_time)
+server_timeout = \
+    Option("config", "server-timeout", 120,
+           "Amount of time to wait for a response from the server before we try to reconnect", is_time)
 
 
 ##############################
