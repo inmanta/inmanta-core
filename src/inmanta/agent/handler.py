@@ -342,7 +342,7 @@ class Commander(object):
 
             if io is None:
                 # Skip this resource
-                raise Exception("No handler available for %s" % resource_id)
+                raise Exception("No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:
