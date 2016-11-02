@@ -18,6 +18,7 @@
 from collections import defaultdict
 import time
 import json
+import uuid
 from threading import Condition
 
 from tornado import gen
@@ -28,7 +29,6 @@ from inmanta.resources import resource, Resource
 import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assertEqualIsh, UNKWN
-import uuid
 from inmanta.config import Config
 
 
