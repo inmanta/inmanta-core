@@ -70,7 +70,7 @@ Model in server         On Agent
 
 
 todo:
- - Test deploy loop (deploy without notify)
+ - run autotest
 
 todo 2:
 

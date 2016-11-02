@@ -29,6 +29,7 @@ import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assertEqualIsh, UNKWN
 import uuid
+from inmanta.config import Config
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -269,6 +270,87 @@ def test_dryrun_and_deploy(io_loop, server, client):
 
     # do a deploy
     result = yield client.release_version(env_id, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 3
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.get_version(env_id, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(env_id, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    assert Provider.isset("agent1", "key1")
+    assert Provider.get("agent1", "key1") == "value1"
+    assert Provider.get("agent1", "key2") == "value2"
+    assert not Provider.isset("agent1", "key3")
+
+    agent.stop()
+
+
+@pytest.mark.gen_test
+def test_spontaneous_deploy(io_loop, server, client):
+    """
+        dryrun and deploy a configuration model
+    """
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    Config.set("config", "agent-interval", "2")
+
+    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    Provider.set("agent1", "key2", "incorrect_value")
+    Provider.set("agent1", "key3", "value")
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key3',
+                  'value': None,
+                  'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                  'requires': [],
+                  'purged': True,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(env_id, version, False)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
