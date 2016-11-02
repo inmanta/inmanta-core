@@ -376,6 +376,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if config is None:
             body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
             self.respond(body, headers, status)
+            return
 
         self.set_header("Access-Control-Allow-Origin", "*")
         try:
@@ -511,7 +512,7 @@ class RESTTransport(Transport):
     def _execute_call(self, kwargs, http_method, config, message, request_headers):
         headers = {"Content-Type": "application/json"}
         try:
-            if kwargs is None:
+            if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
             # create message that contains all arguments (id, query args and body)
             if "id" in kwargs and (message is None or "id" not in message):
@@ -1251,6 +1252,14 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                         for method_call in method_calls:
                             LOGGER.debug("Received call through heartbeat: %s %s", method_call["method"], method_call["url"])
                             kwargs, config = transport.match_call(method_call["url"], method_call["method"])
+
+                            if config is None:
+                                msg = "An error occurred during heartbeat method call (%s %s): %s" % (
+                                    method_call["method"], method_call["url"], "No such method")
+                                LOGGER.error(msg)
+                                self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
+                                                             {"result": msg, "code": 500})
+
                             body = {}
                             if "body" in method_call and method_call["body"] is not None:
                                 body = method_call["body"]

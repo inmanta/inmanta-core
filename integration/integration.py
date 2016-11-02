@@ -96,7 +96,7 @@ port = 8888
 # on the server under /dashboard/
 enabled=true
 # The path where the dashboard is installed
-path=/home/wouter/projects/impera-dashboard/dist""")
+path=/home/wouter/projects/inmanta-dashboard/dist""")
 
         basepath = os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0])))
         app = os.path.join(basepath, "src", "inmanta", "app.py")
@@ -243,12 +243,10 @@ class Environment(object):
     @gen.coroutine
     def waitForAgents(self, total):
         while True:
-            result = yield self.connection._client.list_agent_processes(self.envid)
+            result = yield self.connection._client.list_agents(self.envid)
             result = unwrap(result)
-            now = dateutil.parser.parse(result["servertime"])
-            agents = [y for x in result["nodes"] for y in x["agents"]]
-            agents = len([x for x in agents if dateutil.parser.parse(x["last_seen"]) > now - timedelta(seconds=60)])
-            if agents >= total:
+            agents = [x for x in result["agents"] if x["state"] == "up"]
+            if len(agents) >= total:
                 return
             else:
                 yield gen.sleep(5)

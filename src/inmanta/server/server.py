@@ -105,6 +105,10 @@ class Server(protocol.ServerEndpoint):
         self.agentmanager.seen(session, endpoint_names)
         protocol.ServerEndpoint.seen(self, session, endpoint_names)
 
+    def start(self):
+        super().start()
+        self.agentmanager.start()
+
     def stop(self):
         super().stop()
         self.agentmanager.stop()

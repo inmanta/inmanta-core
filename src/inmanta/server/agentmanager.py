@@ -94,7 +94,7 @@ class AgentManager(object):
     This class contains all server functionality related to the management of agents
     '''
 
-    def __init__(self, server, autostart=True, fact_back_off=60):
+    def __init__(self, server, autostart=True, closesessionsonstart=True, fact_back_off=60):
         self._server = server
 
         self._requires_agents = {}
@@ -114,6 +114,8 @@ class AgentManager(object):
         self.sessions = {}
         # live sessions
         self.tid_endpoint_to_session = {}
+
+        self.closesessionsonstart = closesessionsonstart
 
     # From server
     def new_session(self, session: Session):
@@ -136,6 +138,10 @@ class AgentManager(object):
                            (set(session.endpoint_names), set(endpoint_names)))
         # start async, let it run free
         self.add_future(self.flush_agent_presence(session, datetime.now()))
+
+    def start(self):
+        if self.closesessionsonstart:
+            self.add_future(self.clean_db())
 
     def stop(self):
         self.terminate_agents()
@@ -358,7 +364,7 @@ class AgentManager(object):
         for p in ags:
             dict = yield p.to_dict()
             agents.append(dict)
-        return 200, {"agents": agents}
+        return 200, {"agents": agents, "servertime": datetime.now().isoformat()}
 
     # Start/stop agents
     @gen.coroutine
@@ -630,7 +636,7 @@ ssl_ca_cert_file=%s
             if len(node_dict["agents"]) > 0:
                 response.append(node_dict)
 
-        return 200, {"nodes": response, "servertime": datetime.datetime.now().isoformat()}
+        return 200, {"nodes": response, "servertime": datetime.now().isoformat()}
 
     @gen.coroutine
     def start_agents(self):
