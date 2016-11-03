@@ -23,7 +23,7 @@ import tempfile
 import hashlib
 import logging
 
-from pip._vendor import pkg_resources
+import pkg_resources
 
 
 LOGGER = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ class VirtualEnv(object):
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def install(self, requirements_list: []) -> None:
+    def _install(self, requirements_list: []) -> None:
         """
             Install requirements in the given requirements file
         """
@@ -177,7 +177,7 @@ class VirtualEnv(object):
         if new_req_hash == current_hash and cache:
             return
 
-        self.install(requirements_list)
+        self._install(requirements_list)
         self._set_current_requirements_hash(new_req_hash)
         for x in requirements_list:
             self.__cache_done.add(x)

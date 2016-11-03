@@ -18,16 +18,48 @@
 import tempfile
 
 from inmanta import env
+import pytest
+from subprocess import CalledProcessError
 
 
-def test2VirtualEnv():
-    env_dir1 = tempfile.mkdtemp()
-    env_dir2 = tempfile.mkdtemp()
+def test_basic_install(tmpdir):
+    env_dir1 = tmpdir.mkdir("env1").strpath
+
+    with pytest.raises(ImportError):
+        import lorem
 
     venv1 = env.VirtualEnv(env_dir1)
-    venv1.use_virtual_env()
-    venv1.install(["python-novaclient"])
 
-    venv2 = env.VirtualEnv(env_dir2)
-    venv2.use_virtual_env()
-    venv2.install(["python-neutronclient"])
+    venv1.use_virtual_env()
+    venv1._install(["lorem"])
+    import lorem
+    s = lorem.sentence()
+
+
+def test_basic_install_syntax(tmpdir):
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    with pytest.raises(ImportError):
+        import yummy
+
+    venv1 = env.VirtualEnv(env_dir1)
+
+    venv1.use_virtual_env()
+    venv1.install_from_list(["dummy-yummy"])
+    import yummy
+
+
+def test_full_install_syntax(tmpdir):
+    env_dir1 = tmpdir.mkdir("env1").strpath
+    with pytest.raises(ImportError):
+        import iplib
+
+    venv1 = env.VirtualEnv(env_dir1)
+
+    venv1.use_virtual_env()
+    try:
+        venv1.install_from_list(
+            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem"])
+    except CalledProcessError as ep:
+        print(ep.stdout)
+        raise
+    import iplib
