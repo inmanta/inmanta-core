@@ -15,43 +15,44 @@
 
     Contact: bart@inmanta.com
 """
-import tempfile
+
+from subprocess import CalledProcessError
+
 
 from inmanta import env
 import pytest
-from subprocess import CalledProcessError
 
 
 def test_basic_install(tmpdir):
     env_dir1 = tmpdir.mkdir("env1").strpath
 
     with pytest.raises(ImportError):
-        import lorem
+        import lorem  # NOQA
 
     venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
     venv1._install(["lorem"])
-    import lorem
-    s = lorem.sentence()
+    import lorem  # NOQA
+    lorem.sentence()
 
 
 def test_basic_install_syntax(tmpdir):
     env_dir1 = tmpdir.mkdir("env1").strpath
     with pytest.raises(ImportError):
-        import yummy
+        import yummy  # NOQA
 
     venv1 = env.VirtualEnv(env_dir1)
 
     venv1.use_virtual_env()
     venv1.install_from_list(["dummy-yummy"])
-    import yummy
+    import yummy  # NOQA
 
 
 def test_full_install_syntax(tmpdir):
     env_dir1 = tmpdir.mkdir("env1").strpath
     with pytest.raises(ImportError):
-        import iplib
+        import iplib  # NOQA
 
     venv1 = env.VirtualEnv(env_dir1)
 
@@ -62,4 +63,31 @@ def test_full_install_syntax(tmpdir):
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
-    import iplib
+    import iplib  # NOQA
+
+
+def test_req_parser(tmpdir):
+    url = "git+https://github.com/bartv/python3-iplib"
+    at_url = "iplib@" + url
+    egg_url = url + "#egg=iplib"
+
+    e = env.VirtualEnv(tmpdir)
+    name, u = e._parse_line(url)
+    assert(name is None)
+    assert(u == url)
+
+    name, u = e._parse_line(at_url)
+    assert(name == "iplib")
+    assert(u == egg_url)
+
+    e._parse_line(egg_url)
+    assert(name == "iplib")
+    assert(u == egg_url)
+
+
+def test_gen_req_file(tmpdir):
+    e = env.VirtualEnv(tmpdir)
+    req = ["lorem == 0.1.1", "lorem > 0.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem"]
+
+    req_lines = [x for x in e._gen_requirements_file(req).split("\n") if len(x) > 0]
+    assert(len(req_lines) == 3)
