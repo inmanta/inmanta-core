@@ -127,7 +127,8 @@ class VirtualEnv(object):
                     item = parsed_req[0]
                     name = item.name
                     version = item.specs
-
+                    if hasattr(item, "url"):
+                        url = item.url
             except pkg_resources.RequirementParseError:
                 url = req_spec
 

@@ -59,7 +59,7 @@ def test_full_install_syntax(tmpdir):
     venv1.use_virtual_env()
     try:
         venv1.install_from_list(
-            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem"])
+            ["lorem == 0.1.1", "dummy-yummy", "iplib@git+https://github.com/bartv/python3-iplib", "lorem", "iplib >=0.0.1"])
     except CalledProcessError as ep:
         print(ep.stdout)
         raise
