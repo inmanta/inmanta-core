@@ -67,7 +67,7 @@ class TestProjectTestCase:
 
         agentProc = data.AgentProcess(uuid=uuid.uuid4(),
                                       hostname="testhost",
-                                      environment=env,
+                                      environment_id=env.uuid,
                                       first_seen=datetime.datetime.now(),
                                       last_seen=datetime.datetime.now(),
                                       sid=uuid.uuid4())

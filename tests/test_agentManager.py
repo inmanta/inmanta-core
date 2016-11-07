@@ -167,8 +167,13 @@ def test_API(motorengine):
     # second session
     ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
+    # third session
+    env3 = uuid4()
+    ts3 = MockSession(uuid4(), env3, ["agentx"], "ts3")
+    am.new_session(ts3)
+
     yield futures.proccess()
-    assert len(am.sessions) == 2
+    assert len(am.sessions) == 3
 
     code, all_agents = yield am.list_agent_processes(None)
     assert code == 200
@@ -182,7 +187,11 @@ def test_API(motorengine):
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
-                               'environment': str(env.uuid)}]}
+                               'environment': str(env.uuid)},
+                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
+                               'last_seen': UNKWN, 'endpoints':
+                               [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
+                               'environment': str(env3)}]}
 
     assertEqualIsh(shouldbe, all_agents, ['hostname', 'name'])
     agentid = all_agents['processes'][0]['id']

@@ -869,7 +869,7 @@ class ServerAgentApiMethod(Method):
             :return The requested node
         """
 
-    @protocol(operation="POST", mt=True, api=True, timeout=5)
+    @protocol(operation="GET", mt=True, api=True, timeout=5)
     def list_agents(self, tid: uuid.UUID):
         """
             List all agent for an environment

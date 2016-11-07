@@ -180,11 +180,10 @@ class AgentManager(object):
             env = yield data.Environment.get_uuid(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
-                return
 
             proc = yield AgentProcess(uuid=uuid.uuid4(),
                                       hostname=nodename,
-                                      environment=env,
+                                      environment_id=tid,
                                       first_seen=now,
                                       last_seen=now,
                                       sid=sid).save()
@@ -195,7 +194,8 @@ class AgentManager(object):
                                          tid=tid,
                                          process=proc,
                                          name=nh).save()
-            yield self.verify_reschedule(env, session.endpoint_names)
+            if env is not None:
+                yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
     def expire_session(self, session: Session, now):
@@ -209,7 +209,6 @@ class AgentManager(object):
             env = yield data.Environment.get_uuid(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
-                return
 
             aps = yield AgentProcess.get_by_sid(sid=sid)
 
@@ -222,11 +221,12 @@ class AgentManager(object):
                 ai.expired = now
                 yield ai.save()
 
-            for endpoint in session.endpoint_names:
-                if (tid, endpoint) in self.tid_endpoint_to_session and self.tid_endpoint_to_session[(tid, endpoint)] == session:
-                    del self.tid_endpoint_to_session[(tid, endpoint)]
+            if env is not None:
+                for endpoint in session.endpoint_names:
+                    if (tid, endpoint) in self.tid_endpoint_to_session and self.tid_endpoint_to_session[(tid, endpoint)] == session:
+                        del self.tid_endpoint_to_session[(tid, endpoint)]
 
-            yield self.verify_reschedule(env, session.endpoint_names)
+                yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
     def flush_agent_presence(self, session: Session, now):
@@ -322,9 +322,9 @@ class AgentManager(object):
             env = yield data.Environment.get_uuid(tid)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
-            aps = yield AgentProcess.get_live_by_env(env)
+            aps = yield AgentProcess.get_by_env(env)
         else:
-            aps = yield AgentProcess.get_live()
+            aps = yield AgentProcess.get()
 
         processes = []
         for p in aps:

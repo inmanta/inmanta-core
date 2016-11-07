@@ -125,7 +125,10 @@ class VirtualEnv(object):
                 parsed_req = list(pkg_resources.parse_requirements(req_spec))
                 if len(parsed_req) > 0:
                     item = parsed_req[0]
-                    name = item.name
+                    if hasattr(item, "name"):
+                        name = item.name
+                    elif hasattr(item, "unsafe_name"):
+                        name = item.unsafe_name
                     version = item.specs
                     if hasattr(item, "url"):
                         url = item.url

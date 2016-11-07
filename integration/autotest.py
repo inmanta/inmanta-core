@@ -181,4 +181,4 @@ def run_test(auth=False, ssl=False, purge_env=False, purge_project=False):
         LOGGER.info("Success")
 
 if __name__ == '__main__':
-    run_test(purge_env=True, purge_project=False)
+    run_test(purge_env=False, purge_project=False)

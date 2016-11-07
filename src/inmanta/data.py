@@ -171,7 +171,9 @@ class AgentProcess(IdDocument):
         :param last_seen When did the server receive data from the node for the last time.
     """
     hostname = StringField(required=True, sparse=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
+    #environment = ReferenceField(reference_document_type=Environment, required=False, sparse=True)
+    # for unknown environments
+    environment_id = UUIDField(required=True, sparse=True)
     first_seen = DateTimeField(required=True)
     last_seen = DateTimeField()
     expired = DateTimeField()
@@ -182,7 +184,7 @@ class AgentProcess(IdDocument):
         yield self.load_references()
         out = {"id": self.uuid,
                "hostname": self.hostname,
-               "environment": str(self.environment.uuid),
+               "environment": str(self.environment_id),
                "first_seen": self.first_seen.isoformat(),
                "last_seen": self.last_seen.isoformat()}
         if self.expired is not None:
@@ -201,7 +203,19 @@ class AgentProcess(IdDocument):
     @classmethod
     @gen.coroutine
     def get_live_by_env(cls, env):
-        nodes = yield cls.objects.filter(expired__is_null=True, environment=env).find_all()
+        nodes = yield cls.objects.filter(expired__is_null=True, environment_id=env.uuid).find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
+    def get(cls):
+        nodes = yield cls.objects.find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
+    def get_by_env(cls, env):
+        nodes = yield cls.objects.filter(environment_id=env.uuid).find_all()
         return nodes
 
     @classmethod
