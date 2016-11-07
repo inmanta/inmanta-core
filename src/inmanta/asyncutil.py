@@ -15,7 +15,13 @@
 
     Contact: code@inmanta.com
 """
+import time
 
-# flake8: noqa: F401
-from inmanta.agent.agent import Agent
-from inmanta.agent.reporting import collect_report
+from tornado import gen
+
+
+@gen.coroutine
+def retry_limited(fun, timeout, interval=0.1):
+    start = time.time()
+    while time.time() - start < timeout and not fun():
+        yield gen.sleep(interval)

@@ -21,6 +21,7 @@ import os
 import logging
 from collections import defaultdict
 import uuid
+import sys
 
 LOGGER = logging.getLogger(__name__)
 
@@ -250,6 +251,18 @@ state_dir = \
 log_dir = \
     Option("config", "log_dir", "/var/log/inmanta",
            "The directory where the server stores log file. Currently this is only for the output of embedded agents.")
+
+
+def get_executable():
+    """os.path.abspath(sys.argv[0]) """
+    try:
+        return os.path.abspath(sys.argv[0])
+    except:
+        return None
+
+executable = \
+    Option("config", "executable", get_executable,
+           "The main python file for the server")
 
 
 def get_default_nodename():

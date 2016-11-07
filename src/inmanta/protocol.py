@@ -376,6 +376,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if config is None:
             body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
             self.respond(body, headers, status)
+            return
 
         self.set_header("Access-Control-Allow-Origin", "*")
         try:
@@ -454,6 +455,7 @@ class RESTTransport(Transport):
         self._handlers = []
         self.token = None
         self.token_lock = locks.Lock()
+        self.connection_timout = 120
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -510,6 +512,8 @@ class RESTTransport(Transport):
     def _execute_call(self, kwargs, http_method, config, message, request_headers):
         headers = {"Content-Type": "application/json"}
         try:
+            if kwargs is None or config is None:
+                raise Exception("This method is unknown! This should not occur!")
             # create message that contains all arguments (id, query args and body)
             if "id" in kwargs and (message is None or "id" not in message):
                 message["id"] = kwargs["id"]
@@ -528,6 +532,15 @@ class RESTTransport(Transport):
                         return self.return_error_msg(500, "%s header set without value." % INMANTA_MT_HEADER, headers)
 
                     headers[INMANTA_MT_HEADER] = message["tid"]
+
+            validate_sid = config[0]["validate_sid"]
+            if validate_sid:
+                if 'sid' not in message:
+                    return self.return_error_msg(500,
+                                                 "This is an agent to server call, it should contain an agent session id",
+                                                 headers)
+                elif not self.validate_sid(message['sid']):
+                    return self.return_error_msg(500, "The sid %s is not valid." % message['sid'], headers)
 
             # validate message against the arguments
             argspec = inspect.getfullargspec(config[2])
@@ -565,6 +578,11 @@ class RESTTransport(Transport):
                         except (ValueError, TypeError):
                             return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
                                                          (arg, arg_type, message[arg].__class__), headers)
+
+            if config[0]["agent_server"]:
+                if 'sid' in all_fields:
+                    del message['sid']
+                    all_fields.remove('sid')
 
             if len(all_fields) > 0 and argspec.varkw is None:
                 return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
@@ -743,7 +761,7 @@ class RESTTransport(Transport):
         try:
             if body is not None:
                 body = json_encode(body)
-            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=120,
+            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=self.connection_timout,
                                   request_timeout=120, ca_certs=ca_certs)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
@@ -796,6 +814,9 @@ class RESTTransport(Transport):
                     LOGGER.error("Login failed: %s %s", e.code, str(e))
                 except Exception as e:
                     LOGGER.error("Login failed: %s", str(e))
+
+    def validate_sid(self, sid):
+        return self.endpoint.validate_sid(sid)
 
 
 class handle(object):
@@ -965,74 +986,72 @@ def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message)
         del future_list[future_key]
 
 
-class Environment(object):
+class Session(object):
     """
         An environment that segments agents connected to the server
     """
 
-    def __init__(self, io_loop, env_id):
-        self._env_id = env_id
-        self._agents = set()
-        self._agent_node_map = {}
-        self._node_queues = defaultdict(lambda: queues.Queue())
+    def __init__(self, sessionstore, io_loop, sid, hang_interval, timout, tid, endpoint_names, nodename):
+        self._sid = sid
+        self._interval = hang_interval
+        self._timeout = timout
+        self._sessionstore = sessionstore
+        self._seen = time.time()
+
+        self.tid = tid
+        self.endpoint_names = endpoint_names
+        self.nodename = nodename
+
         self._io_loop = io_loop
+
         self._replies = {}
         self.check_expire()
+        self._queue = queues.Queue()
+
+        self.client = ReturnClient(str(sid), self)
 
     def check_expire(self):
-        # TODO: add expire
-        self._io_loop.call_later(1, self.check_expire)
+        ttw = self._timeout + self._seen - time.time()
+        if ttw < 0:
+            self.expire(self._seen - time.time())
+        else:
+            self._io_loop.call_later(ttw, self.check_expire)
 
     def get_id(self):
-        return self._env_id
-
-    def get_agents(self):
-        return self._agents
+        return self._sid
 
     id = property(get_id)
-    agents = property(get_agents)
 
-    def add_agent(self, node, agent, interval):
-        if agent in self._agent_node_map and self._agent_node_map[agent] != node:
-            LOGGER.info("Agent %s moved from node %s to node %s", agent, self._agent_node_map[agent], node)
+    def expire(self, timeout):
+        self._sessionstore.expire(self, timeout)
 
-        self._agent_node_map[agent] = node
-        self._agents.add(agent)
+    def seen(self):
+        self._seen = time.time()
 
-    def put_call(self, agent, call_spec):
-        import inmanta.server.config
-
+    def put_call(self, call_spec, timeout=10):
         future = tornado.concurrent.Future()
-        if agent in self._agent_node_map:
-            LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], agent)
-            nodename = self._agent_node_map[agent]
-            q = self._node_queues[nodename]
-            call_spec["reply_id"] = uuid.uuid4()
-            call_spec["agent"] = agent
-            q.put(call_spec)
 
-            _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, inmanta.server.config.timeout.get(),
-                         "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], agent))
-            self._replies[call_spec["reply_id"]] = future
-        else:
-            LOGGER.warning("Call for agent %s ignore because it is not known to the server.", agent)
-            future.set_exception(Exception())
+        LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], self._sid)
+
+        q = self._queue
+        call_spec["reply_id"] = uuid.uuid4()
+        q.put(call_spec)
+        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, timeout,
+                     "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], self._sid))
+        self._replies[call_spec["reply_id"]] = future
 
         return future
 
-    def has_agent(self, agent):
-        return agent in self._agents
-
     @gen.coroutine
-    def get_calls(self, nodename, timeout):
+    def get_calls(self):
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
         """
         try:
-            q = self._node_queues[nodename]
+            q = self._queue
             call_list = []
-            call = yield q.get(timeout=self._io_loop.time() + timeout)
+            call = yield q.get(timeout=self._io_loop.time() + self._interval)
             call_list.append(call)
             while q.qsize() > 0:
                 call = yield q.get()
@@ -1050,6 +1069,9 @@ class Environment(object):
             if not future.done():
                 future.set_result(data)
 
+    def get_client(self):
+        return self.client
+
 
 class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
@@ -1057,7 +1079,7 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
     """
     __methods__ = {}
 
-    def __init__(self, name, io_loop, transport=RESTTransport):
+    def __init__(self, name, io_loop, transport=RESTTransport, interval=60, hangtime=None):
         super().__init__(io_loop, name)
         self._transport = transport
 
@@ -1065,15 +1087,15 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         self._sched = Scheduler(self._io_loop)
 
         self._heartbeat_cb = None
-        self._environments = {}
+        self.agent_handles = {}
+        self._sessions = {}
+        self.interval = interval
+        if hangtime is None:
+            hangtime = interval * 3 / 4
+        self.hangtime = hangtime
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
-
-    def get_agents(self, env_id):
-        assert isinstance(env_id, uuid.UUID)
-        env = self.get_env(env_id)
-        return env.agents
 
     def start(self):
         """
@@ -1091,56 +1113,46 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             self._transport_instance.stop_endpoint()
             LOGGER.debug("Stopped %s", self._transport_instance)
 
-    def put_call(self, env_id, agent, call_spec):
-        """
-            Add a call for the given agent on its work queue. This method returns a future to get the response from the
-            agent.
-        """
-        env = self.get_env(env_id)
-        return env.put_call(agent, call_spec)
+    def validate_sid(self, sid):
+        if isinstance(sid, str):
+            sid = uuid.UUID(sid)
+        return sid in self._sessions
 
-    def get_agent_client(self, env_id, agent):
-        """
-            Get a client to do requests on agent. Returns None if the agent is not known
-        """
-        env = self.get_env(env_id)
-        if not env.has_agent(agent):
-            return None
-        client = ReturnClient("client", self, env_id, agent)
-        return client
+    def get_or_create_session(self, sid, tid, endpoint_names, nodename):
+        if isinstance(sid, str):
+            sid = uuid.UUID(sid)
 
-    def add_heartbeat_callback(self, callback):
-        """
-            Register a function that adds custom heartbeat handling to the server. The server does not wait for this method to
-            return. It will be handed over to the ioloop.
-        """
-        self._heartbeat_cb = callback
+        if sid not in self._sessions:
+            session = self.new_session(sid, tid, endpoint_names, nodename)
+            self._sessions[sid] = session
+        else:
+            session = self._sessions[sid]
+            self.seen(session, endpoint_names)
 
-    def get_env(self, env_id):
-        if isinstance(env_id, str):
-            env_id = uuid.UUID(env_id)
+        return session
 
-        if env_id not in self._environments:
-            self._environments[env_id] = Environment(self._io_loop, env_id)
+    def new_session(self, sid, tid, endpoint_names, nodename):
+        LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
+        return Session(self, self._io_loop, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
-        return self._environments[env_id]
+    def expire(self, session: Session, timeout):
+        LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
+        del self._sessions[session.id]
+
+    def seen(self, session: Session, endpoint_names: list):
+        LOGGER.debug("Seen session with id %s" % (session.get_id()))
+        session.seen()
 
     @handle(methods.HeartBeatMethod.heartbeat)
     @gen.coroutine
-    def heartbeat(self, tid, endpoint_names, nodename, interval):
-        LOGGER.debug("Received heartbeat from %s for agents %s in %s (interval=%d)",
-                     nodename, ",".join(endpoint_names), tid, interval)
+    def heartbeat(self, sid, tid, endpoint_names, nodename):
+        LOGGER.debug("Received heartbeat from %s for agents %s in %s",
+                     nodename, ",".join(endpoint_names), tid)
 
-        env = self.get_env(tid)
-        for endpoint in endpoint_names:
-            env.add_agent(nodename, endpoint, interval)
-
-        if self._heartbeat_cb is not None:
-            future = self._heartbeat_cb(tid, endpoint_names, nodename, interval)
-            self.add_future(future)
+        session = self.get_or_create_session(sid, tid, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-        call_list = yield env.get_calls(nodename, interval)
+        call_list = yield session.get_calls()
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}
@@ -1151,10 +1163,13 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
     @handle(methods.HeartBeatMethod.heartbeat_reply)
     @gen.coroutine
-    def heartbeat_reply(self, tid, reply_id, data):
-        env = self.get_env(tid)
-        env.set_reply(reply_id, data)
-        return 200
+    def heartbeat_reply(self, sid, reply_id, data):
+        try:
+            env = self._sessions[sid]
+            env.set_reply(reply_id, data)
+            return 200
+        except Exception:
+            LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
 
     def get_security_policy(self):
 
@@ -1181,14 +1196,17 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
-    def __init__(self, name, io_loop, heartbeat_interval=10, transport=RESTTransport):
+    def __init__(self, name, io_loop, timeout=120, transport=RESTTransport):
         super().__init__(io_loop, name)
         self._transport = transport
         self._client = None
-        self._heart_beat_interval = heartbeat_interval
         self._sched = Scheduler(self._io_loop)
 
         self._env_id = None
+
+        self.sessionid = uuid.uuid1()
+        self.running = True
+        self.server_timeout = timeout
 
     def get_environment(self):
         return self._env_id
@@ -1209,21 +1227,22 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
-        self._client = Client(self.name, self._transport)
-        # self._sched.add_action(self.perform_heartbeat, self._heart_beat_interval, True)
+        self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
         self._io_loop.add_callback(self.perform_heartbeat)
 
     def stop(self):
-        pass
+        self.running = False
 
     @gen.coroutine
     def perform_heartbeat(self):
         """
             Start a continuous heartbeat call
         """
-        while True:
-            result = yield self._client.heartbeat(tid=str(self._env_id), endpoint_names=self.end_point_names,
-                                                  nodename=self.node_name, interval=self._heart_beat_interval)
+        while self.running:
+            result = yield self._client.heartbeat(sid=str(self.sessionid),
+                                                  tid=str(self._env_id),
+                                                  endpoint_names=self.end_point_names,
+                                                  nodename=self.node_name)
             if result.code == 200:
                 if result.result is not None:
                     if "method_calls" in result.result:
@@ -1233,6 +1252,14 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                         for method_call in method_calls:
                             LOGGER.debug("Received call through heartbeat: %s %s", method_call["method"], method_call["url"])
                             kwargs, config = transport.match_call(method_call["url"], method_call["method"])
+
+                            if config is None:
+                                msg = "An error occurred during heartbeat method call (%s %s): %s" % (
+                                    method_call["method"], method_call["url"], "No such method")
+                                LOGGER.error(msg)
+                                self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
+                                                             {"result": msg, "code": 500})
+
                             body = {}
                             if "body" in method_call and method_call["body"] is not None:
                                 body = method_call["body"]
@@ -1258,14 +1285,12 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                                         msg = result_body["message"]
                                     LOGGER.error("An error occurred during heartbeat method call (%s %s): %s",
                                                  method_call["method"], method_call["url"], msg)
-                                self._client.heartbeat_reply(self._env_id, method_call["reply_id"],
+                                self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
                                                              {"result": result_body, "code": status})
 
                             self._io_loop.add_future(call_result, submit_result)
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s", result.code, result.result)
-
-            yield gen.sleep(1)
 
 
 class ClientMeta(type):
@@ -1322,17 +1347,46 @@ class Client(Endpoint, metaclass=ClientMeta):
         return result
 
 
+class AgentClient(Endpoint, metaclass=ClientMeta):
+    """
+        A client that communicates with end-point based on its configuration
+    """
+
+    def __init__(self, name, sid, ioloop=None, transport=RESTTransport, timeout=120):
+        if ioloop is None:
+            ioloop = IOLoop.current()
+        Endpoint.__init__(self, ioloop, name)
+        self._transport = transport
+        self._transport_instance = None
+        self._sid = sid
+
+        LOGGER.debug("Start transport for client %s", self.name)
+        tr = Transport.create(self._transport, self)
+        self._transport_instance = tr
+
+    @gen.coroutine
+    def _call(self, args, kwargs, protocol_properties):
+        """
+            Execute the rpc call
+        """
+        protocol_properties["method_name"] = get_method_name(protocol_properties)
+
+        if 'sid' not in kwargs:
+            kwargs['sid'] = self._sid
+
+        result = yield self._transport_instance.call(protocol_properties, args, kwargs)
+        return result
+
+
 class ReturnClient(Client, metaclass=ClientMeta):
     """
         A client that uses a return channel to connect to its destination. This client is used by the server to communicate
         back to clients over the heartbeat channel.
     """
 
-    def __init__(self, name, server, tid, agent):
+    def __init__(self, name, session):
         super().__init__(name)
-        self._server = server
-        self._tid = tid
-        self._agent = agent
+        self.session = session
 
     @gen.coroutine
     def _call(self, args, kwargs, protocol_properties):
@@ -1340,8 +1394,9 @@ class ReturnClient(Client, metaclass=ClientMeta):
         url, method, headers, body = self._transport_instance.build_call(protocol_properties, args, kwargs)
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
+        timeout = protocol_properties["timeout"]
         try:
-            return_value = yield self._server.put_call(self._tid, self._agent, call_spec)
+            return_value = yield self.session.put_call(call_spec, timeout=timeout)
         except gen.TimeoutError:
             return Result(code=500, result="")
 

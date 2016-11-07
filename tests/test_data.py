@@ -15,36 +15,18 @@
 
     Contact: bart@inmanta.com
 """
-import os
 import uuid
+import datetime
 
-from mongobox.unittest import MongoTestCase
-from motorengine.connection import connect, disconnect
 from inmanta import data
-from tornado.testing import AsyncTestCase, gen_test
+from inmanta.data import AgentInstance, Agent
+import pytest
 
 
-class MotorEngineTestCase(MongoTestCase, AsyncTestCase):
-    def setUp(self):
-        MongoTestCase.setUp(self)
-        AsyncTestCase.setUp(self)
+@pytest.mark.usefixtures("motorengine")
+class TestProjectTestCase:
 
-        mongo_port = os.getenv('MONGOBOX_PORT')
-        if mongo_port is None:
-            raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
-
-        connect(db="inmanta", host="localhost", port=int(mongo_port), io_loop=self.io_loop)
-
-    def tearDown(self):
-        MongoTestCase.tearDown(self)
-        AsyncTestCase.tearDown(self)
-
-        self.purge_database()
-        disconnect()
-
-
-class testProjectTestCase(MotorEngineTestCase):
-    @gen_test
+    @pytest.mark.gen_test
     def testProject(self):
         project = data.Project(name="test", uuid=uuid.uuid4())
         project = yield project.save()
@@ -57,7 +39,7 @@ class testProjectTestCase(MotorEngineTestCase):
         assert project != other
         assert project.uuid == other.uuid
 
-    @gen_test
+    @pytest.mark.gen_test
     def testEnvironment(self):
         project = data.Project(name="test", uuid=uuid.uuid4())
         project = yield project.save()
@@ -73,3 +55,35 @@ class testProjectTestCase(MotorEngineTestCase):
         projects, envs = yield [f1, f2]
         assert len(projects) == 0
         assert len(envs) == 0
+
+    @pytest.mark.gen_test
+    def testAgentProcess(self):
+        project = data.Project(name="test", uuid=uuid.uuid4())
+        project = yield project.save()
+
+        env = yield data.Environment.objects.create(uuid=uuid.uuid4(),  # @UndefinedVariable
+                                                    name="dev", project_id=project.uuid, repo_url="", repo_branch="")
+        env = yield env.save()
+
+        agentProc = data.AgentProcess(uuid=uuid.uuid4(),
+                                      hostname="testhost",
+                                      environment_id=env.uuid,
+                                      first_seen=datetime.datetime.now(),
+                                      last_seen=datetime.datetime.now(),
+                                      sid=uuid.uuid4())
+        agentProc = yield agentProc.save()
+
+        agi1 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi1", tid=env.uuid)
+        agi1 = yield agi1.save()
+        agi2 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi2", tid=env.uuid)
+        agi2 = yield agi2.save()
+
+        agent = Agent(environment=env, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1)
+        agent = yield agent.save()
+
+        agents = yield Agent.objects.find_all()
+        assert len(agents) == 1
+        agent = agents[0]
+        yield agent.load_references()
+        yield agent.primary.load_references()
+        assert agent.primary.process.uuid == agentProc.uuid

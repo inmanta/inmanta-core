@@ -36,6 +36,7 @@ from inmanta.resources import Resource, Id
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
+from inmanta.agent.reporting import collect_report
 
 LOGGER = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ class Agent(AgentEndPoint):
     """
 
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
-        super().__init__("agent", io_loop, cfg.heartbeat.get())
+        super().__init__("agent", io_loop, timeout=cfg.server_timeout)
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -224,6 +225,7 @@ class Agent(AgentEndPoint):
 
         self._nqs = {}
         self._cache = {}
+        self._enabled = {}
 
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
@@ -255,17 +257,70 @@ class Agent(AgentEndPoint):
         self.latest_code_version = 0
 
         self._sched = Scheduler(io_loop=self._io_loop)
-        if self._splay_interval > 0 and cfg.agent_antisplay.get():
-            self._io_loop.add_callback(self.get_latest_version)
-        self._sched.add_action(self.get_latest_version, self._deploy_interval, self._splay_value)
 
         self.thread_pool = ThreadPoolExecutor(poolsize)
+
+    def start(self):
+        AgentEndPoint.start(self)
+        self.add_future(self.initialize())
 
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
         cache = AgentCache()
         self._nqs[name] = ResourceScheduler(self, self._env_id, cache)
         self._cache[name] = cache
+        self._enabled[name] = None
+
+    def unpause(self, name):
+        if name not in self._enabled:
+            return 404, "No such agent"
+
+        if self._enabled[name] is not None:
+            return
+
+        LOGGER.info("Agent assuming primary role for %s" % name)
+
+        @gen.coroutine
+        def action():
+            yield self.get_latest_version_for_agent(name)
+        self._enabled[name] = action
+        self._sched.add_action(action, self._deploy_interval)
+        return 200
+
+    def pause(self, name):
+        if name not in self._enabled:
+            return 404, "No such agent"
+
+        if self._enabled[name] is None:
+            return
+
+        LOGGER.info("Agent lost primary role for %s" % name)
+
+        token = self._enabled[name]
+        self._sched.remove(token)
+        self._enabled[name] = None
+        return 200
+
+    @protocol.handle(methods.AgentState.set_state)
+    @gen.coroutine
+    def set_state(self, agent, enabled):
+        if enabled:
+            return self.unpause(agent)
+        else:
+            return self.pause(agent)
+
+    @gen.coroutine
+    def initialize(self):
+        for name in self._enabled.keys():
+            result = yield self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
+            if result.code == 200:
+                state = result.result
+                if "enabled" in state and isinstance(state["enabled"], bool):
+                    self.set_state(name, state["enabled"])
+                else:
+                    LOGGER.warn("Server reported invalid state %s" % (repr(state)))
+            else:
+                LOGGER.warn("could not get state from the server")
 
     def is_local(self, agent_name):
         """
@@ -304,7 +359,7 @@ class Agent(AgentEndPoint):
         yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
         yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
-    @protocol.handle(methods.NodeMethod.trigger_agent)
+    @protocol.handle(methods.AgentState.trigger)
     @gen.coroutine
     def trigger_update(self, tid, id):
         """
@@ -312,6 +367,9 @@ class Agent(AgentEndPoint):
         """
         if id not in self.end_point_names:
             return 200
+
+        if self._enabled[id] is None:
+            return 500, "Agent is not enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", id, tid)
         future = self.get_latest_version_for_agent(id)
@@ -658,3 +716,8 @@ class Agent(AgentEndPoint):
             if provider is not None:
                 provider.close()
         return 200
+
+    @protocol.handle(methods.AgentReporting.get_status)
+    @gen.coroutine
+    def get_status(self):
+        return 200, collect_report(self)

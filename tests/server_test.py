@@ -46,7 +46,10 @@ class ServerTest(MongoTestCase, AsyncTestCase):
         AsyncTestCase.setUp(self)
 
         self.state_dir = tempfile.mkdtemp()
-        config.Config.load_config()
+        cfg = os.path.join(self.state_dir, "inmanta.cfg")
+        with open(cfg, "w"):
+            pass
+        config.Config.load_config(cfg)
         config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
         config.Config.set("config", "state-dir", self.state_dir)
         config.Config.set("config", "log-dir", os.path.join(self.state_dir, "logs"))
@@ -55,6 +58,8 @@ class ServerTest(MongoTestCase, AsyncTestCase):
         config.Config.set("compiler_rest_transport", "port", PORT)
         config.Config.set("client_rest_transport", "port", PORT)
         config.Config.set("cmdline_rest_transport", "port", PORT)
+        config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
+        config.Config.set("server", "agent-timeout", "2")
 
         LOGGER.info("Starting server")
         mongo_port = os.getenv('MONGOBOX_PORT')

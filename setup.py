@@ -15,7 +15,8 @@ requires=[
         'motorengine == 0.9.1dev0',
         'mongobox',
         'pytest-tornado',
-        'sphinx_rtd_theme']
+        'sphinx_rtd_theme',
+        'netifaces']
 
 setup(
     name="inmanta",

@@ -79,7 +79,7 @@ class For(GeneratorStatement):
         self.module = module
 
     def __repr__(self):
-        return "For(%s)" % self.variable
+        return "For(%s)" % self.loop_var
 
     def normalize(self):
         self.base.normalize()

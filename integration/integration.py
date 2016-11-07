@@ -245,10 +245,8 @@ class Environment(object):
         while True:
             result = yield self.connection._client.list_agents(self.envid)
             result = unwrap(result)
-            now = dateutil.parser.parse(result["servertime"])
-            agents = [y for x in result["nodes"] for y in x["agents"]]
-            agents = len([x for x in agents if dateutil.parser.parse(x["last_seen"]) > now - timedelta(seconds=60)])
-            if agents >= total:
+            agents = [x for x in result["agents"] if x["state"] == "up"]
+            if len(agents) >= total:
                 return
             else:
                 yield gen.sleep(5)

@@ -162,56 +162,166 @@ class UnknownParameter(Document):
                 }
 
 
-class Node(Document):
+class AgentProcess(IdDocument):
+    """
+        A process in the infrastructure that has (had) a session as an agent.
+
+        :param hostname The hostname of the device.
+        :prama environment To what environment is this process bound
+        :param last_seen When did the server receive data from the node for the last time.
+    """
+    hostname = StringField(required=True, sparse=True)
+    # environment = ReferenceField(reference_document_type=Environment, required=False, sparse=True)
+    # for unknown environments
+    environment_id = UUIDField(required=True, sparse=True)
+    first_seen = DateTimeField(required=True)
+    last_seen = DateTimeField()
+    expired = DateTimeField()
+    sid = UUIDField(required=True, sparse=True)
+
+    @gen.coroutine
+    def to_dict(self):
+        yield self.load_references()
+        out = {"id": self.uuid,
+               "hostname": self.hostname,
+               "environment": str(self.environment_id),
+               "first_seen": self.first_seen.isoformat(),
+               "last_seen": self.last_seen.isoformat()}
+        if self.expired is not None:
+            out["expired"] = self.expired.isoformat()
+        else:
+            out["expired"] = None
+
+        return out
+
+    @classmethod
+    @gen.coroutine
+    def get_live(cls):
+        nodes = yield cls.objects.filter(expired__is_null=True).find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
+    def get_live_by_env(cls, env):
+        nodes = yield cls.objects.filter(expired__is_null=True, environment_id=env.uuid).find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
+    def get(cls):
+        nodes = yield cls.objects.find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
+    def get_by_env(cls, env):
+        nodes = yield cls.objects.filter(environment_id=env.uuid).find_all()
+        return nodes
+
+    @classmethod
+    @gen.coroutine
+    def get_by_sid(cls, sid):
+        objects = yield cls.objects.filter(expired__is_null=True, sid=sid).find_all()
+        if len(objects) == 0:
+            return None
+        elif len(objects) > 1:
+            raise Exception("Multiple objects with the same unique id found!")
+        else:
+            return objects[0]
+
+
+class AgentInstance(IdDocument):
     """
         A physical server/node in the infrastructure that reports to the management server.
 
         :param hostname The hostname of the device.
         :param last_seen When did the server receive data from the node for the last time.
     """
-    hostname = StringField(required=True, unique=True)
-    last_seen = DateTimeField()
-
-    def to_dict(self):
-        return {"hostname": self.hostname, "last_seen": self.last_seen.isoformat()}
-
-    @classmethod
-    @gen.coroutine
-    def get_by_hostname(cls, hostname):
-        nodes = yield cls.objects.filter(hostname=hostname).find_all()
-        if len(nodes) == 0:
-            return None
-
-        return nodes[0]
-
-
-class Agent(Document):
-    """
-        An inmanta agent that runs on a device.
-
-        :param environment The environment this resource is defined in
-        :param node The node on which this agent is deployed
-        :param resources A list of resources that this agent handles
-        :param name The name of this agent
-        :param role The role of this agent
-        :param last_seen When did the server receive data from the node for the last time.
-        :param interval The reporting interval of this agent
-    """
-    environment = ReferenceField(reference_document_type=Environment)
-    node = ReferenceField(reference_document_type=Node, required=True)
+    process = ReferenceField(reference_document_type=AgentProcess, required=True)
     name = StringField(required=True)
-    last_seen = DateTimeField()
-    interval = IntField()
+    expired = DateTimeField()
+    tid = UUIDField(required=True)
 
     @gen.coroutine
     def to_dict(self):
         yield self.load_references()
-        return {"name": self.name,
-                "last_seen": self.last_seen.isoformat(),
-                "interval": self.interval,
-                "node": self.node.hostname,
-                "environment": str(self.environment.uuid),
+        return {"process": str(self.process.uuid),
+                "name": self.name,
+                "id": self.uuid}
+
+    @classmethod
+    @gen.coroutine
+    def activeFor(cls, tid, endpoint):
+        objects = yield cls.objects.filter(tid=tid, name=endpoint, expired__is_null=True).find_all()
+        return objects
+
+    @classmethod
+    @gen.coroutine
+    def active(cls):
+        objects = yield cls.objects.filter(expired__is_null=True).find_all()
+        return objects
+
+
+class Agent(Document):
+    """
+        An inmanta agent
+
+        :param environment The environment this resource is defined in
+        :param name The name of this agent
+        :param last_failover Moment at which the primary was last changed
+        :param paused is this agent paused (if so, skip it)
+        :param primary what is the current active instance (if none, state is down)
+    """
+    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
+    name = StringField(required=True)
+    last_failover = DateTimeField()
+    paused = BooleanField(required=True)
+    primary = ReferenceField(reference_document_type=AgentInstance)
+
+    def get_status(self):
+        if self.paused:
+            return "paused"
+        if self.primary is not None:
+            return "up"
+        return "down"
+
+    @gen.coroutine
+    def to_dict(self):
+        yield self.load_references()
+        if self.last_failover is None:
+            fo = ""
+        else:
+            fo = self.last_failover.isoformat()
+
+        if self.primary is None:
+            prim = ""
+        else:
+            prim = str(self.primary.uuid)
+
+        return {"environment": str(self.environment.uuid),
+                "name": self.name,
+                "last_failover": fo,
+                "paused": self.paused,
+                "primary": prim,
+                "state": self.get_status()
                 }
+
+    @classmethod
+    @gen.coroutine
+    def get(cls, env, endpoint):
+        objects = yield cls.objects.filter(environment=env, name=endpoint).find_all()
+        if len(objects) == 0:
+            return None
+        elif len(objects) > 1:
+            raise Exception("Multiple objects with the same unique id found!")
+        else:
+            return objects[0]
+
+    @classmethod
+    @gen.coroutine
+    def by_env(cls, env):
+        nodes = yield cls.objects.filter(environment=env).find_all()
+        return nodes
 
 
 class Report(Document):
