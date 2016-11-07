@@ -68,24 +68,6 @@ Model in server         On Agent
 |               |
 +---------------+
 
-
-todo:
- - run autotest
-
-todo 2:
-
-pause agent (api)
-
-set primary agent (api)
- - endpoint
-
-Test deploy with paused agents
-
-TODO 3:
-  agent failover modes (max 1, min 1, ....)
-
-
-
 """
 
 
