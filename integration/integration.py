@@ -213,7 +213,7 @@ class Environment(object):
     def _create(self, projectID, env_name):
         env = yield self.connection._client.create_environment(UUID(projectID), env_name)
         envID = env.get_result()["environment"]["id"]
-        LOGGER.info("created env %s %s", self.project, projectID)
+        LOGGER.info("created env %s in %s", envID, projectID)
         return envID
 
     @gen.coroutine

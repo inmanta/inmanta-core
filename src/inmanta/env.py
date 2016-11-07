@@ -22,8 +22,9 @@ import subprocess
 import tempfile
 import hashlib
 import logging
+import re
 
-from pip._vendor import pkg_resources
+import pkg_resources
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ class VirtualEnv(object):
     """
         Creates and uses a virtual environment for this process
     """
+    _egg_fragment_re = re.compile(r"#egg=(?P<name>[^&]*)")
+    _at_fragment_re = re.compile(r"^(?P<name>[^@]+)@(?P<req>.+)")
 
     def __init__(self, env_path):
         LOGGER.info("Creating new virtual environment in %s", env_path)
@@ -91,30 +94,71 @@ class VirtualEnv(object):
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
-    def install(self, requirements_list: []) -> None:
+    def _parse_line(self, req_line: str) -> tuple:
+        """
+            Parse the requirement line
+        """
+        at = VirtualEnv._at_fragment_re.search(req_line)
+        if at is not None:
+            d = at.groupdict()
+            return d["name"], d["req"] + "#egg=" + d["name"]
+
+        egg = VirtualEnv._egg_fragment_re.search(req_line)
+        if egg is not None:
+            d = egg.groupdict()
+            return d["name"], req_line
+
+        return None, req_line
+
+    def _gen_requirements_file(self, requirements_list) -> str:
+        modules = {}
+        for req in requirements_list:
+            name, req_spec = self._parse_line(req)
+
+            if name is None:
+                name = req
+
+            url = None
+            version = None
+            try:
+                # this will fail is an url is supplied
+                parsed_req = list(pkg_resources.parse_requirements(req_spec))
+                if len(parsed_req) > 0:
+                    item = parsed_req[0]
+                    name = item.name
+                    version = item.specs
+                    if hasattr(item, "url"):
+                        url = item.url
+            except pkg_resources.RequirementParseError:
+                url = req_spec
+
+            if name not in modules:
+                modules[name] = {"name": name, "version": []}
+
+            if version is not None:
+                modules[name]["version"].extend(version)
+
+            if url is not None:
+                modules[name]["url"] = url
+
+        requirements_file = ""
+        for module, info in modules.items():
+            version_spec = ""
+            if len(info["version"]) > 0:
+                version_spec = " " + (", ".join(["%s %s" % (a, b) for a, b in info["version"]]))
+
+            if "url" in info:
+                module = info["url"]
+
+            requirements_file += module + version_spec + "\n"
+
+        return requirements_file
+
+    def _install(self, requirements_list: []) -> None:
         """
             Install requirements in the given requirements file
         """
-        modules = {}
-        for req in requirements_list:
-            parsed_req = list(pkg_resources.parse_requirements(req))
-            if len(parsed_req) > 0:
-                item = parsed_req[0]
-                name = item.project_name
-                if item.url is not None:
-                    name = "%s#egg=%s" % (item.url, name)
-
-                if name not in modules:
-                    modules[name] = []
-
-                modules[name].extend(item.specs)
-
-        requirements_file = ""
-        for module, specs in modules.items():
-            if len(specs) == 0:
-                requirements_file += module + "\n"
-            else:
-                requirements_file += "%s %s\n" % (module, ", ".join(["%s %s" % (a, b) for a, b in specs]))
+        requirements_file = self._gen_requirements_file(requirements_list)
 
         try:
             fdnum, path = tempfile.mkstemp()
@@ -177,7 +221,7 @@ class VirtualEnv(object):
         if new_req_hash == current_hash and cache:
             return
 
-        self.install(requirements_list)
+        self._install(requirements_list)
         self._set_current_requirements_hash(new_req_hash)
         for x in requirements_list:
             self.__cache_done.add(x)
