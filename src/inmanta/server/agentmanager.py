@@ -223,7 +223,8 @@ class AgentManager(object):
 
             if env is not None:
                 for endpoint in session.endpoint_names:
-                    if (tid, endpoint) in self.tid_endpoint_to_session and self.tid_endpoint_to_session[(tid, endpoint)] == session:
+                    if ((tid, endpoint) in self.tid_endpoint_to_session and
+                            self.tid_endpoint_to_session[(tid, endpoint)] == session):
                         del self.tid_endpoint_to_session[(tid, endpoint)]
 
                 yield self.verify_reschedule(env, session.endpoint_names)

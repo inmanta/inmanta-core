@@ -171,7 +171,7 @@ class AgentProcess(IdDocument):
         :param last_seen When did the server receive data from the node for the last time.
     """
     hostname = StringField(required=True, sparse=True)
-    #environment = ReferenceField(reference_document_type=Environment, required=False, sparse=True)
+    # environment = ReferenceField(reference_document_type=Environment, required=False, sparse=True)
     # for unknown environments
     environment_id = UUIDField(required=True, sparse=True)
     first_seen = DateTimeField(required=True)
