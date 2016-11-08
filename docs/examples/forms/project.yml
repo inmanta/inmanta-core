@@ -1,0 +1,7 @@
+
+            name: snippet test
+            modulepath: [libs,/tmp/tmpmqtlmkgr]
+            downloadpath: /tmp/tmpmqtlmkgr
+            version: 1.0
+            repo: ['https://github.com/inmanta/']
+            install_mode: prerelease

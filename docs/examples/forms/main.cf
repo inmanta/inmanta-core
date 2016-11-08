@@ -1,0 +1,13 @@
+import param
+import formtest
+
+provider_name = param::one("provider", "formtest::CloudProvider")
+
+std::print(provider_name)
+
+
+users = param::instances("formtest::User")
+for i in users:
+    user_name = param::get("name", i)
+    std::print(user_name)
+end
