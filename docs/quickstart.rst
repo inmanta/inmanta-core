@@ -134,7 +134,8 @@ First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 Deploy the configuration model
 -------------------------------
 
-To deploy the project, we must first register it with the management server, by creating a project and an environment. 
+To deploy the project, we must first register it with the management server, by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...) 
+An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
 
 .. code-block:: sh
 
@@ -152,6 +153,8 @@ Then compile the project and send it to the server:
     inmanta -vvv  export -d
     
 The first time you run this command may take a while, as all dependencies are downloaded.  
+
+When the model is sent to the server, it will start deploying the configuration. 
 To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 
 .. note:: 
@@ -354,17 +357,17 @@ configuration module.
 
     implement DrupalStack using drupalStackImplementation
 
-* Lines 1 to 7 define an entity which is the definition of a *concept* in the configuration model. On lines 2 and 6, typed attributes are defined which we can later on use in the implementation of an entity instance.
+* Lines 7 to 13 define an entity which is the definition of a *concept* in the configuration model. On lines 8 to 12, typed attributes are defined which we can later on use in the implementation of an entity instance.
 * Line 9 defines that *hostname* is an identifying attribute for instances of the DrupalStack entity. This also means that all instances of DrupalStack need to have a unique *hostname* attribute.
-* Lines 11 and 12 define a relation between a Host and our DrupalStack entity. The first relation reads as follows:
+* Lines 17 and 18 define a relation between a Host and our DrupalStack entity. The first relation reads as follows:
 
     * Each DrupalStack instance has exactly one ip::Host instance that is available
       in the webhost attribute.
     * Each ip::Host has zero or one DrupalStack instances that use the host as a
       webserver. The DrupalStack instance is available in the drupal_stack_webhost attribute.
 
-* On lines 14 to 25 an implementation is defined that provides a refinement of the DrupalStack entity. It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining DrupalStack in function of other entities, which on their turn do the same. Inside the implementation the attributes and relations of the entity are available as variables. 
-* On line 27, the *implement* statement links the implementation to the entity.
+* On lines 20 to 31 an implementation is defined that provides a refinement of the DrupalStack entity. It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining DrupalStack in function of other entities, which on their turn do the same. Inside the implementation the attributes and relations of the entity are available as variables. 
+* On line 33, the *implement* statement links the implementation to the entity.
 
 The composition
 ==========================

@@ -280,9 +280,9 @@ class EnvironmentCreate(InmantaCommand, ShowOne):
         parser.add_argument("-n", "--name", dest="name", help="The name of the new environment", required=True)
         parser.add_argument("-p", "--project", dest="project", help="The id of the project this environment belongs to",
                             required=True)
-        parser.add_argument("-r", "--repo-url", dest="repo", required=True,
+        parser.add_argument("-r", "--repo-url", dest="repo", required=False, default="",
                             help="The url of the repository that contains the configuration model")
-        parser.add_argument("-b", "--branch", dest="branch", required=True,
+        parser.add_argument("-b", "--branch", dest="branch", required=False, default="master",
                             help="The branch in the repository that contains the configuration model")
         parser.add_argument("-s", "--save", dest="save", action='store_true', default=False,
                             help="Save the ID of the environment and the server to the .inmanta config file")
