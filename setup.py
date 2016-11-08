@@ -10,7 +10,11 @@ requires=[
         'ply',
         'ruamel.yaml',
         'virtualenv',
+        'motor == 0.2',
+        'pymongo == 2.7',
         'motorengine == 0.9.1dev0',
+        'mongobox',
+        'pytest-tornado',
         'blessings']
 
 setup(
