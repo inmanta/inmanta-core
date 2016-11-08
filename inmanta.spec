@@ -27,6 +27,7 @@ BuildRequires:  scl-utils-build
 BuildRequires:  %scl_require_package rh-python34 python-devel
 BuildRequires:  %scl_require_package rh-python34 python-setuptools
 BuildRequires:  %scl_require_package rh-python34 python-ply
+BuildRequires:  %scl_require_package rh-python34 python-sphinx
 
 Requires:       %scl_require_package rh-python34 runtime
 Requires:       %scl_require_package rh-python34 python-tornado
@@ -43,6 +44,7 @@ Requires:       %scl_require_package rh-python34 python-ruamel-yaml
 BuildRequires:  python3-devel
 BuildRequires:  python3-setuptools
 BuildRequires:  python3-ply
+BuildRequires:  python3-sphinx
 
 Requires:       python3
 Requires:       python3-tornado
@@ -51,11 +53,13 @@ Requires:       python3-execnet
 Requires:       python3-colorlog
 Requires:       python3-ply
 Requires:       python3-PyYAML
+Requires:       python3-virtualenv
 Requires:       python-virtualenv
 Requires:       python3-pymongo
 Requires:       python3-motorengine
 Requires:       python3-devel
 Requires:       python3-cliff
+Requires:       python3-blessings
 Requires:       python3-ruamel-yaml
 %endif
 
