@@ -694,17 +694,34 @@ class RecordList(InmantaCommand, Lister):
     def parser_config(self, parser):
         parser.add_argument("-e", "--environment", dest="env", help="The id of environment", required=True)
         parser.add_argument("-t", "--form-type", dest="form", help="Show records from this form", required=True)
+        parser.add_argument("-a", "--all", dest="all", help="Show all fields",
+                            required=False, action="store_true", default=False)
         return parser
 
     def run_action(self, parsed_args):
         tid = self.to_environment_id(parsed_args.env)
-        result = self.do_request("list_records", "records", arguments=dict(tid=tid, form_type=parsed_args.form))
 
-        data = []
-        for p in result:
-            data.append((p["record_id"], p['changed'])),
+        if not parsed_args.all:
+            result = self.do_request("list_records", "records", arguments=dict(tid=tid, form_type=parsed_args.form))
+            data = []
+            for p in result:
+                data.append((p["record_id"], p['changed'])),
 
-        return (('Record ID', 'Changed'), data)
+            return (('Record ID', 'Changed'), data)
+        else:
+            result = self.do_request("list_records", "records", arguments=dict(
+                tid=tid, form_type=parsed_args.form, include_record=True))
+            fields = []
+            data = []
+            for p in result:
+                fields = p["fields"].keys()
+                values = [p["record_id"], p['changed']]
+                values.extend(p["fields"].values())
+                data.append(values),
+
+            allfields = ['Record ID', 'Changed']
+            allfields.extend(fields)
+            return (allfields, data)
 
 
 class RecordCreate(InmantaCommand, ShowOne):

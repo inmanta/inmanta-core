@@ -17,7 +17,7 @@ This tutorial requires you to have an account on an OpenStack. The following par
 +---------------------+--------------------------------------------------------------------------+
 | password            | Openstack password for your account                                      |
 +---------------------+--------------------------------------------------------------------------+
-| ssh_public_key      | Your public ssh key (the key ittself, not the name of the file it is in) |
+| ssh_public_key      | Your public ssh key (the key itself, not the name of the file it is in)  |
 +---------------------+--------------------------------------------------------------------------+
 | network_name        | The name of the Openstack network to connect the VM to                   |
 +---------------------+--------------------------------------------------------------------------+
@@ -61,13 +61,13 @@ To install config::
 Actual usage
 ----------------------------------
 
-Creating instances of ``vm::Host``, as shown above is not practival: it takes too many parameters and polutes the model.
+Creating instances of ``vm::Host``, as shown above is not practical: it takes too many parameters and pollutes the model.
 Instead, we use the capabilities of Inmanta to encapsulate this complexity.
 
 When building larger models, it is best to create your own ``Host`` type. This type encapsulates all settings that are the same for all hosts.
-Addtionally, if there is some shared infrastructure (such as the ``vm::IaaS`` object, monitoring clusters, shared networks, global parameters,...) it is best to make an infrastructure object. 
+Additionally, if there is some shared infrastructure (such as the ``vm::IaaS`` object, monitoring clusters, shared networks, global parameters,...) it is best to make an infrastructure object. 
 
-For example (full source is at https://github.com/inmanta/inmanta/tree/master/docs/examples/openstackclean)
+For example (`full source here <https://github.com/inmanta/inmanta/tree/master/docs/examples/openstackclean>`_)
 
 We can reduce the main file to:
 

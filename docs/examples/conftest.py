@@ -39,7 +39,7 @@ class SnipDirItem(pytest.Item):
     def run_project(self, root):
         project_dir = root
         env = os.path.join(project_dir, ".env")
-        if os.path.exists(env):
+        if os.path.lexists(env):
             os.remove(env)
         os.symlink(shared_env, env)
 
