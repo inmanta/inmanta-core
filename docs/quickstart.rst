@@ -162,7 +162,7 @@ To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 Accessing your new Drupal server
 ----------------------------------
 
-When the installation is done, you can access your new Drupal server at `http://127.0.0.1:8080/ <http://127.0.0.1:8080/>`_.
+When the installation is done, you can access your new Drupal server at `http://localhost:8080/install.php <http://localhost:8080/install.php>`_.
 
 
 Multi-machine deployment using the CLI
@@ -243,7 +243,7 @@ Using the dashboard
     * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server. 
     * It will automatically install the required software and configure it properly.
 
-#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://127.0.0.1:8080/ <http://127.0.0.1:8080/>`_.
+#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/install.php <http://localhost:8080/install.php>`_.
 
 
 Create your own modules
