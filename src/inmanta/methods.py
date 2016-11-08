@@ -835,15 +835,16 @@ class NodeMethod(Method):
     __method_name__ = "agentproc"
 
     @protocol(operation="GET", index=True)
-    def list_agent_processes(self, environment: uuid.UUID=None):
+    def list_agent_processes(self, environment: uuid.UUID=None, expired: bool=True):
         """
             Return a list of all nodes and the agents for these nodes
 
             :param environment An optional environment. If set, only the agents that belong to this environment are returned
+            :param all  Optional, also show expired.
             :return A list of nodes
         """
 
-    @protocol(operation="GET", id=True,)
+    @protocol(operation="GET", id=True)
     def get_agent_process(self, id: uuid.UUID):
         """
             Return a detailed report for a node

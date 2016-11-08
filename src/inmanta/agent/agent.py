@@ -686,6 +686,9 @@ class Agent(AgentEndPoint):
         if agent not in self.end_point_names:
             return 200
 
+        yield self._ensure_code(tid, resource["id_fields"]["version"],
+                                [resource["id_fields"]["entity_type"]])
+
         provider = None
         try:
             data = resource["fields"]

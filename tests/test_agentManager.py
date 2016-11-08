@@ -175,7 +175,7 @@ def test_API(motorengine):
     yield futures.proccess()
     assert len(am.sessions) == 3
 
-    code, all_agents = yield am.list_agent_processes(None)
+    code, all_agents = yield am.list_agent_processes(None, None)
     assert code == 200
 
     shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
@@ -196,7 +196,7 @@ def test_API(motorengine):
     assertEqualIsh(shouldbe, all_agents, ['hostname', 'name'])
     agentid = all_agents['processes'][0]['id']
 
-    code, all_agents = yield am.list_agent_processes(env.uuid)
+    code, all_agents = yield am.list_agent_processes(env.uuid, None)
     assert code == 200
 
     shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
@@ -212,7 +212,7 @@ def test_API(motorengine):
 
     assertEqualIsh(shouldbe, all_agents)
 
-    code, all_agents = yield am.list_agent_processes(env2.uuid)
+    code, all_agents = yield am.list_agent_processes(env2.uuid, None)
     assert code == 200
 
     shouldbe = {'processes': []}

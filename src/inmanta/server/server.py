@@ -624,8 +624,8 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine
-    def list_agent_processes(self, environment):
-        return (yield self.agentmanager.list_agent_processes(environment))
+    def list_agent_processes(self, environment, expired):
+        return (yield self.agentmanager.list_agent_processes(environment, expired))
 
     @protocol.handle(methods.ServerAgentApiMethod.list_agents)
     @gen.coroutine

@@ -300,14 +300,20 @@ class AgentManager(object):
     # External APIS
 
     @gen.coroutine
-    def list_agent_processes(self, tid):
+    def list_agent_processes(self, tid, expired):
         if tid is not None:
             env = yield data.Environment.get_uuid(tid)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
-            aps = yield AgentProcess.get_by_env(env)
+            if expired:
+                aps = yield AgentProcess.get_by_env(env)
+            else:
+                aps = yield AgentProcess.get_live_by_env(env)
         else:
-            aps = yield AgentProcess.get()
+            if expired:
+                aps = yield AgentProcess.get()
+            else:
+                aps = yield AgentProcess.get_live()
 
         processes = []
         for p in aps:

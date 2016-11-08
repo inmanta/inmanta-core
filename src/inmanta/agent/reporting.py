@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import json
 import logging
 import os
 
@@ -66,7 +65,7 @@ def report_ips(agent):
     v4 = [[y['addr'] for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]]
     v6 = [[y['addr'] for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]]
     out = {"v4": v4, "v6": v6}
-    return json.dumps(out)
+    return out
 
 reports["ips"] = report_ips
 
