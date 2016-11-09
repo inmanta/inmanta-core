@@ -10,9 +10,7 @@ requires=[
         'ply',
         'ruamel.yaml',
         'virtualenv',
-        'motor == 0.2',
-        'pymongo == 2.7',
-        'motorengine == 0.9.1dev0',
+        'motorengine',
         'mongobox',
         'pytest-tornado',
         'blessings']
@@ -31,7 +29,6 @@ setup(
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
-    dependency_links=['https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz#egg=motorengine-0.9.1dev0'],
     install_requires=requires,
     tests_requires=requires + [
         "mongobox",

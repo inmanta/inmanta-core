@@ -12,9 +12,7 @@ python-dateutil
 ply
 ruamel.yaml
 virtualenv
-motor == 0.2
-pymongo == 2.7
-https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz#egg=motorengine
+motorengine
 mongobox
 pytest
 pytest-tornado
