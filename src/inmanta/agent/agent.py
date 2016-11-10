@@ -174,18 +174,36 @@ class ResourceAction(object):
         return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
 
 
+class DummyResourceAction(ResourceAction):
+
+    @gen.coroutine
+    def execute(self, dummy, generation, cache):
+        pass
+
+
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id, cache):
+    def __init__(self, agent, env_id, name, cache):
         self.generation = {}
+        self.cad = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
+        self.name = name
 
     def reload(self, resources):
         for ra in self.generation.values():
             ra.cancel()
+
         self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
+
+        cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
+        for cad in cross_agent_dependencies:
+            ra = DummyResourceAction(self, None)
+            self.cad[cad.resource_str()] = ra
+            self.generation[cad.resource_str()] = ra
+            print(cad)
+
         dummy = ResourceAction(self, None)
         for r in self.generation.values():
             r.execute(dummy, self.generation, self.cache)
@@ -206,7 +224,7 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
 
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=5):
         super().__init__("agent", io_loop, timeout=cfg.server_timeout)
 
         if agent_map is None:
@@ -267,7 +285,7 @@ class Agent(AgentEndPoint):
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
         cache = AgentCache()
-        self._nqs[name] = ResourceScheduler(self, self._env_id, cache)
+        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache)
         self._cache[name] = cache
         self._enabled[name] = None
 
@@ -284,7 +302,8 @@ class Agent(AgentEndPoint):
         def action():
             yield self.get_latest_version_for_agent(name)
         self._enabled[name] = action
-        self._sched.add_action(action, self._deploy_interval)
+        # add splay
+        self._sched.add_action(action, self._deploy_interval, 0)
         return 200
 
     def pause(self, name):

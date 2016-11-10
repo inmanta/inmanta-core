@@ -523,6 +523,10 @@ class ResourceVersion(Document):
     model = ReferenceField(reference_document_type="inmanta.data.ConfigurationModel", required=True)
     attributes = JsonField()
     status = StringField(default="")
+    # internal field to handle cross agent dependencies
+    # if this resource is updated, it must notify all RV's in this list
+    # the list contains full rv id's
+    provides = ListField(StringField(), default=[])
 
     def to_dict(self):
         data = {}
