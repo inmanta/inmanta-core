@@ -174,11 +174,26 @@ class ResourceAction(object):
         return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
 
 
-class DummyResourceAction(ResourceAction):
+class RemoteResourceAction(ResourceAction):
+
+    def __init__(self, scheduler, resource_id):
+        super(RemoteResourceAction, self).__init__(scheduler, None)
+        self.resource_id = resource_id
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
-        pass
+        yield dummy.future
+        try:
+            result = yield self.scheduler.agent._client.get_resource(self.scheduler.agent.get_environment(), str(self.resource_id), status=True)
+            status = result.result['status']
+            if status == "deployed":
+                # TODO: remote reload propagation
+                self.future.set_result(ResourceActionResult(True, False, False))
+            else:
+                self.future.set_result(ResourceActionResult(False, False, False))
+            self.running = False
+        except:
+            LOGGER.exception("could not get status for remote resource")
 
 
 class ResourceScheduler(object):
@@ -199,7 +214,7 @@ class ResourceScheduler(object):
 
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
-            ra = DummyResourceAction(self, None)
+            ra = RemoteResourceAction(self, cad)
             self.cad[cad.resource_str()] = ra
             self.generation[cad.resource_str()] = ra
             print(cad)
@@ -224,7 +239,7 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
 
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=5):
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
         super().__init__("agent", io_loop, timeout=cfg.server_timeout)
 
         if agent_map is None:

@@ -282,7 +282,7 @@ class ResourceMethod(Method):
     """
     __method_name__ = "resource"
 
-    @protocol(operation="GET", id=True, mt=True)
+    @protocol(operation="GET", id=True, mt=True, agent_server=True, api=True, validate_sid=False)
     def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None):
         """
             Return a resource with the given id.
