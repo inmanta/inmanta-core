@@ -138,7 +138,7 @@ Using the API
 ---------------------------
 
 Forms can also be access via the API. This is similar to the CLI, but easier to use in scripts. 
-Examples use `httpie <https://httpie.org/>'_
+Examples use `httpie <https://httpie.org/>`_
 
 Important is that the environment is passed as a header called *X-Inmanta-tid*
 

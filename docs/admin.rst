@@ -20,8 +20,9 @@ IMS consists of several components:
 
 
 There are three main deployment models:
+
 * embedded: all components are started with the deploy command, the server is terminated after the deploy is finished. Suitable only for development.
-* push to server: the server is deployed independently. Models are compiled on the developer machine and pushed to the server directly. Suitable only small setups.
+* push to server: the server is deployed independently. Models are compiled on the developer machine and pushed to the server directly. Suitable only for small setups.
 * autonomous server: the server is deployed independently. Models are stored in git repos and compiled by the server.
 
 

@@ -46,7 +46,7 @@ The model code is in the ``.cf`` files. Each file forms a namespace. The namespa
 +-----------------------------------------+----------------------------------+
 | test/model/policy/_init.cf              | test::policy                     |
 +-----------------------------------------+----------------------------------+
-| test/model/policy/other.cf              | test::policy::subsubmodule       |
+| test/model/policy/other.cf              | test::policy::other              |
 +-----------------------------------------+----------------------------------+
 
 Modules are only loaded when they are imported by a loaded module or the ``main.cf`` file of the project. 
@@ -174,7 +174,7 @@ Entities model configuration concepts. They are like classes in other object ori
 Entity names must start with an upper case character and can consist of the characters: ``a-zA-Z_0-9-``
 
 Entities can have a number of attributes and relations to other entities.  
-Entity attributes have primitive types (string, number, with an optional default value.
+Entity attributes have primitive types, with an optional default value.
 
 Entities can inherit from multiple other entities. Entities inherits attributes and relations from parent entities.
 It is not possible to override or rename attributes or relations. All entities inherit from ``std::Entity``.

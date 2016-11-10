@@ -9,9 +9,9 @@ Here we explain all the features and options of Inmanta. If you're just looking 
 
 .. toctree::
 
+    language
     commands
     config
-    language
     admin
     mod_dev
     dev
