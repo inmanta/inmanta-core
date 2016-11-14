@@ -1148,6 +1148,11 @@ class Server(protocol.ServerEndpoint):
             model.deployed = True
             yield model.save()
 
+        waitingagents = set([Id.parse_id(prov).get_agent_name() for prov in resv.provides])
+
+        for agent in waitingagents:
+            yield self.get_agent_client(tid, agent).resource_event(tid, agent, id, status)
+
         return 200
 
     # Project handlers

@@ -915,7 +915,7 @@ class AgentResourceEvent(Method):
     @protocol(operation="PUT", id=True, mt=True, server_agent=True, timeout=5)
     def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
         """
-            Request an agent to reload resources
+            Tell an agent a resource it waits for has been updated
 
             :param tid The environment this agent is defined in
             :param id The name of the agent
