@@ -30,6 +30,7 @@ import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assertEqualIsh, UNKWN
 from inmanta.config import Config
+from inmanta.agent.config import agent_interval
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -123,6 +124,10 @@ class Provider(ResourceHandler):
         if cls.isset(agent, key):
             del cls._STATE[agent][key]
 
+    @classmethod
+    def reset(cls):
+        cls._STATE = defaultdict(dict)
+
 
 @provider("test::Fail", name="test_fail")
 class Fail(ResourceHandler):
@@ -146,6 +151,21 @@ class Fail(ResourceHandler):
         raise Exception()
 
 waiter = Condition()
+
+
+@gen.coroutine
+def waitForDone(client, env_id, version):
+    # unhang waiters
+    result = yield client.get_version(env_id, version)
+    assert result.code == 200
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(env_id, version)
+        if result.result["model"]["done"] > 0:
+            waiter.acquire()
+            waiter.notifyAll()
+            waiter.release()
+        yield gen.sleep(0.1)
+    return result
 
 
 @provider("test::Wait", name="test_wait")
@@ -188,6 +208,7 @@ def test_dryrun_and_deploy(io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -298,6 +319,7 @@ def test_spontaneous_deploy(io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -379,6 +401,7 @@ def test_dual_agent(io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -472,6 +495,7 @@ def test_snapshot_restore(client, server, io_loop):
     """
         create a snapshot and restore it again
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -638,6 +662,7 @@ def test_get_facts(client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -693,6 +718,7 @@ def test_get_set_param(client, server, io_loop):
     """
         Test getting and setting params
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -708,6 +734,7 @@ def test_unkown_parameters(client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -765,6 +792,7 @@ def test_fail(client, server, io_loop):
     """
         Test results when a step fails
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -857,6 +885,7 @@ def test_wait(client, server, io_loop):
     """
         Test results for a cancel
     """
+    Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -980,3 +1009,103 @@ def test_wait(client, server, io_loop):
     assert states['test::Resource[agent1,key=key3],v=%d' % version1] == "deployed"
     assert states['test::Resource[agent1,key=key4],v=%d' % version1] == "deployed"
     assert states['test::Resource[agent1,key=key5],v=%d' % version1] == ""
+
+
+@pytest.mark.gen_test
+def test_cross_agent_deps(io_loop, server, client):
+    """
+        deploy a configuration model with cross host dependency
+    """
+    Provider.reset()
+    # config for recovery mechanism
+    Config.set("config", "agent-interval", "10")
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    agent2 = Agent(io_loop, hostname="node2", env_id=env_id, agent_map={"agent2": "localhost"},
+                   code_loader=False)
+    agent2.add_end_point_name("agent2")
+    agent2.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+
+    Provider.set("agent1", "key2", "incorrect_value")
+    Provider.set("agent1", "key3", "value")
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Wait[agent1,key=key2],v=%d' % version, 'test::Resource[agent2,key=key3],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key3',
+                  'value': 'value3',
+                  'id': 'test::Resource[agent2,key=key3],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key4',
+                  'value': 'value4',
+                  'id': 'test::Resource[agent2,key=key4],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(env_id, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 4
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.get_version(env_id, version)
+    assert result.code == 200
+
+    while result.result["model"]["done"] == 0:
+        result = yield client.get_version(env_id, version)
+        yield gen.sleep(0.1)
+
+    result = yield waitForDone(client, env_id, version)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    assert Provider.isset("agent1", "key1")
+    assert Provider.get("agent1", "key1") == "value1"
+    assert Provider.get("agent1", "key2") == "value2"
+    assert Provider.get("agent2", "key3") == "value3"
+
+    agent.stop()
+    agent2.stop()
