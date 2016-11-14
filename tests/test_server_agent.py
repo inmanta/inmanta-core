@@ -30,7 +30,6 @@ import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assertEqualIsh, UNKWN
 from inmanta.config import Config
-from inmanta.agent.config import agent_interval
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -314,7 +313,7 @@ def test_dryrun_and_deploy(io_loop, server, client):
     agent.stop()
 
 
-@pytest.mark.gen_test
+@pytest.mark.gen_test(timeout=30)
 def test_spontaneous_deploy(io_loop, server, client):
     """
         dryrun and deploy a configuration model

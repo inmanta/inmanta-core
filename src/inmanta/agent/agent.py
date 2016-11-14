@@ -184,7 +184,8 @@ class RemoteResourceAction(ResourceAction):
     def execute(self, dummy, generation, cache):
         yield dummy.future
         try:
-            result = yield self.scheduler.agent._client.get_resource(self.scheduler.agent.get_environment(), str(self.resource_id), status=True)
+            result = yield self.scheduler.agent._client.get_resource(self.scheduler.agent.get_environment(),
+                                                                     str(self.resource_id), status=True)
             status = result.result['status']
             if status == '' or self.future.done():
                 # wait for event
@@ -195,7 +196,7 @@ class RemoteResourceAction(ResourceAction):
             else:
                 self.future.set_result(ResourceActionResult(False, False, False))
             self.running = False
-        except:
+        except Exception:
             LOGGER.exception("could not get status for remote resource")
 
     def notify(self):

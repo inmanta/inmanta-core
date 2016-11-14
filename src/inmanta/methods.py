@@ -920,7 +920,7 @@ class AgentResourceEvent(Method):
             :param tid The environment this agent is defined in
             :param id The name of the agent
             :param resource The resource ID of the resource being updated
-            :param state State the resource acquired (deployed, skipped, canceled) 
+            :param state State the resource acquired (deployed, skipped, canceled)
         """
 
 
