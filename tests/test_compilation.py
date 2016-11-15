@@ -25,6 +25,7 @@ from itertools import groupby
 import sys
 from io import StringIO
 
+
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
@@ -569,6 +570,96 @@ implement Jos using std::none
 c = Jos(bar = ["X"])
 """)
         with pytest.raises(RuntimeException):
+            compiler.do_compile()
+
+    def testNewRelationSyntax(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1.tests [0:] -- Test2.test1 [1]
+
+a = Test1(tests=[Test2(),Test2()])
+b = Test1()
+Test2(test1 = b)
+""")
+        types, root = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
+        assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
+
+    def testNewRelationWithAnnotationSyntax(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+annotation = 5
+
+Test1.tests [0:] annotation Test2.test1 [1]
+
+a = Test1(tests=[Test2(),Test2()])
+b = Test1()
+Test2(test1 = b)
+""")
+        types, root = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
+        assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
+
+    def testNewRelationUniDir(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1.tests [0:] -- Test2
+
+a = Test1(tests=[Test2(),Test2()])
+
+""")
+        types, root = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
+
+    def testNewRelationUniDirDoubleDefine(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1.tests [0:] -- Test2
+
+Test2.xx [1] -- Test1.tests [0:]
+""")
+        with pytest.raises(DuplicateException):
             compiler.do_compile()
 
     def testIssue164FQNInWhen(self):

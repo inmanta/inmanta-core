@@ -166,22 +166,106 @@ Test tests [3] -- [:10] Foo bars
     assert statements[0].requires is None
 
 
-def test_directional_relation():
+def test_new_relation():
     """Test definition of relations
     """
     statements = parse_code("""
-Test tests [0:] -> [5:10] Foo bars
+Test.bar [1] -- Foo.tests [5:10]
 """)
 
-    assert len(statements) == 1
+    assert len(statements) == 1, "Should return four statements"
+    rel = statements[0]
+
+    assert len(rel.left) == 3
+    assert len(rel.right) == 3
+
+    assert rel.left[0] == "Test"
+    assert rel.right[0] == "Foo"
+
+    assert rel.left[1] == "tests"
+    assert rel.right[1] == "bar"
+
+    assert rel.left[2] == (5, 10)
+    assert rel.right[2] == (1, 1)
     assert statements[0].requires is None
 
+
+def test_new_relation_with_annotations():
+    """Test definition of relations
+    """
     statements = parse_code("""
-Test tests [0:] <- [5:10] Foo bars
+Test.bar [1] foo,bar Foo.tests [5:10]
 """)
 
-    assert len(statements) == 1
+    assert len(statements) == 1, "Should return four statements"
+    rel = statements[0]
+
+    assert len(rel.left) == 3
+    assert len(rel.right) == 3
+
+    assert rel.left[0] == "Test"
+    assert rel.right[0] == "Foo"
+
+    assert rel.left[1] == "tests"
+    assert rel.right[1] == "bar"
+
+    assert rel.left[2] == (5, 10)
+    assert rel.right[2] == (1, 1)
     assert statements[0].requires is None
+    assert len(rel.annotations) == 2
+    assert rel.annotations[0].name == "foo"
+    assert rel.annotations[1].name == "bar"
+
+
+def test_new_relation_unidir():
+    """Test definition of relations
+    """
+    statements = parse_code("""
+Test.bar [1] -- Foo
+""")
+
+    assert len(statements) == 1, "Should return four statements"
+    rel = statements[0]
+
+    assert len(rel.left) == 3
+    assert len(rel.right) == 3
+
+    assert rel.left[0] == "Test"
+    assert rel.right[0] == "Foo"
+
+    assert rel.left[1] is None
+    assert rel.right[1] == "bar"
+
+    assert rel.left[2] is None
+    assert rel.right[2] == (1, 1)
+    assert statements[0].requires is None
+
+
+def test_new_relation_with_annotations_unidir():
+    """Test definition of relations
+    """
+    statements = parse_code("""
+Test.bar [1] foo,bar Foo
+""")
+
+    assert len(statements) == 1, "Should return four statements"
+    rel = statements[0]
+
+    assert len(rel.left) == 3
+    assert len(rel.right) == 3
+
+    assert rel.left[0] == "Test"
+    assert rel.right[0] == "Foo"
+
+    assert rel.left[1] is None
+    assert rel.right[1] == "bar"
+
+    assert rel.left[2] is None
+    assert rel.right[2] == (1, 1)
+    assert statements[0].requires is None
+    assert len(rel.annotations) == 2
+    assert rel.annotations[0].name == "foo"
+    assert rel.annotations[1].name == "bar"
 
 
 def test_implementation():
