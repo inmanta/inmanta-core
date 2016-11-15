@@ -583,6 +583,32 @@ std::Host(name="vm1", os=ubuntu::ubuntu1404)
 """)
         compiler.do_compile()
 
+    def testIssue201DoubleSet(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1 test1 [1] -- [0:] Test2 test2
+
+a=Test1()
+b=Test2()
+
+b.test1 = a
+b.test1 = a
+
+std::print(b.test1)
+""")
+
+        (types, _) = compiler.do_compile()
+        a = types["__config__::Test1"].get_all_instances()[0]
+        assert len(a.get_attribute("test2").value)
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 

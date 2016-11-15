@@ -106,6 +106,8 @@ class AttributeVariable(ResultVariable):
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
+            else:
+                return
         if not isinstance(value, Unknown) and self.type is not None:
             self.type.validate(value)
         self.value = value
