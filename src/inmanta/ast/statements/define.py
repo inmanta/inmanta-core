@@ -25,7 +25,7 @@ from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.statements import TypeDefinitionStatement, Statement
-from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException
+from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -382,6 +382,12 @@ class DefineIndex(DefinitionStatement):
             Add the index to the entity
         """
         entity_type = self.namespace.get_type(self.type)
+
+        allattributes = entity_type.get_all_attribute_names()
+        for attribute in self.attributes:
+            if attribute not in allattributes:
+                raise NotFoundException(self, attribute, "Index defined on attribute that does not exist")
+
         entity_type.add_index(self.attributes)
 
 
