@@ -299,8 +299,8 @@ class Deploy(object):
             return []
 
         agents = yield self.get_agents_of_for_model(version)
-        for agent in agents:
-            self._agent.add_end_point_name(agent)
+        for xagent in agents:
+            self._agent.add_end_point_name(xagent)
 
         active_agents = []
         while len([True for a in agents if a in active_agents]) == 0:
