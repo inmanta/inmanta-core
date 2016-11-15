@@ -639,7 +639,7 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.ResourceMethod.get_resource)
     @gen.coroutine
-    def get_resource_state(self, tid, id, logs):
+    def get_resource(self, tid, id, logs, status):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
@@ -648,9 +648,11 @@ class Server(protocol.ServerEndpoint):
         if len(resv) == 0:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
-        ra = data.ResourceAction(resource_version=resv[0], action="pull", level="INFO", timestamp=datetime.datetime.now(),
-                                 message="Individual resource version pulled by client")
-        yield ra.save()
+#         ra = data.ResourceAction(resource_version=resv[0], action="pull", level="INFO", timestamp=datetime.datetime.now(),
+#                                  message="Individual resource version pulled by client")
+#         yield ra.save()
+        if status is not None and status:
+            return 200, {"status": resv[0].status}
 
         action_list = []
         if bool(logs):
@@ -809,29 +811,43 @@ class Server(protocol.ServerEndpoint):
 
         agents = set()
         rv_list = []
+
         ra_list = []
+        # lookup for all RV's, lookup by resource id
+        rv_dict = {}
+        # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
+        cross_agent_dep = []
+
         for res_dict in resources:
+            # parse and extract ID
             resource_obj = Id.parse_id(res_dict['id'])
             resource_id = resource_obj.resource_str()
 
+            # collect all agents
             agents.add(resource_obj.get_agent_name())
+
+            # does this resource already exists
             if resource_id in resources_dict:
+                # update it
                 res_obj = resources_dict[resource_id]
                 res_obj.version_latest = version
 
             else:
+                # create it
                 res_obj = data.Resource(environment=env, resource_id=resource_id,
                                         resource_type=resource_obj.get_entity_type(),
                                         agent=resource_obj.get_agent_name(),
                                         attribute_name=resource_obj.get_attribute(),
                                         attribute_value=resource_obj.get_attribute_value(), version_latest=version)
 
+            # for state handling
             if "state_id" in res_dict:
                 if res_dict["state_id"] == "":
                     res_dict["state_id"] = resource_id
                 if not res_obj.holds_state:
                     res_obj.holds_state = True
 
+            # save it
             yield res_obj.save()
 
             attributes = {}
@@ -841,9 +857,25 @@ class Server(protocol.ServerEndpoint):
 
             rv = data.ResourceVersion(environment=env, rid=res_dict['id'], resource=res_obj, model=cm, attributes=attributes)
             rv_list.append(rv)
+            rv_dict[resource_id] = rv
 
             ra = data.ResourceAction(resource_version=rv, action="store", level="INFO", timestamp=datetime.datetime.now())
             ra_list.append(ra)
+
+            # find cross agent dependencies
+            agent = resource_obj.get_agent_name()
+            if "requires" not in attributes:
+                LOGGER.warning("Received resource without requires attribute (%s)" % resource_id)
+            else:
+                for req in attributes["requires"]:
+                    rid = Id.parse_id(req)
+                    if rid.get_agent_name() != agent:
+                        # it is a CAD
+                        cross_agent_dep.append((resource_obj, rid))
+
+        # hook up all CAD's
+        for f, t in cross_agent_dep:
+            rv_dict[t.resource_str()].provides.append(str(f))
 
         if len(rv_list) > 0:
             yield data.ResourceVersion.objects.bulk_insert(rv_list)  # @UndefinedVariable
@@ -1115,6 +1147,11 @@ class Server(protocol.ServerEndpoint):
 
             model.deployed = True
             yield model.save()
+
+        waitingagents = set([Id.parse_id(prov).get_agent_name() for prov in resv.provides])
+
+        for agent in waitingagents:
+            yield self.get_agent_client(tid, agent).resource_event(tid, agent, id, status)
 
         return 200
 

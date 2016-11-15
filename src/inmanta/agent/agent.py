@@ -174,22 +174,68 @@ class ResourceAction(object):
         return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
 
 
+class RemoteResourceAction(ResourceAction):
+
+    def __init__(self, scheduler, resource_id):
+        super(RemoteResourceAction, self).__init__(scheduler, None)
+        self.resource_id = resource_id
+
+    @gen.coroutine
+    def execute(self, dummy, generation, cache):
+        yield dummy.future
+        try:
+            result = yield self.scheduler.agent._client.get_resource(self.scheduler.agent.get_environment(),
+                                                                     str(self.resource_id), status=True)
+            status = result.result['status']
+            if status == '' or self.future.done():
+                # wait for event
+                pass
+            elif status == "deployed":
+                # TODO: remote reload propagation
+                self.future.set_result(ResourceActionResult(True, False, False))
+            else:
+                self.future.set_result(ResourceActionResult(False, False, False))
+            self.running = False
+        except Exception:
+            LOGGER.exception("could not get status for remote resource")
+
+    def notify(self):
+        if not self.future.done():
+            self.future.set_result(ResourceActionResult(True, False, False))
+
+
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id, cache):
+    def __init__(self, agent, env_id, name, cache):
         self.generation = {}
+        self.cad = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
+        self.name = name
 
     def reload(self, resources):
         for ra in self.generation.values():
             ra.cancel()
+
         self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
+
+        cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
+        for cad in cross_agent_dependencies:
+            ra = RemoteResourceAction(self, cad)
+            self.cad[str(cad)] = ra
+            self.generation[cad.resource_str()] = ra
+
         dummy = ResourceAction(self, None)
         for r in self.generation.values():
             r.execute(dummy, self.generation, self.cache)
         dummy.future.set_result(ResourceActionResult(True, False, False))
+
+    def notify_ready(self, resourceid):
+        if resourceid not in self.cad:
+            LOGGER.warning("received CAD notification that was not required, %s", resourceid)
+            return
+        self.cad[resourceid].notify()
 
     def dump(self):
         print("Waiting:")
@@ -267,7 +313,7 @@ class Agent(AgentEndPoint):
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
         cache = AgentCache()
-        self._nqs[name] = ResourceScheduler(self, self._env_id, cache)
+        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache)
         self._cache[name] = cache
         self._enabled[name] = None
 
@@ -284,7 +330,8 @@ class Agent(AgentEndPoint):
         def action():
             yield self.get_latest_version_for_agent(name)
         self._enabled[name] = action
-        self._sched.add_action(action, self._deploy_interval)
+        # add splay
+        self._sched.add_action(action, self._deploy_interval, 0)
         return 200
 
     def pause(self, name):
@@ -406,6 +453,27 @@ class Agent(AgentEndPoint):
                 LOGGER.error("Failed to receive update", e)
 
             self._nqs[agent].reload(resources)
+
+    @protocol.handle(methods.AgentResourceEvent.resource_event)
+    @gen.coroutine
+    def resource_event(self, tid, id: str, resource: str, state: str):
+        assert tid == self._env_id
+
+        if id not in self.end_point_names:
+            LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
+                        tid, id, resource, state)
+            return 200
+
+        if state != "deployed":
+            LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s",
+                        tid, id, resource, state)
+        else:
+            LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
+                         tid, id, resource, state)
+            agent = self._nqs[id]
+            agent.notify_ready(resource)
+
+        return 200
 
     @protocol.handle(methods.AgentDryRun.do_dryrun)
     @gen.coroutine

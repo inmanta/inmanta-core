@@ -282,14 +282,15 @@ class ResourceMethod(Method):
     """
     __method_name__ = "resource"
 
-    @protocol(operation="GET", id=True, mt=True)
-    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None):
+    @protocol(operation="GET", id=True, mt=True, agent_server=True, api=True, validate_sid=False)
+    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None):
         """
             Return a resource with the given id.
 
             :param tid The id of the environment this resource belongs to
             :param id Get the resource with the given id
             :param logs Include the logs in the response
+            :param status return only resou
         """
 
     @protocol(operation="GET", mt=True, index=True, agent_server=True)
@@ -301,15 +302,6 @@ class ResourceMethod(Method):
             :param agent The agent
             :param version The version to retrieve. If none, the latest available version is returned. With a specific version
                            that version is returned, even if it has not been released yet.
-        """
-
-    @protocol(operation="HEAD", mt=True, id=True, destination="agent")
-    def get_resource_state(self, tid: uuid.UUID, id: str):
-        """
-            Get the status of the resource
-
-            :param tid The id of the environment this resource belongs to
-            :param id Get the status of the resource with the given id from the agent
         """
 
     @protocol(operation="POST", mt=True, id=True, agent_server=True)
@@ -911,7 +903,24 @@ class AgentState(Method):
 
             :param tid The environment this agent is defined in
             :param id The name of the agent
-            :return The requested node
+        """
+
+
+class AgentResourceEvent(Method):
+    """
+        Methods to send event to the server
+    """
+    __method_name__ = "event"
+
+    @protocol(operation="PUT", id=True, mt=True, server_agent=True, timeout=5)
+    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
+        """
+            Tell an agent a resource it waits for has been updated
+
+            :param tid The environment this agent is defined in
+            :param id The name of the agent
+            :param resource The resource ID of the resource being updated
+            :param state State the resource acquired (deployed, skipped, canceled)
         """
 
 
