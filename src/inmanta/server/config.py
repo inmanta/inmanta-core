@@ -154,7 +154,7 @@ dash_path = \
            "The path on the local file system where the dashboard can be found")
 
 agent_timeout = \
-    Option("server", "agent-timeout", 2,
+    Option("server", "agent-timeout", 30,
            "Time before an agent is considered to be offline", is_time)
 
 

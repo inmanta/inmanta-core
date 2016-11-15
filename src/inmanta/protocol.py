@@ -449,13 +449,13 @@ class RESTTransport(Transport):
     __data__ = ("message", "blob")
     __transport_name__ = "rest"
 
-    def __init__(self, endpoint):
+    def __init__(self, endpoint, connection_timout=120):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
         self.token = None
         self.token_lock = locks.Lock()
-        self.connection_timout = 120
+        self.connection_timout = connection_timout
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -1361,7 +1361,7 @@ class AgentClient(Endpoint, metaclass=ClientMeta):
         self._sid = sid
 
         LOGGER.debug("Start transport for client %s", self.name)
-        tr = Transport.create(self._transport, self)
+        tr = self._transport(self, connection_timout=timeout)
         self._transport_instance = tr
 
     @gen.coroutine

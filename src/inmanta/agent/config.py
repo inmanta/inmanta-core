@@ -62,8 +62,8 @@ agent_antisplay = \
            "run the agent at startup, even if a splay time is set", is_bool)
 
 server_timeout = \
-    Option("config", "server-timeout", 120,
-           "Amount of time to wait for a response from the server before we try to reconnect", is_time)
+    Option("config", "server-timeout", 125,
+           "Amount of time to wait for a response from the server before we try to reconnect, must be smaller than server.agent-hold", is_time)
 
 
 ##############################

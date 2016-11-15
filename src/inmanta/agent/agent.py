@@ -207,7 +207,7 @@ class Agent(AgentEndPoint):
     """
 
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
-        super().__init__("agent", io_loop, timeout=cfg.server_timeout)
+        super().__init__("agent", io_loop, timeout=cfg.server_timeout.get())
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -276,7 +276,7 @@ class Agent(AgentEndPoint):
             return 404, "No such agent"
 
         if self._enabled[name] is not None:
-            return
+            return 200, "already running"
 
         LOGGER.info("Agent assuming primary role for %s" % name)
 
@@ -292,14 +292,14 @@ class Agent(AgentEndPoint):
             return 404, "No such agent"
 
         if self._enabled[name] is None:
-            return
+            return 200, "already paused"
 
         LOGGER.info("Agent lost primary role for %s" % name)
 
         token = self._enabled[name]
         self._sched.remove(token)
         self._enabled[name] = None
-        return 200
+        return 200, "paused"
 
     @protocol.handle(methods.AgentState.set_state)
     @gen.coroutine
