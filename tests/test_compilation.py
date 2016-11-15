@@ -700,6 +700,16 @@ std::print(b.test1)
         a = types["__config__::Test1"].get_all_instances()[0]
         assert len(a.get_attribute("test2").value)
 
+    def testIssue212BadIndexDefintion(self):
+        self.setUpForSnippet("""
+entity Test1:
+    string x
+end
+index Test1(x,y)
+""")
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
