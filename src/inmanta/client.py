@@ -542,7 +542,9 @@ class VersionReport(InmantaCommand, Command):
         term = Terminal()
         agents = defaultdict(lambda: defaultdict(lambda: []))
         for res in result["resources"]:
-            if (len(res["actions"]) > 0 and len(res["actions"][0]["data"]) > 0) or parsed_args.details:
+            if (len(res["actions"]) > 0 and
+                    res["actions"][0]["data"] is not None and
+                    len(res["actions"][0]["data"]) > 0) or parsed_args.details:
                 agents[res["id_fields"]["agent_name"]][res["id_fields"]["entity_type"]].append(res)
 
         for agent in sorted(agents.keys()):

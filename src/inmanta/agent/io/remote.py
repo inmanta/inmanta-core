@@ -16,32 +16,54 @@
     Contact: code@inmanta.com
 """
 
+import threading
+
 from execnet import multi, gateway_bootstrap
 from . import local
 from inmanta import resources
 from inmanta.agent import config as cfg
 
 
+class CannotLoginException(Exception):
+    pass
+
+
 class RemoteIO(object):
     """
         This class provides handler IO methods
     """
-
     def is_remote(self):
         return True
 
     def __init__(self, host):
-        python_path = cfg.python_binary.get()
+        self._lock = threading.Lock()
+        self._gw = None
         try:
-            self._gw = multi.makegateway("ssh=root@%s//python=%s" % (host, python_path))
+            self._gw = multi.makegateway(self._build_connect_string(host))
         except (gateway_bootstrap.HostNotFound, BrokenPipeError) as e:
             raise resources.HostNotFoundException(hostname=host, user="root", error=e)
+        except AssertionError:
+            raise CannotLoginException()
+
+    def _build_connect_string(self, host):
+        """
+            Build the connection string for execent based on the hostname
+        """
+        python_path = cfg.python_binary.get()
+
+        if "@" in host:
+            username, hostname = host.split("@")
+            return "ssh=%s@%s//python=%s" % (username, hostname, python_path)
+        else:
+            return "ssh=root@%s//python=%s" % (host, python_path)
 
     def _execute(self, function_name, *args):
-        ch = self._gw.remote_exec(local)
-        ch.send((function_name, args))
-        result = ch.receive()
-        ch.close()
+        with self._lock:
+            ch = self._gw.remote_exec(local)
+            ch.send((function_name, args))
+            result = ch.receive()
+            ch.close()
+
         return result
 
     def read_binary(self, path):
@@ -53,8 +75,7 @@ class RemoteIO(object):
 
     def __getattr__(self, name):
         """
-            Proxy a function call to the local version on the otherside of the
-            channel.
+            Proxy a function call to the local version on the other side of the channel.
         """
         def call(*args):
             result = self._execute(name, *args)
@@ -63,4 +84,8 @@ class RemoteIO(object):
         return call
 
     def close(self):
-        self._gw.exit()
+        if self._gw is not None:
+            self._gw.exit()
+
+    def __del__(self):
+        self.close()

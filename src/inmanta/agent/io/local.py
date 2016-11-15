@@ -131,7 +131,6 @@ class BashIO(object):
         data = result.communicate()
 
         if result.returncode > 0:
-            print(data, result.returncode)
             raise FileNotFoundError()
 
         return data[0].decode().strip()
@@ -449,7 +448,12 @@ class LocalIO(object):
 
 if __name__ == '__channelexec__':
     global channel
-    local_io = LocalIO()
+
+    if os.getuid() == 0:
+        local_io = LocalIO()
+    else:
+        local_io = BashIO(run_as="root")
+
     for item in channel:  # NOQA
         if hasattr(local_io, item[0]):
             try:

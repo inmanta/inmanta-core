@@ -22,8 +22,8 @@ import inspect
 import logging
 import base64
 
-from inmanta.agent.io import get_io
-from inmanta import protocol
+from inmanta.agent.io import get_io, remote
+from inmanta import protocol, resources
 from tornado import ioloop
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
@@ -127,9 +127,7 @@ class ResourceHandler(object):
             Method executed after a transaction
         """
 
-    def close(self, with_io=True):
-        if with_io:
-            self._io.close()
+    def close(self):
         self._ioloop.close(all_fds=True)
 
     @classmethod
@@ -311,9 +309,6 @@ class Commander(object):
     @classmethod
     def close(cls):
         pass
-        # for h in cls.__handlers:
-        # h.close()
-        # del h
 
     @classmethod
     def _get_instance(cls, handler_class: type, agent, io) -> ResourceHandler:
@@ -321,7 +316,7 @@ class Commander(object):
         return new_instance
 
     @classmethod
-    def get_provider(cls, agent, resource) -> ResourceHandler:
+    def get_provider(cls, cache, agent, resource) -> ResourceHandler:
         """
             Return a provider to handle the given resource
         """
@@ -331,7 +326,23 @@ class Commander(object):
         if agent.is_local(agent_name):
             io = get_io()
         else:
-            io = get_io(agent_name)
+            key_name = "remote_io_" + agent_name
+            try:
+                io = cache.find(key_name, version=resource_id.version)
+            except KeyError:
+                try:
+                    io = get_io(agent_name)
+                except (remote.CannotLoginException, resources.HostNotFoundException):
+                    # Unable to login, show an error and ignore this agent
+                    LOGGER.error("Unable to login to host %s (for resource %s)", agent_name, resource_id)
+                    io = None
+
+                # TODO: do not add expire to remoteio!!
+                cache.cache_value(key_name, io, version=resource_id.version)
+
+            if io is None:
+                # Skip this resource
+                raise Exception("No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:
@@ -340,11 +351,13 @@ class Commander(object):
                 if h.available(resource):
                     available.append(h)
                 else:
-                    h.close(with_io=False)
+                    h.close()
 
         if len(available) > 1:
             for h in available:
                 h.close()
+
+            io.close()
             raise Exception("More than one handler selected for resource %s" % resource.id)
 
         elif len(available) == 1:

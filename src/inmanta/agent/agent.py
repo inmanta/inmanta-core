@@ -98,7 +98,7 @@ class ResourceAction(object):
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
-        cache.open_version(self.resource.version)
+        cache.open_version(self.resource.id.version)
 
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
         waiters = [x.future for x in self.dependencies]
@@ -126,11 +126,13 @@ class ResourceAction(object):
             provider = None
 
             try:
-                provider = Commander.get_provider(self.scheduler.agent, resource)
+                provider = Commander.get_provider(cache, self.scheduler.agent, resource)
                 provider.set_cache(cache)
             except Exception:
-                provider.close()
-                cache.close_version(self.resource.version)
+                if provider is not None:
+                    provider.close()
+
+                cache.close_version(self.resource.id.version)
                 LOGGER.exception("Unable to find a handler for %s" % resource.id)
                 return self.__complete(False, False, changes={}, status="unavailable")
 
@@ -139,7 +141,7 @@ class ResourceAction(object):
             status = results["status"]
             if status == "failed" or status == "skipped":
                 provider.close()
-                cache.close_version(self.resource.version)
+                cache.close_version(self.resource.id.version)
                 return self.__complete(False, False,
                                        changes=results["changes"],
                                        status=results["status"],
@@ -150,7 +152,7 @@ class ResourceAction(object):
                 yield self.scheduler.agent.thread_pool.submit(provider.do_reload, resource)
 
             provider.close()
-            cache.close_version(self.resource.version)
+            cache.close_version(self.resource.id.version)
 
             reload = results["changed"] and hasattr(resource, "reload") and resource.reload
             return self.__complete(True, reload=reload, changes=results["changes"],
@@ -511,7 +513,7 @@ class Agent(AgentEndPoint):
                 LOGGER.debug("Running dryrun for %s", resource.id)
 
                 try:
-                    provider = Commander.get_provider(self, resource)
+                    provider = Commander.get_provider(self._cache[agent], self, resource)
                     provider.set_cache(self._cache[agent])
                 except Exception:
                     LOGGER.exception("Unable to find a handler for %s" % resource.id)
@@ -596,7 +598,7 @@ class Agent(AgentEndPoint):
                 data = resource["fields"]
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
-                provider = Commander.get_provider(self, resource_obj)
+                provider = Commander.get_provider(self._cache[agent], self, resource_obj)
                 provider.set_cache(self._cache[agent])
 
                 if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
@@ -654,7 +656,7 @@ class Agent(AgentEndPoint):
                 data = resource["fields"]
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
-                provider = Commander.get_provider(self, resource_obj)
+                provider = Commander.get_provider(self._cache[agent], self, resource_obj)
                 provider.set_cache(self._cache[agent])
 
                 if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
@@ -730,7 +732,7 @@ class Agent(AgentEndPoint):
             cache.open_version(version)
 
             try:
-                provider = Commander.get_provider(self, resource)
+                provider = Commander.get_provider(self._cache[agent], self, resource)
                 provider.set_cache(cache)
             except Exception:
                 LOGGER.exception("Unable to find a handler for %s" % resource)
@@ -765,10 +767,9 @@ class Agent(AgentEndPoint):
 
             version = resource_obj.version
 
-            provider = Commander.get_provider(self, resource_obj)
-
             try:
                 self._cache[agent].open_version(version)
+                provider = Commander.get_provider(self._cache[agent], self, resource_obj)
                 provider.set_cache(self._cache[agent])
                 result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
                 parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
