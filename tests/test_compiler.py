@@ -479,6 +479,22 @@ a=true b=false
     assert not statements[1].value.value
 
 
+def test_Numbers():
+    statements = parse_code("""
+a=1
+b=2.0
+c=-5
+d=-0.256
+""")
+
+    assert len(statements) == 4
+    values = [1, 2.0, -5, -0.256]
+    for i in range(4):
+        stmt = statements[i]
+        assert isinstance(stmt, Assign)
+        assert stmt.value.value == values[i]
+
+
 def test_StringFormat():
     statements = parse_code("""
 a="j{{o}}s"
