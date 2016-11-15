@@ -478,6 +478,8 @@ class AgentManager(object):
 
     def _make_agent_config(self, environment_id, agent_names, agent_map):
         port = Config.get("server_rest_transport", "port", "8888")
+
+        privatestatedir = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
     # generate config file
         config = """[config]
 heartbeat-interval = 60
@@ -494,7 +496,7 @@ host=localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port,
             "python_binary": Config.get("config", "python_binary", "python"),
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
-            "statedir": Config.get("config", "state-dir", "/var/lib/inmanta")}
+            "statedir": privatestatedir}
 
         user = Config.get("server", "username", None)
         passwd = Config.get("server", "password", None)
