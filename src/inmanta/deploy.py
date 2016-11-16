@@ -19,11 +19,10 @@ import os
 import logging
 import random
 import sys
-import datetime
 
 from mongobox import mongobox
 from tornado import gen, process
-from inmanta import module, config, server, agent, protocol, client
+from inmanta import module, config, server, agent, protocol
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +31,7 @@ MAX_TRIES = 25
 
 
 class Deploy(object):
+
     def __init__(self, io_loop):
         self._mongobox = None
         self._mongoport = 0
@@ -80,7 +80,7 @@ class Deploy(object):
         config.Config.set("compiler_rest_transport", "port", str(self._server_port))
         config.Config.set("client_rest_transport", "port", str(self._server_port))
         config.Config.set("cmdline_rest_transport", "port", str(self._server_port))
-        config.Config.set("server", "agent-autostart", "nomatch!")
+        config.Config.set("server", "agent-autostart", "*")
 
         # start the server
         self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop)
@@ -241,8 +241,6 @@ class Deploy(object):
         """
             Export a version to the embedded server
         """
-        yield self._wait(lambda: self._agent_ready, "agent to start")
-
         inmanta_path = [sys.executable, os.path.abspath(sys.argv[0])]
 
         cmd = inmanta_path + ["-vvv", "export", "-e", str(self._environment_id), "--server_address", "localhost",
@@ -278,34 +276,23 @@ class Deploy(object):
 
     @gen.coroutine
     def get_active_agents(self):
-        agent_result = yield self._client.list_agents()
+        agent_result = yield self._client.list_agents(tid=self._environment_id)
         if agent_result.code != 200:
             LOGGER.error("Unable to retrieve active agent list")
             return []
 
-        if len(agent_result.result["nodes"]) == 0:
+        if len(agent_result.result["agents"]) == 0:
             return []
 
-        agents = agent_result.result["nodes"][0]["agents"]
-        server_time = datetime.datetime.strptime(agent_result.result["nodes"][0]["last_seen"], client.ISOFMT)
+        agents = agent_result.result["agents"]
         return [x["name"] for x in agents
-                if datetime.datetime.strptime(x["last_seen"], client.ISOFMT) +
-                datetime.timedelta(0, x["interval"]) > server_time]
+                if x["state"] == "up"]
 
     @gen.coroutine
     def deploy(self, dry_run):
         version = yield self._latest_version(self._environment_id)
         if version is None:
             return []
-
-        agents = yield self.get_agents_of_for_model(version)
-        for xagent in agents:
-            self._agent.add_end_point_name(xagent)
-
-        active_agents = []
-        while len([True for a in agents if a in active_agents]) == 0:
-            active_agents = yield self.get_active_agents()
-            yield gen.sleep(1)
 
         # release the version!
         if not dry_run:
@@ -415,6 +402,11 @@ class Deploy(object):
 
         raise KeyboardInterrupt()
 
+    @gen.coroutine
+    def do_deploy(self, dry_run):
+        yield self.setup_project()
+        yield self.export(dry_run=dry_run)
+
     def run(self, options):
         self.setup_server()
 
@@ -424,9 +416,7 @@ class Deploy(object):
                 self.stop()
                 sys.exit(1)
 
-        self._io_loop.add_future(self.setup_project(), handle_result)
-        self._io_loop.add_future(self.setup_agent(), handle_result)
-        self._io_loop.add_future(self.export(dry_run=options.dryrun), handle_result)
+        self._io_loop.add_future(self.do_deploy(dry_run=options.dryrun), handle_result)
 
     def stop(self):
         if self._agent is not None:
