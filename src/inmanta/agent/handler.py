@@ -52,7 +52,11 @@ class SkipResource(Exception):
     pass
 
 
-def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
+class ResourcePurged(Exception):
+    pass
+
+
+def cache(f=None, ignore=[], timeout=5000, forVersion=True):
     """
         decorator for methods in resource handlers to provide caching
 
@@ -83,7 +87,7 @@ def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
             def bound(**kwds):
                 return f(self, **kwds)
 
-            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, cacheNone, **kwds)
+            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, **kwds)
 
         return wrapper
 
@@ -114,7 +118,8 @@ class ResourceHandler(object):
 
     def get_client(self):
         if self._client is None:
-            self._client = protocol.AgentClient("agent", self._agent.sessionid, self._ioloop)
+            self._client = protocol.AgentClient(
+                "agent", self._agent.sessionid, self._ioloop)
         return self._client
 
     def pre(self, resource):
@@ -182,7 +187,8 @@ class ResourceHandler(object):
         """
             Update the given resource
         """
-        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
+        results = {
+            "changed": False, "changes": {}, "status": "nop", "log_msg": ""}
 
         try:
             self.pre(resource)
@@ -214,10 +220,12 @@ class ResourceHandler(object):
         except SkipResource as e:
             results["log_msg"] = e.args
             results["status"] = "skipped"
-            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
+            LOGGER.warning("Resource %s was skipped: %s" %
+                           (resource.id, e.args))
 
         except Exception as e:
-            LOGGER.exception("An error occurred during deployment of %s" % resource.id)
+            LOGGER.exception(
+                "An error occurred during deployment of %s" % resource.id)
             results["log_msg"] = repr(e)
             results["status"] = "failed"
 
@@ -273,7 +281,8 @@ class ResourceHandler(object):
         elif result.code == 200:
             return base64.b64decode(result.result["content"])
         else:
-            raise Exception("An error occurred while retrieving file %s" % hash_id)
+            raise Exception(
+                "An error occurred while retrieving file %s" % hash_id)
 
     def stat_file(self, hash_id):
         """
@@ -296,6 +305,213 @@ class ResourceHandler(object):
             self._ioloop.run_sync(call)
         except Exception:
             raise Exception("Unable to upload file to the server.")
+
+
+class HandlerContext(object):
+
+    def __init__(self, resource, dry_run):
+        self._resource = resource
+        self._dry_run = dry_run
+        self._cache = {}
+        self.changed = False
+
+    def is_dry_run(self):
+        return self._dry_run
+
+    def get(self, name):
+        return self._cache[name]
+
+    def contains(self, key):
+        return key in self._cache
+
+    def set(self, name, value):
+        self._cache[name] = value
+
+    def set_created(self):
+        self.changed = True
+
+    def set_purged(self):
+        self.changed = True
+
+    def set_updated(self):
+        self.changed = True
+
+    def add_change(self, name, value, old_value=None):
+        pass
+
+    def add_changes(self, **kwargs):
+        pass
+
+    def debug(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'DEBUG'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
+        """
+
+
+    def info(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'INFO'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.info("Houston, we have a %s", "interesting problem", exc_info=1)
+        """
+
+    def warning(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'WARNING'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)
+        """
+
+    def error(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'ERROR'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.error("Houston, we have a %s", "major problem", exc_info=1)
+        """
+
+    def exception(self, msg, *args, exc_info=True, **kwargs):
+        """
+        Convenience method for logging an ERROR with exception information.
+        """
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
+
+    def critical(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'CRITICAL'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.critical("Houston, we have a %s", "major disaster", exc_info=1)
+        """
+
+
+class CRUDHandler(ResourceHandler):
+    """
+        This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
+        only works on purgeable resources.
+    """
+    def read_resource(self, ctx, resource: resources.PurgeableResource):
+        """
+            This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
+            the method implementation should modify the attributes of this resource to the current state.
+
+            :param ctx Context can be used to pass value discovered in the read method to the CUD methods. For example, the
+                       id used in API calls
+            :param resource A clone of the desired resource state. The read method need to set values on this object.
+            :raise SkipResource: Raise this exception when the handler should skip this resource
+            :raise ResourcePurged: Raise this exception when the resource does not exist yet.
+        """
+        raise NotImplemented()
+
+    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+        """
+            This method is called by the handler when the resource should be created.
+
+            :param context Context can be used to get values discovered in the read method. For example, the id used in API
+                           calls. This context should also be used to let the handler know what changes were made to the
+                           resource.
+            :param resource The desired resource state.
+        """
+        raise NotImplemented()
+
+    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+        """
+            This method is called by the handler when the resource should be deleted.
+
+            :param ctx Context can be used to get values discovered in the read method. For example, the id used in API
+                       calls. This context should also be used to let the handler know what changes were made to the
+                       resource.
+            :param resource The desired resource state.
+        """
+        raise NotImplemented()
+
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource):
+        """
+            This method is called by the handler when the resource should be updated.
+
+            :param ctx Context can be used to get values discovered in the read method. For example, the id used in API
+                       calls. This context should also be used to let the handler know what changes were made to the
+                       resource.
+            :param changes A map of resource attributes that should be changed. Each value is a tuple with the current and the
+                           desired value.
+            :param resource The desired resource state.
+        """
+        raise NotImplemented()
+
+    def execute(self, resource, dry_run=False):
+        """
+            Update the given resource
+        """
+        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
+
+        ctx = HandlerContext(resource, dry_run)
+
+        try:
+            self.pre(resource)
+
+            if resource.require_failed:
+                LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
+                results["status"] = "skipped"
+
+            else:
+                current = resource.clone()
+                changes = {}
+                try:
+                    self.read_resource(ctx, current)
+                    changes = self._diff(current, resource)
+                except ResourcePurged:
+                    if not resource.purged:
+                        changes["purged"] = (True, resource.purged)
+
+                results["changes"] = changes
+
+                if not dry_run:
+                    if "purged" in changes:
+                        if changes["purged"][0]:
+                            self.create_resource(ctx, resource)
+                        else:
+                            self.delete_resource(ctx, resource)
+
+                    elif len(changes) > 0:
+                        self.update_resource(ctx, changes, resource)
+
+                    if ctx.get_changed():
+                        LOGGER.info("%s was changed" % resource.id)
+                        results["changed"] = True
+
+                    results["status"] = "deployed"
+
+                else:
+                    results["status"] = "dry"
+
+            self.post(resource)
+        except SkipResource as e:
+            results["log_msg"] = e.args
+            results["status"] = "skipped"
+            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
+
+        except Exception as e:
+            LOGGER.exception(
+                "An error occurred during deployment of %s" % resource.id)
+            results["log_msg"] = repr(e)
+            results["status"] = "failed"
+
+        return results
 
 
 class Commander(object):
@@ -334,7 +550,8 @@ class Commander(object):
                     io = get_io(agent_name)
                 except (remote.CannotLoginException, resources.HostNotFoundException):
                     # Unable to login, show an error and ignore this agent
-                    LOGGER.error("Unable to login to host %s (for resource %s)", agent_name, resource_id)
+                    LOGGER.error(
+                        "Unable to login to host %s (for resource %s)", agent_name, resource_id)
                     io = None
 
                 # TODO: do not add expire to remoteio!!
@@ -342,7 +559,8 @@ class Commander(object):
 
             if io is None:
                 # Skip this resource
-                raise Exception("No handler available for %s (no io available)" % resource_id)
+                raise Exception(
+                    "No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:
@@ -358,12 +576,14 @@ class Commander(object):
                 h.close()
 
             io.close()
-            raise Exception("More than one handler selected for resource %s" % resource.id)
+            raise Exception(
+                "More than one handler selected for resource %s" % resource.id)
 
         elif len(available) == 1:
             return available[0]
 
-        raise Exception("No resource handler registered for resource of type %s" % resource_type)
+        raise Exception(
+            "No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
     def add_provider(cls, resource: str, name: str, provider):
@@ -402,8 +622,10 @@ class Commander(object):
 
                 if hv not in sources:
                     module_name = provider.__module__.split(".")[1]
-                    req = Project.get().modules[module_name].get_python_requirements_as_list()
-                    sources[hv] = (file_name, provider.__module__, source_code, req)
+                    req = Project.get().modules[
+                        module_name].get_python_requirements_as_list()
+                    sources[hv] = (
+                        file_name, provider.__module__, source_code, req)
 
         return resource_to_sources
 
