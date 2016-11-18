@@ -1063,6 +1063,9 @@ class ModuleTool(object):
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
+        commit.add_argument("--major", dest="major", help="make a major release", action="store_true")
+        commit.add_argument("--minor", dest="minor", help="make a major release", action="store_true")
+        commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
         commit.add_argument("-v", "--version", help="Version to use on tag")
         commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
@@ -1249,7 +1252,62 @@ class ModuleTool(object):
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
         return module
 
-    def commit(self, message, version=None, dev=True, commit_all=False):
+    def determine_new_version(self, old_version, version, major, minor, patch, dev):
+        was_dev = old_version.is_prerelease
+
+        if was_dev:
+            if major or minor or patch:
+                print("WARNING: when releasing a dev version, options --major, --minor and --patch are ignored")
+
+            # determine new version
+            if version is not None:
+                baseversion = version
+            else:
+                baseversion = old_version.base_version
+
+            if not dev:
+                outversion = baseversion
+            else:
+                outversion = "%s.dev%d" % (baseversion, time.time())
+        else:
+            opts = [x for x in [major, minor, patch] if x]
+            if version is not None:
+                if len(opts) > 0:
+                    print("WARNING: when using the --version option, --major, --minor and --patch are ignored")
+                outversion = version
+            else:
+                if len(opts) == 0:
+                    print("One of the following options is required: --major, --minor or --patch")
+                    return None
+                elif len(opts) > 1:
+                    print("You can use only one of the following options: --major, --minor or --patch")
+                    return None
+                parts = old_version.base_version.split(".")
+                while len(parts) < 3:
+                    parts.append("0")
+                parts = [int(x) for x in parts]
+                if patch:
+                    parts[2] += 1
+                if minor:
+                    parts[1] += 1
+                    parts[2] = 0
+                if major:
+                    parts[0] += 1
+                    parts[1] = 0
+                    parts[2] = 0
+                outversion = '.'.join([str(x) for x in parts])
+
+            if dev:
+                outversion = "%s.dev%d" % (outversion, time.time())
+
+        outversion = parse_version(outversion)
+        if outversion <= old_version:
+            print("new versions (%s) is not larger then old version (%s), aborting" % (outversion, old_version))
+            return None
+
+        return outversion
+
+    def commit(self, message, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
         """
             Commit all current changes.
         """
@@ -1257,34 +1315,20 @@ class ModuleTool(object):
         module = self._find_module()
         # get version
         old_version = parse_version(str(module.version))
-        # determine new version
-        if version is not None:
-            baseversion = version
-        else:
-            if old_version.is_prerelease:
-                baseversion = old_version.base_version
-            else:
-                baseversion = old_version.base_version
-                parts = baseversion.split('.')
-                parts[-1] = str(int(parts[-1]) + 1)
-                baseversion = '.'.join(parts)
 
-        if dev:
-            baseversion = "%s.dev%d" % (baseversion, time.time())
+        outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
 
-        baseversion = parse_version(baseversion)
-        if baseversion <= old_version:
-            print("new versions (%s) is not larger then old version (%s), aborting" % (baseversion, old_version))
+        if outversion is None:
             return
 
         cfg = module.get_config_for_rewrite()
-        cfg["version"] = str(baseversion)
+        cfg["version"] = str(outversion)
         module.rewrite_config(cfg)
-        print("set version to: " + str(baseversion))
+        print("set version to: " + str(outversion))
         # commit
         gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
         # tag
-        gitprovider.tag(module._path, str(baseversion))
+        gitprovider.tag(module._path, str(outversion))
 
     def validate(self, repo=[], no_clean=False, parse_only=False, isolate=False, workingcopy=False):
         """

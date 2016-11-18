@@ -25,6 +25,7 @@ import subprocess
 import tempfile
 import unittest
 from subprocess import CalledProcessError
+import re
 
 from inmanta import module
 from inmanta.config import Config
@@ -32,6 +33,7 @@ from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitpr
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import ruamel.yaml
+from pkg_resources import parse_version
 
 
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
@@ -97,7 +99,7 @@ def addFile(modpath, file, content, msg, version=None):
         ocd = os.curdir
         os.curdir = modpath
         subprocess.check_output(["git", "add", "*"], cwd=modpath, stderr=subprocess.STDOUT)
-        ModuleTool().commit(msg, version, False, True)
+        ModuleTool().commit(msg, version=version, dev=False, commit_all=True)
         os.curdir = ocd
 
 
@@ -419,3 +421,41 @@ version: '3.2'
     def tearDown(self):
         self.log.removeHandler(self.handler)
         self.handler.close()
+
+
+def test_versioning():
+    mt = ModuleTool()
+
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, False, True, False)
+    assert str(newversion) == "1.2.4"
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, True, False, False)
+    assert str(newversion) == "1.3.0"
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, False, False)
+    assert str(newversion) == "2.0.0"
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, False, False)
+    assert newversion is None
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, True, False)
+    assert newversion is None
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, True, False)
+    assert newversion is None
+    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, True, False)
+    assert str(newversion) == "1.2.3"
+    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, False)
+    assert str(newversion) == "1.2.3"
+
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, False, True, True)
+    assert re.search("1.2.4.dev[0-9]+", str(newversion))
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, False, True, False, True)
+    assert re.search("1.3.0.dev[0-9]+", str(newversion))
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, False, True)
+    assert re.search("2.0.0.dev[0-9]+", str(newversion))
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, False, True)
+    assert newversion is None
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, False, True, True)
+    assert newversion is None
+    newversion = mt.determine_new_version(parse_version("1.2.3"), None, True, True, True, True)
+    assert newversion is None
+    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, True, True)
+    assert re.search("1.2.3.dev[0-9]+", str(newversion))
+    newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, True)
+    assert re.search("1.2.3.dev[0-9]+", str(newversion))
