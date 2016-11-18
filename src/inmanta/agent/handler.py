@@ -52,7 +52,7 @@ class SkipResource(Exception):
     pass
 
 
-def cache(f=None, ignore=[], timeout=5000, forVersion=True):
+def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
     """
         decorator for methods in resource handlers to provide caching
 
@@ -83,7 +83,7 @@ def cache(f=None, ignore=[], timeout=5000, forVersion=True):
             def bound(**kwds):
                 return f(self, **kwds)
 
-            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, **kwds)
+            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, cacheNone, **kwds)
 
         return wrapper
 

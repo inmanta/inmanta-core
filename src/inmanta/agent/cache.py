@@ -165,7 +165,7 @@ class AgentCache():
         key = '__'.join(key)
         return self._get(key).value
 
-    def get_or_else(self, key, function, forVerion=True, timeout=5000, ignore=set(), **kwargs):
+    def get_or_else(self, key, function, forVerion=True, timeout=5000, ignore=set(), cache_none=True, **kwargs):
         """
             Attempt to find a value in the cache.
 
@@ -191,5 +191,6 @@ class AgentCache():
             return self.find(key, **args)
         except KeyError:
             value = function(**kwargs)
-            self.cache_value(key, value, timeout=timeout, **args)
+            if cache_none or value is not None:
+                self.cache_value(key, value, timeout=timeout, **args)
             return value
