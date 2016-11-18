@@ -24,7 +24,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
 
-from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
 from inmanta.ast import RuntimeException, MultiException
@@ -107,12 +107,18 @@ class Scheduler(object):
         others = [t for t in definitions if not isinstance(t, DefineImplement)]
         entities = [t for t in others if isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault)]
         others = [t for t in others if not (isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault))]
+        indices = [t for t in others if isinstance(t, DefineIndex)]
+        others = [t for t in others if not isinstance(t, DefineIndex)]
 
         # first entities, so we have inheritance
         for d in entities:
             d.evaluate()
 
         for d in others:
+            d.evaluate()
+
+        # indices late, as they require all attributes
+        for d in indices:
             d.evaluate()
 
         # lastly the implements, as they require implementations

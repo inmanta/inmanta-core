@@ -61,6 +61,11 @@ agent_antisplay = \
     Option("config", "agent-run-at-start", False,
            "run the agent at startup, even if a splay time is set", is_bool)
 
+
+agent_reconnect_delay = \
+    Option("config", "agent-reconnect-delay", 5,
+           "Time to wait after a failed heartbeat message. DO NOT SET TO 0 ", is_int)
+
 server_timeout = \
     Option("config", "server-timeout", 125,
            "Amount of time to wait for a response from the server before we try to reconnect, must be smaller than server.agent-hold", is_time)

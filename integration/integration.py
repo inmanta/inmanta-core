@@ -51,6 +51,12 @@ def unwrap(result):
     return result.get_result()
 
 
+def patch(dir, patch):
+    bpatch = patch.encode()
+    if subprocess.run(["patch", "-R", "-p1", "--dry-run"], input=bpatch, cwd=dir).returncode != 0:
+        subprocess.run(["patch", "-p1"], input=bpatch, cwd=dir).check_returncode()
+
+
 class Server(object):
 
     def __init__(self, path, host, auth=False, ssl=False):

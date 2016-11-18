@@ -1,4 +1,4 @@
-from integration import Project, Environment, Connection, run_async, SetForm, Server, wait_async
+from integration import Project, Environment, Connection, run_async, SetForm, Server, wait_async, patch
 
 from inmanta.config import Config
 from tornado import httpclient
@@ -49,6 +49,7 @@ def setup(env, purge=False):
     # clone project
     project = Project("git@git.inmanta.com:demo/impera-demo.git", "/tmp/autotest/demo", purge)
     project.init()
+    do_patch(project.target)
 
     try:
         LOGGER.info("Starting first compile run")
@@ -163,6 +164,60 @@ def test_restore(env):
     http_client.close()
 
 
+def do_patch(dir):
+    patch(os.path.join(dir, "libs/rabbitmq"), """diff --git a/requirements.txt b/requirements.txt
+index f5c077a..265e832 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -1 +1 @@
+-git+https://github.com/davidszotten/pyrabbit@permissions#pyrabbit
++pyrabbit~=1.1.0
+""")
+
+    patch(os.path.join(dir, "libs/demo"), """diff --git a/model/_init.cf b/model/_init.cf
+index 2c18127..74f1040 100644
+--- a/model/_init.cf
++++ b/model/_init.cf
+@@ -180,8 +180,8 @@ implementation openstack for Iaas:
+ 
+     self.provider.network = vm::Network(name=param::one("network_name", "demo::OpenStackForm"))
+ 
+-    self.provider.image_id = "2f3f62f7-e707-4f98-8a32-b2546144a98b"
+-    self.provider.image_os = redhat::fedora23
++    self.provider.image_id = "ca079514-52bf-4f11-832a-a5ee783349b1"
++    self.provider.image_os = redhat::fedora24
+     self.provider.image_key = demo::wouter_key
+ 
+     self.provider.small_flavor = "c1m1"
+diff --git a/templates/user_data.tmpl b/templates/user_data.tmpl
+index 190c236..8a1438b 100644
+--- a/templates/user_data.tmpl
++++ b/templates/user_data.tmpl
+@@ -3,17 +3,12 @@
+ hostname {{ name }}
+ setenforce 0
+ 
++dnf copr enable bartvanbrabant/inmanta -y
++
+ cat > /etc/yum.repos.d/inmanta.repo <<EOF
+-[config]
+ [inmanta]
+ name=Inmanta
+-baseurl=https://packages.inmanta.com/rpms/inmanta/{{provider.branch}}/fedora/
+-enabled=1
+-gpgcheck=0
+-
+-[inmanta-deps]
+-name=Inmanta deps
+-baseurl=https://packages.inmanta.com/rpms/deps/fedora/
++baseurl=https://people.cs.kuleuven.be/~wouter.deborger/repo/
+ enabled=1
+ gpgcheck=0
+ EOF
+
+""")
+
+
 def run_test(auth=False, ssl=False, purge_env=False, purge_project=False):
     with Server("/tmp/autotest/server", "172.17.3.106", auth=auth, ssl=ssl) as server:
         connection = Connection("172.17.3.106", auth, ssl)
@@ -177,7 +232,7 @@ def run_test(auth=False, ssl=False, purge_env=False, purge_project=False):
         verify_endpoints(env)
         test_restore(env)
         LOGGER.info("Breaking it down")
-        run_async(env.purge)
+        #run_async(env.purge)
         LOGGER.info("Success")
 
 if __name__ == '__main__':

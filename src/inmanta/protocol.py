@@ -38,6 +38,7 @@ from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 from tornado.web import decode_signed_value, create_signed_value
 import ssl
+from asyncio.tasks import sleep
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -1196,7 +1197,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
-    def __init__(self, name, io_loop, timeout=120, transport=RESTTransport):
+    def __init__(self, name, io_loop, timeout=120, transport=RESTTransport, reconnect_delay=5):
         super().__init__(io_loop, name)
         self._transport = transport
         self._client = None
@@ -1207,6 +1208,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         self.sessionid = uuid.uuid1()
         self.running = True
         self.server_timeout = timeout
+        self.reconnect_delay = reconnect_delay
 
     def get_environment(self):
         return self._env_id
@@ -1290,7 +1292,9 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
 
                             self._io_loop.add_future(call_result, submit_result)
             else:
-                LOGGER.warning("Heartbeat failed with status %d and message: %s", result.code, result.result)
+                LOGGER.warning("Heartbeat failed with status %d and message: %s, going to sleep for %d s",
+                               result.code, result.result, self.reconnect_delay)
+                yield sleep(self.reconnect_delay)
 
 
 class ClientMeta(type):

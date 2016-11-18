@@ -32,7 +32,7 @@ from inmanta import protocol
 from inmanta.agent.handler import Commander
 from inmanta.loader import CodeLoader
 from inmanta.protocol import Scheduler, AgentEndPoint
-from inmanta.resources import Resource, Id
+from inmanta.resources import Resource
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
@@ -255,7 +255,7 @@ class Agent(AgentEndPoint):
     """
 
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
-        super().__init__("agent", io_loop, timeout=cfg.server_timeout.get())
+        super().__init__("agent", io_loop, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -709,46 +709,6 @@ class Agent(AgentEndPoint):
 
         self._cache[agent].close_version(version)
         return 200
-
-    def status(self, operation, body):
-        if "id" not in body:
-            return 500
-
-        if operation is None:
-            id = Id.parse_id(body["id"])
-            resource = id.get_instance()
-            agent = id.get_agent_name()
-
-            if agent not in self._cache[agent]:
-                LOGGER.exception("Agent unknown" % resource)
-                return 500
-
-            cache = self._cache[agent]
-
-            if resource is None:
-                return 500
-
-            version = id.get_version()
-            cache.open_version(version)
-
-            try:
-                provider = Commander.get_provider(self._cache[agent], self, resource)
-                provider.set_cache(cache)
-            except Exception:
-                LOGGER.exception("Unable to find a handler for %s" % resource)
-                return 500
-
-            try:
-                result = yield self.thread_pool.submit(provider.check_resource, resource)
-                return 200, result
-            except Exception:
-                LOGGER.exception("Unable to check status of %s" % resource)
-                return 500
-
-            cache.close_version(version)
-
-        else:
-            return 501
 
     @protocol.handle(methods.AgentParameterMethod.get_parameter)
     @gen.coroutine
