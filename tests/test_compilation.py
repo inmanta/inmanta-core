@@ -710,6 +710,25 @@ index Test1(x,y)
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
+    def testIssue224DefaultOverInheritance(self):
+        self.setUpForSnippet("""
+entity Test1:
+    string a = "a"
+end
+entity Test2 extends Test1:
+end
+entity Test3 extends Test2:
+end
+implement Test3 using std::none
+
+Test3()
+""")
+        (types, _) = compiler.do_compile()
+        instances = types["__config__::Test3"].get_all_instances()
+        assert len(instances) == 1
+        i = instances[0]
+        assert i.get_attribute("a").get_value() == "a"
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
