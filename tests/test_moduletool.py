@@ -25,6 +25,7 @@ import subprocess
 import tempfile
 import unittest
 from subprocess import CalledProcessError
+import re
 
 from inmanta import module
 from inmanta.config import Config
@@ -33,7 +34,6 @@ from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import ruamel.yaml
 from pkg_resources import parse_version
-import re
 
 
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
