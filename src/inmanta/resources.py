@@ -120,7 +120,28 @@ def to_id(entity):
     return None
 
 
-class Resource(object):
+class ResourceMeta(type):
+    @classmethod
+    def _get_parent_fields(cls, bases):
+        fields = []
+        for base in bases:
+            if "fields" in base.__dict__:
+                fields.extend(base.__dict__["fields"])
+
+            fields.extend(cls._get_parent_fields(base.__bases__))
+
+        return fields
+
+    def __new__(cls, class_name, bases, dct):
+        fields = cls._get_parent_fields(bases)
+        if "fields" in dct:
+            fields.extend(dct["fields"])
+
+        dct["fields"] = fields
+        return type.__new__(cls, class_name, bases, dct)
+
+
+class Resource(metaclass=ResourceMeta):
     """
     A managed resource on a system
     """
@@ -214,19 +235,18 @@ class Resource(object):
 
         for field in cls.fields:
             try:
-                if hasattr(cls, "map") and field in cls.map:
-                    try:
+                try:
+                    if hasattr(cls, "get_" + field):
+                        mthd = getattr(cls, "get_" + field)
+                        value = mthd(exporter, DynamicProxy.return_value(model_object))
+                    elif hasattr(cls, "map") and field in cls.map:
                         value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
-                        setattr(obj, field, value)
-                    except UnknownException as e:
-                        setattr(obj, field, e.unknown)
+                    else:
+                        value = getattr(model_object, field)
 
-                else:
-                    try:
-                        # setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
-                        setattr(obj, field, getattr(model_object, field))
-                    except UnknownException as e:
-                        setattr(obj, field, e.unknown)
+                    setattr(obj, field, value)
+                except UnknownException as e:
+                    setattr(obj, field, e.unknown)
 
             except AttributeError:
                 raise AttributeError("Attribute %s does not exist on entity of type %s" % (field, entity_name))
