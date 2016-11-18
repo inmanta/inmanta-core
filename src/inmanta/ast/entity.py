@@ -107,7 +107,7 @@ class Entity(Type):
         values.extend(self.__default_value.items())
 
         for parent in self.parent_entities:
-            values.extend(parent.__default_value.items())
+            values.extend(parent.get_default_values().items())
 
         return dict(values)
 
@@ -176,6 +176,12 @@ class Entity(Type):
             parents.extend(entity.get_all_parent_names())
 
         return parents
+
+    def get_all_parent_entities(self):
+        parents = [x for x in self.parent_entities]
+        for entity in self.parent_entities:
+            parents.extend(entity.get_all_parent_entities())
+        return set(parents)
 
     def get_all_attribute_names(self):
         """
