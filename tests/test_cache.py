@@ -199,6 +199,49 @@ class CacheTests(unittest.TestCase):
         assert len(called) == 1
         assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
 
+    def testGetOrElseNone(self):
+        called = []
+
+        def creator(param, resource, version):
+            called.append("x")
+            return param
+
+        class sequencer(object):
+
+            def __init__(self, sequence):
+                self.seq = sequence
+                self.count = 0
+
+            def __call__(self, **kwargs):
+                out = self.seq[self.count]
+                self.count += 1
+                return out
+
+        cache = AgentCache()
+        value = "test too"
+        resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
+        version = 100
+        cache.open_version(version)
+        assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+        assert len(called) == 1
+        assert None is cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=None)
+        assert len(called) == 2
+        assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+        assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
+        assert len(called) == 3
+
+        seq = sequencer([None, None, "A"])
+        assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert seq.count == 1
+        assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert seq.count == 2
+        assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert seq.count == 3
+        assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert seq.count == 3
+        assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert seq.count == 3
+
     def testDecorator(self):
 
         xcache = AgentCache()
@@ -208,6 +251,7 @@ class CacheTests(unittest.TestCase):
             def __init__(self, cache):
                 self.cache = cache
                 self.count = 0
+                self.c2 = 0
 
             @cache
             def testMethod(self):
@@ -218,6 +262,14 @@ class CacheTests(unittest.TestCase):
             def testMethod2(self, version):
                 self.count += 1
                 return "x2"
+
+            @cache(cacheNone=False)
+            def testMethod3(self):
+                self.c2 += 1
+                if self.c2 < 2:
+                    return None
+                else:
+                    return "X"
 
         test = DT(xcache)
         assert "x" == test.testMethod()
@@ -237,3 +289,10 @@ class CacheTests(unittest.TestCase):
         assert "x2" == test.testMethod2(version=1)
         assert "x2" == test.testMethod2(version=1)
         assert 4 == test.count
+
+        assert None is test.testMethod3()
+        assert 1 == test.c2
+        assert "X" == test.testMethod3()
+        assert 2 == test.c2
+        assert "X" == test.testMethod3()
+        assert 2 == test.c2
