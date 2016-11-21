@@ -384,9 +384,9 @@ class DefineIndex(DefinitionStatement):
         entity_type = self.namespace.get_type(self.type)
 
         allattributes = entity_type.get_all_attribute_names()
-#         for attribute in self.attributes:
-#             if attribute not in allattributes:
-#                 raise NotFoundException(self, attribute, "Index defined on attribute that does not exist")
+        for attribute in self.attributes:
+            if attribute not in allattributes:
+                raise NotFoundException(self, attribute, "Index defined on attribute that does not exist")
 
         entity_type.add_index(self.attributes)
 

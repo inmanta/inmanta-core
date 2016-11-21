@@ -186,8 +186,7 @@ class ResourceHandler(object):
         """
             Update the given resource
         """
-        results = {
-            "changed": False, "changes": {}, "status": "nop", "log_msg": ""}
+        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
 
         try:
             self.pre(resource)
