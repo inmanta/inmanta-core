@@ -56,7 +56,7 @@ class ResourcePurged(Exception):
     pass
 
 
-def cache(f=None, ignore=[], timeout=5000, forVersion=True):
+def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
     """
         decorator for methods in resource handlers to provide caching
 
@@ -87,7 +87,7 @@ def cache(f=None, ignore=[], timeout=5000, forVersion=True):
             def bound(**kwds):
                 return f(self, **kwds)
 
-            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, **kwds)
+            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, cacheNone, **kwds)
 
         return wrapper
 
@@ -118,8 +118,7 @@ class ResourceHandler(object):
 
     def get_client(self):
         if self._client is None:
-            self._client = protocol.AgentClient(
-                "agent", self._agent.sessionid, self._ioloop)
+            self._client = protocol.AgentClient("agent", self._agent.sessionid, self._ioloop)
         return self._client
 
     def pre(self, resource):
@@ -220,12 +219,10 @@ class ResourceHandler(object):
         except SkipResource as e:
             results["log_msg"] = e.args
             results["status"] = "skipped"
-            LOGGER.warning("Resource %s was skipped: %s" %
-                           (resource.id, e.args))
+            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
 
         except Exception as e:
-            LOGGER.exception(
-                "An error occurred during deployment of %s" % resource.id)
+            LOGGER.exception("An error occurred during deployment of %s" % resource.id)
             results["log_msg"] = repr(e)
             results["status"] = "failed"
 
@@ -281,8 +278,7 @@ class ResourceHandler(object):
         elif result.code == 200:
             return base64.b64decode(result.result["content"])
         else:
-            raise Exception(
-                "An error occurred while retrieving file %s" % hash_id)
+            raise Exception("An error occurred while retrieving file %s" % hash_id)
 
     def stat_file(self, hash_id):
         """
@@ -553,8 +549,7 @@ class Commander(object):
                     io = get_io(agent_name)
                 except (remote.CannotLoginException, resources.HostNotFoundException):
                     # Unable to login, show an error and ignore this agent
-                    LOGGER.error(
-                        "Unable to login to host %s (for resource %s)", agent_name, resource_id)
+                    LOGGER.error("Unable to login to host %s (for resource %s)", agent_name, resource_id)
                     io = None
 
                 # TODO: do not add expire to remoteio!!
@@ -562,8 +557,7 @@ class Commander(object):
 
             if io is None:
                 # Skip this resource
-                raise Exception(
-                    "No handler available for %s (no io available)" % resource_id)
+                raise Exception("No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:
@@ -579,14 +573,12 @@ class Commander(object):
                 h.close()
 
             io.close()
-            raise Exception(
-                "More than one handler selected for resource %s" % resource.id)
+            raise Exception("More than one handler selected for resource %s" % resource.id)
 
         elif len(available) == 1:
             return available[0]
 
-        raise Exception(
-            "No resource handler registered for resource of type %s" % resource_type)
+        raise Exception("No resource handler registered for resource of type %s" % resource_type)
 
     @classmethod
     def add_provider(cls, resource: str, name: str, provider):
@@ -625,10 +617,8 @@ class Commander(object):
 
                 if hv not in sources:
                     module_name = provider.__module__.split(".")[1]
-                    req = Project.get().modules[
-                        module_name].get_python_requirements_as_list()
-                    sources[hv] = (
-                        file_name, provider.__module__, source_code, req)
+                    req = Project.get().modules[module_name].get_python_requirements_as_list()
+                    sources[hv] = (file_name, provider.__module__, source_code, req)
 
         return resource_to_sources
 
