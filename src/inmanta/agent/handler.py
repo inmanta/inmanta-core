@@ -52,6 +52,10 @@ class SkipResource(Exception):
     pass
 
 
+class ResourcePurged(Exception):
+    pass
+
+
 def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
     """
         decorator for methods in resource handlers to provide caching
@@ -296,6 +300,215 @@ class ResourceHandler(object):
             self._ioloop.run_sync(call)
         except Exception:
             raise Exception("Unable to upload file to the server.")
+
+
+class HandlerContext(object):
+
+    def __init__(self, resource, dry_run):
+        self._resource = resource
+        self._dry_run = dry_run
+        self._cache = {}
+        self.changed = False
+
+    def is_dry_run(self):
+        return self._dry_run
+
+    def get(self, name):
+        return self._cache[name]
+
+    def contains(self, key):
+        return key in self._cache
+
+    def set(self, name, value):
+        self._cache[name] = value
+
+    def set_created(self):
+        self.changed = True
+
+    def set_purged(self):
+        self.changed = True
+
+    def set_updated(self):
+        self.changed = True
+
+    def add_change(self, name, value, old_value=None):
+        pass
+
+    def add_changes(self, **kwargs):
+        pass
+
+    def fields_updated(self, fields):
+        pass
+
+    def debug(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'DEBUG'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
+        """
+
+    def info(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'INFO'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.info("Houston, we have a %s", "interesting problem", exc_info=1)
+        """
+
+    def warning(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'WARNING'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)
+        """
+
+    def error(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'ERROR'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.error("Houston, we have a %s", "major problem", exc_info=1)
+        """
+
+    def exception(self, msg, *args, exc_info=True, **kwargs):
+        """
+        Convenience method for logging an ERROR with exception information.
+        """
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
+
+    def critical(self, msg, *args, **kwargs):
+        """
+        Log 'msg % args' with severity 'CRITICAL'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.critical("Houston, we have a %s", "major disaster", exc_info=1)
+        """
+
+
+class CRUDHandler(ResourceHandler):
+    """
+        This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
+        only works on purgeable resources.
+    """
+    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+        """
+            This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
+            the method implementation should modify the attributes of this resource to the current state.
+
+            :param ctx Context can be used to pass value discovered in the read method to the CUD methods. For example, the
+                       id used in API calls
+            :param resource A clone of the desired resource state. The read method need to set values on this object.
+            :raise SkipResource: Raise this exception when the handler should skip this resource
+            :raise ResourcePurged: Raise this exception when the resource does not exist yet.
+        """
+        raise NotImplemented()
+
+    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+        """
+            This method is called by the handler when the resource should be created.
+
+            :param context Context can be used to get values discovered in the read method. For example, the id used in API
+                           calls. This context should also be used to let the handler know what changes were made to the
+                           resource.
+            :param resource The desired resource state.
+        """
+        raise NotImplemented()
+
+    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+        """
+            This method is called by the handler when the resource should be deleted.
+
+            :param ctx Context can be used to get values discovered in the read method. For example, the id used in API
+                       calls. This context should also be used to let the handler know what changes were made to the
+                       resource.
+            :param resource The desired resource state.
+        """
+        raise NotImplemented()
+
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource):
+        """
+            This method is called by the handler when the resource should be updated.
+
+            :param ctx Context can be used to get values discovered in the read method. For example, the id used in API
+                       calls. This context should also be used to let the handler know what changes were made to the
+                       resource.
+            :param changes A map of resource attributes that should be changed. Each value is a tuple with the current and the
+                           desired value.
+            :param resource The desired resource state.
+        """
+        raise NotImplemented()
+
+    def execute(self, resource, dry_run=False):
+        """
+            Update the given resource
+        """
+        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
+
+        ctx = HandlerContext(resource, dry_run)
+
+        try:
+            self.pre(resource)
+
+            if resource.require_failed:
+                LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
+                results["status"] = "skipped"
+
+            else:
+                current = resource.clone()
+                changes = {}
+                try:
+                    self.read_resource(ctx, current)
+                    changes = self._diff(current, resource)
+                except ResourcePurged:
+                    if not resource.purged:
+                        changes["purged"] = (True, resource.purged)
+
+                results["changes"] = changes
+
+                if not dry_run:
+                    if "purged" in changes:
+                        if changes["purged"][0]:
+                            self.create_resource(ctx, resource)
+                        else:
+                            self.delete_resource(ctx, resource)
+
+                    elif len(changes) > 0:
+                        self.update_resource(ctx, changes, resource)
+
+                    if ctx.changed:
+                        LOGGER.info("%s was changed" % resource.id)
+                        results["changed"] = True
+
+                    results["status"] = "deployed"
+
+                else:
+                    results["status"] = "dry"
+
+            self.post(resource)
+        except SkipResource as e:
+            results["log_msg"] = e.args
+            results["status"] = "skipped"
+            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
+
+        except Exception as e:
+            LOGGER.exception(
+                "An error occurred during deployment of %s" % resource.id)
+            results["log_msg"] = repr(e)
+            results["status"] = "failed"
+
+        return results
 
 
 class Commander(object):

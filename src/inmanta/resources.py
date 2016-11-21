@@ -120,9 +120,35 @@ def to_id(entity):
     return None
 
 
-class Resource(object):
+class ResourceMeta(type):
+    @classmethod
+    def _get_parent_fields(cls, bases):
+        fields = []
+        for base in bases:
+            if "fields" in base.__dict__:
+                fields.extend(base.__dict__["fields"])
+
+            fields.extend(cls._get_parent_fields(base.__bases__))
+
+        return fields
+
+    def __new__(cls, class_name, bases, dct):
+        fields = cls._get_parent_fields(bases)
+        if "fields" in dct:
+            fields.extend(dct["fields"])
+
+        dct["fields"] = tuple(set(fields))
+        return type.__new__(cls, class_name, bases, dct)
+
+
+class Resource(metaclass=ResourceMeta):
     """
-    A managed resource on a system
+        Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
+
+        Such as class is registered when the @resource decorator is used. Each class needs to indicate the fields the resource
+        will have with a class field named "fields". A metaclass merges all fields lists from the class itself and all
+        superclasses. If a field it not available directly in the model object the serializer will look for static methods in
+        the class with the name "get_$fieldname".
     """
     __create_cache = {}
 
@@ -214,19 +240,18 @@ class Resource(object):
 
         for field in cls.fields:
             try:
-                if hasattr(cls, "map") and field in cls.map:
-                    try:
+                try:
+                    if hasattr(cls, "get_" + field):
+                        mthd = getattr(cls, "get_" + field)
+                        value = mthd(exporter, DynamicProxy.return_value(model_object))
+                    elif hasattr(cls, "map") and field in cls.map:
                         value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
-                        setattr(obj, field, value)
-                    except UnknownException as e:
-                        setattr(obj, field, e.unknown)
+                    else:
+                        value = getattr(model_object, field)
 
-                else:
-                    try:
-                        # setattr(obj, field, DynamicProxy.return_value(model_object.get_attribute(field).get_value()))
-                        setattr(obj, field, getattr(model_object, field))
-                    except UnknownException as e:
-                        setattr(obj, field, e.unknown)
+                    setattr(obj, field, value)
+                except UnknownException as e:
+                    setattr(obj, field, e.unknown)
 
             except AttributeError:
                 raise AttributeError("Attribute %s does not exist on entity of type %s" % (field, entity_name))
@@ -341,6 +366,10 @@ class Resource(object):
 
     def is_type(self, type: str):
         return str(self.model._get_instance().get_type()) == type
+
+
+class PurgeableResource(Resource):
+    fields = ("purged", "purge_on_delete")
 
 
 class Id(object):
