@@ -342,6 +342,9 @@ class HandlerContext(object):
     def add_changes(self, **kwargs):
         pass
 
+    def fields_updated(self, fields):
+        pass
+
     def debug(self, msg, *args, **kwargs):
         """
         Log 'msg % args' with severity 'DEBUG'.
@@ -405,7 +408,7 @@ class CRUDHandler(ResourceHandler):
         This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
         only works on purgeable resources.
     """
-    def read_resource(self, ctx, resource: resources.PurgeableResource):
+    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
         """
             This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
             the method implementation should modify the attributes of this resource to the current state.
@@ -490,7 +493,7 @@ class CRUDHandler(ResourceHandler):
                     elif len(changes) > 0:
                         self.update_resource(ctx, changes, resource)
 
-                    if ctx.get_changed():
+                    if ctx.changed:
                         LOGGER.info("%s was changed" % resource.id)
                         results["changed"] = True
 
