@@ -350,7 +350,6 @@ class HandlerContext(object):
         logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
         """
 
-
     def info(self, msg, *args, **kwargs):
         """
         Log 'msg % args' with severity 'INFO'.
