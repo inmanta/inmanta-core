@@ -22,6 +22,7 @@ from . import ReferenceStatement
 from inmanta.ast.type import List
 from inmanta.ast.statements import AssignStatement
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit
+from inmanta.execute.util import Unknown
 
 
 class CreateList(ReferenceStatement):
@@ -147,6 +148,8 @@ class StringFormat(ReferenceStatement):
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)
+            if isinstance(value, Unknown):
+                return Unknown(self)
             if isinstance(value, float) and (value - int(value)) == 0:
                 value = int(value)
 
