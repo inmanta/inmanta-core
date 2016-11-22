@@ -30,6 +30,7 @@ from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
 from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
@@ -744,6 +745,17 @@ b = "abc{{a}}"
 
         assert isinstance(scope.lookup("a").get_value(), Unknown)
         assert isinstance(scope.lookup("b").get_value(), Unknown)
+
+    def testIssue170AttributeException(self):
+        self.setUpForSnippet("""
+entity Test1:
+    string a
+end
+
+Test1(a=3)
+""")
+        with pytest.raises(AttributeException):
+            compiler.do_compile()
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):

@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException
 from inmanta.ast.type import Type
 
 
@@ -501,7 +501,10 @@ class Instance(ExecutionContext):
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
         if provides:
             self.slots[name].set_provider(self)
-        self.slots[name].set_value(value, location, recur)
+        try:
+            self.slots[name].set_value(value, location, recur)
+        except RuntimeException as e:
+            raise AttributeException(None, self, name) from e
 
     def get_attribute(self, name):
         try:

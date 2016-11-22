@@ -286,6 +286,12 @@ class RuntimeException(CompilerException):
         return self.root_cause_chance < other.root_cause_chance
 
 
+class AttributeException(RuntimeException):
+
+    def __init__(self, stmt, entity, attribute):
+        RuntimeException.__init__(self, stmt=stmt, msg="exception on attribute `%s` on instance `%s`" % (attribute, entity))
+
+
 class OptionalValueException(RuntimeException):
     pass
 
