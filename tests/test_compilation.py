@@ -34,6 +34,7 @@ from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
 import pytest
+from inmanta.execute.util import Unknown
 
 
 class CompilerBaseTest(object):
@@ -76,11 +77,13 @@ class SnippetTests(unittest.TestCase):
             cfg.write(
                 """
             name: snippet test
-            modulepath: %s
+            modulepath: [%s, %s]
             downloadpath: %s
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
-                % (self.__class__.libs, self.__class__.libs))
+                % (self.__class__.libs,
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
+                    self.__class__.libs))
 
         with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
             x.write(snippet)
@@ -728,6 +731,19 @@ Test3()
         assert len(instances) == 1
         i = instances[0]
         assert i.get_attribute("a").get_value() == "a"
+
+    def testIssue219UnknowsInTemplate(self):
+        self.setUpForSnippet("""
+import tests
+
+a = tests::unknown()
+b = "abc{{a}}"
+""")
+        (_, root) = compiler.do_compile()
+        scope = root.get_child("__config__").scope
+
+        assert isinstance(scope.lookup("a").get_value(), Unknown)
+        assert isinstance(scope.lookup("b").get_value(), Unknown)
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
