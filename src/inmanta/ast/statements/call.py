@@ -84,6 +84,8 @@ class FunctionCall(ReferenceStatement):
                 result.set_value(value, self.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.location)
+            except RuntimeException as e:
+                raise e
             except Exception as e:
                 raise WrappingRuntimeException(self, "Exception in plugin %s" % self.name, e)
 

@@ -29,7 +29,7 @@ from io import StringIO
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
 from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
@@ -833,7 +833,7 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
     def test_compile(self):
-        with pytest.raises(DoubleSetException):
+        with pytest.raises(AttributeException):
             compiler.do_compile()
 
 

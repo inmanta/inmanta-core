@@ -67,7 +67,7 @@ class Reference(ExpressionStatement):
             attr_ref = AttributeReference(ref, self.name)
             self.copy_location(attr_ref)
             return attr_ref
-        
+
     def __str__(self, *args, **kwargs):
         return self.name
 

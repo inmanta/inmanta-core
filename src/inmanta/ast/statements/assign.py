@@ -78,7 +78,8 @@ class SetAttribute(AssignStatement):
 
 class SetAttributeHelper(ExecutionUnit):
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression, stmt: SetAttribute, instance: Instance):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression,
+                 stmt: SetAttribute, instance: Instance):
         ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
         self.stmt = stmt
         self.instance = instance
