@@ -504,7 +504,7 @@ class Instance(ExecutionContext):
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
-            raise AttributeException(None, self, name) from e
+            raise AttributeException(None, self, name, cause=e)
 
     def get_attribute(self, name):
         try:
@@ -514,6 +514,9 @@ class Instance(ExecutionContext):
 
     def __repr__(self):
         return "%s %02x" % (self.type, self.sid)
+
+    def __str__(self):
+        return "%s (instantiated at %s)" % (self.type, self.location)
 
     def add_implementation(self, impl):
         if impl in self.implemenations:

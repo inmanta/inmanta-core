@@ -280,16 +280,37 @@ class RuntimeException(CompilerException):
         self.stmt = stmt
 
     def __str__(self, *args, **kwargs):
-        return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
+        if self.stmt is None and self.location is None:
+            return self.msg
+        else:
+            return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
 
     def __le__(self, other):
         return self.root_cause_chance < other.root_cause_chance
 
 
-class AttributeException(RuntimeException):
+def stringifyException(exn: Exception):
+    if isinstance(exn, CompilerException):
+        return str(exn)
+    return "%s: %s" % (exn.__class__.__name__, str(exn))
 
-    def __init__(self, stmt, entity, attribute):
-        RuntimeException.__init__(self, stmt=stmt, msg="exception on attribute `%s` on instance `%s`" % (attribute, entity))
+
+class WrappingRuntimeException(RuntimeException):
+
+    def __init__(self, stmt, msg, cause):
+        if stmt is None:
+            if isinstance(cause, RuntimeException):
+                stmt = cause.stmt
+        longmsg = "%s caused by %s" % (msg, stringifyException(cause))
+        RuntimeException.__init__(self, stmt=stmt, msg=longmsg)
+        self.__cause__ = cause
+
+
+class AttributeException(WrappingRuntimeException):
+
+    def __init__(self, stmt, entity, attribute, cause):
+        WrappingRuntimeException.__init__(
+            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(entity)), cause=cause)
 
 
 class OptionalValueException(RuntimeException):
@@ -328,7 +349,7 @@ class NotFoundException(RuntimeException):
 
     def __str__(self, *args, **kwargs):
         if self.msg is not None:
-            return " %s (reported at (%s))" % (self.msg, self.location)
+            return "%s (reported at (%s))" % (self.msg, self.location)
         return "could not find value %s (reported at (%s))" % (self.name, self.location)
 
 
