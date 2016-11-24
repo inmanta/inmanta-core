@@ -30,7 +30,7 @@ from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id
 from inmanta.config import Config, Option, is_uuid_opt, is_list, is_str
-from inmanta.execute.proxy import DynamicProxy
+from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException
 from tornado.ioloop import IOLoop
 from tornado import gen
@@ -109,7 +109,13 @@ class Exporter(object):
             instances = types[entity].get_all_instances()
             if len(instances) > 0:
                 for instance in instances:
-                    self.add_resource(Resource.create_from_model(self, entity, DynamicProxy.return_value(instance)))
+                    try:
+                        self.add_resource(Resource.create_from_model(self, entity, DynamicProxy.return_value(instance)))
+                    except UnknownException:
+                        # We get this exception when the attribute that is used to create the object id contains an unknown.
+                        # We can safely ignore this resource == prune it
+                        LOGGER.debug("Skipped resource of type %s because its id contains an unknown (location: %s)",
+                                     entity, instance.location)
 
         Resource.convert_requires()
 
