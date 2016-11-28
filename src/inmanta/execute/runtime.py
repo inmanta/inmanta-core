@@ -45,8 +45,9 @@ class ResultVariable(object):
     def set_type(self, mytype: Type):
         self.type = mytype
 
-    def set_provider(self, provider):
+    def get_promise(self, provider):
         self.provider = provider
+        return self
 
     def get_waiting_providers(self):
         # todo: optimize?
@@ -162,23 +163,39 @@ class DelayedResultVariable(ResultVariable):
         self.queued = False
 
 
+class Promise(object):
+
+    def __init__(self, owner, provider):
+        self.provider = provider
+        self.owner = owner
+
+    def set_value(self, value, location, recur=True):
+        self.owner.set_promised_value(self, value, location, recur)
+
+
 class ListVariable(DelayedResultVariable):
 
     def __init__(self, attribute, instance, queue: "QueueScheduler"):
         self.attribute = attribute
         self.myself = instance
-        self.providers = []
+        self.promisses = []
+        self.done_promisses = []
         DelayedResultVariable.__init__(self, queue, [])
 
-    def set_provider(self, provider):
-        self.providers.append(provider)
+    def get_promise(self, provider):
+        out = Promise(self, provider)
+        self.promisses.append(out)
+        return out
+
+    def set_promised_value(self, promis, value, location, recur=True):
+        self.done_promisses.append(promis)
+        self.set_value(value, location, recur)
 
     def get_waiting_providers(self):
         # todo: optimize?
-        out = len(self.providers) - len(self.value)
-        # heuristics,...
+        out = len(self.promisses) - len(self.done_promisses)
         if out < 0:
-            return 0
+            raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
         return out
 
     def set_value(self, value, location, recur=True):
@@ -326,7 +343,7 @@ class ExecutionUnit(Waiter):
         Waiter.__init__(self, queue_scheduler)
         self.result = result
         if provides:
-            result.set_provider(expression)
+            self.result = result.get_promise(expression)
         self.requires = requires
         self.expression = expression
         self.resolver = resolver
@@ -499,9 +516,10 @@ class Instance(ExecutionContext):
     def set_attribute(self, name, value, location, recur=True, provides=False):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
+        vx = self.slots[name]
         if provides:
-            self.slots[name].set_provider(self)
-        self.slots[name].set_value(value, location, recur)
+            vx = vx.get_promise(self)
+        vx.set_value(value, location, recur)
 
     def get_attribute(self, name):
         try:

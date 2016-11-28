@@ -109,7 +109,7 @@ class For(GeneratorStatement):
             # generate a subscope/namespace for each loop
             xc = ExecutionContext(self.module, resolver.for_namespace(self.module.namespace))
             loopvar = xc.lookup(self.loop_var)
-            loopvar.set_provider(self)
+            loopvar = loopvar.get_promise(self)
             loopvar.set_value(loop_var, self.location)
             xc.emit(queue)
 

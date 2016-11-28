@@ -90,8 +90,7 @@ class FunctionUnit(Waiter):
 
     def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, function: FunctionCall):
         Waiter.__init__(self, queue_scheduler)
-        self.result = result
-        result.set_provider(self)
+        self.result = result.get_promise(self)
         self.requires = requires
         self.function = function
         self.resolver = resolver

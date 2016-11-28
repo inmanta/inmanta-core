@@ -116,9 +116,8 @@ class IndexLookup(ReferenceStatement):
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
-        temp.set_provider(self)
         temp.set_type(self.type)
-        HangUnit(queue, resolver, sub, temp, self)
+        HangUnit(queue, resolver, sub, temp.get_promise(self), self)
         return {self: temp}
 
     def resume(self, requires, resolver, queue, target):

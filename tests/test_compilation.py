@@ -745,6 +745,27 @@ b = "abc{{a}}"
         assert isinstance(scope.lookup("a").get_value(), Unknown)
         assert isinstance(scope.lookup("b").get_value(), Unknown)
 
+    def testIssue235EmptyLists(self):
+        self.setUpForSnippet("""
+entity Test1:
+
+end
+implement Test1 using std::none
+
+entity Test2:
+end
+implement Test2 using std::none
+
+Test1 tests [0:] -- [0:] Test2 tests
+
+t1 = Test1(tests=[])
+std::print(t1.tests)
+""")
+        (_, root) = compiler.do_compile()
+        scope = root.get_child("__config__").scope
+
+        assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 

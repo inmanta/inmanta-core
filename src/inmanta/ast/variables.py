@@ -175,10 +175,9 @@ class AttributeReference(Reference):
 
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
-        temp.set_provider(self)
 
         # construct waiter
-        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute)
+        resumer = AttributeReferenceHelper(temp.get_promise(self), self.instance, self.attribute)
         self.copy_location(resumer)
 
         # wait for the instance

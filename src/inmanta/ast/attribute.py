@@ -83,8 +83,7 @@ class Attribute(object):
             out.set_type(TypedList(self.__type))
         else:
             out.set_type(self.__type)
-        out.set_provider(instance)
-        return out
+        return out.get_promise(instance)
 
 
 class RelationAttribute(Attribute):
