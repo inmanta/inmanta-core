@@ -38,7 +38,6 @@ from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 from tornado.web import decode_signed_value, create_signed_value
 import ssl
-from asyncio.tasks import sleep
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -1294,7 +1293,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s, going to sleep for %d s",
                                result.code, result.result, self.reconnect_delay)
-                yield sleep(self.reconnect_delay)
+                yield gen.sleep(self.reconnect_delay)
 
 
 class ClientMeta(type):
