@@ -339,11 +339,9 @@ class ExecutionUnit(Waiter):
         @param provides: Whether to register this XU as provider to the result variable
     """
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression, provides=True):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
         Waiter.__init__(self, queue_scheduler)
-        self.result = result
-        if provides:
-            self.result = result.get_promise(expression)
+        self.result = result.get_promise(expression)
         self.requires = requires
         self.expression = expression
         self.resolver = resolver
@@ -517,8 +515,10 @@ class Instance(ExecutionContext):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
         vx = self.slots[name]
-        if provides:
-            vx = vx.get_promise(self)
+#         if provides:
+#             vx = vx.get_promise(self)
+#         else:
+#             print("X")
         vx.set_value(value, location, recur)
 
     def get_attribute(self, name):

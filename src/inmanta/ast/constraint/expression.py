@@ -189,7 +189,7 @@ class LazyBinaryOperator(BinaryOperator):
         else:
             ExecutionUnit(queue, resolver, target,
                           self.children[1].requires_emit(resolver, queue),
-                          self.children[1], provides=False)
+                          self.children[1])
 
     def execute_direct(self, requires):
         result = self.children[0].execute_direct(requires)
