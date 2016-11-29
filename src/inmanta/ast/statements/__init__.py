@@ -151,7 +151,7 @@ class GeneratorStatement(ExpressionStatement):
 class Literal(ExpressionStatement):
 
     def __init__(self, value):
-        Statement.__init__(self)
+        ExpressionStatement.__init__(self)
         self.value = value
 
     def normalize(self):

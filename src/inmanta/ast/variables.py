@@ -32,6 +32,7 @@ class Reference(ExpressionStatement):
     """
 
     def __init__(self, name):
+        super().__init__()
         self.name = name
         self.full_name = name
 
