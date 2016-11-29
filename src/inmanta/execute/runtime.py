@@ -45,17 +45,14 @@ class ResultVariable(object):
     def set_type(self, mytype: Type):
         self.type = mytype
 
+    def set_provider(self, provider):
+        # no checking for double set, this is done in the actual assignment
+        self.provider = provider
+
     def get_promise(self, provider):
+        """Alternative for set_provider for better handling of ListVariables."""
         self.provider = provider
         return self
-
-    def get_waiting_providers(self):
-        # todo: optimize?
-        if self.provider is None:
-            return 0
-        if self.hasValue:
-            return 0
-        return 1
 
     def is_ready(self):
         return self.hasValue
@@ -162,6 +159,9 @@ class DelayedResultVariable(ResultVariable):
     def unqueue(self):
         self.queued = False
 
+    def get_waiting_providers(self):
+        raise NotImplementedError()
+
 
 class Promise(object):
 
@@ -260,6 +260,14 @@ class OptionVariable(DelayedResultVariable):
         self.value = value
         self.location = location
         self.freeze()
+
+    def get_waiting_providers(self):
+        # todo: optimize?
+        if self.provider is None:
+            return 0
+        if self.hasValue:
+            return 0
+        return 1
 
     def can_get(self):
         return self.get_waiting_providers() == 0
@@ -511,15 +519,10 @@ class Instance(ExecutionContext):
     def get_type(self):
         return self.type
 
-    def set_attribute(self, name, value, location, recur=True, provides=False):
+    def set_attribute(self, name, value, location, recur=True):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
-        vx = self.slots[name]
-#         if provides:
-#             vx = vx.get_promise(self)
-#         else:
-#             print("X")
-        vx.set_value(value, location, recur)
+        self.slots[name].set_value(value, location, recur)
 
     def get_attribute(self, name):
         try:

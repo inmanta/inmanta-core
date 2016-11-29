@@ -69,9 +69,9 @@ class IsDefined(ReferenceStatement):
     def requires_emit(self, resolver, queue):
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
-        prom = temp.get_promise(self)
+        temp.set_provider(self)
         # construct waiter
-        resumer = IsDefinedReferenceHelper(prom, self.attr, self.name)
+        resumer = IsDefinedReferenceHelper(temp, self.attr, self.name)
         self.copy_location(resumer)
 
         # wait for the instance
@@ -176,10 +176,10 @@ class LazyBinaryOperator(BinaryOperator):
         temp = ResultVariable()
         temp.set_type(Bool())
 
-        prom = temp.get_promise(self)
+        temp.set_provider(self)
 
         # wait for the lhs
-        HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), prom, self)
+        HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
         return {self: temp}
 
     def resume(self, requires, resolver, queue, target):
