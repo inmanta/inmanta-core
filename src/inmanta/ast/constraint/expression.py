@@ -70,7 +70,6 @@ class IsDefined(ReferenceStatement):
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         temp.set_provider(self)
-
         # construct waiter
         resumer = IsDefinedReferenceHelper(temp, self.attr, self.name)
         self.copy_location(resumer)
@@ -175,8 +174,9 @@ class LazyBinaryOperator(BinaryOperator):
     def requires_emit(self, resolver, queue):
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
-        temp.set_provider(self)
         temp.set_type(Bool())
+
+        temp.set_provider(self)
 
         # wait for the lhs
         HangUnit(queue, resolver, self.children[0].requires_emit(resolver, queue), temp, self)
@@ -189,7 +189,7 @@ class LazyBinaryOperator(BinaryOperator):
         else:
             ExecutionUnit(queue, resolver, target,
                           self.children[1].requires_emit(resolver, queue),
-                          self.children[1], provides=False)
+                          self.children[1])
 
     def execute_direct(self, requires):
         result = self.children[0].execute_direct(requires)

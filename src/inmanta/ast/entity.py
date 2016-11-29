@@ -285,7 +285,7 @@ class Entity(Type):
         out = Instance(self, resolver, queue)
         out.location = location
         for k, v in attributes.items():
-            out.set_attribute(k, v, location, provides=True)
+            out.set_attribute(k, v, location)
 
         self.add_instance(out)
         return out

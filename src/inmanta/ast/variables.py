@@ -100,7 +100,7 @@ class AttributeReferenceHelper(object):
             self.target.set_value(attr.get_value(), self.location)
         else:
             # reschedule on the attribute, XU will assign it to the target variable
-            ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self, provides=False)
+            ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
 
     def execute(self, requires, resolver, queue):
         # Attribute is ready, return it,
