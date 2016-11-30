@@ -250,7 +250,7 @@ class FileMethod(Method):
             :param content The base64 encoded content of the file
         """
 
-    @protocol(operation="HEAD", id=True)
+    @protocol(operation="HEAD", id=True, agent_server=True, api=True)
     def stat_file(self, id: str):
         """
             Does the file exist
@@ -266,7 +266,7 @@ class FileMethod(Method):
             :param id The id of the file to retrieve
         """
 
-    @protocol()
+    @protocol(api=True)
     def stat_files(self, files: list):
         """
             Check which files exist in the given list
