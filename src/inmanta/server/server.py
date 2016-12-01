@@ -92,6 +92,8 @@ class Server(protocol.ServerEndpoint):
 
         self.setup_dashboard()
 
+        self.dryrun_lock = locks.Lock()
+
     def new_session(self, sid, tid, endpoint_names, nodename):
         session = protocol.ServerEndpoint.new_session(self, sid, tid, endpoint_names, nodename)
         self.agentmanager.new_session(session)
@@ -1056,21 +1058,22 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        dryrun = yield data.DryRun.get_uuid(id)
-        if dryrun is None:
-            return 404, {"message": "The given dryrun does not exist!"}
+        with (yield self.dryrun_lock.acquire()):
+            dryrun = yield data.DryRun.get_uuid(id)
+            if dryrun is None:
+                return 404, {"message": "The given dryrun does not exist!"}
 
-        if resource in dryrun.resources:
-            return 500, {"message": "A dryrun was already stored for this resource."}
+            if resource in dryrun.resources:
+                return 500, {"message": "A dryrun was already stored for this resource."}
 
-        payload = {"changes": changes,
-                   "log": log_msg,
-                   "id_fields": Id.parse_id(resource).to_dict()
-                   }
+            payload = {"changes": changes,
+                       "log": log_msg,
+                       "id_fields": Id.parse_id(resource).to_dict()
+                       }
 
-        dryrun.resources[resource] = payload
-        dryrun.resource_todo -= 1
-        yield dryrun.save()
+            dryrun.resources[resource] = payload
+            dryrun.resource_todo -= 1
+            yield dryrun.save()
 
         return 200
 

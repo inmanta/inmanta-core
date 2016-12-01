@@ -38,6 +38,7 @@ from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 from tornado.web import decode_signed_value, create_signed_value
 import ssl
+import statsd
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -592,7 +593,9 @@ class RESTTransport(Transport):
                                                                            for name, value in message.items()]))
             method_call = getattr(config[1][0], config[1][1])
 
-            result = yield method_call(**message)
+            with self.endpoint.statsd.timer(config[1][1]):
+                result = yield method_call(**message)
+
             if result is None:
                 raise Exception("Handlers for method calls should at least return a status code. %s on %s" % config[1])
 
@@ -930,6 +933,7 @@ class Endpoint(object):
         self._node_name = nodename.get()
         self._end_point_names = []
         self._io_loop = io_loop
+        self.statsd = statsd.StatsClient()
 
     def add_future(self, future):
         """

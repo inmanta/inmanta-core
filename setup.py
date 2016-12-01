@@ -13,7 +13,8 @@ requires=[
         'motorengine',
         'mongobox',
         'pytest-tornado',
-        'blessings']
+        'blessings',
+        'statsd']
 
 setup(
     name="inmanta",
