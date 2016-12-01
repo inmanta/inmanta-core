@@ -21,6 +21,8 @@ import hashlib
 import inspect
 import logging
 import base64
+from concurrent.futures import Future
+
 
 from inmanta.agent.io import get_io, remote
 from inmanta import protocol, resources
@@ -111,7 +113,30 @@ class ResourceHandler(object):
             self._io = io
 
         self._client = None
-        self._ioloop = ioloop.IOLoop()
+        self._ioloop = ioloop.IOLoop.current(instance=True)
+
+    def run_sync(self, func):
+        f = Future()
+
+        def futureToFuture(future):
+            exc = future.exception()
+            if exc is not None:
+                f.set_exception(exc)
+            else:
+                f.set_result(future.result())
+
+        def run():
+            try:
+                result = func()
+                if result is not None:
+                    from tornado.gen import convert_yielded
+                    result = convert_yielded(result)
+                    result.add_done_callback(futureToFuture)
+            except Exception as e:
+                f.set_exception(e)
+        self._ioloop.add_callback(run)
+
+        return f.result()
 
     def set_cache(self, cache: AgentCache):
         self.cache = cache
@@ -132,7 +157,7 @@ class ResourceHandler(object):
         """
 
     def close(self):
-        self._ioloop.close(all_fds=True)
+        pass
 
     @classmethod
     def is_available(self, io):
@@ -271,7 +296,7 @@ class ResourceHandler(object):
         def call():
             return self.get_client().get_file(hash_id)
 
-        result = self._ioloop.run_sync(call)
+        result = self.run_sync(call)
         if result.code == 404:
             return None
         elif result.code == 200:
@@ -286,7 +311,7 @@ class ResourceHandler(object):
         def call():
             return self.get_client().stat_file(hash_id)
 
-        result = self._ioloop.run_sync(call)
+        result = self.run_sync(call)
         return result.code == 200
 
     def upload_file(self, hash_id, content):
@@ -297,7 +322,7 @@ class ResourceHandler(object):
             return self.get_client().upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
         try:
-            self._ioloop.run_sync(call)
+            self.run_sync(call)
         except Exception:
             raise Exception("Unable to upload file to the server.")
 
@@ -402,6 +427,7 @@ class CRUDHandler(ResourceHandler):
         This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
         only works on purgeable resources.
     """
+
     def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
         """
             This method reads the current state of the resource. It provides a copy of the resource that should be deployed,

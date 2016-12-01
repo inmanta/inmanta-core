@@ -25,7 +25,7 @@ import os
 import random
 
 
-from tornado import gen
+from tornado import gen, locks
 from inmanta import env
 from inmanta import methods
 from inmanta import protocol
@@ -105,60 +105,61 @@ class ResourceAction(object):
         waiters.append(dummy.future)
         results = yield waiters
 
-        LOGGER.info("run %s" % self.resource)
-        self.running = True
-        if self.is_done():
-            # Action is cancelled
-            self.running = False
-            return
+        with (yield self.scheduler.ratelimiter.acquire()):
+            LOGGER.info("run %s" % self.resource)
+            self.running = True
+            if self.is_done():
+                # Action is cancelled
+                self.running = False
+                return
 
-        result = sum(results, ResourceActionResult(True, False, False))
+            result = sum(results, ResourceActionResult(True, False, False))
 
-        if result.cancel:
-            return
+            if result.cancel:
+                return
 
-        if not result.success:
-            self.__complete(False, False, changes={}, status="skipped")
-        else:
-            resource = self.resource
+            if not result.success:
+                self.__complete(False, False, changes={}, status="skipped")
+            else:
+                resource = self.resource
 
-            LOGGER.debug("Start deploy of resource %s" % resource)
-            provider = None
+                LOGGER.debug("Start deploy of resource %s" % resource)
+                provider = None
 
-            try:
-                provider = Commander.get_provider(cache, self.scheduler.agent, resource)
-                provider.set_cache(cache)
-            except Exception:
-                if provider is not None:
+                try:
+                    provider = Commander.get_provider(cache, self.scheduler.agent, resource)
+                    provider.set_cache(cache)
+                except Exception:
+                    if provider is not None:
+                        provider.close()
+
+                    cache.close_version(self.resource.id.version)
+                    LOGGER.exception("Unable to find a handler for %s" % resource.id)
+                    return self.__complete(False, False, changes={}, status="unavailable")
+
+                results = yield self.scheduler.agent.thread_pool.submit(provider.execute, resource)
+
+                status = results["status"]
+                if status == "failed" or status == "skipped":
                     provider.close()
+                    cache.close_version(self.resource.id.version)
+                    return self.__complete(False, False,
+                                           changes=results["changes"],
+                                           status=results["status"],
+                                           log_msg=results["log_msg"])
 
-                cache.close_version(self.resource.id.version)
-                LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                return self.__complete(False, False, changes={}, status="unavailable")
+                if result.reload and provider.can_reload():
+                    LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
+                    yield self.scheduler.agent.thread_pool.submit(provider.do_reload, resource)
 
-            results = yield self.scheduler.agent.thread_pool.submit(provider.execute, resource)
-
-            status = results["status"]
-            if status == "failed" or status == "skipped":
                 provider.close()
                 cache.close_version(self.resource.id.version)
-                return self.__complete(False, False,
-                                       changes=results["changes"],
-                                       status=results["status"],
-                                       log_msg=results["log_msg"])
 
-            if result.reload and provider.can_reload():
-                LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
-                yield self.scheduler.agent.thread_pool.submit(provider.do_reload, resource)
+                reload = results["changed"] and hasattr(resource, "reload") and resource.reload
+                return self.__complete(True, reload=reload, changes=results["changes"],
+                                       status=results["status"], log_msg=results["log_msg"])
 
-            provider.close()
-            cache.close_version(self.resource.id.version)
-
-            reload = results["changed"] and hasattr(resource, "reload") and resource.reload
-            return self.__complete(True, reload=reload, changes=results["changes"],
-                                   status=results["status"], log_msg=results["log_msg"])
-
-            LOGGER.debug("Finished %s" % resource)
+                LOGGER.debug("Finished %s" % resource)
 
     def __str__(self, *args, **kwargs):
         if self.resource is None:
@@ -208,13 +209,14 @@ class RemoteResourceAction(ResourceAction):
 
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id, name, cache):
+    def __init__(self, agent, env_id, name, cache, concurency=1):
         self.generation = {}
         self.cad = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
         self.name = name
+        self.ratelimiter = locks.Semaphore(concurency)
 
     def reload(self, resources):
         for ra in self.generation.values():
@@ -256,6 +258,8 @@ class Agent(AgentEndPoint):
 
     def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
         super().__init__("agent", io_loop, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+
+        self.poolsize = poolsize
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -315,7 +319,7 @@ class Agent(AgentEndPoint):
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
         cache = AgentCache()
-        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache)
+        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache, concurency=self.poolsize)
         self._cache[name] = cache
         self._enabled[name] = None
 
@@ -498,13 +502,21 @@ class Agent(AgentEndPoint):
             LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
             return 500
 
-        restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+        resources = result.result["resources"]
+
+        self.add_future(self.do_run_dryrun(version, id, agent, resources))
+
+        return 200
+
+    @gen.coroutine
+    def do_run_dryrun(self, version, id, agent, resources):
+        restypes = set([res["id_fields"]["entity_type"] for res in resources])
 
         yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
 
         self._cache[agent].open_version(version)
 
-        for res in result.result["resources"]:
+        for res in resources:
             provider = None
             try:
                 data = res["fields"]
@@ -533,8 +545,6 @@ class Agent(AgentEndPoint):
                     provider.close()
 
         self._cache[agent].close_version(version)
-
-        return 200
 
     def get_agent_hostname(self, agent_name):
         """

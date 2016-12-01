@@ -181,6 +181,7 @@ class AgentManager(object):
                                          tid=tid,
                                          process=proc,
                                          name=nh).save()
+                yield session.get_client().set_state(agent=nodename, enabled=False)
             if env is not None:
                 yield self.verify_reschedule(env, session.endpoint_names)
 
@@ -230,6 +231,9 @@ class AgentManager(object):
             return
 
         aps = yield AgentProcess.get_by_sid(sid=sid)
+        if aps is None:
+            LOGGER.warning("No process registered for SID %s", sid)
+            return
         aps.last_seen = now
         aps.save()
 
