@@ -49,6 +49,8 @@ from inmanta.server import config as opt
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
 
+DBLIMIT = 100000
+
 
 class Server(protocol.ServerEndpoint):
     """
@@ -689,7 +691,8 @@ class Server(protocol.ServerEndpoint):
             cm = versions[0]
 
         deploy_model = []
-        resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).find_all()  # @UndefinedVariable
+        # @UndefinedVariable
+        resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).limit(DBLIMIT).find_all()
 
         for rv in resources:
             yield rv.load_references()
@@ -985,7 +988,7 @@ class Server(protocol.ServerEndpoint):
         dryrun = data.DryRun(uuid=dryrun_id, environment=env, model=model, date=datetime.datetime.now(), resources={})
 
         # fetch all resource in this cm and create a list of distinct agents
-        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
+        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()  # @UndefinedVariable
         dryrun.resource_total = len(rvs)
         dryrun.resource_todo = dryrun.resource_total
 

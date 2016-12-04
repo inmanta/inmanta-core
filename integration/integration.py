@@ -22,6 +22,7 @@ import dateutil.parser
 from time import sleep
 from shutil import rmtree
 from inmanta.config import TransportConfig
+import tempfile
 
 
 LOGGER = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ def patch(dir, patch):
 
 class Server(object):
 
-    def __init__(self, path, host, auth=False, ssl=False):
+    def __init__(self, path, host, auth=False, ssl=False, autostart="iaas_*"):
         makedirs(path, exist_ok=True)
 
         if ssl:
@@ -81,7 +82,8 @@ fact-renew = 200
 no-recompile = true
 auto-recompile-wait = 10
 server_address= %s
-""" % (path, path, host))
+agent-autostart = %s
+""" % (path, path, host, autostart))
             if auth:
                 file.write("""
 username=jos
@@ -104,21 +106,23 @@ enabled=true
 # The path where the dashboard is installed
 path=/home/wouter/projects/inmanta-dashboard/dist""")
 
-        basepath = os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0])))
-        app = os.path.join(basepath, "src", "inmanta", "app.py")
-
+        app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
         inmanta_path = [sys.executable, app]
         args = inmanta_path + ["-v", "--log-file", os.path.join(path, "log"), "--log-file-level", "3", "server"]
         self.proc = subprocess.Popen(args, cwd=path, env=os.environ.copy())
-        self.tunnel = subprocess.Popen(
-            ["ssh", "-R", "*:8888:127.0.0.1:8888", "fedora@%s" % host], cwd=path, env=os.environ.copy())
+        if host != "127.0.0.1" and host != "localhost":
+            self.tunnel = subprocess.Popen(
+                ["ssh", "-R", "*:8888:127.0.0.1:8888", "fedora@%s" % host], cwd=path, env=os.environ.copy())
+        else:
+            self.tunnel = None
 
     def __enter__(self):
         pass
 
     def __exit__(self, type, value, traceback):
         self.proc.terminate()
-        self.tunnel.terminate()
+        if self.tunnel is not None:
+            self.tunnel.terminate()
 
 
 class Connection(object):
@@ -232,6 +236,21 @@ class Environment(object):
         yield self.connection._client.release_version(self.envid, version, True)
 
     @gen.coroutine
+    def dryrun(self, version):
+        result = yield self.connection._client.dryrun_request(self.envid, version)
+        result = unwrap(result)
+        return result["dryrun"]["id"]
+
+    @gen.coroutine
+    def wait_for_dryrun(self, id):
+        while True:
+            result = yield self.connection._client.dryrun_report(self.envid, id)
+            result = unwrap(result)
+            if result["dryrun"]["todo"] == 0:
+                return
+            yield gen.sleep(2)
+
+    @gen.coroutine
     def waitForDeploy(self, version, total=None):
         while True:
             result = yield self.connection._client.get_version(self.envid, version)
@@ -307,35 +326,37 @@ class Environment(object):
 
 class Project(object):
 
-    def __init__(self, repo, target, purge):
+    def __init__(self, repo, target, purge, inplace=False):
         self.repo = repo
         self.target = target
         self.purge = purge
+        self.inplace = inplace
 
     def init(self):
-        if os.path.exists(self.target) and self.purge:
-            rmtree(self.target)
-        makedirs(self.target, exist_ok=True)
-        if not os.path.exists(os.path.join(self.target, ".git")):
-            gitprovider.clone(self.repo, self.target)
-            LOGGER.info("created project")
+        if self.inplace:
+            self.target = os.path.abspath(self.target)
+            if not os.path.exists(self.target):
+                raise Exception("Project not found", self.target)
         else:
-            gitprovider.fetch(self.target)
-            LOGGER.info("updated project")
+            if os.path.exists(self.target) and self.purge:
+                rmtree(self.target)
+            makedirs(self.target, exist_ok=True)
+            if not os.path.exists(os.path.join(self.target, ".git")):
+                gitprovider.clone(self.repo, self.target)
+                LOGGER.info("created project")
+            else:
+                gitprovider.fetch(self.target)
+                LOGGER.info("updated project")
         self.project = module.Project(self.target)
         module.Project.set(self.project)
 
-    def compile(self, env, logfile=None):
+    def compile(self, env, logfile=None, envvars=None):
         Config.set("config", "environment", env.envid)
         # reset compiler state
         # do_compile()
 
-        basepath = os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0])))
-        app = os.path.join(basepath, "src", "inmanta", "app.py")
-
-        inmanta_path = [sys.executable, app]
-
-        args = inmanta_path
+        apppath = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
+        args = [sys.executable, apppath]
 
         if logfile is not None:
             args += ["--log-file", logfile, "--log-file-level", "3", "-v"]
@@ -351,26 +372,32 @@ class Project(object):
         if env.ssl:
             args += ["--ssl", "--ssl-ca-cert", "/etc/pki/tls/certs/server.crt"]
         try:
-            subprocess.check_output(args, cwd=self.target, env=os.environ.copy())
+            env = os.environ.copy()
+            if envvars is not None:
+                for k, v in envvars.items():
+                    env[k] = v
+            subprocess.check_output(args, cwd=self.target, env=env)
         except CalledProcessError as e:
             print(e.output)
             raise e
 
-    def export(self, env, logfile):
+    def export(self, env, logfile, envvars=None):
         Config.set("config", "environment", env.envid)
         # reset compiler state
         # do_compile()
 
-        basepath = os.path.dirname(os.path.dirname(os.path.abspath(sys.argv[0])))
-        app = os.path.join(basepath, "src", "inmanta", "app.py")
+        app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
 
         inmanta_path = [sys.executable, app]
         args = inmanta_path
-        if logfile is not None:
-            args += ["--log-file", logfile, "--log-file-level", "3"]
+        if logfile is None:
+            logfile = tempfile.mktemp()
+        logfile = os.path.abspath(logfile)
 
-        args = args + ["-vvv", "export",  "-e", env.envid,
-                               "--server_address", env.connection.server, "--server_port", "8888"]
+        args += ["--log-file", logfile, "--log-file-level", "3"]
+
+        args = args + ["-v", "export",  "-e", env.envid,
+                       "--server_address", env.connection.server, "--server_port", "8888"]
 
         if env.auth:
             args += ["--username", "jos", "--password", "raienvnWAVbaerMSZ"]
@@ -379,8 +406,14 @@ class Project(object):
             args += ["--ssl", "--ssl-ca-cert", "/etc/pki/tls/certs/server.crt"]
 
         try:
-            out = subprocess.check_output(args, cwd=self.target, env=os.environ.copy(), stderr=subprocess.STDOUT)
-            out = out.decode("utf-8")
+            env = os.environ.copy()
+            if envvars is not None:
+                for k, v in envvars.items():
+                    env[k] = v
+            subprocess.check_call(args, cwd=self.target, env=env, stderr=subprocess.STDOUT)
+            out = subprocess.check_output(
+                ["grep", "Committed resources with version", logfile], env=os.environ.copy(), universal_newlines=True)
+
             return re.search(r'Committed resources with version ([0-9]+)', out).group(1)
         except CalledProcessError as e:
             print(e.output.decode("utf-8"))

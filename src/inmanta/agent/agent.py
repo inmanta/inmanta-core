@@ -337,7 +337,7 @@ class Agent(AgentEndPoint):
             yield self.get_latest_version_for_agent(name)
         self._enabled[name] = action
         # add splay
-        self._sched.add_action(action, self._deploy_interval, 0)
+        self._sched.add_action(action, self._deploy_interval, self._splay_value)
         return 200
 
     def pause(self, name):
