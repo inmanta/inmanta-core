@@ -23,6 +23,7 @@ from time import sleep
 from shutil import rmtree
 from inmanta.config import TransportConfig
 import tempfile
+from inmanta.server.agentmanager import AgentManager
 
 
 LOGGER = logging.getLogger(__name__)
@@ -61,6 +62,8 @@ def patch(dir, patch):
 class Server(object):
 
     def __init__(self, path, host, auth=False, ssl=False, autostart="iaas_*"):
+        path = os.path.abspath(path)
+        print("server root @:", path)
         makedirs(path, exist_ok=True)
 
         if ssl:
@@ -322,6 +325,28 @@ class Environment(object):
         version = result["version"]
         yield(self.deploy(version))
         yield(self.waitForDeploy(version))
+
+    def start_agent(self, base_path, agent, agentmap):
+        base_path = os.path.abspath(os.path.join(base_path, agent))
+
+        cfg = """
+[config]
+heartbeat-interval = 60
+state-dir=%s
+
+agent-names = %s
+environment=%s
+agent-map=$s=localhost
+
+agent-interval = 60
+agent-splay = 2
+
+agent-run-at-start=true
+""" % (base_path, ",".join(agentmap.keys()), self.envid, ",".join(["%s=%s" % (k, v) for (k, v) in agentmap.items()]))
+
+        config_path = os.path.join(base_path, "agent.cfg")
+        with open(config_path, "w+") as fd:
+            fd.write(cfg)
 
 
 class Project(object):

@@ -119,7 +119,7 @@ class ResourceAction(object):
                 return
 
             if not result.success:
-                self.__complete(False, False, changes={}, status="skipped")
+                yield self.__complete(False, False, changes={}, status="skipped")
             else:
                 resource = self.resource
 
@@ -135,7 +135,7 @@ class ResourceAction(object):
 
                     cache.close_version(self.resource.id.version)
                     LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                    return self.__complete(False, False, changes={}, status="unavailable")
+                    return (yield self.__complete(False, False, changes={}, status="unavailable"))
 
                 results = yield self.scheduler.agent.thread_pool.submit(provider.execute, resource)
 
@@ -143,10 +143,10 @@ class ResourceAction(object):
                 if status == "failed" or status == "skipped":
                     provider.close()
                     cache.close_version(self.resource.id.version)
-                    return self.__complete(False, False,
-                                           changes=results["changes"],
-                                           status=results["status"],
-                                           log_msg=results["log_msg"])
+                    return (yield self.__complete(False, False,
+                                                  changes=results["changes"],
+                                                  status=results["status"],
+                                                  log_msg=results["log_msg"]))
 
                 if result.reload and provider.can_reload():
                     LOGGER.warning("Reloading %s because of updated dependencies" % resource.id)
@@ -156,8 +156,8 @@ class ResourceAction(object):
                 cache.close_version(self.resource.id.version)
 
                 reload = results["changed"] and hasattr(resource, "reload") and resource.reload
-                return self.__complete(True, reload=reload, changes=results["changes"],
-                                       status=results["status"], log_msg=results["log_msg"])
+                return (yield self.__complete(True, reload=reload, changes=results["changes"],
+                                              status=results["status"], log_msg=results["log_msg"]))
 
                 LOGGER.debug("Finished %s" % resource)
 

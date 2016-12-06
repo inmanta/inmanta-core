@@ -702,6 +702,7 @@ class Server(protocol.ServerEndpoint):
                                          message="Resource version pulled by client for agent %s state" % agent)
                 yield ra.save()
 
+        print("XX", len(deploy_model))
         return 200, {"environment": tid, "agent": agent, "version": cm.version, "resources": deploy_model}
 
     @protocol.handle(methods.CMVersionMethod.list_versions)
@@ -988,7 +989,8 @@ class Server(protocol.ServerEndpoint):
         dryrun = data.DryRun(uuid=dryrun_id, environment=env, model=model, date=datetime.datetime.now(), resources={})
 
         # fetch all resource in this cm and create a list of distinct agents
-        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()  # @UndefinedVariable
+        # @UndefinedVariable
+        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()
         dryrun.resource_total = len(rvs)
         dryrun.resource_todo = dryrun.resource_total
 
