@@ -997,6 +997,8 @@ class Session(object):
         self._timeout = timout
         self._sessionstore = sessionstore
         self._seen = time.time()
+        self._callhandle = None
+        self.expired = False
 
         self.tid = tid
         self.endpoint_names = endpoint_names
@@ -1011,11 +1013,13 @@ class Session(object):
         self.client = ReturnClient(str(sid), self)
 
     def check_expire(self):
+        if self.expired:
+            LOGGER.exception("Tried to expire session already expired")
         ttw = self._timeout + self._seen - time.time()
         if ttw < 0:
             self.expire(self._seen - time.time())
         else:
-            self._io_loop.call_later(ttw, self.check_expire)
+            self._callhandle = self._io_loop.call_later(ttw, self.check_expire)
 
     def get_id(self):
         return self._sid
@@ -1023,6 +1027,9 @@ class Session(object):
     id = property(get_id)
 
     def expire(self, timeout):
+        self.expired = True
+        if self._callhandle is not None:
+            self._io_loop.remove_timeout(self._callhandle)
         self._sessionstore.expire(self, timeout)
 
     def seen(self):
@@ -1112,6 +1119,9 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         if self._transport_instance is not None:
             self._transport_instance.stop_endpoint()
             LOGGER.debug("Stopped %s", self._transport_instance)
+        # terminate all sessions cleanly
+        for session in self._sessions.copy().values():
+            session.expire(0)
 
     def validate_sid(self, sid):
         if isinstance(sid, str):
