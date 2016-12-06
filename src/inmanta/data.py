@@ -17,6 +17,8 @@
 """
 
 import json
+import logging
+
 
 from motorengine import Document
 from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
@@ -25,6 +27,8 @@ from inmanta.resources import Id
 from tornado import gen
 from motorengine.fields.list_field import ListField
 from motorengine.fields.embedded_document_field import EmbeddedDocumentField
+
+LOGGER = logging.getLogger(__name__)
 
 
 class IdDocument(Document):
@@ -225,7 +229,8 @@ class AgentProcess(IdDocument):
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
-            raise Exception("Multiple objects with the same unique id found!")
+            LOGGER.exception("Multiple objects with the same unique id found!")
+            return objects[0]
         else:
             return objects[0]
 
