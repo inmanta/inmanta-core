@@ -209,14 +209,14 @@ class RemoteResourceAction(ResourceAction):
 
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id, name, cache, concurency=1):
+    def __init__(self, agent, env_id, name, cache, ratelimiter):
         self.generation = {}
         self.cad = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
         self.name = name
-        self.ratelimiter = locks.Semaphore(concurency)
+        self.ratelimiter = ratelimiter
 
     def reload(self, resources):
         for ra in self.generation.values():
@@ -260,6 +260,7 @@ class Agent(AgentEndPoint):
         super().__init__("agent", io_loop, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
+        self.ratelimiter = locks.Semaphore(poolsize)
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -319,7 +320,7 @@ class Agent(AgentEndPoint):
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
         cache = AgentCache()
-        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache, concurency=self.poolsize)
+        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache, ratelimiter=self.ratelimiter)
         self._cache[name] = cache
         self._enabled[name] = None
 
@@ -442,7 +443,7 @@ class Agent(AgentEndPoint):
         if result.code == 404:
             LOGGER.info("No released configuration model version available for agent %s", agent)
         elif result.code != 200:
-            LOGGER.warning("Got an error while pulling resources for agent %s", agent)
+            LOGGER.warning("Got an error while pulling resources for agent %s. %s", agent, result.result)
 
         else:
             restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])

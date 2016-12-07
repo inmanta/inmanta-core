@@ -648,7 +648,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=id).find_all()  # @UndefinedVariable
+        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=id).limit(DBLIMIT).find_all()  # @UndefinedVariable
         if len(resv) == 0:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
@@ -660,7 +660,7 @@ class Server(protocol.ServerEndpoint):
 
         action_list = []
         if bool(logs):
-            actions = yield data.ResourceAction.objects.filter(resource_version=resv[0]).find_all()  # @UndefinedVariable
+            actions = yield data.ResourceAction.objects.filter(resource_version=resv[0]).limit(DBLIMIT).find_all()  # @UndefinedVariable
             for action in actions:
                 action_list.append(action.to_dict())
 
@@ -746,7 +746,7 @@ class Server(protocol.ServerEndpoint):
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.ResourceVersion.objects.filter(model=version).find_all()  # @UndefinedVariable
+        resources = yield data.ResourceVersion.objects.filter(model=version).limit(DBLIMIT).find_all()  # @UndefinedVariable
 
         version_dict = yield version.to_dict()
         d = {"model": version_dict}

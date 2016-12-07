@@ -328,6 +328,7 @@ class Environment(object):
 
     def start_agent(self, base_path, agent, agentmap):
         base_path = os.path.abspath(os.path.join(base_path, agent))
+        os.makedirs(base_path, exist_ok=True)
 
         cfg = """
 [config]
@@ -336,7 +337,7 @@ state-dir=%s
 
 agent-names = %s
 environment=%s
-agent-map=$s=localhost
+agent-map=%s
 
 agent-interval = 60
 agent-splay = 2
@@ -347,6 +348,17 @@ agent-run-at-start=true
         config_path = os.path.join(base_path, "agent.cfg")
         with open(config_path, "w+") as fd:
             fd.write(cfg)
+
+        app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
+        inmanta_path = [sys.executable, app]
+        args = inmanta_path + ["-vvvv", "--config", config_path, "agent"]
+
+        outfile = os.path.join(base_path, "out.log")
+        err = os.path.join(base_path, "err.log")
+
+        with open(outfile, "wb+") as outhandle:
+            with open(err, "wb+") as errhandle:
+                return subprocess.Popen(args, stdout=outhandle, stderr=errhandle, cwd=base_path, env=os.environ.copy())
 
 
 class Project(object):

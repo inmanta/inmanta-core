@@ -1415,6 +1415,6 @@ class ReturnClient(Client, metaclass=ClientMeta):
         try:
             return_value = yield self.session.put_call(call_spec, timeout=timeout)
         except gen.TimeoutError:
-            return Result(code=500, result="")
+            return Result(code=500, result="Call timed out")
 
         return Result(code=return_value["code"], result=return_value["result"])

@@ -181,7 +181,7 @@ class AgentManager(object):
                                          tid=tid,
                                          process=proc,
                                          name=nh).save()
-                yield session.get_client().set_state(agent=nodename, enabled=False)
+                #yield session.get_client().set_state(agent=nodename, enabled=False)
             if env is not None:
                 yield self.verify_reschedule(env, session.endpoint_names)
 
