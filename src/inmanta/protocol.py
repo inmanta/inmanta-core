@@ -38,7 +38,6 @@ from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 from tornado.web import decode_signed_value, create_signed_value
 import ssl
-import statsd
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -507,6 +506,7 @@ class RESTTransport(Transport):
     def return_error_msg(self, status=500, msg="", headers={}):
         body = {"message": msg}
         headers["Content-Type"] = "application/json"
+        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
         return body, headers, status
 
     @gen.coroutine
@@ -593,8 +593,7 @@ class RESTTransport(Transport):
                                                                            for name, value in message.items()]))
             method_call = getattr(config[1][0], config[1][1])
 
-            with self.endpoint.statsd.timer(config[1][1]):
-                result = yield method_call(**message)
+            result = yield method_call(**message)
 
             if result is None:
                 raise Exception("Handlers for method calls should at least return a status code. %s on %s" % config[1])
@@ -933,7 +932,6 @@ class Endpoint(object):
         self._node_name = nodename.get()
         self._end_point_names = []
         self._io_loop = io_loop
-        self.statsd = statsd.StatsClient()
 
     def add_future(self, future):
         """
@@ -1242,6 +1240,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
+        LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
         self._io_loop.add_callback(self.perform_heartbeat)
 
@@ -1249,16 +1248,26 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         self.running = False
 
     @gen.coroutine
+    def on_reconnect(self):
+        pass
+
+    @gen.coroutine
     def perform_heartbeat(self):
         """
             Start a continuous heartbeat call
         """
+        connected = False
         while self.running:
+            LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
             result = yield self._client.heartbeat(sid=str(self.sessionid),
                                                   tid=str(self._env_id),
                                                   endpoint_names=self.end_point_names,
                                                   nodename=self.node_name)
+            LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
             if result.code == 200:
+                if not connected:
+                    connected = True
+                    self.add_future(self.on_reconnect())
                 if result.result is not None:
                     if "method_calls" in result.result:
                         method_calls = result.result["method_calls"]
@@ -1307,6 +1316,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s, going to sleep for %d s",
                                result.code, result.result, self.reconnect_delay)
+                connected = False
                 yield gen.sleep(self.reconnect_delay)
 
 

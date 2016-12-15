@@ -702,7 +702,6 @@ class Server(protocol.ServerEndpoint):
                                          message="Resource version pulled by client for agent %s state" % agent)
                 yield ra.save()
 
-        print("XX", len(deploy_model))
         return 200, {"environment": tid, "agent": agent, "version": cm.version, "resources": deploy_model}
 
     @protocol.handle(methods.CMVersionMethod.list_versions)

@@ -250,6 +250,13 @@ class ResourceScheduler(object):
             print(r.long_string())
 
 
+class AgentInstance():
+    
+    def __init__(self, name: str, process: Agent):
+        self.agent = process
+        self.name = name
+    
+
 class Agent(AgentEndPoint):
     """
         An agent to enact changes upon resources. This agent listens to the
@@ -313,10 +320,6 @@ class Agent(AgentEndPoint):
 
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
-    def start(self):
-        AgentEndPoint.start(self)
-        self.add_future(self.initialize())
-
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
         cache = AgentCache()
@@ -364,7 +367,7 @@ class Agent(AgentEndPoint):
             return self.pause(agent)
 
     @gen.coroutine
-    def initialize(self):
+    def on_reconnect(self):
         for name in self._enabled.keys():
             result = yield self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
             if result.code == 200:
@@ -438,28 +441,29 @@ class Agent(AgentEndPoint):
         if agent not in self.end_point_names:
             return 200
 
-        LOGGER.debug("Getting latest resources for %s" % agent)
-        result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
-        if result.code == 404:
-            LOGGER.info("No released configuration model version available for agent %s", agent)
-        elif result.code != 200:
-            LOGGER.warning("Got an error while pulling resources for agent %s. %s", agent, result.result)
+        with (yield self.ratelimiter.acquire()):
+            LOGGER.debug("Getting latest resources for %s" % agent)
+            result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
+            if result.code == 404:
+                LOGGER.info("No released configuration model version available for agent %s", agent)
+            elif result.code != 200:
+                LOGGER.warning("Got an error while pulling resources for agent %s. %s", agent, result.result)
 
-        else:
-            restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
-            resources = []
-            yield self._ensure_code(self._env_id, result.result["version"], restypes)
-            try:
-                for res in result.result["resources"]:
-                    data = res["fields"]
-                    data["id"] = res["id"]
-                    resource = Resource.deserialize(data)
-                    resources.append(resource)
-                    LOGGER.debug("Received update for %s", resource.id)
-            except TypeError as e:
-                LOGGER.error("Failed to receive update", e)
+            else:
+                restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+                resources = []
+                yield self._ensure_code(self._env_id, result.result["version"], restypes)
+                try:
+                    for res in result.result["resources"]:
+                        data = res["fields"]
+                        data["id"] = res["id"]
+                        resource = Resource.deserialize(data)
+                        resources.append(resource)
+                        LOGGER.debug("Received update for %s", resource.id)
+                except TypeError as e:
+                    LOGGER.error("Failed to receive update", e)
 
-            self._nqs[agent].reload(resources)
+                self._nqs[agent].reload(resources)
 
     @protocol.handle(methods.AgentResourceEvent.resource_event)
     @gen.coroutine

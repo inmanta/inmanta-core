@@ -326,6 +326,10 @@ class Environment(object):
         yield(self.deploy(version))
         yield(self.waitForDeploy(version))
 
+    @gen.coroutine
+    def clear(self):
+        yield self.connection._client.clear_environment(self.envid)
+
     def start_agent(self, base_path, agent, agentmap):
         base_path = os.path.abspath(os.path.join(base_path, agent))
         os.makedirs(base_path, exist_ok=True)
@@ -351,7 +355,7 @@ agent-run-at-start=true
 
         app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
         inmanta_path = [sys.executable, app]
-        args = inmanta_path + ["-vvvv", "--config", config_path, "agent"]
+        args = inmanta_path + ["-vvvv", "--timed-logs", "--config", config_path, "agent"]
 
         outfile = os.path.join(base_path, "out.log")
         err = os.path.join(base_path, "err.log")
