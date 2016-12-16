@@ -24,6 +24,7 @@ from shutil import rmtree
 from inmanta.config import TransportConfig
 import tempfile
 from inmanta.server.agentmanager import AgentManager
+import time
 
 
 LOGGER = logging.getLogger(__name__)
@@ -111,7 +112,7 @@ path=/home/wouter/projects/inmanta-dashboard/dist""")
 
         app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
         inmanta_path = [sys.executable, app]
-        args = inmanta_path + ["-v", "--log-file", os.path.join(path, "log"), "--log-file-level", "3", "server"]
+        args = inmanta_path + ["-v", "--log-file", os.path.join(path, "log"), "--log-file-level", "4", "server"]
         self.proc = subprocess.Popen(args, cwd=path, env=os.environ.copy())
         if host != "127.0.0.1" and host != "localhost":
             self.tunnel = subprocess.Popen(
@@ -278,6 +279,21 @@ class Environment(object):
                 return
             else:
                 yield gen.sleep(5)
+
+    @gen.coroutine
+    def waitAgentTimeout(self):
+        print("waiting for agents to timeout")
+        xtime = time.time()
+        waiting = True
+        while waiting:
+            result = yield self.connection._client.list_agents(self.envid)
+            result = unwrap(result)
+            agents = [x for x in result["agents"] if x["state"] == "up"]
+            if len(agents) == 0:
+                waiting = False
+            else:
+                yield gen.sleep(5)
+        print("waited %s" % (time.time() - xtime))
 
     @gen.coroutine
     def get_endpoints(self):

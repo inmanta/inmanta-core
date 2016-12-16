@@ -37,6 +37,7 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
+import uuid
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +60,12 @@ class ResourceActionResult(object):
 
 class ResourceAction(object):
 
-    def __init__(self, scheduler, resource):
+    def __init__(self, scheduler, resource, gid):
         self.scheduler = scheduler
         self.resource = resource
         self.future = Future()
         self.running = False
+        self.gid = gid
 
     def is_running(self):
         return self.running
@@ -73,7 +75,7 @@ class ResourceAction(object):
 
     def cancel(self):
         if not self.is_running() and not self.is_done():
-            LOGGER.info("Cancelled deploy of %s", self.resource)
+            LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
@@ -84,13 +86,13 @@ class ResourceAction(object):
         else:
             level = "ERROR"
 
-        yield self.scheduler.agent._client.resource_updated(tid=self.scheduler._env_id,
-                                                            id=str(self.resource.id),
-                                                            level=level,
-                                                            action=action,
-                                                            status=status,
-                                                            message="%s: %s" % (status, log_msg),
-                                                            extra_data=changes)
+        yield self.scheduler.get_client().resource_updated(tid=self.scheduler._env_id,
+                                                           id=str(self.resource.id),
+                                                           level=level,
+                                                           action=action,
+                                                           status=status,
+                                                           message="%s: %s" % (status, log_msg),
+                                                           extra_data=changes)
 
         self.future.set_result(ResourceActionResult(success, reload, False))
         LOGGER.info("end run %s" % self.resource)
@@ -98,6 +100,7 @@ class ResourceAction(object):
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
+        LOGGER.log(3, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.version)
 
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
@@ -106,10 +109,11 @@ class ResourceAction(object):
         results = yield waiters
 
         with (yield self.scheduler.ratelimiter.acquire()):
-            LOGGER.info("run %s" % self.resource)
+            LOGGER.info("run %s %s" % (self.gid, self.resource))
             self.running = True
             if self.is_done():
                 # Action is cancelled
+                LOGGER.log(3, "%s %s is no longer active" % (self.gid, self.resource))
                 self.running = False
                 return
 
@@ -123,7 +127,7 @@ class ResourceAction(object):
             else:
                 resource = self.resource
 
-                LOGGER.debug("Start deploy of resource %s" % resource)
+                LOGGER.debug("Start deploy of resource %s %s" % (self.gid, resource))
                 provider = None
 
                 try:
@@ -159,7 +163,7 @@ class ResourceAction(object):
                 return (yield self.__complete(True, reload=reload, changes=results["changes"],
                                               status=results["status"], log_msg=results["log_msg"]))
 
-                LOGGER.debug("Finished %s" % resource)
+                LOGGER.debug("Finished %s %s" % (self.gid, resource))
 
     def __str__(self, *args, **kwargs):
         if self.resource is None:
@@ -179,16 +183,16 @@ class ResourceAction(object):
 
 class RemoteResourceAction(ResourceAction):
 
-    def __init__(self, scheduler, resource_id):
-        super(RemoteResourceAction, self).__init__(scheduler, None)
+    def __init__(self, scheduler, resource_id, gid):
+        super(RemoteResourceAction, self).__init__(scheduler, None, gid)
         self.resource_id = resource_id
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
         yield dummy.future
         try:
-            result = yield self.scheduler.agent._client.get_resource(self.scheduler.agent.get_environment(),
-                                                                     str(self.resource_id), status=True)
+            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent.get_environment(),
+                                                                    str(self.resource_id), status=True)
             status = result.result['status']
             if status == '' or self.future.done():
                 # wait for event
@@ -222,15 +226,16 @@ class ResourceScheduler(object):
         for ra in self.generation.values():
             ra.cancel()
 
-        self.generation = {r.id.resource_str(): ResourceAction(self, r) for r in resources}
+        gid = uuid.uuid4()
+        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid) for r in resources}
 
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(self, cad)
+            ra = RemoteResourceAction(self, cad, gid)
             self.cad[str(cad)] = ra
             self.generation[cad.resource_str()] = ra
 
-        dummy = ResourceAction(self, None)
+        dummy = ResourceAction(self, None, gid)
         for r in self.generation.values():
             r.execute(dummy, self.generation, self.cache)
         dummy.future.set_result(ResourceActionResult(True, False, False))
@@ -249,13 +254,325 @@ class ResourceScheduler(object):
         for r in self.queue:
             print(r.long_string())
 
+    def get_client(self):
+        return self.agent.get_client()
+
 
 class AgentInstance():
-    
-    def __init__(self, name: str, process: Agent):
-        self.agent = process
+
+    def __init__(self, process, name: str, hostname: str):
+        self.process = process
         self.name = name
-    
+        self.hostname = hostname
+
+        # inherit
+        self.ratelimiter = process.ratelimiter
+        self._env_id = process._env_id
+        self.thread_pool = process.thread_pool
+        self.sessionid = process.sessionid
+
+        # init
+        self._cache = AgentCache()
+        self._nq = ResourceScheduler(self, self.process._env_id, name, self._cache, ratelimiter=self.ratelimiter)
+        self._enabled = None
+
+        # do regular deploys
+        self._deploy_interval = cfg.agent_interval.get()
+        self._splay_interval = cfg.agent_splay.get()
+        self._splay_value = random.randint(0, self._splay_interval)
+
+    def get_client(self):
+        return self.process._client
+
+    def get_hostname(self):
+        return self.hostname
+
+    def is_local(self):
+        return self.get_client().node_name == self.hostname or self.hostname == "localhost"
+
+    def is_enabled(self):
+        return self._enabled is not None
+
+    def add_future(self, future):
+        self.process.add_future(future)
+
+    def unpause(self):
+        if self._enabled is not None:
+            return 200, "already running"
+
+        LOGGER.info("Agent assuming primary role for %s" % self.name)
+
+        @gen.coroutine
+        def action():
+            yield self.get_latest_version_for_agent()
+        self._enabled = action
+        self.process._sched.add_action(action, self._deploy_interval, self._splay_value)
+        return 200, "unpaused"
+
+    def pause(self):
+        if self._enabled is None:
+            return 200, "already paused"
+
+        LOGGER.info("Agent lost primary role for %s" % self.name)
+
+        token = self._enabled
+        self.process._sched.remove(token)
+        self._enabled = None
+        return 200, "paused"
+
+    def notify_ready(self, resourceid):
+        self._nq.notify_ready(resourceid)
+
+    @gen.coroutine
+    def get_latest_version_for_agent(self):
+        """
+            Get the latest version for the given agent (this is also how we are notified)
+        """
+        with (yield self.ratelimiter.acquire()):
+            LOGGER.debug("Getting latest resources for %s" % self.name)
+            result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name)
+            if result.code == 404:
+                LOGGER.info("No released configuration model version available for agent %s", self.name)
+            elif result.code != 200:
+                LOGGER.warning("Got an error while pulling resources for agent %s. %s", self.name, result.result)
+
+            else:
+                restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+                resources = []
+                yield self.process._ensure_code(self._env_id, result.result["version"], restypes)
+                try:
+                    for res in result.result["resources"]:
+                        data = res["fields"]
+                        data["id"] = res["id"]
+                        resource = Resource.deserialize(data)
+                        resources.append(resource)
+                        LOGGER.debug("Received update for %s", resource.id)
+                except TypeError as e:
+                    LOGGER.error("Failed to receive update", e)
+
+                self._nq.reload(resources)
+
+    @gen.coroutine
+    def dryrun(self, id, version):
+
+        result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
+        if result.code == 404:
+            LOGGER.info("Version %s does not exist", version)
+            return 404
+
+        elif result.code != 200:
+            LOGGER.warning("Got an error while pulling resources for agent %s and version %s", self.name, version)
+            return 500
+
+        resources = result.result["resources"]
+
+        self.add_future(self.do_run_dryrun(version, id, resources))
+
+        return 200
+
+    @gen.coroutine
+    def do_run_dryrun(self, version, id, resources):
+        restypes = set([res["id_fields"]["entity_type"] for res in resources])
+
+        with (yield self.ratelimiter.acquire()):
+            # TODO: handle different versions for dryrun and deploy!
+            yield self.process._ensure_code(self._env_id, version, restypes)
+
+            self._cache.open_version(version)
+
+            for res in resources:
+                provider = None
+                try:
+                    data = res["fields"]
+                    data["id"] = res["id"]
+                    resource = Resource.deserialize(data)
+                    LOGGER.debug("Running dryrun for %s", resource.id)
+
+                    try:
+                        provider = Commander.get_provider(self._cache, self, resource)
+                        provider.set_cache(self._cache)
+                    except Exception:
+                        LOGGER.exception("Unable to find a handler for %s" % resource.id)
+                        self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                                   changes={}, log_msg="No handler available")
+                        continue
+
+                    results = yield self.thread_pool.submit(provider.execute, resource, dry_run=True)
+                    yield self.get_client().dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                                          changes=results["changes"], log_msg=results["log_msg"])
+
+                except TypeError:
+                    LOGGER.exception("Unable to process resource for dryrun.")
+                    return 500
+                finally:
+                    if provider is not None:
+                        provider.close()
+
+            self._cache.close_version(version)
+
+    @gen.coroutine
+    def do_restore(self, restore_id, snapshot_id, resources):
+        with (yield self.ratelimiter.acquire()):
+
+            LOGGER.info("Start a restore %s", restore_id)
+
+            yield self.process._ensure_code(self._env_id, resources[0][1]["id_fields"]["version"],
+                                            [res[1]["id_fields"]["entity_type"] for res in resources])
+
+            version = resources[0][1]["id_fields"]["version"]
+            self._cache.open_version(version)
+
+            for restore, resource in resources:
+                start = datetime.datetime.now()
+                provider = None
+                try:
+                    data = resource["fields"]
+                    data["id"] = resource["id"]
+                    resource_obj = Resource.deserialize(data)
+                    provider = Commander.get_provider(self._cache, self, resource_obj)
+                    provider.set_cache(self._cache)
+
+                    if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
+                        yield self.get_client().update_restore(tid=self._env_id, id=restore_id, resource_id=str(resource_obj.id),
+                                                               start=start, stop=datetime.datetime.now(), success=False, error=False,
+                                                               msg="Resource %s does not allow restore" % resource["id"])
+                        continue
+
+                    try:
+                        yield self.thread_pool.submit(provider.restore, resource_obj, restore["content_hash"])
+                        yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
+                                                               resource_id=str(resource_obj.id), success=True, error=False,
+                                                               start=start, stop=datetime.datetime.now(), msg="")
+                    except NotImplementedError:
+                        yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
+                                                               resource_id=str(resource_obj.id), success=False, error=False,
+                                                               start=start, stop=datetime.datetime.now(),
+                                                               msg="The handler for resource "
+                                                               "%s does not support restores" % resource["id"])
+
+                except Exception:
+                    LOGGER.exception("Unable to find a handler for %s", resource["id"])
+                    yield self.get_client().update_restore(tid=self._env_id, id=restore_id, resource_id=resource_obj.id.resource_str(),
+                                                           success=False, error=False, start=start, stop=datetime.datetime.now(
+                    ),
+                        msg="Unable to find a handler to restore a snapshot of resource %s" %
+                        resource["id"])
+                finally:
+                    if provider is not None:
+                        provider.close()
+            self._cache.close_version(version)
+
+            return 200
+
+    @gen.coroutine
+    def do_snapshot(self, snapshot_id, resources):
+        with (yield self.ratelimiter.acquire()):
+            LOGGER.info("Start snapshot %s", snapshot_id)
+
+            yield self.process._ensure_code(self._env_id, resources[0]["id_fields"]["version"],
+                                            [res["id_fields"]["entity_type"] for res in resources])
+
+            version = resources[0]["id_fields"]["version"]
+            self._cache.open_version(version)
+
+            for resource in resources:
+                start = datetime.datetime.now()
+                provider = None
+                try:
+                    data = resource["fields"]
+                    data["id"] = resource["id"]
+                    resource_obj = Resource.deserialize(data)
+                    provider = Commander.get_provider(self._cache, self, resource_obj)
+                    provider.set_cache(self._cache)
+
+                    if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
+                        yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id,
+                                                                resource_id=resource_obj.id.resource_str(), snapshot_data="",
+                                                                start=start, stop=datetime.datetime.now(), size=0,
+                                                                success=False, error=False,
+                                                                msg="Resource %s does not allow snapshots" % resource["id"])
+                        continue
+
+                    try:
+                        result = yield self.thread_pool.submit(provider.snapshot, resource_obj)
+                        if result is not None:
+                            sha1sum = hashlib.sha1()
+                            sha1sum.update(result)
+                            content_id = sha1sum.hexdigest()
+                            yield self.get_client().upload_file(id=content_id, content=base64.b64encode(result).decode("ascii"))
+
+                            yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id,
+                                                                    resource_id=resource_obj.id.resource_str(),
+                                                                    snapshot_data=content_id, start=start, stop=datetime.datetime.now(
+                                                                    ),
+                                                                    size=len(result), success=True, error=False,
+                                                                    msg="")
+                        else:
+                            raise Exception("Snapshot returned no data")
+
+                    except NotImplementedError:
+                        yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, error=False,
+                                                                resource_id=resource_obj.id.resource_str(), snapshot_data="",
+                                                                start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                                msg="The handler for resource "
+                                                                "%s does not support snapshots" % resource["id"])
+                    except Exception:
+                        LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
+                        yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, snapshot_data="",
+                                                                resource_id=resource_obj.id.resource_str(), error=True,
+                                                                start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                                msg="The handler for resource "
+                                                                "%s does not support snapshots" % resource["id"])
+
+                except Exception:
+                    LOGGER.exception("Unable to find a handler for %s", resource["id"])
+                    yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, snapshot_data="",
+                                                            resource_id=resource_obj.id.resource_str(), error=False,
+                                                            start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                            msg="Unable to find a handler for %s" % resource["id"])
+                finally:
+                    if provider is not None:
+                        provider.close()
+
+            self._cache.close_version(version)
+            return 200
+
+    @gen.coroutine
+    def get_facts(self, resource):
+        with (yield self.ratelimiter.acquire()):
+            yield self.process._ensure_code(self._env_id, resource["id_fields"]["version"],
+                                            [resource["id_fields"]["entity_type"]])
+
+            provider = None
+            try:
+                data = resource["fields"]
+                data["id"] = resource["id"]
+                resource_obj = Resource.deserialize(data)
+
+                version = resource_obj.version
+
+                try:
+                    self._cache.open_version(version)
+                    provider = Commander.get_provider(self._cache, self, resource_obj)
+                    provider.set_cache(self._cache)
+                    result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
+                    parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
+                                  for name, value in result.items()]
+                    yield self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
+
+                except Exception:
+                    LOGGER.exception("Unable to retrieve fact")
+                finally:
+                    self._cache.close_version(version)
+
+            except Exception:
+                LOGGER.exception("Unable to find a handler for %s", resource["id"])
+                return 500
+            finally:
+                if provider is not None:
+                    provider.close()
+            return 200
+
 
 class Agent(AgentEndPoint):
     """
@@ -268,6 +585,8 @@ class Agent(AgentEndPoint):
 
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
+        self._sched = Scheduler(io_loop=self._io_loop)
+        self.thread_pool = ThreadPoolExecutor(poolsize)
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -275,17 +594,13 @@ class Agent(AgentEndPoint):
         self.agent_map = agent_map
         self._storage = self.check_storage()
 
-        self._last_update = 0
-
         if env_id is None:
             env_id = cfg.environment.get()
             if env_id is None:
                 raise Exception("The agent requires an environment to be set.")
         self.set_environment(env_id)
 
-        self._nqs = {}
-        self._cache = {}
-        self._enabled = {}
+        self._instances = {}
 
         if code_loader:
             self._env = env.VirtualEnv(self._storage["env"])
@@ -308,55 +623,26 @@ class Agent(AgentEndPoint):
 
                     self.add_end_point_name(name)
 
-        # do regular deploys
-        self._deploy_interval = cfg.agent_interval.get()
-        self._splay_interval = cfg.agent_splay.get()
-        self._splay_value = random.randint(0, self._splay_interval)
-
-        self.latest_version = 0
-        self.latest_code_version = 0
-
-        self._sched = Scheduler(io_loop=self._io_loop)
-
-        self.thread_pool = ThreadPoolExecutor(poolsize)
-
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
-        cache = AgentCache()
-        self._nqs[name] = ResourceScheduler(self, self._env_id, name, cache, ratelimiter=self.ratelimiter)
-        self._cache[name] = cache
-        self._enabled[name] = None
+
+        hostname = name
+        if name in self.agent_map:
+            hostname = self.agent_map[name]
+
+        self._instances[name] = AgentInstance(self, name, hostname)
 
     def unpause(self, name):
-        if name not in self._enabled:
+        if name not in self._instances:
             return 404, "No such agent"
 
-        if self._enabled[name] is not None:
-            return 200, "already running"
-
-        LOGGER.info("Agent assuming primary role for %s" % name)
-
-        @gen.coroutine
-        def action():
-            yield self.get_latest_version_for_agent(name)
-        self._enabled[name] = action
-        # add splay
-        self._sched.add_action(action, self._deploy_interval, self._splay_value)
-        return 200
+        return self._instances[name].unpause()
 
     def pause(self, name):
-        if name not in self._enabled:
+        if name not in self._instances:
             return 404, "No such agent"
 
-        if self._enabled[name] is None:
-            return 200, "already paused"
-
-        LOGGER.info("Agent lost primary role for %s" % name)
-
-        token = self._enabled[name]
-        self._sched.remove(token)
-        self._enabled[name] = None
-        return 200, "paused"
+        return self._instances[name].pause()
 
     @protocol.handle(methods.AgentState.set_state)
     @gen.coroutine
@@ -368,7 +654,7 @@ class Agent(AgentEndPoint):
 
     @gen.coroutine
     def on_reconnect(self):
-        for name in self._enabled.keys():
+        for name in self._instances.keys():
             result = yield self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
             if result.code == 200:
                 state = result.result
@@ -379,19 +665,13 @@ class Agent(AgentEndPoint):
             else:
                 LOGGER.warn("could not get state from the server")
 
-    def is_local(self, agent_name):
-        """
-            Check if the given agent name is a local or a remote agent
-        """
-        return self._client.node_name == agent_name or agent_name == "localhost"
-
     @gen.coroutine
     def get_latest_version(self):
         """
             Get the latest version of managed resources for all agents
         """
-        for agent in self.end_point_names:
-            yield self.get_latest_version_for_agent(agent)
+        for agent in self._instances.values():
+            yield agent.get_latest_version_for_agent()
 
     @gen.coroutine
     def _ensure_code(self, environment, version, resourcetypes):
@@ -422,55 +702,26 @@ class Agent(AgentEndPoint):
         """
             Trigger an update
         """
-        if id not in self.end_point_names:
+        if id not in self._instances:
             return 200
 
-        if self._enabled[id] is None:
-            return 500, "Agent is not enabled"
+        if not self._instances[id].is_enabled():
+            return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", id, tid)
-        future = self.get_latest_version_for_agent(id)
+        future = self._instances[id].get_latest_version_for_agent()
         self.add_future(future)
         return 200
-
-    @gen.coroutine
-    def get_latest_version_for_agent(self, agent):
-        """
-            Get the latest version for the given agent (this is also how we are notified)
-        """
-        if agent not in self.end_point_names:
-            return 200
-
-        with (yield self.ratelimiter.acquire()):
-            LOGGER.debug("Getting latest resources for %s" % agent)
-            result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent)
-            if result.code == 404:
-                LOGGER.info("No released configuration model version available for agent %s", agent)
-            elif result.code != 200:
-                LOGGER.warning("Got an error while pulling resources for agent %s. %s", agent, result.result)
-
-            else:
-                restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
-                resources = []
-                yield self._ensure_code(self._env_id, result.result["version"], restypes)
-                try:
-                    for res in result.result["resources"]:
-                        data = res["fields"]
-                        data["id"] = res["id"]
-                        resource = Resource.deserialize(data)
-                        resources.append(resource)
-                        LOGGER.debug("Received update for %s", resource.id)
-                except TypeError as e:
-                    LOGGER.error("Failed to receive update", e)
-
-                self._nqs[agent].reload(resources)
 
     @protocol.handle(methods.AgentResourceEvent.resource_event)
     @gen.coroutine
     def resource_event(self, tid, id: str, resource: str, state: str):
-        assert tid == self._env_id
+        if tid != self._env_id:
+            LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
+                        tid, id, resource, state)
+            return 200
 
-        if id not in self.end_point_names:
+        if id not in self._instances:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
                         tid, id, resource, state)
             return 200
@@ -481,8 +732,7 @@ class Agent(AgentEndPoint):
         else:
             LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
                          tid, id, resource, state)
-            agent = self._nqs[id]
-            agent.notify_ready(resource)
+            self._instances[id].notify_ready(resource)
 
         return 200
 
@@ -492,73 +742,14 @@ class Agent(AgentEndPoint):
         """
            Run a dryrun of the given version
         """
-        if agent not in self.end_point_names:
+        assert tid == self._env_id
+
+        if agent not in self._instances:
             return 200
 
         LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, id, version, tid)
-        assert tid == self._env_id
 
-        result = yield self._client.get_resources_for_agent(tid=self._env_id, agent=agent, version=version)
-        if result.code == 404:
-            LOGGER.info("Version %s does not exist", version)
-            return 404
-
-        elif result.code != 200:
-            LOGGER.warning("Got an error while pulling resources for agent %s and version %s", agent, version)
-            return 500
-
-        resources = result.result["resources"]
-
-        self.add_future(self.do_run_dryrun(version, id, agent, resources))
-
-        return 200
-
-    @gen.coroutine
-    def do_run_dryrun(self, version, id, agent, resources):
-        restypes = set([res["id_fields"]["entity_type"] for res in resources])
-
-        yield self._ensure_code(self._env_id, version, restypes)  # TODO: handle different versions for dryrun and deploy!
-
-        self._cache[agent].open_version(version)
-
-        for res in resources:
-            provider = None
-            try:
-                data = res["fields"]
-                data["id"] = res["id"]
-                resource = Resource.deserialize(data)
-                LOGGER.debug("Running dryrun for %s", resource.id)
-
-                try:
-                    provider = Commander.get_provider(self._cache[agent], self, resource)
-                    provider.set_cache(self._cache[agent])
-                except Exception:
-                    LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                    self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
-                                               changes={}, log_msg="No handler available")
-                    continue
-
-                results = yield self.thread_pool.submit(provider.execute, resource, dry_run=True)
-                yield self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
-                                                 changes=results["changes"], log_msg=results["log_msg"])
-
-            except TypeError:
-                LOGGER.exception("Unable to process resource for dryrun.")
-                return 500
-            finally:
-                if provider is not None:
-                    provider.close()
-
-        self._cache[agent].close_version(version)
-
-    def get_agent_hostname(self, agent_name):
-        """
-            Convert the agent name to a hostname using the agent map
-        """
-        if agent_name in self.agent_map:
-            return self.agent_map[agent_name]
-
-        return agent_name
+        return (yield self._instances[agent].dryrun(id, version))
 
     def check_storage(self):
         """
@@ -595,57 +786,10 @@ class Agent(AgentEndPoint):
         """
             Restore a snapshot
         """
-        if agent not in self.end_point_names:
+        if agent not in self._instances:
             return 200
 
-        LOGGER.info("Start a restore %s", restore_id)
-
-        yield self._ensure_code(tid, resources[0][1]["id_fields"]["version"],
-                                [res[1]["id_fields"]["entity_type"] for res in resources])
-
-        version = resources[0][1]["id_fields"]["version"]
-        self._cache[agent].open_version(version)
-
-        for restore, resource in resources:
-            start = datetime.datetime.now()
-            provider = None
-            try:
-                data = resource["fields"]
-                data["id"] = resource["id"]
-                resource_obj = Resource.deserialize(data)
-                provider = Commander.get_provider(self._cache[agent], self, resource_obj)
-                provider.set_cache(self._cache[agent])
-
-                if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
-                    yield self._client.update_restore(tid=tid, id=restore_id, resource_id=str(resource_obj.id),
-                                                      start=start, stop=datetime.datetime.now(), success=False, error=False,
-                                                      msg="Resource %s does not allow restore" % resource["id"])
-                    continue
-
-                try:
-                    yield self.thread_pool.submit(provider.restore, resource_obj, restore["content_hash"])
-                    yield self._client.update_restore(tid=tid, id=restore_id,
-                                                      resource_id=str(resource_obj.id), success=True, error=False,
-                                                      start=start, stop=datetime.datetime.now(), msg="")
-                except NotImplementedError:
-                    yield self._client.update_restore(tid=tid, id=restore_id,
-                                                      resource_id=str(resource_obj.id), success=False, error=False,
-                                                      start=start, stop=datetime.datetime.now(),
-                                                      msg="The handler for resource "
-                                                      "%s does not support restores" % resource["id"])
-
-            except Exception:
-                LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                yield self._client.update_restore(tid=tid, id=restore_id, resource_id=resource_obj.id.resource_str(),
-                                                  success=False, error=False, start=start, stop=datetime.datetime.now(),
-                                                  msg="Unable to find a handler to restore a snapshot of resource %s" %
-                                                  resource["id"])
-            finally:
-                if provider is not None:
-                    provider.close()
-        self._cache[agent].close_version(version)
-
-        return 200
+        return (yield self._instances[agent].do_restore(restore_id, snapshot_id, resources))
 
     @protocol.handle(methods.AgentSnapshot.do_snapshot)
     @gen.coroutine
@@ -653,116 +797,18 @@ class Agent(AgentEndPoint):
         """
             Create a snapshot of stateful resources managed by this agent
         """
-        if agent not in self.end_point_names:
+        if agent not in self._instances:
             return 200
 
-        LOGGER.info("Start snapshot %s", snapshot_id)
-
-        yield self._ensure_code(tid, resources[0]["id_fields"]["version"],
-                                [res["id_fields"]["entity_type"] for res in resources])
-
-        version = resources[0]["id_fields"]["version"]
-        self._cache[agent].open_version(version)
-
-        for resource in resources:
-            start = datetime.datetime.now()
-            provider = None
-            try:
-                data = resource["fields"]
-                data["id"] = resource["id"]
-                resource_obj = Resource.deserialize(data)
-                provider = Commander.get_provider(self._cache[agent], self, resource_obj)
-                provider.set_cache(self._cache[agent])
-
-                if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
-                    yield self._client.update_snapshot(tid=tid, id=snapshot_id,
-                                                       resource_id=resource_obj.id.resource_str(), snapshot_data="",
-                                                       start=start, stop=datetime.datetime.now(), size=0,
-                                                       success=False, error=False,
-                                                       msg="Resource %s does not allow snapshots" % resource["id"])
-                    continue
-
-                try:
-                    result = yield self.thread_pool.submit(provider.snapshot, resource_obj)
-                    if result is not None:
-                        sha1sum = hashlib.sha1()
-                        sha1sum.update(result)
-                        content_id = sha1sum.hexdigest()
-                        yield self._client.upload_file(id=content_id, content=base64.b64encode(result).decode("ascii"))
-
-                        yield self._client.update_snapshot(tid=tid, id=snapshot_id,
-                                                           resource_id=resource_obj.id.resource_str(),
-                                                           snapshot_data=content_id, start=start, stop=datetime.datetime.now(),
-                                                           size=len(result), success=True, error=False,
-                                                           msg="")
-                    else:
-                        raise Exception("Snapshot returned no data")
-
-                except NotImplementedError:
-                    yield self._client.update_snapshot(tid=tid, id=snapshot_id, error=False,
-                                                       resource_id=resource_obj.id.resource_str(), snapshot_data="",
-                                                       start=start, stop=datetime.datetime.now(), size=0, success=False,
-                                                       msg="The handler for resource "
-                                                       "%s does not support snapshots" % resource["id"])
-                except Exception:
-                    LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
-                    yield self._client.update_snapshot(tid=tid, id=snapshot_id, snapshot_data="",
-                                                       resource_id=resource_obj.id.resource_str(), error=True,
-                                                       start=start, stop=datetime.datetime.now(), size=0, success=False,
-                                                       msg="The handler for resource "
-                                                       "%s does not support snapshots" % resource["id"])
-
-            except Exception:
-                LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                yield self._client.update_snapshot(tid=tid, id=snapshot_id, snapshot_data="",
-                                                   resource_id=resource_obj.id.resource_str(), error=False,
-                                                   start=start, stop=datetime.datetime.now(), size=0, success=False,
-                                                   msg="Unable to find a handler for %s" % resource["id"])
-            finally:
-                if provider is not None:
-                    provider.close()
-
-        self._cache[agent].close_version(version)
-        return 200
+        return (yield self._instances[agent].do_snapshot(snapshot_id, resources))
 
     @protocol.handle(methods.AgentParameterMethod.get_parameter)
     @gen.coroutine
     def get_facts(self, tid, agent, resource):
-        if agent not in self.end_point_names:
+        if agent not in self._instances:
             return 200
 
-        yield self._ensure_code(tid, resource["id_fields"]["version"],
-                                [resource["id_fields"]["entity_type"]])
-
-        provider = None
-        try:
-            data = resource["fields"]
-            data["id"] = resource["id"]
-            resource_obj = Resource.deserialize(data)
-
-            version = resource_obj.version
-
-            try:
-                self._cache[agent].open_version(version)
-                provider = Commander.get_provider(self._cache[agent], self, resource_obj)
-                provider.set_cache(self._cache[agent])
-                result = yield self.thread_pool.submit(provider.check_facts, resource_obj)
-                parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
-                              for name, value in result.items()]
-                yield self._client.set_parameters(tid=tid, parameters=parameters)
-
-            except Exception:
-                LOGGER.exception("Unable to retrieve fact")
-            finally:
-                self._cache[agent].close_version(version)
-
-        except Exception:
-            LOGGER.exception("Unable to find a handler for %s", resource["id"])
-            return 500
-        finally:
-            if provider is not None:
-                provider.close()
-        return 200
+        return (yield self._instances[agent].get_facts(resource))
 
     @protocol.handle(methods.AgentReporting.get_status)
     @gen.coroutine

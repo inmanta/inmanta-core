@@ -34,7 +34,7 @@ def testagent_get_status(io_loop, server):
     myagent = agent.Agent(io_loop,
                           hostname="node1",
                           env_id=env_id,
-                          agent_map="agent1=localhost",
+                          agent_map={"agent1": "localhost"},
                           code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()

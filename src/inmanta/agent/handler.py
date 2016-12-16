@@ -561,8 +561,8 @@ class Commander(object):
         """
         resource_id = resource.id
         resource_type = resource_id.entity_type
-        agent_name = agent.get_agent_hostname(resource.id.agent_name)
-        if agent.is_local(agent_name):
+        agent_name = agent.get_hostname()
+        if agent.is_local():
             io = get_io()
         else:
             key_name = "remote_io_" + agent_name
