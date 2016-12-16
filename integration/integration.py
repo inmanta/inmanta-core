@@ -359,8 +359,8 @@ agent-names = %s
 environment=%s
 agent-map=%s
 
-agent-interval = 60
-agent-splay = 2
+agent-interval = 120
+agent-splay = 30
 
 agent-run-at-start=true
 """ % (base_path, ",".join(agentmap.keys()), self.envid, ",".join(["%s=%s" % (k, v) for (k, v) in agentmap.items()]))

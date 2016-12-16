@@ -221,8 +221,15 @@ class ResourceScheduler(object):
         self.cache = cache
         self.name = name
         self.ratelimiter = ratelimiter
+        self.version = 0
 
     def reload(self, resources):
+        version = resources[0].id.get_version
+
+        if self.version == version:
+            LOGGER.info("%s: Same version, carry on", self.agent.name)
+            return
+
         for ra in self.generation.values():
             ra.cancel()
 
