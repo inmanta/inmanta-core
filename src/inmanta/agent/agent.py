@@ -38,8 +38,10 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 import uuid
+import time
 
 LOGGER = logging.getLogger(__name__)
+GET_RESOURCE_BACKOFF = 5
 
 
 class ResourceActionResult(object):
@@ -226,9 +228,7 @@ class ResourceScheduler(object):
     def reload(self, resources):
         version = resources[0].id.get_version
 
-        if self.version == version:
-            LOGGER.info("%s: Same version, carry on", self.agent.name)
-            return
+        self.version = version
 
         for ra in self.generation.values():
             ra.cancel()
@@ -274,6 +274,8 @@ class AgentInstance():
 
         # inherit
         self.ratelimiter = process.ratelimiter
+        self.critical_ratelimiter = process.critical_ratelimiter
+
         self._env_id = process._env_id
         self.thread_pool = process.thread_pool
         self.sessionid = process.sessionid
@@ -287,6 +289,9 @@ class AgentInstance():
         self._deploy_interval = cfg.agent_interval.get()
         self._splay_interval = cfg.agent_splay.get()
         self._splay_value = random.randint(0, self._splay_interval)
+
+        self._getting_resources = False
+        self._get_resource_timeout = 0
 
     def get_client(self):
         return self.process._client
@@ -330,14 +335,36 @@ class AgentInstance():
     def notify_ready(self, resourceid):
         self._nq.notify_ready(resourceid)
 
+    def _can_get_resources(self):
+        if self._getting_resources:
+            LOGGER.info("%s Attempting to get resource while get is in progress", self.name)
+            return False
+        if time.time() < self._get_resource_timeout:
+            LOGGER.info("%s Attempting to get resources during backoff %d seconds left",
+                        self.name, self._get_resource_timeout - time.time())
+            return False
+        return True
+
     @gen.coroutine
     def get_latest_version_for_agent(self):
         """
             Get the latest version for the given agent (this is also how we are notified)
         """
-        with (yield self.ratelimiter.acquire()):
+        if not self._can_get_resources():
+            return
+        with (yield self.critical_ratelimiter.acquire()):
+            if not self._can_get_resources():
+                return
             LOGGER.debug("Getting latest resources for %s" % self.name)
-            result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name)
+            self._getting_resources = True
+            start = time.time()
+            try:
+                result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name)
+            finally:
+                self._getting_resources = False
+            end = time.time()
+            duration = end - start
+            self._get_resource_timeout = GET_RESOURCE_BACKOFF * duration + end
             if result.code == 404:
                 LOGGER.info("No released configuration model version available for agent %s", self.name)
             elif result.code != 200:
@@ -587,11 +614,12 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
 
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1):
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1, cricital_pool_size=5):
         super().__init__("agent", io_loop, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
+        self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
         self._sched = Scheduler(io_loop=self._io_loop)
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
