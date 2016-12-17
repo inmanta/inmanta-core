@@ -23,7 +23,8 @@ import hashlib
 import logging
 import os
 import random
-
+import uuid
+import time
 
 from tornado import gen, locks
 from inmanta import env
@@ -37,8 +38,7 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-import uuid
-import time
+
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -275,6 +275,7 @@ class AgentInstance():
         # inherit
         self.ratelimiter = process.ratelimiter
         self.critical_ratelimiter = process.critical_ratelimiter
+        self.dryrunlock = locks.Semaphore(1)
 
         self._env_id = process._env_id
         self.thread_pool = process.thread_pool
@@ -389,60 +390,61 @@ class AgentInstance():
     @gen.coroutine
     def dryrun(self, id, version):
 
-        result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
-        if result.code == 404:
-            LOGGER.info("Version %s does not exist", version)
-            return 404
-
-        elif result.code != 200:
-            LOGGER.warning("Got an error while pulling resources for agent %s and version %s", self.name, version)
-            return 500
-
-        resources = result.result["resources"]
-
-        self.add_future(self.do_run_dryrun(version, id, resources))
+        self.add_future(self.do_run_dryrun(version, id))
 
         return 200
 
     @gen.coroutine
-    def do_run_dryrun(self, version, id, resources):
-        restypes = set([res["id_fields"]["entity_type"] for res in resources])
+    def do_run_dryrun(self, version, id):
+        with (yield self.dryrunlock.acquire()):
+            with (yield self.ratelimiter.acquire()):
+                result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
+                if result.code == 404:
+                    LOGGER.warn("Version %s does not exist, can not run dryrun", version)
+                    return
 
-        with (yield self.ratelimiter.acquire()):
-            # TODO: handle different versions for dryrun and deploy!
-            yield self.process._ensure_code(self._env_id, version, restypes)
+                elif result.code != 200:
+                    LOGGER.warning("Got an error while pulling resources for agent %s and version %s", self.name, version)
+                    return
 
-            self._cache.open_version(version)
+                resources = result.result["resources"]
 
-            for res in resources:
-                provider = None
-                try:
-                    data = res["fields"]
-                    data["id"] = res["id"]
-                    resource = Resource.deserialize(data)
-                    LOGGER.debug("Running dryrun for %s", resource.id)
+                restypes = set([res["id_fields"]["entity_type"] for res in resources])
 
+                # TODO: handle different versions for dryrun and deploy!
+                yield self.process._ensure_code(self._env_id, version, restypes)
+
+                self._cache.open_version(version)
+
+                for res in resources:
+                    provider = None
                     try:
-                        provider = Commander.get_provider(self._cache, self, resource)
-                        provider.set_cache(self._cache)
-                    except Exception:
-                        LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                        self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
-                                                   changes={}, log_msg="No handler available")
-                        continue
+                        data = res["fields"]
+                        data["id"] = res["id"]
+                        resource = Resource.deserialize(data)
+                        LOGGER.debug("Running dryrun for %s", resource.id)
 
-                    results = yield self.thread_pool.submit(provider.execute, resource, dry_run=True)
-                    yield self.get_client().dryrun_update(tid=self._env_id, id=id, resource=res["id"],
-                                                          changes=results["changes"], log_msg=results["log_msg"])
+                        try:
+                            provider = Commander.get_provider(self._cache, self, resource)
+                            provider.set_cache(self._cache)
+                        except Exception:
+                            LOGGER.exception("Unable to find a handler for %s" % resource.id)
+                            self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                                       changes={}, log_msg="No handler available")
+                            continue
 
-                except TypeError:
-                    LOGGER.exception("Unable to process resource for dryrun.")
-                    return 500
-                finally:
-                    if provider is not None:
-                        provider.close()
+                        results = yield self.thread_pool.submit(provider.execute, resource, dry_run=True)
+                        yield self.get_client().dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                                              changes=results["changes"], log_msg=results["log_msg"])
 
-            self._cache.close_version(version)
+                    except TypeError:
+                        LOGGER.exception("Unable to process resource for dryrun.")
+                        return 500
+                    finally:
+                        if provider is not None:
+                            provider.close()
+
+                self._cache.close_version(version)
 
     @gen.coroutine
     def do_restore(self, restore_id, snapshot_id, resources):
@@ -467,30 +469,38 @@ class AgentInstance():
                     provider.set_cache(self._cache)
 
                     if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
-                        yield self.get_client().update_restore(tid=self._env_id, id=restore_id, resource_id=str(resource_obj.id),
-                                                               start=start, stop=datetime.datetime.now(), success=False, error=False,
+                        yield self.get_client().update_restore(tid=self._env_id,
+                                                               id=restore_id,
+                                                               resource_id=str(resource_obj.id),
+                                                               start=start,
+                                                               stop=datetime.datetime.now(),
+                                                               success=False,
+                                                               error=False,
                                                                msg="Resource %s does not allow restore" % resource["id"])
                         continue
 
                     try:
                         yield self.thread_pool.submit(provider.restore, resource_obj, restore["content_hash"])
                         yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
-                                                               resource_id=str(resource_obj.id), success=True, error=False,
+                                                               resource_id=str(resource_obj.id),
+                                                               success=True, error=False,
                                                                start=start, stop=datetime.datetime.now(), msg="")
                     except NotImplementedError:
                         yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
-                                                               resource_id=str(resource_obj.id), success=False, error=False,
+                                                               resource_id=str(resource_obj.id),
+                                                               success=False, error=False,
                                                                start=start, stop=datetime.datetime.now(),
                                                                msg="The handler for resource "
                                                                "%s does not support restores" % resource["id"])
 
                 except Exception:
                     LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                    yield self.get_client().update_restore(tid=self._env_id, id=restore_id, resource_id=resource_obj.id.resource_str(),
-                                                           success=False, error=False, start=start, stop=datetime.datetime.now(
-                    ),
-                        msg="Unable to find a handler to restore a snapshot of resource %s" %
-                        resource["id"])
+                    yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
+                                                           resource_id=resource_obj.id.resource_str(),
+                                                           success=False, error=False,
+                                                           start=start, stop=datetime.datetime.now(),
+                                                           msg="Unable to find a handler to restore a snapshot of resource %s" %
+                                                           resource["id"])
                 finally:
                     if provider is not None:
                         provider.close()
@@ -537,8 +547,8 @@ class AgentInstance():
 
                             yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id,
                                                                     resource_id=resource_obj.id.resource_str(),
-                                                                    snapshot_data=content_id, start=start, stop=datetime.datetime.now(
-                                                                    ),
+                                                                    snapshot_data=content_id,
+                                                                    start=start, stop=datetime.datetime.now(),
                                                                     size=len(result), success=True, error=False,
                                                                     msg="")
                         else:
@@ -546,23 +556,29 @@ class AgentInstance():
 
                     except NotImplementedError:
                         yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, error=False,
-                                                                resource_id=resource_obj.id.resource_str(), snapshot_data="",
-                                                                start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                                resource_id=resource_obj.id.resource_str(),
+                                                                snapshot_data="",
+                                                                start=start, stop=datetime.datetime.now(),
+                                                                size=0, success=False,
                                                                 msg="The handler for resource "
                                                                 "%s does not support snapshots" % resource["id"])
                     except Exception:
                         LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
                         yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, snapshot_data="",
                                                                 resource_id=resource_obj.id.resource_str(), error=True,
-                                                                start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                                start=start,
+                                                                stop=datetime.datetime.now(),
+                                                                size=0, success=False,
                                                                 msg="The handler for resource "
                                                                 "%s does not support snapshots" % resource["id"])
 
                 except Exception:
                     LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                    yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, snapshot_data="",
+                    yield self.get_client().update_snapshot(tid=self._env_id,
+                                                            id=snapshot_id, snapshot_data="",
                                                             resource_id=resource_obj.id.resource_str(), error=False,
-                                                            start=start, stop=datetime.datetime.now(), size=0, success=False,
+                                                            start=start, stop=datetime.datetime.now(),
+                                                            size=0, success=False,
                                                             msg="Unable to find a handler for %s" % resource["id"])
                 finally:
                     if provider is not None:
