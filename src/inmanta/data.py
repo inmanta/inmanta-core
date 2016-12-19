@@ -20,7 +20,7 @@ import json
 import logging
 
 
-from motorengine import Document
+from motorengine import Document, DESCENDING
 from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
 from motorengine.fields.json_field import JsonField
 from inmanta.resources import Id
@@ -531,8 +531,6 @@ class ResourceVersion(Document):
     attributes = JsonField()
     status = StringField(default="")
 
-    environment_id = UUIDField(required=True, sparse=True)
-
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
@@ -561,12 +559,53 @@ class ResourceVersion(Document):
         if env is None:
             return Exception("The given environment id does not exist!")
 
-        cm = ConfigurationModel.get_version(version)
+        cm = yield ConfigurationModel.get_version(environment, version)
         if cm is None:
             return None
 
         resources = yield ResourceVersion.objects.filter(environment=env, model=cm).limit(DBLIMIT).find_all()
         return resources
+
+    @classmethod
+    @gen.coroutine
+    def get_latest_version(cls, environment, resource_id):
+        env = yield Environment.get_uuid(environment)
+        if env is None:
+            return Exception("The given environment id does not exist!")
+
+        resources = yield Resource.objects.filter(environment=env, resource_id=resource_id).find_all()
+        if len(resources) == 0:
+            return None
+
+        rv = yield ResourceVersion.objects.filter(environment=env,
+                                                  resource=resources[0]).order_by("rid",
+                                                                                  direction=DESCENDING).limit(1).find_all()
+
+        if len(rv) == 0:
+            return None
+
+        return rv[0]
+
+    @classmethod
+    @gen.coroutine
+    def get(cls, environment_id, resource_version_id):
+        """
+            Get a resource with the given resource version id
+        """
+        env = yield Environment.get_uuid(environment_id)
+        if env is None:
+            return Exception("The given environment id does not exist!")
+
+        results = yield ResourceVersion.objects.filter(environment=env, rid=resource_version_id).find_all()
+
+        if len(results) == 0:
+            return None
+
+        if len(results) > 0:
+            raise Exception("Invalid database state, multiple resources with same id (%s) found in environment %s" %
+                            (resource_version_id, environment_id))
+
+        return results[0]
 
 
 class ConfigurationModel(Document):
@@ -620,6 +659,14 @@ class ConfigurationModel(Document):
             return None
 
         return versions[0]
+
+    @classmethod
+    @gen.coroutine
+    def get_agents(self, environment, version):
+        """
+            Returns a list of all agents that have resources defined in this configuration model
+        """
+
 
     @gen.coroutine
     def to_dict(self):

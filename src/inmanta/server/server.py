@@ -644,27 +644,20 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id")
     @gen.coroutine
     def get_resource(self, tid, resource_id, logs, status):
-        env = yield data.Environment.get_uuid(tid)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
-        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=resource_id).limit(DBLIMIT).find_all()  # @UndefinedVariable
-        if len(resv) == 0:
+        resv = yield data.ResourceVersion.get(tid, resource_id)
+        if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
-#         ra = data.ResourceAction(resource_version=resv[0], action="pull", level="INFO", timestamp=datetime.datetime.now(),
-#                                  message="Individual resource version pulled by client")
-#         yield ra.save()
         if status is not None and status:
-            return 200, {"status": resv[0].status}
+            return 200, {"status": resv.status}
 
         action_list = []
         if bool(logs):
-            actions = yield data.ResourceAction.objects.filter(resource_version=resv[0]).limit(DBLIMIT).find_all()  # @UndefinedVariable
+            actions = yield data.ResourceAction.objects.filter(resource_version=resv).limit(DBLIMIT).find_all()  # @UndefinedVariable
             for action in actions:
                 action_list.append(action.to_dict())
 
-        return 200, {"resource": resv[0].to_dict(), "logs": action_list}
+        return 200, {"resource": resv.to_dict(), "logs": action_list}
 
     @protocol.handle(methods.ResourceMethod.get_resources_for_agent)
     @gen.coroutine
@@ -725,15 +718,13 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.CMVersionMethod.get_version, version_id="id")
     @gen.coroutine
     def get_version(self, tid, version_id, include_logs=None, log_filter=None, limit=None):
-        env = yield data.Environment.get_uuid(tid)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
         version = yield data.ConfigurationModel.get_version(tid, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.ResourceVersion.objects.filter(model=version).limit(DBLIMIT).find_all()  # @UndefinedVariable
+        resources = yield data.ResourceVersion.get_resources_for_version(tid, version_id)
+        if resources is None:
+            return 404, {"message": "The given configuration model does not exist yet."}
 
         version_dict = yield version.to_dict()
         d = {"model": version_dict}
@@ -757,6 +748,10 @@ class Server(protocol.ServerEndpoint):
                 res_dict["actions"] = [x.to_dict() for x in actions]
 
             d["resources"].append(res_dict)
+
+        env = yield data.Environment.get_uuid(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
 
         unp = yield (data.UnknownParameter.objects.  # @UndefinedVariable
                      filter(environment=env, version=version.version).find_all())  # @UndefinedVariable
@@ -866,7 +861,7 @@ class Server(protocol.ServerEndpoint):
                         # it is a CAD
                         cross_agent_dep.append((resource_obj, rid))
 
-        # hook up all CAD's
+        # hook up all CADs
         for f, t in cross_agent_dep:
             rv_dict[t.resource_str()].provides.append(str(f))
 
@@ -879,10 +874,8 @@ class Server(protocol.ServerEndpoint):
         # search for deleted resources
         for res in all_resources:
             if res.version_latest < version:
-                rv = yield (data.ResourceVersion.objects.filter(environment=env, resource=res).  # @UndefinedVariable
-                            order_by("rid", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-                if len(rv) > 0:
-                    rv = rv[0]
+                rv = yield data.ResourceVersion.get_latest_version(environment=tid, resource_id=res.resource_id)
+                if rv is None:
                     if "purge_on_delete" in rv.attributes and rv.attributes["purge_on_delete"]:
                         LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, rv.rid))
 
