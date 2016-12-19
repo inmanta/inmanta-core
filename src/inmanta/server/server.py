@@ -677,6 +677,7 @@ class Server(protocol.ServerEndpoint):
 
         for rv in resources:
             rv_dict = rv.to_dict()
+
             if rv_dict["id_fields"]["agent_name"] == agent:
                 deploy_model.append(rv_dict)
                 ra = data.ResourceAction(resource_version=rv, action="pull", level="INFO", timestamp=datetime.datetime.now(),
@@ -935,9 +936,8 @@ class Server(protocol.ServerEndpoint):
             rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
             agents = set()
             for rv in rvs:
-                yield rv.load_references()
-                yield rv.resource.load_references()
-                agents.add(rv.resource.agent)
+                rv_dict = rv.to_dict()
+                agents.add(rv_dict["id_fields"]["agent_name"])
 
             yield self.agentmanager._ensure_agents(str(tid), agents)
 
@@ -976,9 +976,8 @@ class Server(protocol.ServerEndpoint):
 
         agents = set()
         for rv in rvs:
-            yield rv.load_references()
-            yield rv.resource.load_references()
-            agents.add(rv.resource.agent)
+            rv_dict = rv.to_dict()
+            agents.add(rv_dict["id_fields"]["agent_name"])
 
         yield self.agentmanager._ensure_agents(str(tid), agents)
 

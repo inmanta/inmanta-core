@@ -341,8 +341,8 @@ class AgentInstance():
             LOGGER.info("%s Attempting to get resource while get is in progress", self.name)
             return False
         if time.time() < self._get_resource_timeout:
-            LOGGER.info("%s Attempting to get resources during backoff %d seconds left",
-                        self.name, self._get_resource_timeout - time.time())
+            LOGGER.info("%s Attempting to get resources during backoff %d seconds left, last download took %d seconds",
+                        self.name, self._get_resource_timeout - time.time(), self._get_resource_duration)
             return False
         return True
 
@@ -364,8 +364,8 @@ class AgentInstance():
             finally:
                 self._getting_resources = False
             end = time.time()
-            duration = end - start
-            self._get_resource_timeout = GET_RESOURCE_BACKOFF * duration + end
+            self._get_resource_duration = end - start
+            self._get_resource_timeout = GET_RESOURCE_BACKOFF * self._get_resource_duration + end
             if result.code == 404:
                 LOGGER.info("No released configuration model version available for agent %s", self.name)
             elif result.code != 200:
