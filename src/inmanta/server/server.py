@@ -698,9 +698,10 @@ class Server(protocol.ServerEndpoint):
         resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).limit(DBLIMIT).find_all()
 
         for rv in resources:
-            yield rv.load_references()
-            if rv.resource.agent == agent:
-                deploy_model.append(rv.to_dict())
+            rv_dict = rv.to_dict()
+            
+            if rv_dict["id_fields"]["agent_name"] == agent:
+                deploy_model.append(rv_dict)
                 ra = data.ResourceAction(resource_version=rv, action="pull", level="INFO", timestamp=datetime.datetime.now(),
                                          message="Resource version pulled by client for agent %s state" % agent)
                 yield ra.save()
