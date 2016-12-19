@@ -998,9 +998,8 @@ class Server(protocol.ServerEndpoint):
 
         agents = set()
         for rv in rvs:
-            yield rv.load_references()
-            yield rv.resource.load_references()
-            agents.add(rv.resource.agent)
+            rv_dict = rv.to_dict()
+            agents.add(rv_dict["id_fields"]["agent_name"])
 
         yield self.agentmanager._ensure_agents(str(tid), agents)
 
