@@ -230,15 +230,15 @@ class Server(protocol.ServerEndpoint):
 
         LOGGER.info("Done renewing expired parameters")
 
-    @protocol.handle(methods.ParameterMethod.get_param)
+    @protocol.handle(methods.ParameterMethod.get_param, param_id="id")
     @gen.coroutine
-    def get_param(self, tid, id, resource_id=None):
+    def get_param(self, tid, param_id, resource_id=None):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
+                                                     name=param_id, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         if len(params) == 0:
             out = yield self.agentmanager._request_parameter(env, resource_id)
@@ -250,7 +250,7 @@ class Server(protocol.ServerEndpoint):
         if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0].to_dict()}
 
-        LOGGER.info("Parameter %s of resource %s expired.", id, resource_id)
+        LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
         out = yield self.agentmanager._request_parameter(env, resource_id)
         return out
 
@@ -300,14 +300,14 @@ class Server(protocol.ServerEndpoint):
 
         return False
 
-    @protocol.handle(methods.ParameterMethod.set_param)
+    @protocol.handle(methods.ParameterMethod.set_param, param_id="id")
     @gen.coroutine
-    def set_param(self, tid, id, source, value, resource_id, metadata):
+    def set_param(self, tid, param_id, source, value, resource_id, metadata):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        result = yield self._update_param(env, id, value, source, resource_id, metadata)
+        result = yield self._update_param(env, param_id, value, source, resource_id, metadata)
         if result:
             self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
@@ -315,7 +315,7 @@ class Server(protocol.ServerEndpoint):
             resource_id = ""
 
         params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     name=id, resource_id=resource_id).find_all()  # @UndefinedVariable
+                                                     name=param_id, resource_id=resource_id).find_all()  # @UndefinedVariable
 
         return 200, {"parameter": params[0].to_dict()}
 
@@ -363,20 +363,20 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"parameters": return_value, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
 
-    @protocol.handle(methods.FormMethod.put_form)
+    @protocol.handle(methods.FormMethod.put_form, form_id="id")
     @gen.coroutine
-    def put_form(self, tid: uuid.UUID, id: str, form: dict):
+    def put_form(self, tid: uuid.UUID, form_id: str, form: dict):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form_doc = yield data.Form.get_form(environment=env, form_type=id)
+        form_doc = yield data.Form.get_form(environment=env, form_type=form_id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
         field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
 
         if form_doc is None:
-            form_doc = data.Form(uuid=uuid.uuid4(), environment=env, form_type=id, fields=fields, defaults=defaults,
+            form_doc = data.Form(uuid=uuid.uuid4(), environment=env, form_type=form_id, fields=fields, defaults=defaults,
                                  options=form["options"], field_options=field_options)
 
         else:
@@ -390,14 +390,14 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"form": {"id": form_doc.uuid}}
 
-    @protocol.handle(methods.FormMethod.get_form)
+    @protocol.handle(methods.FormMethod.get_form, form_id="id")
     @gen.coroutine
-    def get_form(self, tid, id):
+    def get_form(self, tid, form_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form = yield data.Form.get_form(environment=env, form_type=id)
+        form = yield data.Form.get_form(environment=env, form_type=form_id)
 
         if form is None:
             return 404
@@ -439,23 +439,23 @@ class Server(protocol.ServerEndpoint):
 
             return 200, {"records": record_dict}
 
-    @protocol.handle(methods.FormRecords.get_record)
+    @protocol.handle(methods.FormRecords.get_record, record_id="id")
     @gen.coroutine
-    def get_record(self, tid, id):
+    def get_record(self, tid, record_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        record = yield data.FormRecord.get_uuid(id)
+        record = yield data.FormRecord.get_uuid(record_id)
         if record is None:
-            return 404, {"message": "The record with id %s does not exist" % id}
+            return 404, {"message": "The record with id %s does not exist" % record_id}
 
         record_dict = yield record.to_dict()
         return 200, {"record": record_dict}
 
-    @protocol.handle(methods.FormRecords.update_record)
+    @protocol.handle(methods.FormRecords.update_record, record_id="id")
     @gen.coroutine
-    def update_record(self, tid, id, form):
+    def update_record(self, tid, record_id, form):
         f1 = data.Environment.get_uuid(tid)
         f2 = data.FormRecord.get_uuid(id)
         env, record = yield [f1, f2]
@@ -522,22 +522,22 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"record": record_dict}
 
-    @protocol.handle(methods.FormRecords.delete_record)
+    @protocol.handle(methods.FormRecords.delete_record, record_id="id")
     @gen.coroutine
-    def delete_record(self, tid, id):
+    def delete_record(self, tid, record_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        record = yield data.FormRecord.get_uuid(id)
+        record = yield data.FormRecord.get_uuid(record_id)
         yield record.delete()
 
         return 200
 
-    @protocol.handle(methods.FileMethod.upload_file)
+    @protocol.handle(methods.FileMethod.upload_file, file_hash="id")
     @gen.coroutine
-    def upload_file(self, id, content):
-        file_name = os.path.join(self._server_storage["files"], id)
+    def upload_file(self, file_hash, content):
+        file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if os.path.exists(file_name):
             return 500, {"message": "A file with this id already exists."}
@@ -547,20 +547,20 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
-    @protocol.handle(methods.FileMethod.stat_file)
+    @protocol.handle(methods.FileMethod.stat_file, file_hash="id")
     @gen.coroutine
-    def stat_file(self, id):
-        file_name = os.path.join(self._server_storage["files"], id)
+    def stat_file(self, file_hash):
+        file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if os.path.exists(file_name):
             return 200
         else:
             return 404
 
-    @protocol.handle(methods.FileMethod.get_file)
+    @protocol.handle(methods.FileMethod.get_file, file_hash="id")
     @gen.coroutine
-    def get_file(self, id):
-        file_name = os.path.join(self._server_storage["files"], id)
+    def get_file(self, file_hash):
+        file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if not os.path.exists(file_name):
             return 404
@@ -616,15 +616,15 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"diff": list(diff)}
 
-    @protocol.handle(methods.NodeMethod.get_agent_process)
+    @protocol.handle(methods.NodeMethod.get_agent_process, agent_id="id")
     @gen.coroutine
-    def get_agent_process(self, id):
-        return (yield self.agentmanager.get_agent_process_report(id))
+    def get_agent_process(self, agent_id):
+        return (yield self.agentmanager.get_agent_process_report(agent_id))
 
-    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent)
+    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id")
     @gen.coroutine
-    def trigger_agent(self, tid, id):
-        yield self.agentmanager.trigger_agent(tid, id)
+    def trigger_agent(self, tid, agent_id):
+        yield self.agentmanager.trigger_agent(tid, agent_id)
 
     @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine
@@ -641,15 +641,14 @@ class Server(protocol.ServerEndpoint):
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
         return (yield self.agentmanager.get_state(tid, sid, agent))
 
-    @protocol.handle(methods.ResourceMethod.get_resource)
+    @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id")
     @gen.coroutine
-    def get_resource(self, tid, id, logs, status):
+    def get_resource(self, tid, resource_id, logs, status):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
-        # @UndefinedVariable
-        resv = yield (data.ResourceVersion.objects.filter(environment=env, rid=id)
-                      .limit(DBLIMIT).find_all())
+
+        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=resource_id).limit(DBLIMIT).find_all()  # @UndefinedVariable
         if len(resv) == 0:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
@@ -661,9 +660,7 @@ class Server(protocol.ServerEndpoint):
 
         action_list = []
         if bool(logs):
-            # @UndefinedVariable
-            actions = yield (data.ResourceAction.objects.filter(resource_version=resv[0])
-                             .limit(DBLIMIT).find_all())
+            actions = yield data.ResourceAction.objects.filter(resource_version=resv[0]).limit(DBLIMIT).find_all()  # @UndefinedVariable
             for action in actions:
                 action_list.append(action.to_dict())
 
@@ -672,40 +669,28 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.ResourceMethod.get_resources_for_agent)
     @gen.coroutine
     def get_resources_for_agent(self, tid, agent, version):
-        env = yield data.Environment.get_uuid(tid)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
         if version is None:
-            versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-
-            if len(versions) == 0:
-                return 404
-
-            cm = versions[0]
+            cm = yield data.ConfigurationModel.get_latest_version(tid)
+            version = cm.version
 
         else:
-            versions = yield (data.ConfigurationModel.objects.filter(environment=env, version=version).  # @UndefinedVariable
-                              find_all())  # @UndefinedVariable
-            if len(versions) == 0:
+            cm = yield data.ConfigurationModel.get_version(environment=tid, version=version)
+            if cm is None:
                 return 404, {"message": "The given version does not exist"}
 
-            cm = versions[0]
-
         deploy_model = []
-        # @UndefinedVariable
-        resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).limit(DBLIMIT).find_all()
+
+        resources = yield data.ResourceVersion.get_resources_for_version(tid, version)
 
         for rv in resources:
-            yield rv.load_references()
-            if rv.resource.agent == agent:
-                deploy_model.append(rv.to_dict())
+            rv_dict = rv.to_dict()
+            if rv_dict["id_fields"]["agent_name"] == agent:
+                deploy_model.append(rv_dict)
                 ra = data.ResourceAction(resource_version=rv, action="pull", level="INFO", timestamp=datetime.datetime.now(),
                                          message="Resource version pulled by client for agent %s state" % agent)
                 yield ra.save()
 
-        return 200, {"environment": tid, "agent": agent, "version": cm.version, "resources": deploy_model}
+        return 200, {"environment": tid, "agent": agent, "version": version, "resources": deploy_model}
 
     @protocol.handle(methods.CMVersionMethod.list_versions)
     @gen.coroutine
@@ -737,14 +722,14 @@ class Server(protocol.ServerEndpoint):
 
         return 200, d
 
-    @protocol.handle(methods.CMVersionMethod.get_version)
+    @protocol.handle(methods.CMVersionMethod.get_version, version_id="id")
     @gen.coroutine
-    def get_version(self, tid, id, include_logs=None, log_filter=None, limit=None):
+    def get_version(self, tid, version_id, include_logs=None, log_filter=None, limit=None):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        version = yield data.ConfigurationModel.get_version(env, id)
+        version = yield data.ConfigurationModel.get_version(tid, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
@@ -779,14 +764,14 @@ class Server(protocol.ServerEndpoint):
 
         return 200, d
 
-    @protocol.handle(methods.CMVersionMethod.delete_version)
+    @protocol.handle(methods.CMVersionMethod.delete_version, version_id="id")
     @gen.coroutine
-    def delete_version(self, tid, id):
+    def delete_version(self, tid, version_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        version = yield data.ConfigurationModel.get_version(env, id)
+        version = yield data.ConfigurationModel.get_version(tid, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
@@ -800,7 +785,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        cm = yield data.ConfigurationModel.get_version(env, version)
+        cm = yield data.ConfigurationModel.get_version(tid, version)
         if cm is not None:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
 
@@ -937,14 +922,14 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
-    @protocol.handle(methods.CMVersionMethod.release_version)
+    @protocol.handle(methods.CMVersionMethod.release_version, version_id="id")
     @gen.coroutine
-    def release_version(self, tid, id, push):
+    def release_version(self, tid, version_id, push):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        model = yield data.ConfigurationModel.get_version(env, id)
+        model = yield data.ConfigurationModel.get_version(tid, version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
@@ -969,20 +954,20 @@ class Server(protocol.ServerEndpoint):
                     future = client.trigger(tid, agent)
                     self.add_future(future)
                 else:
-                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, id, tid)
+                    LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, tid)
 
         model_dict = yield model.to_dict()
 
         return 200, {"model": model_dict}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_request)
+    @protocol.handle(methods.DryRunMethod.dryrun_request, version_id="id")
     @gen.coroutine
-    def dryrun_request(self, tid, id):
+    def dryrun_request(self, tid, version_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        model = yield data.ConfigurationModel.get_version(environment=env, version=id)
+        model = yield data.ConfigurationModel.get_version(environment=tid, version=version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
@@ -992,7 +977,7 @@ class Server(protocol.ServerEndpoint):
 
         # fetch all resource in this cm and create a list of distinct agents
         # @UndefinedVariable
-        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()
+        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()  # @UndefinedVariable
         dryrun.resource_total = len(rvs)
         dryrun.resource_todo = dryrun.resource_total
 
@@ -1007,10 +992,10 @@ class Server(protocol.ServerEndpoint):
         for agent in agents:
             client = self.get_agent_client(tid, agent)
             if client is not None:
-                future = client.do_dryrun(tid, dryrun_id, agent, id)
+                future = client.do_dryrun(tid, dryrun_id, agent, version_id)
                 self.add_future(future)
             else:
-                LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, id, tid)
+                LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, tid)
 
         yield dryrun.save()
 
@@ -1028,7 +1013,7 @@ class Server(protocol.ServerEndpoint):
 
         query_args["environment"] = env
         if version is not None:
-            model = yield data.ConfigurationModel.get_version(environment=env, version=version)
+            model = yield data.ConfigurationModel.get_version(environment=tid, version=version)
             if model is None:
                 return 404, {"message": "The request version does not exist."}
 
@@ -1044,29 +1029,29 @@ class Server(protocol.ServerEndpoint):
                                   "todo": x.resource_todo
                                   } for x in dryruns]}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_report)
+    @protocol.handle(methods.DryRunMethod.dryrun_report, dryrun_id="id")
     @gen.coroutine
-    def dryrun_report(self, tid, id):
+    def dryrun_report(self, tid, dryrun_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        dryrun = yield data.DryRun.get_uuid(id)
+        dryrun = yield data.DryRun.get_uuid(dryrun_id)
         if dryrun is None:
             return 404, {"message": "The given dryrun does not exist!"}
 
         dryrun_dict = yield dryrun.to_dict()
         return 200, {"dryrun": dryrun_dict}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_update)
+    @protocol.handle(methods.DryRunMethod.dryrun_update, dryrun_id="id")
     @gen.coroutine
-    def dryrun_update(self, tid, id, resource, changes, log_msg=None):
+    def dryrun_update(self, tid, dryrun_id, resource, changes, log_msg=None):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         with (yield self.dryrun_lock.acquire()):
-            dryrun = yield data.DryRun.get_uuid(id)
+            dryrun = yield data.DryRun.get_uuid(dryrun_id)
             if dryrun is None:
                 return 404, {"message": "The given dryrun does not exist!"}
 
@@ -1084,43 +1069,43 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
-    @protocol.handle(methods.CodeMethod.upload_code)
+    @protocol.handle(methods.CodeMethod.upload_code, code_id="id")
     @gen.coroutine
-    def upload_code(self, tid, id, resource, sources):
+    def upload_code(self, tid, code_id, resource, sources):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = yield data.Code.get_version(environment=env, version=id, resource=resource)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=env, version=code_id, resource=resource)  # @UndefinedVariable
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env, version=id, resource=resource, sources=sources)
+        code = data.Code(environment=env, version=code_id, resource=resource, sources=sources)
         yield code.save()
 
         return 200
 
-    @protocol.handle(methods.CodeMethod.get_code)
+    @protocol.handle(methods.CodeMethod.get_code, code_id="id")
     @gen.coroutine
-    def get_code(self, tid, id, resource):
+    def get_code(self, tid, code_id, resource):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = yield data.Code.get_version(environment=env, version=id, resource=resource)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=env, version=code_id, resource=resource)  # @UndefinedVariable
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
-        return 200, {"version": id, "environment": tid, "resource": resource, "sources": code.sources}
+        return 200, {"version": code_id, "environment": tid, "resource": resource, "sources": code.sources}
 
-    @protocol.handle(methods.ResourceMethod.resource_updated)
+    @protocol.handle(methods.ResourceMethod.resource_updated, resource_id="id")
     @gen.coroutine
-    def resource_updated(self, tid, id, level, action, message, status, extra_data):
+    def resource_updated(self, tid, resource_id, level, action, message, status, extra_data):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=id).find_all()  # @UndefinedVariable
+        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=resource_id).find_all()  # @UndefinedVariable
         if len(resv) == 0:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
@@ -1161,7 +1146,7 @@ class Server(protocol.ServerEndpoint):
         waitingagents = set([Id.parse_id(prov).get_agent_name() for prov in resv.provides])
 
         for agent in waitingagents:
-            yield self.get_agent_client(tid, agent).resource_event(tid, agent, id, status)
+            yield self.get_agent_client(tid, agent).resource_event(tid, agent, resource_id, status)
 
         return 200
 
@@ -1177,21 +1162,21 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"project": project.to_dict()}
 
-    @protocol.handle(methods.Project.delete_project)
+    @protocol.handle(methods.Project.delete_project, project_id="id")
     @gen.coroutine
-    def delete_project(self, id):
-        project = yield data.Project.get_uuid(id)
+    def delete_project(self, project_id):
+        project = yield data.Project.get_uuid(project_id)
         if project is None:
             return 404, {"message": "The project with given id does not exist."}
 
         yield project.delete_cascade()
         return 200, {}
 
-    @protocol.handle(methods.Project.modify_project)
+    @protocol.handle(methods.Project.modify_project, project_id="id")
     @gen.coroutine
-    def modify_project(self, id, name):
+    def modify_project(self, project_id, name):
         try:
-            project = yield data.Project.get_uuid(id)
+            project = yield data.Project.get_uuid(project_id)
             if project is None:
                 return 404, {"message": "The project with given id does not exist."}
 
@@ -1209,12 +1194,12 @@ class Server(protocol.ServerEndpoint):
         projects = yield data.Project.objects.find_all()  # @UndefinedVariable
         return 200, {"projects": [x.to_dict() for x in projects]}
 
-    @protocol.handle(methods.Project.get_project)
+    @protocol.handle(methods.Project.get_project, project_id="id")
     @gen.coroutine
-    def get_project(self, id):
+    def get_project(self, project_id):
         try:
-            future_1 = data.Project.get_uuid(id)
-            future_2 = data.Environment.objects.filter(project_id=id).find_all()  # @UndefinedVariable
+            future_1 = data.Project.get_uuid(project_id)
+            future_2 = data.Environment.objects.filter(project_id=project_id).find_all()  # @UndefinedVariable
 
             project, environments = yield [future_1, future_2]
 
@@ -1256,10 +1241,10 @@ class Server(protocol.ServerEndpoint):
         env_dict = env.to_dict()
         return 200, {"environment": env_dict}
 
-    @protocol.handle(methods.Environment.modify_environment)
+    @protocol.handle(methods.Environment.modify_environment, environment_id="id")
     @gen.coroutine
-    def modify_environment(self, id, name, repository, branch):
-        env = yield data.Environment.get_uuid(id)
+    def modify_environment(self, environment_id, name, repository, branch):
+        env = yield data.Environment.get_uuid(environment_id)
         if env is None:
             return 404, {"message": "The environment id does not exist."}
 
@@ -1280,13 +1265,13 @@ class Server(protocol.ServerEndpoint):
         yield env.save()
         return 200, {"environment": env.to_dict()}
 
-    @protocol.handle(methods.Environment.get_environment)
+    @protocol.handle(methods.Environment.get_environment, environment_id="id")
     @gen.coroutine
-    def get_environment(self, id, versions=None, resources=None):
+    def get_environment(self, environment_id, versions=None, resources=None):
         versions = 0 if versions is None else int(versions)
         resources = 0 if resources is None else int(resources)
 
-        env = yield data.Environment.get_uuid(id)
+        env = yield data.Environment.get_uuid(environment_id)
 
         if env is None:
             return 404, {"message": "The environment id does not exist."}
@@ -1318,10 +1303,10 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"environments": dicts}  # @UndefinedVariable
 
-    @protocol.handle(methods.Environment.delete_environment)
+    @protocol.handle(methods.Environment.delete_environment, environment_id="id")
     @gen.coroutine
-    def delete_environment(self, id):
-        env = yield data.Environment.get_uuid(id)
+    def delete_environment(self, environment_id):
+        env = yield data.Environment.get_uuid(environment_id)
         if env is None:
             return 404, {"message": "The environment with given id does not exist."}
 
@@ -1330,26 +1315,26 @@ class Server(protocol.ServerEndpoint):
             yield agent.delete()
 
         compiles = yield data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for compile in compiles:
-            yield compile.delete()
+        for c in compiles:
+            yield c.delete()
 
         yield env.delete_cascade()
 
         return 200
 
-    @protocol.handle(methods.NotifyMethod.is_compiling)
+    @protocol.handle(methods.NotifyMethod.is_compiling, environment_id="id")
     @gen.coroutine
-    def is_compiling(self, id):
-        if self._recompiles[id] is self:
+    def is_compiling(self, environment_id):
+        if self._recompiles[environment_id] is self:
             return 200
 
         return 204
 
-    @protocol.handle(methods.NotifyMethod.notify_change)
+    @protocol.handle(methods.NotifyMethod.notify_change, environment_id="id")
     @gen.coroutine
-    def notify_change(self, id, update):
-        LOGGER.info("Received change notification for environment %s", id)
-        self._async_recompile(id, update > 0)
+    def notify_change(self, environment_id, update):
+        LOGGER.info("Received change notification for environment %s", environment_id)
+        self._async_recompile(environment_id, update > 0)
 
         return 200
 
@@ -1531,14 +1516,14 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"snapshots": snap_list}
 
-    @protocol.handle(methods.Snapshot.get_snapshot)
+    @protocol.handle(methods.Snapshot.get_snapshot, snapshot_id="id")
     @gen.coroutine
-    def get_snapshot(self, tid, id):
+    def get_snapshot(self, tid, snapshot_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        snapshot = yield data.Snapshot.get_uuid(id)
+        snapshot = yield data.Snapshot.get_uuid(snapshot_id)
         if snapshot is None:
             return 404, {"message": "The given snapshot id does not exist!"}
         snap_dict = yield snapshot.to_dict()
@@ -1608,17 +1593,17 @@ class Server(protocol.ServerEndpoint):
         value["resources"] = resource_list
         return 200, {"snapshot": value}
 
-    @protocol.handle(methods.Snapshot.update_snapshot)
+    @protocol.handle(methods.Snapshot.update_snapshot, snapshot_id="id")
     @gen.coroutine
-    def update_snapshot(self, tid, id, resource_id, snapshot_data, start, stop, size, success, error, msg):
+    def update_snapshot(self, tid, snapshot_id, resource_id, snapshot_data, start, stop, size, success, error, msg):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         with (yield agent_lock.acquire()):
-            snapshot = yield data.Snapshot.get_uuid(id)
+            snapshot = yield data.Snapshot.get_uuid(snapshot_id)
             if snapshot is None:
-                return 404, {"message": "Snapshot with id %s does not exist!" % id}
+                return 404, {"message": "Snapshot with id %s does not exist!" % snapshot_id}
 
             res = yield (data.ResourceSnapshot.objects.  # @UndefinedVariable
                          filter(environment=env, snapshot=snapshot, resource_id=resource_id).find_all())  # @UndefinedVariable
@@ -1647,16 +1632,16 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
-    @protocol.handle(methods.Snapshot.delete_snapshot)
+    @protocol.handle(methods.Snapshot.delete_snapshot, snapshot_id="id")
     @gen.coroutine
-    def delete_snapshot(self, tid, id):
+    def delete_snapshot(self, tid, snapshot_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        snapshot = yield data.Snapshot.get_uuid(id)
+        snapshot = yield data.Snapshot.get_uuid(snapshot_id)
         if snapshot is None:
-            return 404, {"message": "Snapshot with id %s does not exist!" % id}
+            return 404, {"message": "Snapshot with id %s does not exist!" % snapshot_id}
 
         yield snapshot.delete_cascade()
 
@@ -1736,14 +1721,14 @@ class Server(protocol.ServerEndpoint):
         restore_list = yield [x.to_dict() for x in restores]
         return 200, {"restores": restore_list}
 
-    @protocol.handle(methods.RestoreSnapshot.get_restore_status)
+    @protocol.handle(methods.RestoreSnapshot.get_restore_status, restore_id="id")
     @gen.coroutine
-    def get_restore_status(self, tid, id):
+    def get_restore_status(self, tid, restore_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        restore = yield data.SnapshotRestore.get_uuid(id)
+        restore = yield data.SnapshotRestore.get_uuid(restore_id)
         if restore is None:
             return 404, {"message": "The given restore id does not exist!"}
 
@@ -1756,15 +1741,15 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"restore": restore_dict}
 
-    @protocol.handle(methods.RestoreSnapshot.update_restore)
+    @protocol.handle(methods.RestoreSnapshot.update_restore, restore_id="id")
     @gen.coroutine
-    def update_restore(self, tid, id, resource_id, success, error, msg, start, stop):
+    def update_restore(self, tid, restore_id, resource_id, success, error, msg, start, stop):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         with (yield agent_lock.acquire()):
-            restore = yield data.SnapshotRestore.get_uuid(id)
+            restore = yield data.SnapshotRestore.get_uuid(restore_id)
             rr = yield (data.ResourceRestore.objects.  # @UndefinedVariable
                         filter(environment=env, restore=restore, resource_id=resource_id).find_all())  # @UndefinedVariable
             if len(rr) == 0:
@@ -1785,38 +1770,38 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
-    @protocol.handle(methods.RestoreSnapshot.delete_restore)
+    @protocol.handle(methods.RestoreSnapshot.delete_restore, resource_id="id")
     @gen.coroutine
-    def delete_restore(self, tid, id):
+    def delete_restore(self, tid, restore_id):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        restore = yield data.SnapshotRestore.get_uuid(id)
+        restore = yield data.SnapshotRestore.get_uuid(restore_id)
         if restore is None:
             return 404, {"message": "The given restore id does not exist!"}
 
         yield restore.delete()
         return 200
 
-    @protocol.handle(methods.Decommision.decomission_environment)
+    @protocol.handle(methods.Decommision.decomission_environment, restore_id="id")
     @gen.coroutine
-    def decomission_environment(self, id):
+    def decomission_environment(self, restore_id):
         env = yield data.Environment.get_uuid(id)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         version = int(time.time())
-        result = yield self.put_version(id, version, [], [], {})
+        result = yield self.put_version(restore_id, version, [], [], {})
         return result, {"version": version}
 
-    @protocol.handle(methods.Decommision.clear_environment)
+    @protocol.handle(methods.Decommision.clear_environment, restore_id="id")
     @gen.coroutine
-    def clear_environment(self, id):
+    def clear_environment(self, restore_id):
         """
             Clear the environment
         """
-        env = yield data.Environment.get_uuid(id)
+        env = yield data.Environment.get_uuid(restore_id)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -1845,7 +1830,7 @@ class Server(protocol.ServerEndpoint):
             yield record.delete()
 
         compiles = yield data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for compile in compiles:
-            yield compile.delete()
+        for c in compiles:
+            yield c.delete()
 
         return 200

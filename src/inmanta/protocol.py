@@ -593,6 +593,12 @@ class RESTTransport(Transport):
                                                                            for name, value in message.items()]))
             method_call = getattr(config[1][0], config[1][1])
 
+            if hasattr(method_call, "__protocol_mapping__"):
+                for k, v in method_call.__protocol_mapping__.items():
+                    if v in message:
+                        message[k] = message[v]
+                        del message[v]
+
             result = yield method_call(**message)
 
             if result is None:
@@ -826,13 +832,11 @@ class handle(object):
         Decorator for subclasses of an endpoint to handle protocol methods
 
         :param method A subclass of method that defines the method
-        :param operation The operation to use (POST, GET, PUT, HEAD, ...)
-        :param id Is the special parameter id required
-        :param index Does this method handle the index
     """
 
-    def __init__(self, method):
+    def __init__(self, method, **kwargs):
         self.method = method
+        self.mapping = kwargs
 
     def __call__(self, function):
         """
@@ -849,6 +853,7 @@ class handle(object):
             self.method.__protocol_properties__["method_name"] = method_class.__method_name__
 
         function.__protocol_method__ = self.method
+        function.__protocol_mapping__ = self.mapping
         return function
 
 
@@ -1037,15 +1042,15 @@ class Session(object):
     def put_call(self, call_spec, timeout=10):
         future = tornado.concurrent.Future()
 
-        id = uuid.uuid4()
+        reply_id = uuid.uuid4()
 
-        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", id, call_spec["method"], call_spec["url"], self._sid)
+        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec["method"], call_spec["url"], self._sid)
 
         q = self._queue
-        call_spec["reply_id"] = id
+        call_spec["reply_id"] = reply_id
         q.put(call_spec)
         self._set_timeout(future, timeout,
-                          "Call %s: %s %s for agent %s timed out." % (id, call_spec["method"], call_spec["url"], self._sid))
+                          "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec["method"], call_spec["url"], self._sid))
         self._replies[call_spec["reply_id"]] = future
 
         return future

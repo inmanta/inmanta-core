@@ -30,6 +30,8 @@ from motorengine.fields.embedded_document_field import EmbeddedDocumentField
 
 LOGGER = logging.getLogger(__name__)
 
+DBLIMIT = 100000
+
 
 class IdDocument(Document):
     """
@@ -528,6 +530,9 @@ class ResourceVersion(Document):
     model = ReferenceField(reference_document_type="inmanta.data.ConfigurationModel", required=True)
     attributes = JsonField()
     status = StringField(default="")
+
+    environment_id = UUIDField(required=True, sparse=True)
+
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
@@ -548,6 +553,20 @@ class ResourceVersion(Document):
         for r in resource_actions:
             yield r.delete()
         yield self.delete()
+
+    @classmethod
+    @gen.coroutine
+    def get_resources_for_version(cls, environment, version):
+        env = yield Environment.get_uuid(environment)
+        if env is None:
+            return Exception("The given environment id does not exist!")
+
+        cm = ConfigurationModel.get_version(version)
+        if cm is None:
+            return None
+
+        resources = yield ResourceVersion.objects.filter(environment=env, model=cm).limit(DBLIMIT).find_all()
+        return resources
 
 
 class ConfigurationModel(Document):
@@ -577,7 +596,26 @@ class ConfigurationModel(Document):
     @classmethod
     @gen.coroutine
     def get_version(cls, environment, version):
-        versions = yield cls.objects.filter(environment=environment, version=version).find_all()
+        env = yield Environment.get_uuid(environment)
+        if env is None:
+            return Exception("The given environment id does not exist!")
+
+        versions = yield cls.objects.filter(environment=env, version=version).find_all()
+        if len(versions) == 0:
+            return None
+
+        return versions[0]
+
+    @classmethod
+    @gen.coroutine
+    def get_latest_version(cls, environment):
+        env = yield Environment.get_uuid(environment)
+        if env is None:
+            return Exception("The given environment id does not exist!")
+
+        versions = yield (ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
+                          order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
+
         if len(versions) == 0:
             return None
 
