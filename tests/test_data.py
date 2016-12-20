@@ -23,6 +23,69 @@ from inmanta.data import AgentInstance, Agent
 import pytest
 
 
+class Doc(data.BaseDocument):
+    name = data.Field(field_type=str, required=True)
+
+
+@pytest.mark.gen_test
+def test_motor(motor):
+    yield motor.testCollection.insert({"a": 1, "b": "abcd"})
+    results = yield motor.testCollection.find_one({"a": {"$gt": 0}})
+
+    assert("_id" in results)
+
+    yield motor.testCollection.insert({"a": {"b": {"c": 1}}})
+    results = motor.testCollection.find({})
+
+    while (yield results.fetch_next):
+        assert("a" in results.next_object())
+
+
+def test_collection_naming():
+    assert(Doc.collection() == "Doc")
+
+
+def test_document_def():
+    t = Doc(name="doc")
+    try:
+        t.id = "1234"
+        assert(False)
+    except TypeError:
+        pass
+
+    t.id = uuid.uuid4()
+    json = t.to_dict()
+
+    assert("id" in json)
+    assert("_id" in t.to_dict(mongo_pk=True))
+
+
+@pytest.mark.gen_test
+def test_document_insert(motor):
+    Doc.set_connection(motor)
+
+    d = Doc(name="test")
+
+    yield d.insert()
+    docs = yield motor.Doc.find({}).to_list(length=10)
+    assert(len(docs) == 1)
+
+    doc = yield Doc.get_by_id(d.id)
+    assert(doc.name == d.name)
+
+
+@pytest.mark.gen_test
+def test_document_update(motor):
+    Doc.set_connection(motor)
+
+    d = Doc(name="test")
+    yield d.insert()
+
+    yield d.update(name="test2")
+    result = yield motor.Doc.find_one({"name": "test2"})
+    assert("name" in result)
+
+
 @pytest.mark.usefixtures("motorengine")
 class TestProjectTestCase:
 

@@ -18,7 +18,7 @@
 
 import json
 import logging
-
+import uuid
 
 from motorengine import Document, DESCENDING
 from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
@@ -27,10 +27,203 @@ from inmanta.resources import Id
 from tornado import gen
 from motorengine.fields.list_field import ListField
 from motorengine.fields.embedded_document_field import EmbeddedDocumentField
+from motor import motor_tornado
+import datetime
+
 
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
+
+
+class Field(object):
+    def __init__(self, field_type, required=False, default=None):
+        self._field_type = field_type
+        self._required = required
+        self._default = default
+
+    def get_field_type(self):
+        return self._field_type
+
+    field_type = property(get_field_type)
+
+    def get_required(self):
+        return self._required
+
+    required = property(get_required)
+
+    def get_default(self):
+        return self._default
+
+    default = property(get_default)
+
+
+class BaseDocument(object):
+    """
+        A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
+        bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
+    """
+    id = Field(field_type=uuid.UUID, required=True)
+
+    @classmethod
+    def collection(cls):
+        """
+            Return the name of the collection
+        """
+        return cls.__name__
+
+    @classmethod
+    def set_connection(cls, motor):
+        cls._coll = motor[cls.collection()]
+
+    def __init__(self, from_mongo=False, **kwargs):
+        self.__fields = {}
+
+        if from_mongo:
+            if "id" in kwargs:
+                raise AttributeError("A mongo document should not contain a field 'id'")
+
+            kwargs["id"] = kwargs["_id"]
+            del kwargs["_id"]
+        else:
+            if "id" in kwargs:
+                raise AttributeError("The id attribute is generated per collection by the document class.")
+
+            kwargs["id"] = self.__class__._new_id()
+
+        fields = self.__class__._get_all_fields()
+        for name, value in kwargs.items():
+            if name not in fields:
+                raise AttributeError("%s field is not defined for this document %s" % (name, self.__class__.collection()))
+
+            if not isinstance(value, fields[name].field_type):
+                raise TypeError("Field %s should have the correct type" % name)
+
+            del fields[name]
+            setattr(self, name, value)
+
+        if len(fields) > 0:
+            raise AttributeError("%s fields are required." % ", ".join(fields.keys()))
+
+    def _get_field(self, name):
+        if hasattr(self.__class__, name):
+            field = getattr(self.__class__, name)
+            if isinstance(field, Field):
+                return field
+
+        return None
+
+    @classmethod
+    def _get_all_fields(cls):
+        fields = {}
+        for attr in dir(cls):
+            value = getattr(cls, attr)
+            if isinstance(value, Field):
+                fields[attr] = value
+        return fields
+
+    def __getattribute__(self, name):
+        if name.startswith("_"):
+            return object.__getattribute__(self, name)
+
+        field = self._get_field(name)
+        if field is not None:
+            if name in self.__fields:
+                return self.__fields[name]
+            else:
+                return None
+
+        return object.__getattribute__(self, name)
+
+    def __setattr__(self, name, value):
+        if name.startswith("_"):
+            return object.__setattr__(self, name, value)
+
+        field = self._get_field(name)
+        if field is not None:
+            # validate
+            if not isinstance(value, field.field_type):
+                raise TypeError("Field %s should be of type %s" % (name, field.field_type))
+
+            self.__fields[name] = value
+            return
+
+        raise AttributeError(name)
+
+    def to_dict(self, mongo_pk=False):
+        """
+            Return a dict representing the document
+        """
+        result = {}
+        for name, typing in self.__class__._get_all_fields().items():
+            value = None
+            if name in self.__fields:
+                value = self.__fields[name]
+
+            if typing.required and value is None:
+                raise TypeError("%s should have field '%s'" % (self.__class__.__name__, name))
+
+            if not isinstance(value, typing.field_type):
+                raise TypeError("Value of field %s does not have the correct type" % name)
+
+            if mongo_pk and name == "id":
+                result["_id"] = value
+            else:
+                result[name] = value
+
+        return result
+
+    @classmethod
+    def _new_id(cls):
+        """
+            Generate a new ID. Override to use something else than uuid4
+        """
+        return uuid.uuid4()
+
+    @gen.coroutine
+    def insert(self):
+        """
+            Insert a new document based on the instance passed. Validation is done based on the defined fields.
+        """
+        yield self._coll.insert(self.to_dict(mongo_pk=True))
+
+
+    @gen.coroutine
+    def update(self, **kwargs):
+        """
+            Update this document in the database. It will update the fields in this object and send a full update to mongodb.
+            Use update_fields to only update specific fields.
+        """
+        for name, value in kwargs.items():
+            setattr(self, name, value)
+
+        yield self._coll.update({"_id": self.id}, self.to_dict(mongo_pk=True))
+
+    @classmethod
+    @gen.coroutine
+    def get_by_id(cls, doc_id):
+        """
+            Get a specific document based on its ID
+
+            :return An instance of this class with its fields filled from the database.
+        """
+        result = yield cls._coll.find_one({"_id": doc_id})
+        return cls(from_mongo=True, **result)
+
+    @classmethod
+    @gen.coroutine
+    def get_list(cls, limit=10000, **query):
+        """
+            Get a cu of documents matching the filter args
+        """
+        result = []
+        cursor = cls._coll.find(query)
+
+        while (yield cursor.fetch_next):
+            obj = cls(from_mongo=True, **cursor.next_object())
+            result.append(obj)
+
+        return result
 
 
 class IdDocument(Document):
@@ -652,8 +845,9 @@ class ConfigurationModel(Document):
         if env is None:
             return Exception("The given environment id does not exist!")
 
-        versions = yield (ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                          order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
+        versions = yield ConfigurationModel.objects.filter(environment=env,
+                                                           released=True).order_by("version",
+                                                                                   direction=DESCENDING).limit(1).find_all()
 
         if len(versions) == 0:
             return None
@@ -662,11 +856,26 @@ class ConfigurationModel(Document):
 
     @classmethod
     @gen.coroutine
-    def get_agents(self, environment, version):
+    def get_agents(cls, environment, version):
         """
             Returns a list of all agents that have resources defined in this configuration model
         """
+        env = yield Environment.get_uuid(environment)
+        if env is None:
+            return Exception("The given environment id does not exist!")
 
+        model = yield ConfigurationModel.get_version(environment=environment, version=version)
+        if model is None:
+            return []
+
+        rvs = yield ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()  # @UndefinedVariable
+
+        agents = set()
+        for rv in rvs:
+            rv_dict = rv.to_dict()
+            agents.add(rv_dict["id_fields"]["agent_name"])
+
+        return list(agents)
 
     @gen.coroutine
     def to_dict(self):
@@ -733,7 +942,7 @@ class Code(Document):
         return codes[0]
 
 
-class DryRun(IdDocument):
+class DryRun(BaseDocument):
     """
         A dryrun of a model version
 
@@ -745,24 +954,40 @@ class DryRun(IdDocument):
         :param resource_todo The number of resources left to do
         :param resources Changes for each of the resources in the version
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    model = ReferenceField(reference_document_type=ConfigurationModel)
-    date = DateTimeField()
-    resource_total = IntField()
-    resource_todo = IntField()
-    resources = JsonField()
+    environment = Field(field_type=uuid.UUID, required=True)
+    model = Field(field_type=int, required=True)
+    date = Field(field_type=datetime.datetime)
+    total = Field(field_type=int, default=0)
+    todo = Field(field_type=int, default=0)
+    resources = Field(field_type=dict, default={})
 
+    @classmethod
     @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"id": self.uuid,
-                "environment": str(self.environment.uuid),
-                "model": str(self.model.version),
-                "date": self.date.isoformat(),
-                "total": self.resource_total,
-                "todo": self.resource_todo,
-                "resources": self.resources,
-                }
+    def update_resource(cls, dryrun_id, resource_id, dryrun_data):
+        """
+            Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
+            if the resource has not been saved yet.
+        """
+        entry_uuid = uuid.uuid5(dryrun_id, resource_id)
+        resource_key = "resources.%s" % entry_uuid
+
+        query = {"_id": dryrun_id, resource_key: {"$exists": False}}
+        update = {"$inc": {"todo":-1}, "$set": {resource_key: dryrun_data}}
+
+        yield cls._coll.update(query, update)
+
+    @classmethod
+    @gen.coroutine
+    def create(cls, environment, model, total, todo):
+        obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
+        obj.insert()
+        return obj
+
+    def to_dict(self, mongo_pk=False):
+        dict_result = BaseDocument.to_dict(self, mongo_pk=mongo_pk)
+        resources = {r["id"]: r for r in dict_result["resources"].values()}
+        dict_result["resources"] = resources
+        return dict_result
 
 
 class ResourceSnapshot(Document):
@@ -896,3 +1121,11 @@ class Snapshot(IdDocument):
             yield restore.delete_cascade()
 
         yield self.delete()
+
+
+def connect(host, port, database, io_loop):
+    client = motor_tornado.MotorClient(host, port, io_loop=io_loop)
+    db = client[database]
+
+    for cls in [DryRun]:
+        cls.set_connection(db)

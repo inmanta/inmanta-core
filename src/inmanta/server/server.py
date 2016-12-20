@@ -73,6 +73,7 @@ class Server(protocol.ServerEndpoint):
             database_port = opt.db_port.get()
 
         self._db = connect(opt.db_name.get(), host=database_host, port=database_port)
+        data.connect(database_host, database_port, opt.db_name.get(), io_loop)
         LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(),
                     database_host, database_port)
 
@@ -664,6 +665,9 @@ class Server(protocol.ServerEndpoint):
     def get_resources_for_agent(self, tid, agent, version):
         if version is None:
             cm = yield data.ConfigurationModel.get_latest_version(tid)
+            if cm is None:
+                return 404, {"message": "No version available"}
+
             version = cm.version
 
         else:
@@ -933,12 +937,7 @@ class Server(protocol.ServerEndpoint):
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
-            rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
-            agents = set()
-            for rv in rvs:
-                rv_dict = rv.to_dict()
-                agents.add(rv_dict["id_fields"]["agent_name"])
-
+            agents = yield data.ConfigurationModel.get_agents(tid, version_id)
             yield self.agentmanager._ensure_agents(str(tid), agents)
 
             for agent in agents:
@@ -964,35 +963,25 @@ class Server(protocol.ServerEndpoint):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        # Create a dryrun document
-        dryrun_id = str(uuid.uuid4())
-        dryrun = data.DryRun(uuid=dryrun_id, environment=env, model=model, date=datetime.datetime.now(), resources={})
-
         # fetch all resource in this cm and create a list of distinct agents
         # @UndefinedVariable
         rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()  # @UndefinedVariable
-        dryrun.resource_total = len(rvs)
-        dryrun.resource_todo = dryrun.resource_total
 
-        agents = set()
-        for rv in rvs:
-            rv_dict = rv.to_dict()
-            agents.add(rv_dict["id_fields"]["agent_name"])
+        # Create a dryrun document
+        dryrun = yield data.DryRun.create(environment=tid, model=version_id, todo=len(rvs), total=len(rvs))
 
+        agents = yield data.ConfigurationModel.get_agents(tid, version_id)
         yield self.agentmanager._ensure_agents(str(tid), agents)
 
         for agent in agents:
             client = self.get_agent_client(tid, agent)
             if client is not None:
-                future = client.do_dryrun(tid, dryrun_id, agent, version_id)
+                future = client.do_dryrun(tid, dryrun.id, agent, version_id)
                 self.add_future(future)
             else:
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, tid)
 
-        yield dryrun.save()
-
-        dryrun = yield data.DryRun.get_uuid(dryrun_id)
-        dryrun_dict = yield dryrun.to_dict()
+        dryrun_dict = dryrun.to_dict()
         return 200, {"dryrun": dryrun_dict}
 
     @protocol.handle(methods.DryRunMethod.dryrun_list)
@@ -1003,23 +992,18 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        query_args["environment"] = env
+        query_args["environment"] = tid
         if version is not None:
             model = yield data.ConfigurationModel.get_version(environment=tid, version=version)
             if model is None:
                 return 404, {"message": "The request version does not exist."}
 
-            query_args["model"] = model
+            query_args["model"] = version
 
-        dryruns = yield data.DryRun.objects.filter(**query_args).find_all()  # @UndefinedVariable
+        dryruns = yield data.DryRun.get_list(**query_args)
 
-        for x in dryruns:
-            yield x.load_references()
-
-        return 200, {"dryruns": [{"id": x.uuid, "version": x.model.version,
-                                  "date": x.date.isoformat(), "total": x.resource_total,
-                                  "todo": x.resource_todo
-                                  } for x in dryruns]}
+        return 200, {"dryruns": [{"id": x.id, "version": x.model, "date": x.date, "total": x.total, "todo": x.todo}
+                                 for x in dryruns]}
 
     @protocol.handle(methods.DryRunMethod.dryrun_report, dryrun_id="id")
     @gen.coroutine
@@ -1028,12 +1012,11 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        dryrun = yield data.DryRun.get_uuid(dryrun_id)
+        dryrun = yield data.DryRun.get_by_id(dryrun_id)
         if dryrun is None:
             return 404, {"message": "The given dryrun does not exist!"}
 
-        dryrun_dict = yield dryrun.to_dict()
-        return 200, {"dryrun": dryrun_dict}
+        return 200, {"dryrun": dryrun.to_dict()}
 
     @protocol.handle(methods.DryRunMethod.dryrun_update, dryrun_id="id")
     @gen.coroutine
@@ -1043,21 +1026,8 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         with (yield self.dryrun_lock.acquire()):
-            dryrun = yield data.DryRun.get_uuid(dryrun_id)
-            if dryrun is None:
-                return 404, {"message": "The given dryrun does not exist!"}
-
-            if resource in dryrun.resources:
-                return 500, {"message": "A dryrun was already stored for this resource."}
-
-            payload = {"changes": changes,
-                       "log": log_msg,
-                       "id_fields": Id.parse_id(resource).to_dict()
-                       }
-
-            dryrun.resources[resource] = payload
-            dryrun.resource_todo -= 1
-            yield dryrun.save()
+            payload = {"changes": changes, "log": log_msg, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
+            yield data.DryRun.update_resource(dryrun_id, resource, payload)
 
         return 200
 

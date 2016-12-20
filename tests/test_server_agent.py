@@ -1228,3 +1228,60 @@ def test_cross_agent_deps(io_loop, server, client):
 
     agent.stop()
     agent2.stop()
+
+
+@pytest.mark.gen_test
+def test_dryrun_scale(io_loop, server, client):
+    """
+        test dryrun scaling
+    """
+    Provider.reset()
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    resources = []
+    for i in range(1, 100):
+        resources.append({'key': 'key%d' % i,
+                          'value': 'value%d' % i,
+                          'id': 'test::Resource[agent1,key=key%d],v=%d' % (i, version),
+                          'purged': False,
+                          'state_id': '',
+                          'allow_restore': True,
+                          'allow_snapshot': True,
+                          'requires': [],
+                          })
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # request a dryrun
+    result = yield client.dryrun_request(env_id, version)
+    assert result.code == 200
+    assert result.result["dryrun"]["total"] == len(resources)
+    assert result.result["dryrun"]["todo"] == len(resources)
+
+    # get the dryrun results
+    result = yield client.dryrun_list(env_id, version)
+    assert result.code == 200
+    assert len(result.result["dryruns"]) == 1
+
+    while result.result["dryruns"][0]["todo"] > 0:
+        result = yield client.dryrun_list(env_id, version)
+        yield gen.sleep(0.1)
+
+    dry_run_id = result.result["dryruns"][0]["id"]
+    result = yield client.dryrun_report(env_id, dry_run_id)
+    assert result.code == 200
+
+    agent.stop()

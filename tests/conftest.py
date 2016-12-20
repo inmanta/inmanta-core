@@ -27,6 +27,8 @@ import pytest
 from inmanta import config
 import pymongo
 from motorengine.connection import connect, disconnect
+from motor import motor_tornado
+
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -60,6 +62,16 @@ def motorengine(mongo_db, mongo_client, io_loop):
     c = connect(db="inmanta", host="localhost", port=int(mongo_db.port), io_loop=io_loop)
     yield c
     disconnect()
+    for db_name in mongo_client.database_names():
+        mongo_client.drop_database(db_name)
+
+
+@pytest.fixture(scope="function")
+def motor(mongo_db, mongo_client, io_loop):
+    client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
+    db = client["inmanta"]
+    yield db
+
     for db_name in mongo_client.database_names():
         mongo_client.drop_database(db_name)
 
