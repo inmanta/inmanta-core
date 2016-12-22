@@ -35,6 +35,7 @@ from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
 import pytest
 from inmanta.execute.util import Unknown
+from inmanta.export import DependencyCycleException
 
 
 class CompilerBaseTest(object):
@@ -89,6 +90,23 @@ class SnippetTests(unittest.TestCase):
             x.write(snippet)
 
         Project.set(Project(self.project_dir))
+
+    def do_export(self):
+        config.Config.load_config()
+        from inmanta.export import Exporter
+
+        (types, scopes) = compiler.do_compile()
+
+        class Options(object):
+            pass
+        options = Options()
+        options.json = True
+        options.depgraph = False
+        options.deploy = False
+        options.ssl = False
+
+        export = Exporter(options=options)
+        return export.run(types, scopes)
 
     def xtearDown(self):
         shutil.rmtree(self.project_dir)
@@ -765,6 +783,26 @@ std::print(t1.tests)
         scope = root.get_child("__config__").scope
 
         assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
+
+    def testIssue220DepLoops(self):
+        self.setUpForSnippet("""
+import std
+
+host = std::Host(name="Test", os=std::unix)
+f1 = std::ConfigFile(host=host, path="/f1", content="")
+f2 = std::ConfigFile(host=host, path="/f2", content="")
+f3 = std::ConfigFile(host=host, path="/f3", content="")
+f4 = std::ConfigFile(host=host, path="/f4", content="")
+f1.requires = f2
+f2.requires = f3
+f3.requires = f1
+f4.requires = f1
+""")
+        with pytest.raises(DependencyCycleException) as e:
+            self.do_export()
+
+        cyclenames = [r.id.resource_str() for r in e.value.cycle]
+        assert set(cyclenames) == set(['std::File[Test,path=/f3]', 'std::File[Test,path=/f2]', 'std::File[Test,path=/f1]'])
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
