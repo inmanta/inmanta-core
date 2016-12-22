@@ -46,15 +46,13 @@ class ResultVariable(object):
         self.type = mytype
 
     def set_provider(self, provider):
+        # no checking for double set, this is done in the actual assignment
         self.provider = provider
 
-    def get_waiting_providers(self):
-        # todo: optimize?
-        if self.provider is None:
-            return 0
-        if self.hasValue:
-            return 0
-        return 1
+    def get_promise(self, provider):
+        """Alternative for set_provider for better handling of ListVariables."""
+        self.provider = provider
+        return self
 
     def is_ready(self):
         return self.hasValue
@@ -161,24 +159,43 @@ class DelayedResultVariable(ResultVariable):
     def unqueue(self):
         self.queued = False
 
+    def get_waiting_providers(self):
+        raise NotImplementedError()
+
+
+class Promise(object):
+
+    def __init__(self, owner, provider):
+        self.provider = provider
+        self.owner = owner
+
+    def set_value(self, value, location, recur=True):
+        self.owner.set_promised_value(self, value, location, recur)
+
 
 class ListVariable(DelayedResultVariable):
 
     def __init__(self, attribute, instance, queue: "QueueScheduler"):
         self.attribute = attribute
         self.myself = instance
-        self.providers = []
+        self.promisses = []
+        self.done_promisses = []
         DelayedResultVariable.__init__(self, queue, [])
 
-    def set_provider(self, provider):
-        self.providers.append(provider)
+    def get_promise(self, provider):
+        out = Promise(self, provider)
+        self.promisses.append(out)
+        return out
+
+    def set_promised_value(self, promis, value, location, recur=True):
+        self.done_promisses.append(promis)
+        self.set_value(value, location, recur)
 
     def get_waiting_providers(self):
         # todo: optimize?
-        out = len(self.providers) - len(self.value)
-        # heuristics,...
+        out = len(self.promisses) - len(self.done_promisses)
         if out < 0:
-            return 0
+            raise Exception("SEVERE: COMPILER STATE CORRUPT: provide count negative")
         return out
 
     def set_value(self, value, location, recur=True):
@@ -243,6 +260,14 @@ class OptionVariable(DelayedResultVariable):
         self.value = value
         self.location = location
         self.freeze()
+
+    def get_waiting_providers(self):
+        # todo: optimize?
+        if self.provider is None:
+            return 0
+        if self.hasValue:
+            return 0
+        return 1
 
     def can_get(self):
         return self.get_waiting_providers() == 0
@@ -322,11 +347,9 @@ class ExecutionUnit(Waiter):
         @param provides: Whether to register this XU as provider to the result variable
     """
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression, provides=True):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
         Waiter.__init__(self, queue_scheduler)
-        self.result = result
-        if provides:
-            result.set_provider(expression)
+        self.result = result.get_promise(expression)
         self.requires = requires
         self.expression = expression
         self.resolver = resolver
@@ -496,11 +519,9 @@ class Instance(ExecutionContext):
     def get_type(self):
         return self.type
 
-    def set_attribute(self, name, value, location, recur=True, provides=False):
+    def set_attribute(self, name, value, location, recur=True):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
-        if provides:
-            self.slots[name].set_provider(self)
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
