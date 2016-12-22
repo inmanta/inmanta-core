@@ -275,8 +275,7 @@ class OptionVariable(DelayedResultVariable):
     def get_value(self):
         result = DelayedResultVariable.get_value(self)
         if result is None:
-            raise OptionalValueException(
-                None, "Optional variable accessed that has no value (%s.%s)" % (self.myself, self.attribute))
+            raise OptionalValueException(self.myself, self.attribute)
         return result
 
     def __str__(self):

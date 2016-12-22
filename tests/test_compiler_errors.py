@@ -88,7 +88,7 @@ class SnippetTests(unittest.TestCase):
             """
         a=b
 """,
-            "variable b not found (reported at ({dir}/main.cf:2))"
+            "variable b not found (reported in Assign(a, b) ({dir}/main.cf:2))"
         )
 
     def test_bad_type(self):
