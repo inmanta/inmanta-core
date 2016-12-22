@@ -1251,7 +1251,7 @@ def test_dryrun_scale(io_loop, server, client):
     version = int(time.time())
 
     resources = []
-    for i in range(1, 100):
+    for i in range(1, 1):
         resources.append({'key': 'key%d' % i,
                           'value': 'value%d' % i,
                           'id': 'test::Resource[agent1,key=key%d],v=%d' % (i, version),

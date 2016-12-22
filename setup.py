@@ -10,7 +10,8 @@ requires=[
         'ply',
         'ruamel.yaml',
         'virtualenv',
-        'motorengine',
+        'motor',
+        'pymongo',
         'mongobox',
         'pytest-tornado',
         'blessings']

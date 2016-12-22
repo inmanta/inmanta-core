@@ -20,7 +20,7 @@ from uuid import uuid4, UUID
 
 import pytest
 from inmanta.server.agentmanager import AgentManager
-from inmanta.data import Environment, Agent
+from inmanta import data
 from tornado import gen
 from inmanta.protocol import Result
 from utils import assertEqualIsh, UNKWN
@@ -70,13 +70,15 @@ class MockSession(object):
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_primary_selection(motorengine):
+def test_primary_selection(motor):
+    data.use_motor(motor)
 
-    env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
-    env = yield env.save()
-    yield Agent(environment=env, name="agent1", paused=True).save()
-    yield Agent(environment=env, name="agent2", paused=False).save()
-    yield Agent(environment=env, name="agent3", paused=False).save()
+    env = data.Environment(name="testenv", project=uuid4())
+    yield env.insert()
+
+    yield data.Agent(environment=env.id, name="agent1", paused=True).insert()
+    yield data.Agent(environment=env.id, name="agent2", paused=False).insert()
+    yield data.Agent(environment=env.id, name="agent3", paused=False).insert()
 
     server = Mock()
     futures = Collector()
@@ -85,8 +87,8 @@ def test_primary_selection(motorengine):
 
     @gen.coroutine
     def assert_agent(name: str, state: str, sid: UUID):
-        agent = yield Agent.get(env, name)
-        yield agent.load_references()
+        agent = yield data.Agent.get(env.id, name)
+
         assert agent.get_status() == state
         if state == "paused":
             assert agent.primary is None
@@ -96,8 +98,9 @@ def test_primary_selection(motorengine):
             assert not agent.paused
         elif state == "up":
             assert agent.primary is not None
-            yield agent.primary.load_references()
-            assert agent.primary.process.sid == sid
+            agent_instance = yield data.AgentInstance.get_by_id(agent.primary)
+            agent_proc = yield data.AgentProcess.get_by_id(agent_instance.process)
+            assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 
     @gen.coroutine
@@ -107,7 +110,7 @@ def test_primary_selection(motorengine):
         yield assert_agent("agent3", s3, sid3)
 
     # one session
-    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
@@ -122,7 +125,7 @@ def test_primary_selection(motorengine):
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
-    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     yield futures.proccess()
     assert len(am.sessions) == 2
@@ -146,15 +149,17 @@ def test_primary_selection(motorengine):
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_API(motorengine):
-    env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
-    env = yield env.save()
-    env2 = Environment(uuid=uuid4(), name="testenv2", project_id=uuid4())
-    env2 = yield env2.save()
-    yield Agent(environment=env, name="agent1", paused=True).save()
-    yield Agent(environment=env, name="agent2", paused=False).save()
-    yield Agent(environment=env, name="agent3", paused=False).save()
-    yield Agent(environment=env2, name="agent4", paused=False).save()
+def test_API(motor):
+    data.use_motor(motor)
+
+    env = data.Environment(name="testenv", project=uuid4())
+    yield env.insert()
+    env2 = data.Environment(name="testenv2", project=uuid4())
+    yield env2.insert()
+    yield data.Agent(environment=env.id, name="agent1", paused=True).insert()
+    yield data.Agent(environment=env.id, name="agent2", paused=False).insert()
+    yield data.Agent(environment=env.id, name="agent3", paused=False).insert()
+    yield data.Agent(environment=env2.id, name="agent4", paused=False).insert()
 
     server = Mock()
     futures = Collector()
@@ -162,10 +167,10 @@ def test_API(motorengine):
     am = AgentManager(server, False)
 
     # one session
-    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     # second session
-    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     # third session
     env3 = uuid4()
@@ -182,37 +187,37 @@ def test_API(motorengine):
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
-                               'environment': str(env.uuid)},
+                               'environment': env.id},
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
-                               'environment': str(env.uuid)},
+                               'environment': env.id},
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
-                               'environment': str(env3)}]}
+                               'environment': env3}]}
 
     assertEqualIsh(shouldbe, all_agents, ['hostname', 'name'])
     agentid = all_agents['processes'][0]['id']
 
-    code, all_agents = yield am.list_agent_processes(env.uuid, None)
+    code, all_agents = yield am.list_agent_processes(env.id, None)
     assert code == 200
 
     shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
-                               'environment': str(env.uuid)},
+                               'environment': env.id},
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
-                               'environment': str(env.uuid)}]}
+                               'environment': env.id}]}
 
     assertEqualIsh(shouldbe, all_agents)
 
-    code, all_agents = yield am.list_agent_processes(env2.uuid, None)
+    code, all_agents = yield am.list_agent_processes(env2.id, None)
     assert code == 200
 
     shouldbe = {'processes': []}
@@ -233,30 +238,32 @@ def test_API(motorengine):
     code, all_agents = yield am.list_agents(None)
     assert code == 200
     shouldbe = {'agents': [{'name': 'agent1', 'paused': True, 'last_failover': '', 'primary': '',
-                            'environment': str(env.uuid), "state": "paused"},
+                            'environment': env.id, "state": "paused"},
                            {'name': 'agent2', 'paused': False, 'last_failover': UNKWN,
-                               'primary': UNKWN, 'environment': str(env.uuid), "state": "up"},
+                               'primary': UNKWN, 'environment': env.id, "state": "up"},
                            {'name': 'agent3', 'paused': False, 'last_failover': UNKWN,
-                               'primary': UNKWN, 'environment': str(env.uuid), "state": "up"},
+                               'primary': UNKWN, 'environment': env.id, "state": "up"},
                            {'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
-                            'environment': str(env2.uuid), "state": "down"}]}
+                            'environment': env2.id, "state": "down"}]}
     assertEqualIsh(shouldbe, all_agents, ['name'])
 
-    code, all_agents = yield am.list_agents(env2.uuid)
+    code, all_agents = yield am.list_agents(env2.id)
     assert code == 200
     shouldbe = {
         'agents': [{'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
-                    'environment': str(env2.uuid), "state": "down"}]}
+                    'environment': env2.id, "state": "down"}]}
     assertEqualIsh(shouldbe, all_agents)
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_DB_Clean(motorengine):
-    env = Environment(uuid=uuid4(), name="testenv", project_id=uuid4())
-    env = yield env.save()
-    yield Agent(environment=env, name="agent1", paused=True).save()
-    yield Agent(environment=env, name="agent2", paused=False).save()
-    yield Agent(environment=env, name="agent3", paused=False).save()
+def test_DB_Clean(motor):
+    data.use_motor(motor)
+
+    env = data.Environment(name="testenv", project=uuid4())
+    yield env.insert()
+    yield data.Agent(environment=env.id, name="agent1", paused=True).insert()
+    yield data.Agent(environment=env.id, name="agent2", paused=False).insert()
+    yield data.Agent(environment=env.id, name="agent3", paused=False).insert()
 
     server = Mock()
     futures = Collector()
@@ -265,8 +272,7 @@ def test_DB_Clean(motorengine):
 
     @gen.coroutine
     def assert_agent(name: str, state: str, sid: UUID):
-        agent = yield Agent.get(env, name)
-        yield agent.load_references()
+        agent = yield data.Agent.get(env.id, name)
         assert agent.get_status() == state
         if state == "paused":
             assert agent.primary is None
@@ -276,8 +282,9 @@ def test_DB_Clean(motorengine):
             assert not agent.paused
         elif state == "up":
             assert agent.primary is not None
-            yield agent.primary.load_references()
-            assert agent.primary.process.sid == sid
+            agent_instance = yield data.AgentInstance.get_by_id(agent.primary)
+            agent_proc = yield data.AgentProcess.get_by_id(agent_instance.process)
+            assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 
     @gen.coroutine
@@ -287,7 +294,7 @@ def test_DB_Clean(motorengine):
         yield assert_agent("agent3", s3, sid3)
 
     # one session
-    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
@@ -302,7 +309,7 @@ def test_DB_Clean(motorengine):
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
-    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     yield futures.proccess()
     assert len(am.sessions) == 2
@@ -323,7 +330,7 @@ def test_DB_Clean(motorengine):
     yield am.clean_db()
 
     # one session
-    ts1 = MockSession(uuid4(), env.uuid, ["agent1", "agent2"], "ts1")
+    ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
     am.new_session(ts1)
     yield futures.proccess()
     assert len(am.sessions) == 1
@@ -338,7 +345,7 @@ def test_DB_Clean(motorengine):
     yield assert_agents("paused", "up", "down", sid2=ts1.id)
 
     # second session
-    ts2 = MockSession(uuid4(), env.uuid, ["agent3", "agent2"], "ts2")
+    ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     yield futures.proccess()
     assert len(am.sessions) == 2

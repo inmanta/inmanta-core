@@ -18,11 +18,12 @@
 
 import time
 import logging
+import uuid
 
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta.data import Environment
+from inmanta import data
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def test_autostart(server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    env = yield Environment.get_uuid(env_id)
+    env = yield data.Environment.get_by_id(uuid.UUID(env_id))
 
     yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
     yield server.agentmanager.ensure_agent_registered(env, "iaas_josx")
@@ -92,8 +93,8 @@ def test_autostart_dual_env(server):
     result = yield client.create_environment(project_id=project_id, name="devx")
     env_id2 = result.result["environment"]["id"]
 
-    env = yield Environment.get_uuid(env_id)
-    env2 = yield Environment.get_uuid(env_id2)
+    env = yield data.Environment.get_by_id(uuid.UUID(env_id))
+    env2 = yield data.Environment.get_by_id(uuid.UUID(env_id2))
 
     yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
     yield server.agentmanager.ensure_agent_registered(env2, "iaas_jos")
@@ -126,7 +127,7 @@ def test_autostart_batched(server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    env = yield Environment.get_uuid(env_id)
+    env = yield data.Environment.get_by_id(uuid.UUID(env_id))
 
     yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
     yield server.agentmanager.ensure_agent_registered(env, "iaas_josx")
@@ -182,9 +183,10 @@ def test_version_removal(server):
         assert versions.result["count"] <= 3
 
 
+# TODO: fix multi again
 @pytest.mark.gen_test(timeout=30)
 @pytest.mark.slowtest
-def test_get_resource_for_agent(io_loop, server_multi):
+def test_get_resource_for_agent(io_loop, motor, server):
     """
         Test the server to manage the updates on a model during agent deploy
     """

@@ -17,15 +17,21 @@
 """
 import uuid
 import datetime
+import time
 
 from inmanta import data
-from inmanta.data import AgentInstance, Agent
 import pytest
+import pymongo
+from inmanta.data import ConfigurationModel
 
 
 class Doc(data.BaseDocument):
     name = data.Field(field_type=str, required=True)
+    field1 = data.Field(field_type=str, default=None)
 
+    __indexes__ = [
+        dict(keys=[("name", pymongo.ASCENDING)], unique=True)
+    ]
 
 @pytest.mark.gen_test
 def test_motor(motor):
@@ -42,7 +48,7 @@ def test_motor(motor):
 
 
 def test_collection_naming():
-    assert(Doc.collection() == "Doc")
+    assert(Doc.collection_name() == "Doc")
 
 
 def test_document_def():
@@ -62,7 +68,7 @@ def test_document_def():
 
 @pytest.mark.gen_test
 def test_document_insert(motor):
-    Doc.set_connection(motor)
+    yield Doc.set_connection(motor)
 
     d = Doc(name="test")
 
@@ -75,8 +81,32 @@ def test_document_insert(motor):
 
 
 @pytest.mark.gen_test
+def test_get_by_id(motor):
+    yield Doc.set_connection(motor)
+
+    d = Doc(name="test")
+    yield d.insert()
+
+    d1 = yield Doc.get_by_id(d.id)
+    assert(d1.name == d.name)
+
+    d2 = yield Doc.get_by_id(uuid.uuid4())
+    assert(d2 is None)
+
+
+@pytest.mark.gen_test
+def test_defaults(motor):
+    yield Doc.set_connection(motor)
+
+    d = Doc(name="test")
+    yield d.insert()
+
+    assert(d.to_dict()["field1"] is None)
+
+
+@pytest.mark.gen_test
 def test_document_update(motor):
-    Doc.set_connection(motor)
+    yield Doc.set_connection(motor)
 
     d = Doc(name="test")
     yield d.insert()
@@ -86,67 +116,190 @@ def test_document_update(motor):
     assert("name" in result)
 
 
-@pytest.mark.usefixtures("motorengine")
-class TestProjectTestCase:
+@pytest.mark.gen_test
+def test_document_delete(motor):
+    yield Doc.set_connection(motor)
 
-    @pytest.mark.gen_test
-    def testProject(self):
-        project = data.Project(name="test", uuid=uuid.uuid4())
-        project = yield project.save()
+    d = Doc(name="test")
+    yield d.insert()
+    yield Doc.delete_all(name="test")
 
-        projects = yield data.Project.objects.filter(name="test").find_all()  # @UndefinedVariable
-        assert len(projects) == 1
-        assert projects[0].uuid == project.uuid
+    docs = yield Doc.get_list()
+    assert(len(docs) == 0)
 
-        other = yield data.Project.get_uuid(project.uuid)
-        assert project != other
-        assert project.uuid == other.uuid
 
-    @pytest.mark.gen_test
-    def testEnvironment(self):
-        project = data.Project(name="test", uuid=uuid.uuid4())
-        project = yield project.save()
+@pytest.mark.gen_test
+def test_project(motor):
+    yield data.Project.set_connection(motor)
 
-        env = yield data.Environment.objects.create(uuid=uuid.uuid4(),  # @UndefinedVariable
-                                                    name="dev", project_id=project.uuid, repo_url="", repo_branch="")
-        assert env.project_id == project.uuid
+    project = data.Project(name="test")
+    yield project.insert()
 
-        yield project.delete_cascade()
+    projects = yield data.Project.get_list(name="test")
+    assert len(projects) == 1
+    assert projects[0].id == project.id
 
-        f1 = data.Project.objects.find_all()  # @UndefinedVariable
-        f2 = data.Environment.objects.find_all()  # @UndefinedVariable
-        projects, envs = yield [f1, f2]
-        assert len(projects) == 0
-        assert len(envs) == 0
+    other = yield data.Project.get_by_id(project.id)
+    assert project != other
+    assert project.id == other.id
 
-    @pytest.mark.gen_test
-    def testAgentProcess(self):
-        project = data.Project(name="test", uuid=uuid.uuid4())
-        project = yield project.save()
 
-        env = yield data.Environment.objects.create(uuid=uuid.uuid4(),  # @UndefinedVariable
-                                                    name="dev", project_id=project.uuid, repo_url="", repo_branch="")
-        env = yield env.save()
+@pytest.mark.gen_test
+def test_project_unique(motor):
+    yield data.use_motor(motor)
 
-        agentProc = data.AgentProcess(uuid=uuid.uuid4(),
-                                      hostname="testhost",
-                                      environment_id=env.uuid,
-                                      first_seen=datetime.datetime.now(),
-                                      last_seen=datetime.datetime.now(),
-                                      sid=uuid.uuid4())
-        agentProc = yield agentProc.save()
+    project = data.Project(name="test")
+    yield project.insert()
 
-        agi1 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi1", tid=env.uuid)
-        agi1 = yield agi1.save()
-        agi2 = AgentInstance(uuid=uuid.uuid4(), process=agentProc, name="agi2", tid=env.uuid)
-        agi2 = yield agi2.save()
+    project = data.Project(name="test")
+    with pytest.raises(pymongo.errors.DuplicateKeyError):
+        yield project.insert()
 
-        agent = Agent(environment=env, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1)
-        agent = yield agent.save()
 
-        agents = yield Agent.objects.find_all()
-        assert len(agents) == 1
-        agent = agents[0]
-        yield agent.load_references()
-        yield agent.primary.load_references()
-        assert agent.primary.process.uuid == agentProc.uuid
+@pytest.mark.gen_test
+def test_environment(motor):
+    yield data.use_motor(motor)
+
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+    assert env.project == project.id
+
+    yield project.delete_cascade()
+
+    projects = yield data.Project.get_list()
+    envs = yield data.Environment.get_list()
+    assert len(projects) == 0
+    assert len(envs) == 0
+
+
+@pytest.mark.gen_test
+def test_agent_process(motor):
+    yield data.use_motor(motor)
+
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    agent_proc = data.AgentProcess(hostname="testhost",
+                                  environment=env.id,
+                                  first_seen=datetime.datetime.now(),
+                                  last_seen=datetime.datetime.now(),
+                                  sid=uuid.uuid4())
+    yield agent_proc.insert()
+
+    agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+    yield agi1.insert()
+    agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+    yield agi2.insert()
+
+    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
+    agent = yield agent.insert()
+
+    agents = yield data.Agent.get_list()
+    assert len(agents) == 1
+    agent = agents[0]
+
+    primary_instance = yield data.AgentInstance.get_by_id(agent.primary)
+    primary_process = yield data.AgentProcess.get_by_id(primary_instance.process)
+    assert primary_process.id == agent_proc.id
+
+
+@pytest.mark.gen_test
+def test_config_model(motor):
+    yield data.use_motor(motor)
+
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
+                                 total=1, version_info={})
+    yield cm.insert()
+
+    # create resources
+    key = "std::File[agent1,path=/etc/motd]"
+    res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": "/etc/motd"})
+    yield res1.insert()
+
+
+    agents = yield data.ConfigurationModel.get_agents(env.id, version)
+    assert(len(agents) == 1)
+    assert("agent1" in agents)
+
+
+@pytest.mark.gen_test
+def test_model_list(motor):
+    yield data.use_motor(motor)
+
+    env_id = uuid.uuid4()
+
+    for version in range(1, 20):
+        cm = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0,
+                                    version_info={})
+        yield cm.insert()
+
+    versions = yield ConfigurationModel.get_versions(env_id, 0, 1)
+    assert(len(versions) == 1)
+    assert(versions[0].version == 19)
+
+    versions = yield ConfigurationModel.get_versions(env_id, 1, 1)
+    assert(len(versions) == 1)
+    assert(versions[0].version == 18)
+
+    versions = yield ConfigurationModel.get_versions(env_id)
+    assert(len(versions) == 19)
+    assert(versions[0].version == 19)
+    assert(versions[-1].version == 1)
+
+    versions = yield ConfigurationModel.get_versions(env_id, 10)
+    assert(len(versions) == 9)
+    assert(versions[0].version == 9)
+    assert(versions[-1].version == 1)
+
+
+@pytest.mark.gen_test
+def test_resource_purge_on_delete(motor):
+    yield data.use_motor(motor)
+
+    env_id = uuid.uuid4()
+
+    # model 1
+    cm1 = data.ConfigurationModel(environment=env_id, version=1, date=datetime.datetime.now(), total=2, version_info={},
+                                  released=True, deployed=True)
+    yield cm1.insert()
+
+    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=1", status="deployed",
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res11.insert()
+
+    res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=1", status="deployed",
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    yield res12.insert()
+
+    # model 2
+    cm2 = data.ConfigurationModel(environment=env_id, version=2, date=datetime.datetime.now(), total=1, version_info={},
+                                  released=False, deployed=False)
+    yield cm2.insert()
+
+    res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent5,path=/etc/motd],v=2",
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res21.insert()
+
+    # model 3
+    cm3 = data.ConfigurationModel(environment=env_id, version=3, date=datetime.datetime.now(), total=0, version_info={})
+    yield cm3.insert()
+
+    to_purge = yield data.Resource.get_deleted_resources(env_id, 3)
+
+    assert(len(to_purge) == 1)
+    assert(to_purge[0].model == 1)
+    assert(to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]")
+

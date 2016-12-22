@@ -27,7 +27,6 @@ from inmanta.resources import HostNotFoundException
 from inmanta import data
 from inmanta.server.config import server_agent_autostart
 from inmanta.protocol import Session
-from inmanta.data import AgentProcess, AgentInstance, Agent, Environment
 from inmanta.asyncutil import retry_limited
 
 import logging
@@ -135,9 +134,9 @@ class AgentManager(object):
     # Agent Management
 
     @gen.coroutine
-    def ensure_agent_registered(self, env: Environment, nodename: str):
+    def ensure_agent_registered(self, env: data.Environment, nodename: str):
         with (yield self.session_lock.acquire()):
-            agent = yield Agent.get(env, nodename)
+            agent = yield data.Agent.get(env.id, nodename)
             if agent is not None:
                 return agent
             else:
@@ -145,8 +144,9 @@ class AgentManager(object):
                 return agent
 
     @gen.coroutine
-    def create_default_agent(self, env: Environment, nodename: str):
-        saved = yield Agent(environment=env, name=nodename, paused=False).save()
+    def create_default_agent(self, env:data.Environment, nodename: str):
+        saved = data.Agent(environment=env.id, name=nodename, paused=False)
+        yield saved.insert()
         yield self.verify_reschedule(env, [nodename])
         return saved
 
@@ -159,29 +159,22 @@ class AgentManager(object):
 
             self.sessions[sid] = session
 
-            env = yield data.Environment.get_uuid(tid)
+            env = yield data.Environment.get_by_id(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
-            proc = yield AgentProcess.get_by_sid(sid)
+            proc = yield data.AgentProcess.get_by_sid(sid)
             if proc is None:
-                proc = yield AgentProcess(uuid=uuid.uuid4(),
-                                          hostname=nodename,
-                                          environment_id=tid,
-                                          first_seen=now,
-                                          last_seen=now,
-                                          sid=sid).save()
+                proc = data.AgentProcess(hostname=nodename, environment=tid, first_seen=now, last_seen=now, sid=sid)
+                yield proc.insert()
             else:
-                proc.last_seen = now
-                proc = yield proc.save()
+                yield proc.update_fields(last_seen=now)
 
             for nh in session.endpoint_names:
                 LOGGER.debug("New session for agent %s on %s", nh, nodename)
-                yield data.AgentInstance(uuid=uuid.uuid4(),
-                                         tid=tid,
-                                         process=proc,
-                                         name=nh).save()
+                yield data.AgentInstance(tid=tid, process=proc.id, name=nh).insert()
                 # yield session.get_client().set_state(agent=nodename, enabled=False)
+
             if env is not None:
                 yield self.verify_reschedule(env, session.endpoint_names)
 
@@ -195,22 +188,19 @@ class AgentManager(object):
 
             del self.sessions[sid]
 
-            env = yield data.Environment.get_uuid(tid)
+            env = yield data.Environment.get_by_id(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
-            aps = yield AgentProcess.get_by_sid(sid=sid)
+            aps = yield data.AgentProcess.get_by_sid(sid=sid)
             if aps is None:
                 LOGGER.info("expiring session on none existant process sid:%s", sid)
             else:
-                aps.expired = now
+                yield aps.update_fields(expired=now)
 
-                yield aps.save()
-
-                instances = yield AgentInstance.objects.filter(process=aps).find_all()
+                instances = yield data.AgentInstance.get_list(process=aps.id)
                 for ai in instances:
-                    ai.expired = now
-                    yield ai.save()
+                    yield ai.update_fields(expired=now)
 
             if env is not None:
                 for endpoint in session.endpoint_names:
@@ -225,26 +215,26 @@ class AgentManager(object):
         tid = session.tid
         sid = session.id
 
-        env = yield data.Environment.get_uuid(tid)
+        env = yield data.Environment.get_by_id(tid)
         if env is None:
             LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
             return
 
-        aps = yield AgentProcess.get_by_sid(sid=sid)
+        aps = yield data.AgentProcess.get_by_sid(sid=sid)
         if aps is None:
             LOGGER.warning("No process registered for SID %s", sid)
             return
-        aps.last_seen = now
-        aps.save()
+
+        yield aps.update_fields(last_seen=now)
 
     @gen.coroutine
     def verify_reschedule(self, env, enpoints):
         """
              only call under session lock
         """
-        tid = env.uuid
+        tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
-        agents = yield [Agent.get(env, endpoint) for endpoint in no_primary]
+        agents = yield [data.Agent.get(env.id, endpoint) for endpoint in no_primary]
         needswork = [agent for agent in agents if agent is not None and not agent.paused]
         for agent in needswork:
             yield self.reschedule(env, agent)
@@ -254,47 +244,45 @@ class AgentManager(object):
         """
              only call under session lock
         """
-        tid = env.uuid
-        instances = yield AgentInstance.activeFor(tid, agent.name)
-        agent.last_failover = datetime.now()
+        tid = env.id
+        instances = yield data.AgentInstance.active_for(tid, agent.name)
+
         for instance in instances:
-            yield instance.load_references()
-            sid = instance.process.sid
+            agent_proc = yield data.AgentProcess.get_by_id(instance.process)
+            sid = agent_proc.sid
+
             if sid not in self.sessions:
                 LOGGER.warn("session marked as live in DB, but not found. sid: %s" % sid)
             else:
                 yield self._setPrimary(env, agent, instance, self.sessions[sid])
                 return
-        agent.primary = None
-        yield agent.save()
+
+        yield agent.update_fields(primary=None, last_failover=datetime.now())
 
     @gen.coroutine
-    def _setPrimary(self, env: Environment, agent: Agent, instance: AgentInstance, session: Session):
-        LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.uuid))
-        self.tid_endpoint_to_session[(env.uuid, agent.name)] = session
-        agent.primary = instance
-        yield agent.save()
+    def _setPrimary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: Session):
+        LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
+        self.tid_endpoint_to_session[(env.id, agent.name)] = session
+        yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
         self.add_future(session.get_client().set_state(agent.name, True))
 
     @gen.coroutine
     def clean_db(self):
         with (yield self.session_lock.acquire()):
             LOGGER.debug("Cleaning server session DB")
-            procs = yield AgentProcess.get_live()
 
+            # TODO: do as one query
+            procs = yield data.AgentProcess.get_live()
             for proc in procs:
-                proc.expired = datetime.now()
-                yield proc.save()
+                yield proc.update_fields(expired=datetime.now())
 
-            ais = yield AgentInstance.active()
+            ais = yield data.AgentInstance.active()
             for ai in ais:
-                ai.expired = datetime.now()
-                yield ai.save()
+                yield ai.update_fields(expired=datetime.now())
 
-            agents = yield Agent.objects.find_all()
+            agents = yield data.Agent.get_list()
             for agent in agents:
-                agent.primary = None
-                yield agent.save()
+                yield agent.update_fields(primary=None)
 
     # utils
     def _fork_inmanta(self, args, outfile, errfile, cwd=None):
@@ -315,34 +303,35 @@ class AgentManager(object):
     @gen.coroutine
     def list_agent_processes(self, tid, expired):
         if tid is not None:
-            env = yield data.Environment.get_uuid(tid)
+            env = yield data.Environment.get_by_id(tid)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
             if expired:
-                aps = yield AgentProcess.get_by_env(env)
+                aps = yield data.AgentProcess.get_by_env(tid)
             else:
-                aps = yield AgentProcess.get_live_by_env(env)
+                aps = yield data.AgentProcess.get_live_by_env(tid)
         else:
             if expired:
-                aps = yield AgentProcess.get()
+                aps = yield data.AgentProcess.get()
             else:
-                aps = yield AgentProcess.get_live()
+                aps = yield data.AgentProcess.get_live()
 
         processes = []
         for p in aps:
-            dict = yield p.to_dict()
-            ais = yield AgentInstance.objects.filter(process=p).find_all()
+            agent_dict = p.to_dict()
+            ais = yield data.AgentInstance.get_list(process=p.id)
             oais = []
             for ai in ais:
-                a = yield ai.to_dict()
+                a = ai.to_dict()
                 oais.append(a)
-            dict["endpoints"] = oais
-            processes.append(dict)
+            agent_dict["endpoints"] = oais
+            processes.append(agent_dict)
+
         return 200, {"processes": processes}
 
     @gen.coroutine
     def get_agent_process_report(self, apid: UUID):
-        ap = yield AgentProcess.get_uuid(apid)
+        ap = yield data.AgentProcess.get_by_id(apid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
         sid = ap.sid
@@ -355,17 +344,15 @@ class AgentManager(object):
     @gen.coroutine
     def list_agents(self, tid):
         if tid is not None:
-            env = yield data.Environment.get_uuid(tid)
-            if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
-            ags = yield Agent.by_env(env)
+            ags = yield data.Agent.by_env(tid)
         else:
-            ags = yield Agent.objects.find_all()
+            ags = yield data.Agent.get_list()
 
         agents = []
         for p in ags:
-            dict = yield p.to_dict()
-            agents.append(dict)
+            agent_dict = p.to_dict()
+            agents.append(agent_dict)
+
         return 200, {"agents": agents, "servertime": datetime.now().isoformat()}
 
     # Start/stop agents
@@ -536,7 +523,7 @@ ssl_ca_cert_file=%s
         """
             Request the value of a parameter from an agent
         """
-        tid = str(env.uuid)
+        tid = str(env.id)
 
         if resource_id is not None and resource_id != "":
             # get the latest version
@@ -569,7 +556,7 @@ ssl_ca_cert_file=%s
             if (resource_id not in self._fact_resource_block_set or
                     (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
                 yield self._ensure_agent(str(tid), resource.agent)
-                client = self.get_agent_client(env.uuid, resource.agent)
+                client = self.get_agent_client(env.id, resource.agent)
                 if client is not None:
                     future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
                     self.add_future(future)
@@ -585,20 +572,6 @@ ssl_ca_cert_file=%s
             return 404, {"message": "resource_id parameter is required."}
 
     @gen.coroutine
-    def get_agent_info(self, id):
-        node = yield data.Node.get_by_hostname(id)
-        if node is None:
-            return 404
-
-        agents = yield data.Agent.objects.filter(node=node).find_all()  # @UndefinedVariable
-        agent_list = []
-        for agent in agents:
-            agent_dict = yield agent.to_dict()
-            agent_list.append(agent_dict)
-
-        return 200, {"node": node.to_dict(), "agents": agent_list}
-
-    @gen.coroutine
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
         if isinstance(tid, str):
             tid = UUID(tid)
@@ -611,7 +584,7 @@ ssl_ca_cert_file=%s
 
     @gen.coroutine
     def trigger_agent(self, tid, id):
-        env = yield data.Environment.get_uuid(tid)
+        env = yield data.Environment.get_by_id(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
@@ -625,30 +598,12 @@ ssl_ca_cert_file=%s
         return 200
 
     @gen.coroutine
-    def list_agent(self, environment):
-        response = []
-        nodes = yield data.Node.objects.find_all()  # @UndefinedVariable
-        for node in nodes:  # @UndefinedVariable
-            agents = yield data.Agent.objects.filter(node=node).find_all()  # @UndefinedVariable
-            node_dict = node.to_dict()
-            node_dict["agents"] = []
-            for agent in agents:
-                agent_dict = yield agent.to_dict()  # do this first, because it also loads all lazy references
-                if environment is None or agent.environment.uuid == environment:
-                    node_dict["agents"].append(agent_dict)
-
-            if len(node_dict["agents"]) > 0:
-                response.append(node_dict)
-
-        return 200, {"nodes": response, "servertime": datetime.now().isoformat()}
-
-    @gen.coroutine
     def start_agents(self):
-        agents = yield data.Agent.objects.find_all()  # @UndefinedVariable
+        agents = yield data.Agent.get_list()
         for agent in agents:
             if self._agent_matches(agent.name):
                 yield agent.load_references()
-                env_id = str(agent.environment.uuid)
+                env_id = str(agent.environment.id)
                 if env_id not in self._requires_agents:
                     agent_data = {"agents": set(), "process": None}
                     self._requires_agents[env_id] = agent_data
