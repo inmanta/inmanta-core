@@ -445,6 +445,7 @@ def test_spontaneous_deploy(io_loop, server, client):
     env_id = result.result["environment"]["id"]
 
     Config.set("config", "agent-interval", "2")
+    Config.set("config", "agent-splay", "2")
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)

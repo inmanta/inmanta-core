@@ -181,6 +181,7 @@ class AgentManager(object):
                                          tid=tid,
                                          process=proc,
                                          name=nh).save()
+                # yield session.get_client().set_state(agent=nodename, enabled=False)
             if env is not None:
                 yield self.verify_reschedule(env, session.endpoint_names)
 
@@ -230,6 +231,9 @@ class AgentManager(object):
             return
 
         aps = yield AgentProcess.get_by_sid(sid=sid)
+        if aps is None:
+            LOGGER.warning("No process registered for SID %s", sid)
+            return
         aps.last_seen = now
         aps.save()
 
@@ -455,7 +459,7 @@ class AgentManager(object):
 
         out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
         err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
-        proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"], out, err)
+        proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "agent"], out, err)
 
         if agent_data["process"] is not None:
             LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)

@@ -218,7 +218,8 @@ log_levels = {
     0: logging.ERROR,
     1: logging.WARNING,
     2: logging.INFO,
-    3: logging.DEBUG
+    3: logging.DEBUG,
+    4: 2
 }
 
 
@@ -230,9 +231,10 @@ def cmd_parser():
     parser.add_argument("--log-file", dest="log_file", help="Path to the logfile")
     parser.add_argument("--log-file-level", dest="log_file_level", default=2, type=int,
                         help="Log level for messages going to the logfile: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG")
+    parser.add_argument("--timed-logs", dest="timed", help="Add timestamps to logs", action="store_true")
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help="Log level for messages going to the console. Default is only errors,"
-                        "-v warning, -vv info and -vvv debug")
+                        "-v warning, -vv info and -vvv debug and -vvvv trace")
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
         cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"])
@@ -248,6 +250,8 @@ def app():
     """
         Run the compiler
     """
+
+    normalformatter = logging.Formatter(fmt="%(levelname)-8s%(message)s")
     # set logging to sensible defaults
     formatter = colorlog.ColoredFormatter(
         "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
@@ -267,10 +271,12 @@ def app():
 
     if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
         stream.setFormatter(formatter)
+    else:
+        stream.setFormatter(normalformatter)
 
     logging.root.handlers = []
     logging.root.addHandler(stream)
-    logging.root.setLevel(logging.DEBUG)
+    logging.root.setLevel(0)
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
@@ -280,11 +286,28 @@ def app():
     options, other = parser.parse_known_args()
     options.other = other
 
+    if options.timed:
+        if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+            formatter = colorlog.ColoredFormatter(
+                "%(asctime)s %(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
+                datefmt=None,
+                reset=True,
+                log_colors={
+                    'DEBUG': 'cyan',
+                    'INFO': 'green',
+                    'WARNING': 'yellow',
+                    'ERROR': 'red',
+                    'CRITICAL': 'red',
+                }
+            )
+        else:
+            formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s%(message)s")
+        stream.setFormatter(formatter)
+
     # set the log level
     level = options.verbose
     if level >= len(log_levels):
         level = 3
-
     stream.setLevel(log_levels[level])
 
     # set the logfile
@@ -293,7 +316,11 @@ def app():
         if level >= len(log_levels):
             level = 3
 
+        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
+
         file_handler = logging.FileHandler(filename=options.log_file, mode="w")
+        file_handler.setFormatter(formatter)
+
         file_handler.setLevel(log_levels[level])
         logging.root.addHandler(file_handler)
 
