@@ -819,13 +819,10 @@ def test_get_facts(client, server, io_loop):
     result = yield client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 503
 
-    env = yield data.Environment.get_uuid(env_id)
-
-    params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                 resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+    env_uuid = uuid.UUID(env_id)
+    params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
         yield gen.sleep(0.1)
 
     result = yield client.get_param(env_id, "key1", resource_id_wov)
@@ -893,13 +890,9 @@ def test_unkown_parameters(client, server, io_loop):
 
     yield server.renew_expired_facts()
 
-    env = yield data.Environment.get_uuid(env_id)
-
-    params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                 resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+    params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
         yield gen.sleep(0.1)
 
     result = yield client.get_param(env_id, "length", resource_id_wov)
@@ -1251,7 +1244,7 @@ def test_dryrun_scale(io_loop, server, client):
     version = int(time.time())
 
     resources = []
-    for i in range(1, 1):
+    for i in range(1, 100):
         resources.append({'key': 'key%d' % i,
                           'value': 'value%d' % i,
                           'id': 'test::Resource[agent1,key=key%d],v=%d' % (i, version),

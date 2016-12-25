@@ -20,7 +20,6 @@ import base64
 from collections import defaultdict
 import datetime
 import difflib
-import json
 import logging
 import os
 import re
@@ -72,13 +71,10 @@ class Server(protocol.ServerEndpoint):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        @gen.coroutine
-        def connect_db():
-            yield data.connect(database_host, database_port, opt.db_name.get(), self._io_loop)
-            LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(),
-                        database_host, database_port)
+        data.connect(database_host, database_port, opt.db_name.get(), self._io_loop)
+        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
-        self._io_loop.add_callback(connect_db)
+        self._io_loop.add_callback(data.create_indexes)
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
@@ -205,7 +201,7 @@ class Server(protocol.ServerEndpoint):
         LOGGER.info("Renewing expired parameters")
 
         updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
-        expired_params = yield data.Parameter.objects.filter(updated__lt=updated_before).find_all()  # @UndefinedVariable
+        expired_params = yield data.Parameter.get_updated_before(updated_before)
 
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
 
@@ -220,16 +216,15 @@ class Server(protocol.ServerEndpoint):
                              param.environment.id)
                 yield self.agentmanager._request_parameter(param.environment, param.resource_id)
 
-        unknown_parameters = yield data.UnknownParameter.objects.filter(resolved=False).find_all()  # @UndefinedVariable
+        unknown_parameters = yield data.UnknownParameter.get_list(resolved=False)
         for u in unknown_parameters:
-            yield u.load_references()
             if u.environment is None:
                 LOGGER.warning("Found unknown parameter without environment (%s for resource %s). Deleting it.",
                                u.name, u.resource_id)
                 yield u.delete()
             else:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
-                             u.environment.id)
+                             u.id)
                 self.agentmanager._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
@@ -241,11 +236,10 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     name=param_id, resource_id=resource_id).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=tid, name=param_id, resource_id=resource_id)
 
         if len(params) == 0:
-            out = yield self.agentmanager._request_parameter(env, resource_id)
+            out = yield self.agentmanager._request_parameter(tid, resource_id)
             return out
 
         param = params[0]
@@ -255,7 +249,7 @@ class Server(protocol.ServerEndpoint):
             return 200, {"parameter": params[0].to_dict()}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
-        out = yield self.agentmanager._request_parameter(env, resource_id)
+        out = yield self.agentmanager._request_parameter(tid, resource_id)
         return out
 
     @gen.coroutine
@@ -273,32 +267,23 @@ class Server(protocol.ServerEndpoint):
         if resource_id is None:
             resource_id = ""
 
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     name=name, resource_id=resource_id).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         if len(params) == 0:
-            param = data.Parameter(environment=env, name=name, resource_id=resource_id, value=value, source=source,
+            param = data.Parameter(environment=env.id, name=name, resource_id=resource_id, value=value, source=source,
                                    updated=datetime.datetime.now(), metadata=metadata)
-
+            yield param.insert()
         else:
             param = params[0]
-            param.source = source
-            param.value = value
-            param.updated = datetime.datetime.now()
-            param.metadata = metadata
-
-        yield param.save()
+            yield param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
 
         # check if the parameter is an unknown
-        params = yield data.UnknownParameter.objects.filter(environment=env, name=name,  # @UndefinedVariable
-                                                            resource_id=resource_id,
-                                                            resolved=False).find_all()  # @UndefinedVariable
+        params = yield data.UnknownParameter.get_list(environment=env.id, name=name, resource_id=resource_id, resolved=False)
         if len(params) > 0:
             LOGGER.info("Received values for unknown parameters %s, triggering a recompile",
                         ", ".join([x.name for x in params]))
             for p in params:
-                p.resolved = True
-                yield p.save()
+                yield p.update_fields(resolved=True)
 
             return True
 
@@ -318,8 +303,7 @@ class Server(protocol.ServerEndpoint):
         if resource_id is None:
             resource_id = ""
 
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     name=param_id, resource_id=resource_id).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
         return 200, {"parameter": params[0].to_dict()}
 
@@ -356,9 +340,9 @@ class Server(protocol.ServerEndpoint):
 
         m_query = {"environment": env}
         for k, v in query.items():
-            m_query["metadata__" + k] = v
+            m_query["metadata." + k] = v
 
-        params = yield data.Parameter.objects.filter(**m_query).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(**m_query)
 
         return_value = []
         for p in params:
@@ -415,7 +399,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        forms = yield data.Form.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        forms = yield data.Form.get_list(environment=tid)
 
         return 200, {"forms": [{"form_id": x.id, "form_type": x.form_type} for x in forms]}
 
@@ -430,18 +414,13 @@ class Server(protocol.ServerEndpoint):
         if form_type is None:
             return 404, {"message": "No form is defined with id %s" % form_type}
 
-        records = yield data.FormRecord.objects.filter(form=form_type).find_all()  # @UndefinedVariable
+        records = yield data.FormRecord.get_list(form=form_type.id)
 
         if not include_record:
             return 200, {"records": [{"record_id": r.id, "changed": r.changed} for r in records]}
 
         else:
-            record_dict = []
-            for record in records:
-                data_dict = yield record.to_dict()
-                record_dict.append(data_dict)
-
-            return 200, {"records": record_dict}
+            return 200, {"records": [r.to_dict() for r in records]}
 
     @protocol.handle(methods.FormRecords.get_record, record_id="id")
     @gen.coroutine
@@ -454,8 +433,7 @@ class Server(protocol.ServerEndpoint):
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % record_id}
 
-        record_dict = yield record.to_dict()
-        return 200, {"record": record_dict}
+        return 200, {"record": record.to_dict()}
 
     @protocol.handle(methods.FormRecords.update_record, record_id="id")
     @gen.coroutine
@@ -628,21 +606,37 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id")
     @gen.coroutine
     def trigger_agent(self, tid, agent_id):
+        env = yield data.Environment.get_by_id(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
         yield self.agentmanager.trigger_agent(tid, agent_id)
 
     @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine
     def list_agent_processes(self, environment, expired):
+        env = yield data.Environment.get_by_id(environment)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
         return (yield self.agentmanager.list_agent_processes(environment, expired))
 
     @protocol.handle(methods.ServerAgentApiMethod.list_agents)
     @gen.coroutine
     def list_agents(self, tid: UUID=None):
+        env = yield data.Environment.get_by_id(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
         return (yield self.agentmanager.list_agents(tid))
 
     @protocol.handle(methods.AgentRecovery.get_state)
     @gen.coroutine
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
+        env = yield data.Environment.get_by_id(tid)
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
+
         return (yield self.agentmanager.get_state(tid, sid, agent))
 
     @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id")
@@ -799,9 +793,6 @@ class Server(protocol.ServerEndpoint):
                 if res_dict["state_id"] == "":
                     res_dict["state_id"] = res_obj.resource_id
 
-                if not res_obj.holds_state:
-                    res_obj.holds_state = True
-
             attributes = {}
             for field, value in res_dict.items():
                 if field != "id":
@@ -829,6 +820,7 @@ class Server(protocol.ServerEndpoint):
 
         # hook up all CADs
         for f, t in cross_agent_dep:
+            print(rv_dict[t.resource_str()])
             rv_dict[t.resource_str()].provides.append(str(f))
 
         # search for deleted resources
@@ -860,7 +852,7 @@ class Server(protocol.ServerEndpoint):
             if "metadata" not in uk:
                 uk["metadata"] = {}
 
-            up = data.UnknownParameter(resource_id=uk["resource"], name=uk["parameter"], source=uk["source"], environment=env,
+            up = data.UnknownParameter(resource_id=uk["resource"], name=uk["parameter"], source=uk["source"], environment=tid,
                                        version=version, metadata=uk["metadata"])
             yield up.insert()
 
@@ -911,8 +903,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The request version does not exist."}
 
         # fetch all resource in this cm and create a list of distinct agents
-        # @UndefinedVariable
-        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()  # @UndefinedVariable
+        rvs = yield data.Resource.get_list(model=version_id, environment=tid)
 
         # Create a dryrun document
         dryrun = yield data.DryRun.create(environment=tid, model=version_id, todo=len(rvs), total=len(rvs))
@@ -985,12 +976,12 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = yield data.Code.get_version(environment=env, version=code_id, resource=resource)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=tid, version=code_id, resource=resource)
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env, version=code_id, resource=resource, sources=sources)
-        yield code.save()
+        code = data.Code(environment=tid, version=code_id, resource=resource, sources=sources)
+        yield code.insert()
 
         return 200
 
@@ -1001,7 +992,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        code = yield data.Code.get_version(environment=env, version=code_id, resource=resource)  # @UndefinedVariable
+        code = yield data.Code.get_version(environment=tid, version=code_id, resource=resource)
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
@@ -1168,8 +1159,7 @@ class Server(protocol.ServerEndpoint):
                        order_by("date", direction=DESCENDING).limit(versions).find_all())  # @UndefinedVariable
             env_dict["versions"] = []
             for model in v:
-                model_dict = yield model.to_dict()
-                env_dict["versions"].append(model_dict)
+                env_dict["versions"].append(model.to_dict())
 
         if resources > 0:
             resource_list = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
@@ -1258,8 +1248,6 @@ class Server(protocol.ServerEndpoint):
         log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
                                               gen.Task(sub_process.stderr.read_until_close),
                                               sub_process.wait_for_exit(raise_error=False)]
-        returncode
-
         stop = datetime.datetime.now()
         return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
                            errstream=log_err.decode(), outstream=log_out.decode(), returncode=returncode)
@@ -1333,10 +1321,14 @@ class Server(protocol.ServerEndpoint):
         finally:
             end = datetime.datetime.now()
             self._recompiles[environment_id] = end
+            stage_ids = []
             for stage in stages:
-                yield stage.save()
+                yield stage.insert()
+                stage_ids.append(stage.id)
 
-            yield data.Compile(environment=env, started=requested, completed=end, reports=stages).save()
+            comp = data.Compile(environment=environment_id, started=requested, completed=end)
+                                # reports=stage_ids)
+            yield comp.insert()
 
     @protocol.handle(methods.CompileReport.get_reports)
     @gen.coroutine
@@ -1385,13 +1377,8 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        snapshots = yield data.Snapshot.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        snap_list = []
-        for s in snapshots:
-            result_dict = yield s.to_dict()
-            snap_list.append(result_dict)
-
-        return 200, {"snapshots": snap_list}
+        snapshots = yield data.Snapshot.get_list(environment=tid)
+        return 200, {"snapshots": [s.to_dict() for s in snapshots]}
 
     @protocol.handle(methods.Snapshot.get_snapshot, snapshot_id="id")
     @gen.coroutine
@@ -1403,14 +1390,10 @@ class Server(protocol.ServerEndpoint):
         snapshot = yield data.Snapshot.get_by_id(snapshot_id)
         if snapshot is None:
             return 404, {"message": "The given snapshot id does not exist!"}
-        snap_dict = yield snapshot.to_dict()
+        snap_dict = snapshot.to_dict()
 
-        resources = yield data.ResourceSnapshot.objects.filter(snapshot=snapshot).find_all()  # @UndefinedVariable
-        snap_dict["resources"] = []
-        for x in resources:
-            res_dict = yield x.to_dict()
-            snap_dict["resources"].append(res_dict)
-
+        resources = yield data.ResourceSnapshot.get_list(snapshot=snapshot.id)
+        snap_dict["resources"] = [r.to_dict() for r in resources]
         return 200, {"snapshot": snap_dict}
 
     @protocol.handle(methods.Snapshot.create_snapshot)
@@ -1421,42 +1404,33 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         # get the latest deployed configuration model
-        versions = yield (data.ConfigurationModel.objects.filter(environment=env, deployed=True).  # @UndefinedVariable
-                          order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-
-        if len(versions) == 0:
+        version = yield data.ConfigurationModel.get_latest_version(tid)
+        if version is None:
             return 500, {"message": "There is no deployed configuration model to create a snapshot."}
-
-        version = versions[0]
 
         LOGGER.info("Creating a snapshot from version %s in environment %s", version.version, tid)
 
         # create the snapshot
-        snapshot = data.Snapshot(environment=env, model=version, started=datetime.datetime.now(), name=name)
+        snapshot = data.Snapshot(environment=env.id, model=version.version, started=datetime.datetime.now(), name=name)
         yield snapshot.insert()
 
         # find resources with state
         resources_to_snapshot = defaultdict(list)
         resource_list = []
-        resource_states = yield (data.ResourceVersion.objects.filter(environment=env, model=version).  # @UndefinedVariable
-                                 find_all())  # @UndefinedVariable
+        resource_states = yield data.Resource.get_with_state(environment=tid, version=version.version)
+
         for rs in resource_states:
-            yield rs.load_references()
-            if rs.resource.holds_state and "state_id" in rs.attributes:
-                agent = rs.resource.agent
-                resources_to_snapshot[agent].append(rs.to_dict())
-                resource_list.append(rs.resource.resource_id)
-                r = data.ResourceSnapshot(environment=env, snapshot=snapshot, resource_id=rs.resource.resource_id,
-                                          state_id=rs.attributes["state_id"])
-                yield r.save()
+            agent = rs.agent
+            resources_to_snapshot[agent].append(rs.to_dict())
+            resource_list.append(rs.resource_id)
+            r = data.ResourceSnapshot(environment=tid, snapshot=snapshot.id, resource_id=rs.resource_id,
+                                      state_id=rs.attributes["state_id"])
+            yield r.insert()
 
         if len(resource_list) == 0:
-            snapshot.finished = datetime.datetime.now()
-            snapshot.total_size = 0
+            yield snapshot.update_fields(finished=datetime.datetime.now(), total_size=0)
         else:
-            snapshot.resources_todo = len(resource_list)
-
-        yield snapshot.save()
+            yield snapshot.update_fields(resources_todo=len(resource_list))
 
         for agent, resources in resources_to_snapshot.items():
             client = self.get_agent_client(tid, agent)
@@ -1464,8 +1438,7 @@ class Server(protocol.ServerEndpoint):
                 future = client.do_snapshot(tid, agent, snapshot.id, resources)
                 self.add_future(future)
 
-        snapshot = yield data.Snapshot.get_by_id(snapshot.id)
-        value = yield snapshot.to_dict()
+        value = snapshot.to_dict()
         value["resources"] = resource_list
         return 200, {"snapshot": value}
 
@@ -1481,30 +1454,16 @@ class Server(protocol.ServerEndpoint):
             if snapshot is None:
                 return 404, {"message": "Snapshot with id %s does not exist!" % snapshot_id}
 
-            res = yield (data.ResourceSnapshot.objects.  # @UndefinedVariable
-                         filter(environment=env, snapshot=snapshot, resource_id=resource_id).find_all())  # @UndefinedVariable
+            res = yield data.ResourceSnapshot.get_list(environment=env.id, snapshot=snapshot.id, resource_id=resource_id)
 
             if len(res) == 0:
                 return 404, {"message": "Resource not found"}
             res = res[0]
 
-            res.content_hash = snapshot_data
-            res.started = start
-            res.finished = stop
-            res.size = size
-            res.success = success
-            res.error = error
-            res.msg = msg
+            yield res.update_fields(content_hash=snapshot_data, started=start, finished=stop, size=size, success=success,
+                                    error=error, msg=msg)
 
-            yield res.save()
-
-            snapshot.resources_todo -= 1
-            snapshot.total_size += size
-
-            if snapshot.resources_todo == 0:
-                snapshot.finished = datetime.datetime.now()
-
-            yield snapshot.save()
+            yield snapshot.resource_updated(size)
 
         return 200
 
@@ -1526,9 +1485,8 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.RestoreSnapshot.restore_snapshot)
     @gen.coroutine
     def restore_snapshot(self, tid, snapshot):
-        f1 = data.Environment.get_by_id(tid)
-        f2 = data.Snapshot.get_by_id(snapshot)
-        env, snapshot = yield [f1, f2]
+        env = yield data.Environment.get_by_id(tid)
+        snapshot = yield data.Snapshot.get_by_id(snapshot)
 
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
@@ -1537,54 +1495,43 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "Snapshot with id %s does not exist!" % snapshot}
 
         # get all resources in the snapshot
-        snap_resources = yield data.ResourceSnapshot.objects.filter(snapshot=snapshot).find_all()  # @UndefinedVariable
+        snap_resources = yield data.ResourceSnapshot.get_list(snapshot=snapshot.id)
 
         # get all resource that support state in the current environment
-        env_versions = yield (data.ConfigurationModel.objects.filter(environment=env, deployed=True).  # @UndefinedVariable
-                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
-
-        if len(env_versions) == 0:
+        env_version = yield data.ConfigurationModel.get_latest_version(tid)
+        if env_version is None:
             return 500, {"message": "There is no deployed configuration model in this environment."}
-        else:
-            env_version = env_versions[0]
 
-        env_resources = yield data.ResourceVersion.objects.filter(model=env_version).find_all()  # @UndefinedVariable
-        env_states = {}
-        for r in env_resources:
-            if "state_id" in r.attributes:
-                env_states[r.attributes["state_id"]] = r
+        env_resources = yield data.Resource.get_with_state(environment=tid, version=env_version.version)
+        env_states = {r.attributes["state_id"]: r for r in env_resources}
 
         # create a restore object
-        restore_id = uuid.uuid4()
-        restore = data.SnapshotRestore(uuid=restore_id, snapshot=snapshot, environment=env, started=datetime.datetime.now())
-        yield restore.save()
+        restore = data.SnapshotRestore(snapshot=snapshot.id, environment=tid, started=datetime.datetime.now())
 
         # find matching resources
         restore_list = defaultdict(list)
+        todo = 0
         for r in snap_resources:
             if r.state_id in env_states:
                 env_res = env_states[r.state_id]
-                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res.rid))
-                yield env_res.load_references()
-                r_dict = yield r.to_dict()
-                restore_list[env_res.resource.agent].append((r_dict, env_res.to_dict()))
+                LOGGER.debug("Matching state_id %s to %s, scheduling restore" % (r.state_id, env_res.resource_id))
+                restore_list[env_res.agent].append((r.to_dict(), env_res.to_dict()))
 
-                rr = data.ResourceRestore(environment=env, restore=restore, state_id=r.state_id, resource_id=env_res.rid,
-                                          started=datetime.datetime.now(),)
-                yield rr.save()
-                restore.resources_todo += 1
+                rr = data.ResourceRestore(environment=tid, restore=restore.id, state_id=r.state_id,
+                                          resource_id=env_res.resource_version_id, started=datetime.datetime.now(),)
+                yield rr.insert()
+                todo += 1
 
-        yield restore.save()
+        restore.resources_todo = todo
+        yield restore.insert()
 
         for agent, resources in restore_list.items():
             client = self.get_agent_client(tid, agent)
             if client is not None:
-                future = client.do_restore(tid, agent, restore_id, snapshot.id, resources)
+                future = client.do_restore(tid, agent, restore.id, snapshot.id, resources)
                 self.add_future(future)
 
-        restore = yield data.SnapshotRestore.get_by_id(restore_id)
-        restore_dict = yield restore.to_dict()
-        return 200, {"restore": restore_dict}
+        return 200, {"restore": restore.to_dict()}
 
     @protocol.handle(methods.RestoreSnapshot.list_restores)
     @gen.coroutine
@@ -1593,9 +1540,8 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        restores = yield data.SnapshotRestore.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        restore_list = yield [x.to_dict() for x in restores]
-        return 200, {"restores": restore_list}
+        restores = yield data.SnapshotRestore.get_list(environment=tid)
+        return 200, {"restores": [x.to_dict() for x in restores]}
 
     @protocol.handle(methods.RestoreSnapshot.get_restore_status, restore_id="id")
     @gen.coroutine
@@ -1608,13 +1554,9 @@ class Server(protocol.ServerEndpoint):
         if restore is None:
             return 404, {"message": "The given restore id does not exist!"}
 
-        restore_dict = yield restore.to_dict()
-        resources = yield data.ResourceRestore.objects.filter(restore=restore).find_all()  # @UndefinedVariable
-        restore_dict["resources"] = []
-        for x in resources:
-            result = yield x.to_dict()
-            restore_dict["resources"].append(result)
-
+        restore_dict = restore.to_dict()
+        resources = yield data.ResourceRestore.get_list(restore=restore_id)
+        restore_dict["resources"] = [x.to_dict() for x in resources]
         return 200, {"restore": restore_dict}
 
     @protocol.handle(methods.RestoreSnapshot.update_restore, restore_id="id")
@@ -1624,25 +1566,14 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        with (yield agent_lock.acquire()):
-            restore = yield data.SnapshotRestore.get_by_id(restore_id)
-            rr = yield (data.ResourceRestore.objects.  # @UndefinedVariable
-                        filter(environment=env, restore=restore, resource_id=resource_id).find_all())  # @UndefinedVariable
-            if len(rr) == 0:
-                return 404, {"message": "Resource restore not found."}
-            rr = rr[0]
+        restore = yield data.SnapshotRestore.get_by_id(restore_id)
+        rr = yield data.ResourceRestore.get_list(environment=tid, restore=restore.id, resource_id=resource_id)
+        if len(rr) == 0:
+            return 404, {"message": "Resource restore not found."}
+        rr = rr[0]
 
-            rr.error = error
-            rr.success = success
-            rr.started = start
-            rr.finished = stop
-            rr.msg = msg
-            yield [rr.save(), rr.load_references()]
-
-            restore.resources_todo -= 1
-            if restore.resources_todo == 0:
-                restore.finished = datetime.datetime.now()
-            yield restore.save()
+        yield rr.update_fields(error=error, success=success, started=start, finished=stop, msg=msg)
+        yield restore.resource_updated()
 
         return 200
 
@@ -1671,42 +1602,23 @@ class Server(protocol.ServerEndpoint):
         result = yield self.put_version(restore_id, version, [], [], {})
         return result, {"version": version}
 
-    @protocol.handle(methods.Decommision.clear_environment, restore_id="id")
+    @protocol.handle(methods.Decommision.clear_environment, env_id="id")
     @gen.coroutine
-    def clear_environment(self, restore_id):
+    def clear_environment(self, env_id):
         """
             Clear the environment
         """
-        env = yield data.Environment.get_by_id(restore_id)
+        env = yield data.Environment.get_by_id(env_id)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        agents = yield data.Agent.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for agent in agents:
-            yield agent.delete()
-
-        models = yield data.ConfigurationModel.objects.filter(environment=env).find_all()  # @UndefinedVariable
+        yield data.Agent.delete_all(environment=env_id)
+        models = yield data.ConfigurationModel.get_list()
         for model in models:
             yield model.delete_cascade()
 
-        resources = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for resource in resources:
-            yield resource.delete()
-
-        parameters = yield data.Parameter.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for parameter in parameters:
-            yield parameter.delete()
-
-        forms = yield data.Form.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for form in forms:
-            yield form.delete()
-
-        records = yield data.FormRecord.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for record in records:
-            yield record.delete()
-
-        compiles = yield data.Compile.objects.filter(environment=env).find_all()  # @UndefinedVariable
-        for c in compiles:
-            yield c.delete()
-
+        yield data.Parameter.delete_all(environment=env_id)
+        yield data.Form.delete_all(environment=env_id)
+        yield data.FormRecord.delete_all(environment=env_id)
+        yield data.Compile.delete_all(environment=env_id)
         return 200

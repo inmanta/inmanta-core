@@ -193,6 +193,7 @@ class RemoteResourceAction(ResourceAction):
     def execute(self, dummy, generation, cache):
         yield dummy.future
         try:
+            print(self.scheduler.agent)
             result = yield self.scheduler.get_client().get_resource(self.scheduler.agent.get_environment(),
                                                                     str(self.resource_id), status=True)
             status = result.result['status']
@@ -372,12 +373,12 @@ class AgentInstance():
                 LOGGER.warning("Got an error while pulling resources for agent %s. %s", self.name, result.result)
 
             else:
-                restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+                restypes = set([res["resource_type"] for res in result.result["resources"]])
                 resources = []
                 yield self.process._ensure_code(self._env_id, result.result["version"], restypes)
                 try:
                     for res in result.result["resources"]:
-                        data = res["fields"]
+                        data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
                         resources.append(resource)
@@ -409,7 +410,7 @@ class AgentInstance():
 
                 resources = result.result["resources"]
 
-                restypes = set([res["id_fields"]["entity_type"] for res in resources])
+                restypes = set([res["resource_type"] for res in resources])
 
                 # TODO: handle different versions for dryrun and deploy!
                 yield self.process._ensure_code(self._env_id, version, restypes)
@@ -419,7 +420,7 @@ class AgentInstance():
                 for res in resources:
                     provider = None
                     try:
-                        data = res["fields"]
+                        data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
                         LOGGER.debug("Running dryrun for %s", resource.id)
@@ -452,17 +453,17 @@ class AgentInstance():
 
             LOGGER.info("Start a restore %s", restore_id)
 
-            yield self.process._ensure_code(self._env_id, resources[0][1]["id_fields"]["version"],
-                                            [res[1]["id_fields"]["entity_type"] for res in resources])
+            yield self.process._ensure_code(self._env_id, resources[0][1]["model"],
+                                            [res[1]["resource_type"] for res in resources])
 
-            version = resources[0][1]["id_fields"]["version"]
+            version = resources[0][1]["model"]
             self._cache.open_version(version)
 
             for restore, resource in resources:
                 start = datetime.datetime.now()
                 provider = None
                 try:
-                    data = resource["fields"]
+                    data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
                     provider = Commander.get_provider(self._cache, self, resource_obj)
@@ -513,17 +514,17 @@ class AgentInstance():
         with (yield self.ratelimiter.acquire()):
             LOGGER.info("Start snapshot %s", snapshot_id)
 
-            yield self.process._ensure_code(self._env_id, resources[0]["id_fields"]["version"],
-                                            [res["id_fields"]["entity_type"] for res in resources])
+            yield self.process._ensure_code(self._env_id, resources[0]["model"],
+                                            [res["resource_type"] for res in resources])
 
-            version = resources[0]["id_fields"]["version"]
+            version = resources[0]["model"]
             self._cache.open_version(version)
 
             for resource in resources:
                 start = datetime.datetime.now()
                 provider = None
                 try:
-                    data = resource["fields"]
+                    data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
                     provider = Commander.get_provider(self._cache, self, resource_obj)
@@ -590,12 +591,11 @@ class AgentInstance():
     @gen.coroutine
     def get_facts(self, resource):
         with (yield self.ratelimiter.acquire()):
-            yield self.process._ensure_code(self._env_id, resource["id_fields"]["version"],
-                                            [resource["id_fields"]["entity_type"]])
+            yield self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
 
             provider = None
             try:
-                data = resource["fields"]
+                data = resource["attributes"]
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
 

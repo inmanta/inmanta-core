@@ -28,6 +28,8 @@ from inmanta.data import ConfigurationModel
 class Doc(data.BaseDocument):
     name = data.Field(field_type=str, required=True)
     field1 = data.Field(field_type=str, default=None)
+    field2 = data.Field(field_type=bool, default=False)
+    field3 = data.Field(field_type=list, default=[])
 
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING)], unique=True)
@@ -68,7 +70,7 @@ def test_document_def():
 
 @pytest.mark.gen_test
 def test_document_insert(motor):
-    yield Doc.set_connection(motor)
+    Doc.set_connection(motor)
 
     d = Doc(name="test")
 
@@ -82,7 +84,7 @@ def test_document_insert(motor):
 
 @pytest.mark.gen_test
 def test_get_by_id(motor):
-    yield Doc.set_connection(motor)
+    Doc.set_connection(motor)
 
     d = Doc(name="test")
     yield d.insert()
@@ -96,17 +98,26 @@ def test_get_by_id(motor):
 
 @pytest.mark.gen_test
 def test_defaults(motor):
-    yield Doc.set_connection(motor)
+    Doc.set_connection(motor)
 
     d = Doc(name="test")
     yield d.insert()
 
     assert(d.to_dict()["field1"] is None)
 
+    assert(not d.field2)
+
+    d2 = yield Doc.get_by_id(d.id)
+    d2.insert()
+
+    assert(not d2.field2)
+
+    d.field3.append(1)
+
 
 @pytest.mark.gen_test
 def test_document_update(motor):
-    yield Doc.set_connection(motor)
+    Doc.set_connection(motor)
 
     d = Doc(name="test")
     yield d.insert()
@@ -118,7 +129,7 @@ def test_document_update(motor):
 
 @pytest.mark.gen_test
 def test_document_delete(motor):
-    yield Doc.set_connection(motor)
+    Doc.set_connection(motor)
 
     d = Doc(name="test")
     yield d.insert()
@@ -129,9 +140,7 @@ def test_document_delete(motor):
 
 
 @pytest.mark.gen_test
-def test_project(motor):
-    yield data.Project.set_connection(motor)
-
+def test_project(data_module):
     project = data.Project(name="test")
     yield project.insert()
 
@@ -145,9 +154,7 @@ def test_project(motor):
 
 
 @pytest.mark.gen_test
-def test_project_unique(motor):
-    yield data.use_motor(motor)
-
+def test_project_unique(data_module):
     project = data.Project(name="test")
     yield project.insert()
 
@@ -157,9 +164,7 @@ def test_project_unique(motor):
 
 
 @pytest.mark.gen_test
-def test_environment(motor):
-    yield data.use_motor(motor)
-
+def test_environment(data_module):
     project = data.Project(name="test")
     yield project.insert()
 
@@ -176,9 +181,7 @@ def test_environment(motor):
 
 
 @pytest.mark.gen_test
-def test_agent_process(motor):
-    yield data.use_motor(motor)
-
+def test_agent_process(data_module):
     project = data.Project(name="test")
     yield project.insert()
 
@@ -210,9 +213,7 @@ def test_agent_process(motor):
 
 
 @pytest.mark.gen_test
-def test_config_model(motor):
-    yield data.use_motor(motor)
-
+def test_config_model(data_module):
     project = data.Project(name="test")
     yield project.insert()
 
@@ -236,9 +237,7 @@ def test_config_model(motor):
 
 
 @pytest.mark.gen_test
-def test_model_list(motor):
-    yield data.use_motor(motor)
-
+def test_model_list(data_module):
     env_id = uuid.uuid4()
 
     for version in range(1, 20):
@@ -266,9 +265,7 @@ def test_model_list(motor):
 
 
 @pytest.mark.gen_test
-def test_resource_purge_on_delete(motor):
-    yield data.use_motor(motor)
-
+def test_resource_purge_on_delete(data_module):
     env_id = uuid.uuid4()
 
     # model 1
@@ -303,3 +300,41 @@ def test_resource_purge_on_delete(motor):
     assert(to_purge[0].model == 1)
     assert(to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]")
 
+
+@pytest.mark.gen_test
+def test_get_latest_resource(data_module):
+    env_id = uuid.uuid4()
+    key = "std::File[agent1,path=/etc/motd]"
+    res11 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=1", status="deployed",
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res11.insert()
+
+    res12 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=2", status="deployed",
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    yield res12.insert()
+
+    res = yield data.Resource.get_latest_version(env_id, key)
+    assert(res.model == 2)
+
+
+@pytest.mark.gen_test
+def test_snapshot(data_module):
+    env_id = uuid.uuid4()
+
+    snap = data.Snapshot(environment=env_id, model=1, name="a", started=datetime.datetime.now(), resources_todo=1)
+    yield snap.insert()
+
+    s = yield data.Snapshot.get_by_id(snap.id)
+    yield s.resource_updated(10)
+    assert(s.resources_todo == 0)
+    assert(s.total_size == 10)
+    assert(s.finished is not None)
+
+    s = yield data.Snapshot.get_by_id(snap.id)
+    assert(s.resources_todo == 0)
+    assert(s.total_size == 10)
+    assert(s.finished is not None)
+
+    yield s.delete_cascade()
+    result = yield data.Snapshot.get_list()
+    assert(len(result) == 0)

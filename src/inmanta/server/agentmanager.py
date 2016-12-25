@@ -19,7 +19,6 @@
 
 from tornado import gen
 from tornado import locks
-from motorengine import DESCENDING
 
 from inmanta.config import Config, executable
 from inmanta.agent.io.remote import RemoteIO
@@ -344,16 +343,11 @@ class AgentManager(object):
     @gen.coroutine
     def list_agents(self, tid):
         if tid is not None:
-            ags = yield data.Agent.by_env(tid)
+            ags = yield data.Agent.get_list(environment=tid)
         else:
             ags = yield data.Agent.get_list()
 
-        agents = []
-        for p in ags:
-            agent_dict = p.to_dict()
-            agents.append(agent_dict)
-
-        return 200, {"agents": agents, "servertime": datetime.now().isoformat()}
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat()}
 
     # Start/stop agents
     @gen.coroutine
@@ -523,42 +517,29 @@ ssl_ca_cert_file=%s
         """
             Request the value of a parameter from an agent
         """
-        tid = str(env.id)
+        tid = str(env)
 
         if resource_id is not None and resource_id != "":
             # get the latest version
-            versions = yield (data.ConfigurationModel.objects.filter(environment=env, released=True).  # @UndefinedVariable
-                              order_by("version", direction=DESCENDING).limit(1).find_all())  # @UndefinedVariable
+            version = yield data.ConfigurationModel.get_latest_version(env)
 
-            if len(versions) == 0:
+            if version is None:
                 return 404, {"message": "The environment associated with this parameter does not have any releases."}
 
-            version = versions[0]
-
-            # get the associated resource
-            resources = yield data.Resource.objects.filter(environment=env,  # @UndefinedVariable
-                                                           resource_id=resource_id).find_all()  # @UndefinedVariable
-
-            if len(resources) == 0:
-                return 404, {"message": "The resource parameter does not exist."}
-
-            resource = resources[0]
-
             # get a resource version
-            rvs = yield data.ResourceVersion.objects.filter(environment=env,  # @UndefinedVariable
-                                                            model=version, resource=resource).find_all()  # @UndefinedVariable
+            res = yield data.Resource.get_latest_version(env, resource_id)
 
-            if len(rvs) == 0:
+            if res is None:
                 return 404, {"message": "The resource has no recent version."}
 
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
             if (resource_id not in self._fact_resource_block_set or
                     (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
-                yield self._ensure_agent(str(tid), resource.agent)
-                client = self.get_agent_client(env.id, resource.agent)
+                yield self._ensure_agent(str(tid), res.agent)
+                client = self.get_agent_client(env, res.agent)
                 if client is not None:
-                    future = client.get_parameter(tid, resource.agent, rvs[0].to_dict())
+                    future = client.get_parameter(tid, res.agent, res.to_dict())
                     self.add_future(future)
 
                 self._fact_resource_block_set[resource_id] = now
@@ -602,8 +583,7 @@ ssl_ca_cert_file=%s
         agents = yield data.Agent.get_list()
         for agent in agents:
             if self._agent_matches(agent.name):
-                yield agent.load_references()
-                env_id = str(agent.environment.id)
+                env_id = str(agent.environment)
                 if env_id not in self._requires_agents:
                     agent_data = {"agents": set(), "process": None}
                     self._requires_agents[env_id] = agent_data

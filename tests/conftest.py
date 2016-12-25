@@ -77,6 +77,12 @@ def motor(mongo_db, mongo_client, io_loop):
 
 
 @pytest.fixture(scope="function")
+def data_module(io_loop, motor):
+    data.use_motor(motor)
+    io_loop.run_sync(data.create_indexes)
+
+
+@pytest.fixture(scope="function")
 def server(io_loop, mongo_db, mongo_client, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()

@@ -186,7 +186,7 @@ def test_version_removal(server):
 # TODO: fix multi again
 @pytest.mark.gen_test(timeout=30)
 @pytest.mark.slowtest
-def test_get_resource_for_agent(io_loop, motor, server):
+def test_get_resource_for_agent(io_loop, motor, server_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -282,3 +282,5 @@ def test_get_resource_for_agent(io_loop, motor, server):
     result = yield client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
+
+# TODO: test get_environment
