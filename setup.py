@@ -11,8 +11,7 @@ requires=[
         'ruamel.yaml',
         'virtualenv',
         'motorengine',
-        'mongobox',
-        'pytest-tornado',
+        'pymongo'
         'blessings']
 
 setup(
@@ -30,10 +29,6 @@ setup(
     include_package_data=True,
 
     install_requires=requires,
-    tests_requires=requires + [
-        "mongobox",
-        "pytest"
-    ],
     setup_requires=['tox-setuptools', 'tox'],
 
     entry_points={
