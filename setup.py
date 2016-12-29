@@ -13,7 +13,6 @@ requires=[
         'motor',
         'pymongo',
         'mongobox',
-        'pytest-tornado',
         'blessings']
 
 setup(
@@ -31,10 +30,6 @@ setup(
     include_package_data=True,
 
     install_requires=requires,
-    tests_requires=requires + [
-        "mongobox",
-        "pytest"
-    ],
     setup_requires=['tox-setuptools', 'tox'],
 
     entry_points={

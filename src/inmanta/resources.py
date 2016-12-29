@@ -95,6 +95,10 @@ class resource(object):
 
         return resource_to_sources
 
+    @classmethod
+    def reset(cls):
+        cls._resources = {}
+
 
 class ResourceNotFoundExcpetion(Exception):
     """
@@ -121,6 +125,7 @@ def to_id(entity):
 
 
 class ResourceMeta(type):
+
     @classmethod
     def _get_parent_fields(cls, bases):
         fields = []
