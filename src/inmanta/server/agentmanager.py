@@ -302,9 +302,6 @@ class AgentManager(object):
     @gen.coroutine
     def list_agent_processes(self, tid, expired):
         if tid is not None:
-            env = yield data.Environment.get_by_id(tid)
-            if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
             if expired:
                 aps = yield data.AgentProcess.get_by_env(tid)
             else:

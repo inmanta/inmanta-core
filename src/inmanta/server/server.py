@@ -206,7 +206,6 @@ class Server(protocol.ServerEndpoint):
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
 
         for param in expired_params:
-            yield param.load_references()
             if param.environment is None:
                 LOGGER.warning("Found parameter without environment (%s for resource %s). Deleting it.",
                                param.name, param.resource_id)
