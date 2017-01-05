@@ -5,4 +5,4 @@ server:
     links:
         - mongo
 mongo:
-    image: mongo
+    image: mongo:3.2
