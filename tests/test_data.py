@@ -35,6 +35,7 @@ class Doc(data.BaseDocument):
         dict(keys=[("name", pymongo.ASCENDING)], unique=True)
     ]
 
+
 @pytest.mark.gen_test
 def test_motor(motor):
     yield motor.testCollection.insert({"a": 1, "b": "abcd"})
@@ -189,10 +190,10 @@ def test_agent_process(data_module):
     yield env.insert()
 
     agent_proc = data.AgentProcess(hostname="testhost",
-                                  environment=env.id,
-                                  first_seen=datetime.datetime.now(),
-                                  last_seen=datetime.datetime.now(),
-                                  sid=uuid.uuid4())
+                                   environment=env.id,
+                                   first_seen=datetime.datetime.now(),
+                                   last_seen=datetime.datetime.now(),
+                                   sid=uuid.uuid4())
     yield agent_proc.insert()
 
     agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
@@ -230,7 +231,6 @@ def test_config_model(data_module):
     res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version, attributes={"path": "/etc/motd"})
     yield res1.insert()
 
-
     agents = yield data.ConfigurationModel.get_agents(env.id, version)
     assert(len(agents) == 1)
     assert("agent1" in agents)
@@ -242,7 +242,7 @@ def test_model_list(data_module):
 
     for version in range(1, 20):
         cm = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0,
-                                    version_info={})
+                                     version_info={})
         yield cm.insert()
 
     versions = yield ConfigurationModel.get_versions(env_id, 0, 1)
@@ -274,11 +274,11 @@ def test_resource_purge_on_delete(data_module):
     yield cm1.insert()
 
     res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=1", status="deployed",
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
     yield res11.insert()
 
     res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=1", status="deployed",
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     yield res12.insert()
 
     # model 2
@@ -287,7 +287,7 @@ def test_resource_purge_on_delete(data_module):
     yield cm2.insert()
 
     res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent5,path=/etc/motd],v=2",
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
     yield res21.insert()
 
     # model 3
@@ -306,11 +306,11 @@ def test_get_latest_resource(data_module):
     env_id = uuid.uuid4()
     key = "std::File[agent1,path=/etc/motd]"
     res11 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=1", status="deployed",
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
     yield res11.insert()
 
     res12 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=2", status="deployed",
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     yield res12.insert()
 
     res = yield data.Resource.get_latest_version(env_id, key)

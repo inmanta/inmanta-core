@@ -18,11 +18,11 @@
 
 import logging
 import uuid
+import datetime
 
 from inmanta.resources import Id
 from tornado import gen
 from motor import motor_tornado
-import datetime
 import pymongo
 
 
@@ -141,7 +141,6 @@ class BaseDocument(object):
             if value is not None and not isinstance(value, fields[name].field_type):
                 raise TypeError("Field %s should have the correct type (%s instead of %s)" %
                                 (name, fields[name].field_type.__name__, type(value).__name__))
-
 
             if value is not None:
                 setattr(self, name, value)
@@ -1024,7 +1023,7 @@ class DryRun(BaseDocument):
         resource_key = "resources.%s" % entry_uuid
 
         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
-        update = {"$inc": {"todo":-1}, "$set": {resource_key: dryrun_data}}
+        update = {"$inc": {"todo": -1}, "$set": {resource_key: dryrun_data}}
 
         yield cls._coll.update(query, update)
 
@@ -1093,7 +1092,7 @@ class SnapshotRestore(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self):
-        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo":-1}})
+        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo": -1}})
         self.resources_todo -= 1
 
         now = datetime.datetime.now()
@@ -1131,7 +1130,8 @@ class Snapshot(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self, size):
-        yield Snapshot._coll.update({"_id": self.id}, {"$inc": {"resources_todo":-1, "total_size": size}})
+        yield Snapshot._coll.update({"_id": self.id},
+                                    {"$inc": {"resources_todo": -1, "total_size": size}})
         self.total_size += size
         self.resources_todo -= 1
 

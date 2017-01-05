@@ -143,7 +143,7 @@ class AgentManager(object):
                 return agent
 
     @gen.coroutine
-    def create_default_agent(self, env:data.Environment, nodename: str):
+    def create_default_agent(self, env: data.Environment, nodename: str):
         saved = data.Agent(environment=env.id, name=nodename, paused=False)
         yield saved.insert()
         yield self.verify_reschedule(env, [nodename])

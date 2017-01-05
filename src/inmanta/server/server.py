@@ -41,7 +41,6 @@ from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
-
 import pymongo
 
 
@@ -153,7 +152,6 @@ class Server(protocol.ServerEndpoint):
 
                 for v in delete_list:
                     yield version_dict[v].delete_cascade()
-
 
     def check_storage(self):
         """
@@ -1325,8 +1323,8 @@ class Server(protocol.ServerEndpoint):
                 yield stage.insert()
                 stage_ids.append(stage.id)
 
-            comp = data.Compile(environment=environment_id, started=requested, completed=end)
-                                # reports=stage_ids)
+            comp = data.Compile(environment=environment_id, started=requested, completed=end,
+                                reports=stage_ids)
             yield comp.insert()
 
     @protocol.handle(methods.CompileReport.get_reports)

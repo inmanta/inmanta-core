@@ -26,7 +26,6 @@ from mongobox import MongoBox
 import pytest
 from inmanta import config, data
 import pymongo
-from motorengine.connection import connect, disconnect
 from motor import motor_tornado
 
 
@@ -55,15 +54,6 @@ def mongo_client(mongo_db):
 
     port = int(mongo_db.port)
     return pymongo.MongoClient(port=port)
-
-
-@pytest.fixture(scope="function")
-def motorengine(mongo_db, mongo_client, io_loop):
-    c = connect(db="inmanta", host="localhost", port=int(mongo_db.port), io_loop=io_loop)
-    yield c
-    disconnect()
-    for db_name in mongo_client.database_names():
-        mongo_client.drop_database(db_name)
 
 
 @pytest.fixture(scope="function")

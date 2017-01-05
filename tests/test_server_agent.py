@@ -865,7 +865,8 @@ def test_unkown_parameters(client, server, io_loop):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     yield retry_limited(lambda: len(server._sessions) == 1, 10)

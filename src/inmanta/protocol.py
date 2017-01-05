@@ -1049,8 +1049,8 @@ class Session(object):
         q = self._queue
         call_spec["reply_id"] = reply_id
         q.put(call_spec)
-        self._set_timeout(future, timeout,
-                          "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec["method"], call_spec["url"], self._sid))
+        self._set_timeout(future, timeout, "Call %s: %s %s for agent %s timed out." %
+                          (reply_id, call_spec["method"], call_spec["url"], self._sid))
         self._replies[call_spec["reply_id"]] = future
 
         return future
