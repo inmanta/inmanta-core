@@ -1,4 +1,4 @@
-FROM fedora:22
+FROM fedora:24
 
 RUN dnf install -y git python3 python-virtualenv python3-virtualenv git
 
