@@ -1,10 +1,3 @@
-dashboard:
-    image: inmanta-dashboard
-    links:
-        - server
-    ports:
-        - "8000:8000"
-
 server:
     build: .
     ports:
@@ -12,4 +5,4 @@ server:
     links:
         - mongo
 mongo:
-    image: mongo
+    image: mongo:3.2

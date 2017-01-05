@@ -50,6 +50,10 @@ fact-renew = 200
 auto-recompile-wait = 10
 #agent_autostart = *
 server_address=172.20.20.10
+
+[dashboard]
+enabled=true
+path=/usr/share/inmanta/dashboard
 EOF
 
 sudo mkdir -p /var/lib/inmanta
@@ -58,40 +62,4 @@ sudo systemctl daemon-reload
 sudo systemctl start inmanta-server
 sudo systemctl enable inmanta-server
 
-#sudo dnf install -y npm
-#mkdir -p /home/vagrant/node_modules
-#chown vagrant:vagrant /home/vagrant/node_modules
-#mkdir -p /inmanta-dashboard/node_modules
-#sudo mount --bind /home/vagrant/node_modules /inmanta-dashboard/node_modules
-#cd /inmanta-dashboard
-#npm install
-
-#sudo cat >/etc/systemd/system/inmanta-dashboard.service <<EOF
-#[Unit]
-#Description=Inmanta dashboard
-#After=network.target
-
-#[Service]
-#Type=simple
-#User=vagrant
-#Group=vagrant
-#ExecStart=/opt/inmanta/dashboard.sh
-#Restart=on-failure
-
-#[Install]
-#WantedBy=multi-user.target
-#EOF
-
-#sudo cat >/opt/inmanta/dashboard.sh <<EOF
-##!/bin/bash
-
-#cd /inmanta-dashboard
-#npm start
-#EOF
-
-#sudo chmod +x /opt/inmanta/dashboard.sh
-
-#sudo systemctl daemon-reload
-#sudo systemctl start inmanta-dashboard
-#sudo systemctl enable inmanta-dashboard
 

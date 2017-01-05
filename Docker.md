@@ -1,7 +1,2 @@
-The latest code can be tested using a docker and docker-compose. The compose file requires a 
-dashboard container to be available. This container can be created by checking out the 
-dashboard source code and running the following command in the demo subdir:
-
-docker build -t inmanta-dashboard .
-
-Then 'docker-compose up' takes care of everything else.
+The latest code can be tested using a docker and docker-compose. 'docker-compose up' takes care 
+of creating the docker server container (including dashboard) and starting a mongo.
