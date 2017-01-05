@@ -712,7 +712,7 @@ def test_server_agent_api(client, server, io_loop):
     agent = Agent(io_loop, env_id=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.start()
-
+    yield gen.sleep(0.1)
     agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
                   code_loader=False)
     agent.start()
@@ -728,7 +728,7 @@ def test_server_agent_api(client, server, io_loop):
                                   {'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent2', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
                                    'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}]},
-                   result.result, ['name'])
+                   result.result, ['name', 'first_seen'])
 
     agentid = result.result["processes"][0]["id"]
     endpointid = result.result["processes"][0]["endpoints"][0]["id"]
