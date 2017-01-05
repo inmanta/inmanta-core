@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 domain = "dev.inmanta.com"
-box = "fedora/23-cloud-base"
+box = "fedora/24-cloud-base"
 
 nodes = [
     {:hostname => "server", :ip => "172.20.20.10", :fwd => {8888 => 8888}, :ram => 1024, :scripts => ["common.sh", "server.sh"]},
