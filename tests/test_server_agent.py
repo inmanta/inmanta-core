@@ -726,6 +726,11 @@ def test_server_agent_api(client, server, io_loop):
     result = yield client.list_agent_processes(env_id)
     assert result.code == 200
 
+    while len(result.result["processes"]) != 2:
+        result = yield client.list_agent_processes(env_id)
+        assert result.code == 200
+        yield gen.sleep(0.1)
+
     assert(len(result.result["processes"]) == 2)
     assertEqualIsh({'processes': [{'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent1', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
@@ -895,6 +900,7 @@ def test_unkown_parameters(client, server, io_loop):
 
     yield server.renew_expired_facts()
 
+    env_id = uuid.UUID(env_id)
     params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
     while len(params) < 3:
         params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)

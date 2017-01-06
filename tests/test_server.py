@@ -283,4 +283,42 @@ def test_get_resource_for_agent(io_loop, motor, server_multi):
     assert result.code == 200
     assert result.result["model"]["done"] == 2
 
-# TODO: test get_environment
+
+@pytest.mark.gen_test(timeout=10)
+def test_get_environment(server):
+    from inmanta import protocol
+
+    client = protocol.Client("client")
+
+    result = yield client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    version = int(time.time())
+
+    for i in range(10):
+        version += 1
+
+        resources = []
+        for j in range(i):
+            resources.append({'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d' % (j, version),
+                  'owner': 'root',
+                  'path': '/tmp/file%d' % j,
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version})
+
+        res = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert res.code, 200
+
+    result = yield client.get_environment(env_id, versions=5, resources=1)
+    assert(result.code == 200)
+    assert(len(result.result["environment"]["versions"]) == 5)
+    assert(len(result.result["environment"]["resources"]) == 9)

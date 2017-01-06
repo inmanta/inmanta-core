@@ -38,7 +38,7 @@ from inmanta import data
 from inmanta import methods
 from inmanta import protocol
 from inmanta.ast import type
-from inmanta.resources import Id
+from inmanta.resources import Id, resource
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
 import pymongo
@@ -220,9 +220,8 @@ class Server(protocol.ServerEndpoint):
                                u.name, u.resource_id)
                 yield u.delete()
             else:
-                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
-                             u.id)
-                self.agentmanager._request_parameter(u.environment, u.resource_id)
+                LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
+                yield self.agentmanager._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 
@@ -817,7 +816,6 @@ class Server(protocol.ServerEndpoint):
 
         # hook up all CADs
         for f, t in cross_agent_dep:
-            print(rv_dict[t.resource_str()])
             rv_dict[t.resource_str()].provides.append(str(f))
 
         # search for deleted resources
@@ -1152,15 +1150,13 @@ class Server(protocol.ServerEndpoint):
         env_dict = env.to_dict()
 
         if versions > 0:
-            v = yield (data.ConfigurationModel.objects.filter(environment=env).  # @UndefinedVariable
-                       order_by("date", direction=DESCENDING).limit(versions).find_all())  # @UndefinedVariable
+            v = yield data.ConfigurationModel.get_versions(environment_id, limit=versions)
             env_dict["versions"] = []
             for model in v:
                 env_dict["versions"].append(model.to_dict())
 
         if resources > 0:
-            resource_list = yield data.Resource.objects.filter(environment=env).find_all()  # @UndefinedVariable
-            env_dict["resources"] = [x.to_dict() for x in resource_list]
+            env_dict["resources"] = yield data.Resource.get_resources_report(environment=environment_id)
 
         return 200, {"environment": env_dict}
 

@@ -743,6 +743,44 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
+    def get_resources_report(cls, environment):
+        """
+            This method generates a report of all resources in the database, with their latest version, if they are deleted
+            and when they are last deployed.
+                    return {"id": self.resource_id,
+                "id_fields": {"type": self.resource_type,
+                              "agent": self.agent,
+                              "attribute": self.attribute_name,
+                              "value": self.attribute_value,
+                              },
+                "latest_version": self.version_latest,
+                "deployed_version": self.version_deployed,
+                "last_deploy": self.last_deploy,
+                "holds_state": self.holds_state,
+                }
+        """
+        resources = yield cls._coll.find({"environment": environment}, ["resource_id"]).distinct("resource_id")
+        result = []
+        for res in resources:
+            latest = (yield cls._coll.find({"environment": environment,
+                                            "resource_id": res}).sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
+            if latest["status"] != "":
+                deployed = (yield cls._coll.find({"environment": environment, "resource_id": res,
+                                                  "status": {"$ne": ""}}).sort("version",
+                                                                               pymongo.DESCENDING).limit(1).to_list(1))[0]
+            else:
+                deployed = latest
+
+            result.append({"resource_id": res,
+                           "latest_version": latest["model"],
+                           "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
+                           "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
+
+
+        return result
+
+    @classmethod
+    @gen.coroutine
     def get_resources_for_version(cls, environment, version, agent=None):
         if agent is not None:
             resources = yield cls.get_list(environment=environment, model=version, agent=agent)
@@ -1023,7 +1061,7 @@ class DryRun(BaseDocument):
         resource_key = "resources.%s" % entry_uuid
 
         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
-        update = {"$inc": {"todo": -1}, "$set": {resource_key: dryrun_data}}
+        update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: dryrun_data}}
 
         yield cls._coll.update(query, update)
 
@@ -1092,7 +1130,7 @@ class SnapshotRestore(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self):
-        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo": -1}})
+        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
         self.resources_todo -= 1
 
         now = datetime.datetime.now()
@@ -1131,7 +1169,7 @@ class Snapshot(BaseDocument):
     @gen.coroutine
     def resource_updated(self, size):
         yield Snapshot._coll.update({"_id": self.id},
-                                    {"$inc": {"resources_todo": -1, "total_size": size}})
+                                    {"$inc": {"resources_todo": int(-1), "total_size": size}})
         self.total_size += size
         self.resources_todo -= 1
 
