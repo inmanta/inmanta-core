@@ -38,7 +38,7 @@ from inmanta import data
 from inmanta import methods
 from inmanta import protocol
 from inmanta.ast import type
-from inmanta.resources import Id, resource
+from inmanta.resources import Id
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
 import pymongo
@@ -778,6 +778,8 @@ class Server(protocol.ServerEndpoint):
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
         cross_agent_dep = []
 
+        resource_objects = []
+        resource_action_objects = []
         for res_dict in resources:
             res_obj = data.Resource.new(tid, res_dict["id"])
 
@@ -795,13 +797,13 @@ class Server(protocol.ServerEndpoint):
                     attributes[field] = value
 
             res_obj.attributes = attributes
-            yield res_obj.insert()
+            resource_objects.append(res_obj)
 
             rv_dict[res_obj.resource_id] = res_obj
 
             ra = data.ResourceAction(resource_version_id=res_obj.resource_version_id, action="store", level="INFO",
                                      timestamp=datetime.datetime.now())
-            yield ra.insert()
+            resource_action_objects.append(ra)
 
             # find cross agent dependencies
             agent = res_obj.agent
@@ -816,7 +818,10 @@ class Server(protocol.ServerEndpoint):
 
         # hook up all CADs
         for f, t in cross_agent_dep:
-            rv_dict[t.resource_str()].provides.append(str(f))
+            rv_dict[t.resource_str()].provides.append(f.resource_version_id)
+
+        yield data.Resource.insert_many(resource_objects)
+        yield data.ResourceAction.insert_many(resource_action_objects)
 
         # search for deleted resources
         resources_to_purge = yield data.Resource.get_deleted_resources(tid, version)
@@ -1328,7 +1333,7 @@ class Server(protocol.ServerEndpoint):
     def get_reports(self, environment=None, start=None, end=None, limit=None):
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
-            return 500, {"message": "Limit, start and end can not be set togheter"}
+            return 500, {"message": "Limit, start and end can not be set together"}
 
         queryparts = {}
 
@@ -1340,21 +1345,23 @@ class Server(protocol.ServerEndpoint):
             queryparts["environment"] = env
 
         if start is not None:
-            queryparts["started__gt"] = dateutil.parser.parse(start)
+            queryparts["started"] = {"$gt": dateutil.parser.parse(start)}
 
         if end is not None:
-            queryparts["started__lt"] = dateutil.parser.parse(end)
+            queryparts["started"] = {"$lt": dateutil.parser.parse(end)}
 
         if limit is not None and end is not None:
-            # no negative indices supported
-            models = yield data.Compile.objects.filter(**queryparts).order_by("started").find_all()  # @UndefinedVariable
-            models = list(models[:int(limit)])
+            cursor = data.Compile._coll.find(**queryparts).sort("started").limit(int(limit))
+            models = []
+            while (yield cursor.fetch_next):
+                models.append(data.Compile(from_mongo=True, **cursor.next_object()))
+
             models.reverse()
         else:
-            models = yield (data.Compile.objects.filter(**queryparts).  # @UndefinedVariable
-                            order_by("started", direction=DESCENDING).find_all())  # @UndefinedVariable
-            if limit is not None:
-                models = models[:int(limit)]
+            cursor = data.Compile._coll.find(**queryparts).sort("started", pymongo.DESCENDING).limit(int(limit))
+            models = []
+            while (yield cursor.fetch_next):
+                models.append(data.Compile(from_mongo=True, **cursor.next_object()))
 
         reports = []
         for m in models:

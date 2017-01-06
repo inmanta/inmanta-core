@@ -304,16 +304,17 @@ def test_get_environment(server):
 
         resources = []
         for j in range(i):
-            resources.append({'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d' % (j, version),
-                  'owner': 'root',
-                  'path': '/tmp/file%d' % j,
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version})
+            resources.append({
+                'group': 'root',
+                'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                'id': 'std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d' % (j, version),
+                'owner': 'root',
+                'path': '/tmp/file%d' % j,
+                'permissions': 644,
+                'purged': False,
+                'reload': False,
+                'requires': [],
+                'version': version})
 
         res = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
         assert res.code, 200

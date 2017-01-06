@@ -248,6 +248,14 @@ class BaseDocument(object):
         """
         yield self._coll.insert_one(self.to_dict(mongo_pk=True))
 
+    @classmethod
+    @gen.coroutine
+    def insert_many(cls, documents):
+        """
+            Insert multiple objects at once
+        """
+        yield cls._coll.insert_many((d.to_dict(mongo_pk=True) for d in documents))
+
     @gen.coroutine
     def update(self, **kwargs):
         """
@@ -775,7 +783,6 @@ class Resource(BaseDocument):
                            "latest_version": latest["model"],
                            "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
                            "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
-
 
         return result
 
