@@ -165,6 +165,7 @@ def waitForDone(client, env_id, version):
             waiter.notifyAll()
             waiter.release()
         yield gen.sleep(0.1)
+
     return result
 
 
@@ -712,7 +713,9 @@ def test_server_agent_api(client, server, io_loop):
     agent = Agent(io_loop, env_id=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.start()
+
     yield gen.sleep(0.1)
+
     agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
                   code_loader=False)
     agent.start()
@@ -722,12 +725,6 @@ def test_server_agent_api(client, server, io_loop):
 
     result = yield client.list_agent_processes(env_id)
     assert result.code == 200
-
-    while len(result.result["processes"]) != 2:
-        result = yield client.list_agent_processes(env_id)
-        assert result.code == 200
-        yield gen.sleep(0.1)
-        # TODO: why is this wait now required? It was not required with motorengine
 
     assert(len(result.result["processes"]) == 2)
     assertEqualIsh({'processes': [{'expired': None, 'environment': env_id, 'endpoints':
@@ -1213,10 +1210,6 @@ def test_cross_agent_deps(io_loop, server, client):
 
     result = yield client.get_version(env_id, version)
     assert result.code == 200
-
-    while result.result["model"]["done"] == 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
 
     result = yield waitForDone(client, env_id, version)
 
