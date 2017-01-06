@@ -193,7 +193,7 @@ class RemoteResourceAction(ResourceAction):
     def execute(self, dummy, generation, cache):
         yield dummy.future
         try:
-            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent.get_environment(),
+            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id,
                                                                     str(self.resource_id), status=True)
             status = result.result['status']
             if status == '' or self.future.done():
