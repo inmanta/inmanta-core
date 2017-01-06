@@ -226,7 +226,7 @@ class Server(protocol.ServerEndpoint):
             else:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
                              u.environment.uuid)
-                self.agentmanager._request_parameter(u.environment, u.resource_id)
+                yield self.agentmanager._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 
