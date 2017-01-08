@@ -1,3 +1,6 @@
+v 2016.6 (2017-01-08)
+Mainly a bugfix and stabilisation release. No new features.
+
 v 2016.5 (2016-11-28)
 New release with upgraded server-agent protocol
 - Upgraded server agent protocol
