@@ -8,13 +8,12 @@ available on your system.
 
 With pip
 ---------
-Inmanta can be installed with pip, however, we depend on a version of motorengine that is not in pypi yet. You must first install this version by hand.
+Inmanta can be installed with pip.
 
 .. code-block:: sh
 
-    pip install https://packages.inmanta.com/misc/motorengine-0.9.1dev0.tar.gz
     pip install inmanta
-    
+
 
 From source
 ------------
@@ -23,7 +22,7 @@ From source
 .. code-block:: sh
 
     git clone https://github.com/inmanta/inmanta.git
-    cd inmanta 
+    cd inmanta
     pip install --process-dependency-links .
 
 
@@ -63,7 +62,7 @@ To install the dashboard:
   EOF
   sudo dnf install inmanta-dashboard
   exit
-  
+
 And add the following section to the config file (`/etc/inmanta/server.cfg`)
 
 .. code-block:: ini
@@ -94,7 +93,7 @@ Enable the inmanta-scl copr repo:
 Install inmanta tool, server or agent or all:
 
 .. code-block:: sh
-  
+
   sudo yum install rh-python34-python-inmanta
   sudo yum install rh-python34-python-inmanta-server
   sudo yum install rh-python34-python-inmanta-agent
@@ -116,7 +115,7 @@ To install the dashboard:
   EOF
   sudo dnf install inmanta-dashboard
   exit
-  
+
 And add the following section to the config file (`/etc/inmanta/server.cfg`)
 
 .. code-block:: ini
