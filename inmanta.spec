@@ -1,6 +1,6 @@
 # Use release 0 for prerelease version.
-%define release 0
-%define version 2017.1
+%define release 1
+%define version 2016.6
 
 %define sourceversion %{version}%{?buildid}
 
@@ -55,7 +55,7 @@ Requires:       python3-ply
 Requires:       python3-PyYAML
 Requires:       python3-virtualenv
 Requires:       python-virtualenv
-Requires:       python3-pymongo
+Requires:       python3-pymongo = 2.7.2
 Requires:       python3-motorengine
 Requires:       python3-devel
 Requires:       python3-cliff
