@@ -1122,7 +1122,7 @@ def test_wait(client, server, io_loop):
 
     logger.info("second version pushed")
 
-    yield gen.sleep(0.5)
+    yield gen.sleep(1)
 
     logger.info("wait to expire load limiting")
 
