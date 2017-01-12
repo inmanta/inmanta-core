@@ -1120,11 +1120,11 @@ def test_wait(client, server, io_loop):
     result = yield client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
-    logger.info("second version pushed")
+    logger.info("second version pushed %f", time.time())
 
     yield gen.sleep(1)
 
-    logger.info("wait to expire load limiting")
+    logger.info("wait to expire load limiting%f", time.time())
 
     # deploy and wait until done
     result = yield client.release_version(env_id, version2, True)
