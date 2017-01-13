@@ -1013,12 +1013,12 @@ def test_fail(client, server, io_loop):
 @pytest.mark.gen_test
 def test_wait(client, server, io_loop):
     """
-        If this test fail due to timeout, 
+        If this test fail due to timeout,
         this is probably due to the mechanism in the agent that prevents pulling resources in very rapp\id succession.
-        
+
         If the test server is slow, a get_resources call takes a long time,
         this makes the back-off longer
-        
+
         this test deploys two models in rapid successions, if the server is slow, this may fail due to the back-off
     """
     Provider.reset()
