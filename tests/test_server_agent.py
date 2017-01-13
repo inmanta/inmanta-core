@@ -20,6 +20,8 @@ import time
 import json
 import uuid
 from threading import Condition
+import logging
+
 
 from tornado import gen
 
@@ -31,6 +33,8 @@ from inmanta.agent.agent import Agent
 from utils import retry_limited, assertEqualIsh, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
+
+logger = logging.getLogger("inmanta.test.server_agent")
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -154,12 +158,13 @@ waiter = Condition()
 
 
 @gen.coroutine
-def waitForDone(client, env_id, version):
+def waitForDoneWithWaiters(client, env_id, version):
     # unhang waiters
     result = yield client.get_version(env_id, version)
     assert result.code == 200
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
         result = yield client.get_version(env_id, version)
+        logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
         if result.result["model"]["done"] > 0:
             waiter.acquire()
             waiter.notifyAll()
@@ -170,6 +175,10 @@ def waitForDone(client, env_id, version):
 
 @provider("test::Wait", name="test_wait")
 class Wait(ResourceHandler):
+
+    def __init__(self, agent, io=None):
+        super().__init__(agent, io)
+        self.traceid = uuid.uuid4()
 
     def check_resource(self, resource):
         current = resource.clone()
@@ -187,9 +196,11 @@ class Wait(ResourceHandler):
         return self._diff(current, desired)
 
     def do_changes(self, resource):
+        logger.info("Haning waiter %s", self.traceid)
         waiter.acquire()
         waiter.wait()
         waiter.release()
+        logger.info("Releasing waiter %s", self.traceid)
         changes = self.list_changes(resource)
         if "purged" in changes:
             if changes["purged"][1]:
@@ -1002,21 +1013,34 @@ def test_fail(client, server, io_loop):
 @pytest.mark.gen_test
 def test_wait(client, server, io_loop):
     """
-        Test results for a cancel
+        If this test fail due to timeout,
+        this is probably due to the mechanism in the agent that prevents pulling resources in very rapp\id succession.
+
+        If the test server is slow, a get_resources call takes a long time,
+        this makes the back-off longer
+
+        this test deploys two models in rapid successions, if the server is slow, this may fail due to the back-off
     """
     Provider.reset()
+
+    # setup project
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
+    # setup env
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
+    # setup agent
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
+
+    # wait for agent
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
+    # set the deploy environment
     Provider.set("agent1", "key", "value")
 
     def makeVersion(offset=0):
@@ -1071,20 +1095,6 @@ def test_wait(client, server, io_loop):
         return version, resources
 
     @gen.coroutine
-    def waitForDone(version):
-        # unhang waiters
-        result = yield client.get_version(env_id, version)
-        assert result.code == 200
-        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-            result = yield client.get_version(env_id, version)
-            if result.result["model"]["done"] > 0:
-                waiter.acquire()
-                waiter.notifyAll()
-                waiter.release()
-            yield gen.sleep(0.1)
-        assert result.result["model"]["done"] == len(resources)
-
-    @gen.coroutine
     def waitForResources(version, n):
         result = yield client.get_version(env_id, version)
         assert result.code == 200
@@ -1094,25 +1104,43 @@ def test_wait(client, server, io_loop):
             yield gen.sleep(0.1)
         assert result.result["model"]["done"] == n
 
+    logger.info("setup done")
+
     version1, resources = makeVersion()
     result = yield client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
+
+    logger.info("first version pushed")
 
     # deploy and wait until one is ready
     result = yield client.release_version(env_id, version1, True)
     assert result.code == 200
 
+    logger.info("first version released")
+
     yield waitForResources(version1, 2)
+
+    logger.info("first version, 2 resources deployed")
 
     version2, resources = makeVersion(3)
     result = yield client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
+    logger.info("second version pushed %f", time.time())
+
+    yield gen.sleep(1)
+
+    logger.info("wait to expire load limiting%f", time.time())
+
     # deploy and wait until done
     result = yield client.release_version(env_id, version2, True)
     assert result.code == 200
 
-    yield waitForDone(version2)
+    logger.info("second version released")
+
+    yield waitForDoneWithWaiters(client, env_id, version2)
+
+    logger.info("second version complete")
 
     result = yield client.get_version(env_id, version2)
     assert result.code == 200
@@ -1217,7 +1245,7 @@ def test_cross_agent_deps(io_loop, server, client):
         result = yield client.get_version(env_id, version)
         yield gen.sleep(0.1)
 
-    result = yield waitForDone(client, env_id, version)
+    result = yield waitForDoneWithWaiters(client, env_id, version)
 
     assert result.result["model"]["done"] == len(resources)
 

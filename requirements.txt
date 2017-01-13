@@ -16,4 +16,5 @@ motorengine
 mongobox
 pytest
 pytest-tornado
+pytest-logging
 sphinx_rtd_theme
