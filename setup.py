@@ -11,7 +11,7 @@ requires=[
         'ruamel.yaml',
         'virtualenv',
         'motorengine',
-        'pymongo==2.7',
+        'pymongo',
         'blessings']
 
 setup(
