@@ -26,7 +26,7 @@ from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint,
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
 
@@ -465,6 +465,45 @@ a=["a]","b"]
     assert isinstance(stmt, Assign)
     assert isinstance(stmt.value, CreateList)
     assert [x.value for x in stmt.value.items] == ["a]", "b"]
+
+
+def test_map_Def():
+    statements = parse_code("""
+a={ "a":"b", "b":1}
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert [(x[0], x[1].value) for x in stmt.value.items] == [("a", "b"), ("b", 1)]
+
+
+def test_map_def_var():
+    statements = parse_code("""a={ "b":b}""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert isinstance(stmt.value.items[0][1], Reference)
+
+
+def test_map_def_list():
+    statements = parse_code("""a={ "a":["a"]}""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert isinstance(stmt.value.items[0][1], CreateList)
+
+
+def test_map_def_map():
+    statements = parse_code("""a={ "a":{"a":"C"}}""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert isinstance(stmt.value.items[0][1], CreateDict)
 
 
 def test_booleans():

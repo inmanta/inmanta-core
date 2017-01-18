@@ -297,6 +297,42 @@ class List(Type, list):
     @classmethod
     def __str__(cls):
         return "list"
+    
+class Dict(Type, dict):
+    """
+        This class represents a list type in the configuration model. (instances represent instances)
+    """
+
+    def __init__(self):
+        Type.__init__(self)
+        dict.__init__(self)
+
+    @classmethod
+    def cast(cls, value):
+        """
+            Cast the given value to a string
+
+            :see CastableType#cast
+        """
+        return dict(value)
+
+    @classmethod
+    def validate(cls, value):
+        """
+            Validate the given value to check if it satisfies the constraints
+            associated with this type
+        """
+        if value is None:
+            return True
+
+        if not isinstance(value, dict):
+            raise RuntimeException(None, "Invalid value '%s' expected dict" % value)
+
+        return True
+
+    @classmethod
+    def __str__(cls):
+        return "dict"
 
 
 class ConstraintType(Type):

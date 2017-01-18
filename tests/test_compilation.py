@@ -525,6 +525,29 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         for lf in types["__config__::LogFile"].get_all_instances():
             assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
+    def testDict(self):
+        self.setUpForSnippet("""
+a = "a"
+b = { "a" : a, "b" : "b", "c" : 3}
+""")
+
+        (_, root) = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+        b = scope.lookup("b").get_value()
+        assert b["a"] == "a"
+        assert b["b"] == "b"
+        assert b["c"] == 3
+
+    def testDictCollide(self):
+        self.setUpForSnippet("""
+a = "a"
+b = { "a" : a, "a" : "b", "c" : 3}
+""")
+
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
+
     def testListAtributes(self):
         self.setUpForSnippet("""
 entity Jos:
