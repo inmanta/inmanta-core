@@ -17,10 +17,10 @@
 """
 
 from copy import copy
+from collections import Mapping
 
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException
-from collections import Mapping
 
 
 class UnsetException(RuntimeException):

@@ -16,9 +16,9 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 import unittest
 
+import pytest
 from test_compilation import AbstractSnippetTest
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import DynamicProxy

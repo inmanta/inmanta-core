@@ -111,7 +111,7 @@ class AbstractSnippetTest(object):
     def tearDown(self):
         shutil.rmtree(self.project_dir)
 
-    
+
 class SnippetTests(AbstractSnippetTest, unittest.TestCase):
 
     def testIssue92(self):
