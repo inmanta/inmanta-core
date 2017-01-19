@@ -95,8 +95,11 @@ Literal values can be assigned to variables::
     # var6 is a list of values
     var6 = ["fedora", "ubuntu", "rhel"]
 
-    # var7 contains the same value as var2
-    var7 = var2
+    # a dictionary with string keys and any type of values is also a primitive 
+    var7 = { "foo":"bar", "baz": 1}
+    
+    # var8 contains the same value as var2
+    var8 = var2
     
     # next assignment will not return an error because var1 already contains this value
     var1 = 1
@@ -107,6 +110,7 @@ Literal values can be assigned to variables::
     #ref to a variable from another namespace
     import ip::services
     sshservice = ip::services::ssh
+    
     
 
 Primitive types
@@ -129,6 +133,8 @@ For example::
     
 
 Lists of primitive types are also primitive types: ``string[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
+
+``dict`` is the primitive type that represents a dictionary 
    
 
 Conditions
@@ -197,6 +203,7 @@ Defining entities in a configuration model::
        string content
        number mode = 640
        string[] list = []
+       dict things = {}
     end
 
 Default values can also be set using a type alias::
