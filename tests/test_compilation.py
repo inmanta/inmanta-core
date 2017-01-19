@@ -55,7 +55,7 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-class SnippetTests(unittest.TestCase):
+class AbstractSnippetTest(object):
     libs = None
     env = None
 
@@ -108,8 +108,11 @@ class SnippetTests(unittest.TestCase):
         export = Exporter(options=options)
         return export.run(types, scopes)
 
-    def xtearDown(self):
+    def tearDown(self):
         shutil.rmtree(self.project_dir)
+
+    
+class SnippetTests(AbstractSnippetTest, unittest.TestCase):
 
     def testIssue92(self):
         self.setUpForSnippet("""

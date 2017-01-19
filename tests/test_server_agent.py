@@ -1010,7 +1010,7 @@ def test_fail(client, server, io_loop):
     assert states['test::Resource[agent1,key=key5],v=%d' % version] == "skipped"
 
 
-@pytest.mark.gen_test
+@pytest.mark.gen_test(timeout=15)
 def test_wait(client, server, io_loop):
     """
         If this test fail due to timeout,
