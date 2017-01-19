@@ -108,7 +108,7 @@ class AbstractSnippetTest(object):
         export = Exporter(options=options)
         return export.run(types, scopes)
 
-    def tearDown(self):
+    def xtearDown(self):
         shutil.rmtree(self.project_dir)
 
 
