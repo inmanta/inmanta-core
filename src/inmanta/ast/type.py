@@ -297,7 +297,8 @@ class List(Type, list):
     @classmethod
     def __str__(cls):
         return "list"
-    
+
+
 class Dict(Type, dict):
     """
         This class represents a list type in the configuration model. (instances represent instances)
@@ -410,4 +411,4 @@ def create_function(expression):
 
     return function
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": List}
+TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict}

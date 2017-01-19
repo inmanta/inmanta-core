@@ -658,6 +658,44 @@ end""")
     compareAttr(stmt.attributes[3], "floomx", "string", compareDefault(['a', 'b']))
 
 
+def test_defineDictAttribute():
+    statements = parse_code("""
+entity Jos:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineEntity)
+    assert len(stmt.attributes) == 3
+
+    def compareAttr(attr, name, type, defs):
+        assert attr.name == name
+        defs(attr.default)
+        assert not attr.multi
+        assert attr.type == "dict"
+
+    def assert_is_none(x):
+        assert x is None
+
+    def assert_equals(x, y):
+        assert x == y
+
+    compareAttr(stmt.attributes[0], "bar", "dict", assert_is_none)
+    compareAttr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
+
+    def compareDefault(list):
+        def comp(x):
+            assert len(list) == len(x.items)
+            for (ok, ov), (k, v) in zip(list, x.items):
+                assert k == ok
+                assert ov == v.value
+        return comp
+    compareAttr(stmt.attributes[2], "blah", "dict", compareDefault([('a', 'a')]))
+
+
 def test_Lexer():
     parse_code("""
 #test

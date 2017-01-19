@@ -548,6 +548,58 @@ b = { "a" : a, "a" : "b", "c" : 3}
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
+    def testDictAttr(self):
+        self.setUpForSnippet("""
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar={})
+b=Foo(bar={"a":z})
+c=Foo(bar={}, blah={"z":"y"})
+z=5
+""")
+
+        (_, root) = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        def mapAssert(in_dict, expected):
+            for (ek, ev), (k, v) in zip(expected.items(), in_dict.items()):
+                assert ek == k
+                assert ev == v
+
+        def validate(var, bar, foo, blah):
+            e = scope.lookup(var).get_value()
+            mapAssert(e.get_attribute("bar").get_value(), bar)
+            mapAssert(e.get_attribute("foo").get_value(), foo)
+            mapAssert(e.get_attribute("blah").get_value(), blah)
+
+        validate("a", {}, {}, {"a": "a"})
+        validate("b", {"a": 5}, {}, {"a": "a"})
+
+        validate("c", {}, {}, {"z": "y"})
+
+    def testDictAttrTypeError(self):
+        self.setUpForSnippet("""
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar=b)
+b=Foo(bar={"a":"A"})
+""")
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
+
     def testListAtributes(self):
         self.setUpForSnippet("""
 entity Jos:

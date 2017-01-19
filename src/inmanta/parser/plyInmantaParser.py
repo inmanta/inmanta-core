@@ -205,7 +205,19 @@ def p_attr_list(p):
 def p_attr_list_cte(p):
     "attr : ns_ref '[' ']' ID '=' constant_list"
     p[0] = DefineAttribute(p[1], p[4], p[6], True)
-    attach_lnr(p, 4)
+    attach_lnr(p, 2)
+
+
+def p_attr_dict(p):
+    "attr : DICT ID"
+    p[0] = DefineAttribute("dict", p[2], None)
+    attach_lnr(p, 1)
+
+
+def p_attr_list_dict(p):
+    "attr : DICT ID '=' map_def"
+    p[0] = DefineAttribute("dict", p[2], p[4])
+    attach_lnr(p, 1)
 
 # IMPLEMENT
 
