@@ -22,7 +22,7 @@ import logging
 import re
 
 from inmanta.execute import util
-from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException
+from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy
 from inmanta.module import Project
 
 
@@ -146,6 +146,17 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
+def serialize_dict_proxy(d):
+    data = {}
+    for key, value in d.items():
+        if  isinstance(value, DictProxy):
+            data[key] = serialize_dict_proxy(value)
+        else:
+            data[key] = value
+
+    return data
+
+
 class Resource(metaclass=ResourceMeta):
     """
         Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
@@ -253,6 +264,9 @@ class Resource(metaclass=ResourceMeta):
                         value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
                     else:
                         value = getattr(model_object, field)
+
+                    if isinstance(value, DictProxy):
+                        value = serialize_dict_proxy(value)
 
                     setattr(obj, field, value)
                 except UnknownException as e:
