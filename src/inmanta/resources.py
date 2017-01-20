@@ -149,7 +149,7 @@ class ResourceMeta(type):
 def serialize_dict_proxy(d):
     data = {}
     for key, value in d.items():
-        if  isinstance(value, DictProxy):
+        if isinstance(value, DictProxy):
             data[key] = serialize_dict_proxy(value)
         else:
             data[key] = value
