@@ -400,7 +400,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form_type = yield data.Form.get_form(environment=env, form_type=form_type)
+        form_type = yield data.Form.get_form(environment=tid, form_type=form_type)
         if form_type is None:
             return 404, {"message": "No form is defined with id %s" % form_type}
 
@@ -428,32 +428,29 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.FormRecords.update_record, record_id="id")
     @gen.coroutine
     def update_record(self, tid, record_id, form):
-        f1 = data.Environment.get_by_id(tid)
-        f2 = data.FormRecord.get_by_id(record_id)
-        env, record = yield [f1, f2]
+        env = yield data.Environment.get_by_id(tid)
+        record = yield data.FormRecord.get_by_id(record_id)
+        form_def = yield data.Form.get_by_id(record.form)
 
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         record.changed = datetime.datetime.now()
 
-        form_fields = record.form.fields
-        for k, _v in form_fields.items():
-            if k in form:
+        for k, _v in form_def.fields.items():
+            if k in form_def.fields:
                 value = form[k]
-                field_type = form_fields[k]
+                field_type = form_def.fields[k]
                 if field_type in type.TYPES:
                     type_obj = type.TYPES[field_type]
                     record.fields[k] = type_obj.cast(value)
                 else:
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, id))
 
-        yield record.save()
-
-        new_record = yield data.FormRecord.get_by_id(id)
+        yield record.update()
 
         self._async_recompile(tid, False, opt.server_wait_after_param.get())
-        return 200, {"record": new_record}
+        return 200, {"record": record}
 
     @protocol.handle(methods.FormRecords.create_record)
     @gen.coroutine

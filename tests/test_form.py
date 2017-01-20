@@ -18,7 +18,6 @@
 import logging
 
 import pytest
-from inmanta import data
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,15 +39,19 @@ def test_form(server):
     env_id = result.result["environment"]["id"]
 
     form_id = "cwdemo::forms::ClearwaterSize"
-    result = yield client.put_form(tid=env_id, id=form_id,
-                                   form={'attributes': {'bono': {'default': 1,
-                                                                 'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
-                                                                 'type': 'number'},
-                                                        'ralf': {'default': 1,
-                                                                 'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
-                                                                 'type': 'number'}},
-                                         'options': {'title': 'VNF replication', 'help': 'help', 'record_count': 1},
-                                         'type': 'cwdemo::forms::ClearwaterSize'})
+    form_data = {
+        'attributes': {
+            'bono': {'default': 1,
+                     'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
+                     'type': 'number'},
+            'ralf': {'default': 1,
+                     'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
+                     'type': 'number'}
+        },
+        'options': {'title': 'VNF replication', 'help': 'help', 'record_count': 1},
+        'type': 'cwdemo::forms::ClearwaterSize'
+    }
+    result = yield client.put_form(tid=env_id, id=form_id, form=form_data)
     assert(result.code == 200)
 
     result = yield client.get_form(env_id, form_id)
@@ -78,12 +81,30 @@ def test_records(server):
 
     form_id = "FormType"
     result = yield client.put_form(tid=env_id, id=form_id,
-                                   form={'attributes': {'field1': {'default': 1, 'options': {'min': 1, 'max': 100}, 'type': 'number'},
-                                                        'field2': {'default': "", 'options': {}, 'type': 'string'},
-                                                       },
+                                   form={'attributes': {'field1': {'default': 1, 'options': {'min': 1, 'max': 100},
+                                                                   'type': 'number'},
+                                                        'field2': {'default': "", 'options': {}, 'type': 'string'}},
                                          'options': {},
-                                         'type': form_id})
+                                         'type': form_id}
+                                   )
     assert(result.code == 200)
 
     result = yield client.create_record(tid=env_id, form_type=form_id, form={"field1": 10, "field2": "value"})
+    assert(result.code == 200)
+
+    record_id = result.result["record"]["id"]
+    result = yield client.update_record(tid=env_id, id=record_id, form={"field1": 20, "field2": "value2"})
+    assert(result.code == 200)
+
+    result = yield client.list_records(tid=env_id, form_type=form_id)
+    assert(result.code == 200)
+    assert(len(result.result["records"]) == 1)
+
+    yield client.create_record(tid=env_id, form_type=form_id, form={"field1": 10, "field2": "value"})
+    result = yield client.list_records(tid=env_id, form_type=form_id, include_record=True)
+    assert(result.code == 200)
+    assert(len(result.result["records"]) == 2)
+    assert("field1" in result.result["records"][0]["fields"])
+
+    result = yield client.delete_record(tid=env_id, id=record_id)
     assert(result.code == 200)
