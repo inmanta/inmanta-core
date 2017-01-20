@@ -29,7 +29,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineI
     DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
 from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat
+from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict
 from inmanta.ast.variables import Reference, AttributeReference
 from inmanta.parser import plyInmantaLex, ParserException
 from inmanta.ast.blocks import BasicBlock
@@ -205,7 +205,19 @@ def p_attr_list(p):
 def p_attr_list_cte(p):
     "attr : ns_ref '[' ']' ID '=' constant_list"
     p[0] = DefineAttribute(p[1], p[4], p[6], True)
-    attach_lnr(p, 4)
+    attach_lnr(p, 2)
+
+
+def p_attr_dict(p):
+    "attr : DICT ID"
+    p[0] = DefineAttribute("dict", p[2], None)
+    attach_lnr(p, 1)
+
+
+def p_attr_list_dict(p):
+    "attr : DICT ID '=' map_def"
+    p[0] = DefineAttribute("dict", p[2], p[4])
+    attach_lnr(p, 1)
 
 # IMPLEMENT
 
@@ -387,6 +399,7 @@ def p_operand(p):
               | function_call
               | constructor
               | list_def
+              | map_def
               | var_ref
               | index_lookup"""
     p[0] = p[1]
@@ -423,6 +436,29 @@ def p_list_def(p):
 def p_list_def_empty(p):
     " list_def : '[' ']'"
     p[0] = CreateList([])
+    attach_lnr(p, 1)
+
+
+def p_pair_list_collect(p):
+    """pair_list : STRING ':' operand ',' pair_list"""
+    p[5].insert(0, (p[1], p[3]))
+    p[0] = p[5]
+
+
+def p_pair_list_term(p):
+    "pair_list : STRING ':' operand"
+    p[0] = [(p[1], p[3])]
+
+
+def p_map_def(p):
+    " map_def : '{' pair_list '}'"
+    p[0] = CreateDict(p[2])
+    attach_lnr(p, 2)
+
+
+def p_map_def_empty(p):
+    " map_def : '{' '}'"
+    p[0] = CreateDict([])
     attach_lnr(p, 1)
 
 

@@ -29,6 +29,7 @@ from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
 from inmanta import protocol
 from inmanta.export import cfg_env
+from inmanta.ast import CompilerException
 
 LOGGER = logging.getLogger()
 
@@ -68,6 +69,8 @@ def compiler_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
+    parser.add_argument("-X", "--extended-errors", dest="errors",
+                        help="Show stack traces for compile errors", action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server hosting the environment")
     parser.add_argument("--server_port", dest="port", help="The port of the server hosting the environment")
     parser.add_argument("--username", dest="user", help="The username of the server")
@@ -100,17 +103,23 @@ def compile_project(options):
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
-    if options.profile:
-        import cProfile
-        import pstats
-        result = cProfile.runctx('do_compile()', globals(), {}, "run.profile")
-        p = pstats.Stats('run.profile')
-        p.strip_dirs().sort_stats("time").print_stats(20)
-    else:
-        t1 = time.time()
-        result = do_compile()
-        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
-    return result
+    try:
+        if options.profile:
+            import cProfile
+            import pstats
+            result = cProfile.runctx('do_compile()', globals(), {}, "run.profile")
+            p = pstats.Stats('run.profile')
+            p.strip_dirs().sort_stats("time").print_stats(20)
+        else:
+            t1 = time.time()
+            result = do_compile()
+            LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+        return result
+    except CompilerException as e:
+        if not options.errors:
+            print(e, file=sys.stderr)
+        else:
+            raise e
 
 
 @command("list-commands", help_msg="Print out an overview of all commands")
@@ -134,6 +143,8 @@ def deploy_parser_config(parser):
     parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map"),
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
+    parser.add_argument("--no-agent-log", help="Do not capture agents logs, print them to stdout", action="store_true",
+                        dest="no_agent_log")
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -167,6 +178,8 @@ def export_parser_config(parser):
     parser.add_argument("--password", dest="password", help="The password of the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
+    parser.add_argument("-X", "--extended-errors", dest="errors",
+                        help="Show stack traces for compile errors", action="store_true", default=False)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -205,7 +218,10 @@ def export(options):
     version, _ = export.run(types, scopes)
 
     if exp is not None:
-        raise exp
+        if not options.errors:
+            print(exp, file=sys.stderr)
+        else:
+            raise exp
 
     if options.deploy:
         conn = protocol.Client("compiler")

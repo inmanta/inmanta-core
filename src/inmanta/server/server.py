@@ -54,14 +54,13 @@ class Server(protocol.ServerEndpoint):
     """
         The central Inmanta server that communicates with clients and agents and persists configuration
         information
-
-        :param usedb Use a database to store data. If not, only facts are persisted in a yaml file.
     """
 
-    def __init__(self, io_loop, database_host=None, database_port=None):
+    def __init__(self, io_loop, database_host=None, database_port=None, agent_no_log=False):
         super().__init__("server", io_loop=io_loop, interval=opt.agent_timeout.get(), hangtime=opt.agent_hangtime.get())
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
+        self._agent_no_log = agent_no_log
 
         self._db = None
         if database_host is None:
@@ -1226,15 +1225,6 @@ class Server(protocol.ServerEndpoint):
             self._io_loop.add_callback(self._recompile_environment, environment_id, update_repo, wait)
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
-
-    def _fork_inmanta(self, args, cwd=None):
-        """
-            For an inmanta process from the same code base as the current code
-        """
-        inmanta_path = [sys.executable, os.path.abspath(sys.argv[0])]
-        proc = subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        return proc
 
     @gen.coroutine
     def _run_compile_stage(self, name, cmd, cwd, **kwargs):

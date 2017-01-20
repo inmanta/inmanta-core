@@ -58,7 +58,7 @@ class Deploy(object):
             LOGGER.debug("Creating directory %s", path)
             os.mkdir(path)
 
-    def _setup_server(self):
+    def _setup_server(self, no_agent_log):
         # set the custom config before starting the server
         config.Config.load_config()
 
@@ -83,7 +83,8 @@ class Deploy(object):
         config.Config.set("server", "agent-autostart", "*")
 
         # start the server
-        self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop)
+        self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop,
+                                     agent_no_log=no_agent_log)
         self._server.start()
         LOGGER.debug("Started server on port %d", self._server_port)
 
@@ -218,7 +219,7 @@ class Deploy(object):
         self._agent_ready = True
         return True
 
-    def setup_server(self):
+    def setup_server(self, no_agent_log):
         """
             Run inmanta locally
         """
@@ -231,7 +232,7 @@ class Deploy(object):
         if not self._setup_mongodb():
             return False
 
-        if not self._setup_server():
+        if not self._setup_server(no_agent_log):
             return False
 
         return True
@@ -408,7 +409,7 @@ class Deploy(object):
         yield self.export(dry_run=dry_run)
 
     def run(self, options):
-        self.setup_server()
+        self.setup_server(options.no_agent_log)
 
         def handle_result(x):
             if not x.result() or x.exception() is not None:

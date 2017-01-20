@@ -341,7 +341,7 @@ class AgentInstance():
             LOGGER.info("%s Attempting to get resource while get is in progress", self.name)
             return False
         if time.time() < self._get_resource_timeout:
-            LOGGER.info("%s Attempting to get resources during backoff %d seconds left, last download took %d seconds",
+            LOGGER.info("%s Attempting to get resources during backoff %g seconds left, last download took %d seconds",
                         self.name, self._get_resource_timeout - time.time(), self._get_resource_duration)
             return False
         return True

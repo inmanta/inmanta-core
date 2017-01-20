@@ -51,7 +51,7 @@ class BasicBlock(object):
             try:
                 s.normalize()
             except TypeNotFoundException as e:
-                e.set_location(s.location)
+                e.set_statement(s)
                 raise e
         # not used yet
         # self.requires = set([require for s in self.__stmts for require in s.requires()])

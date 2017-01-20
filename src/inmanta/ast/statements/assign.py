@@ -19,10 +19,11 @@
 # pylint: disable-msg=W0613
 
 from . import ReferenceStatement
-from inmanta.ast.type import List
+from inmanta.ast.type import List, Dict
 from inmanta.ast.statements import AssignStatement
-from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit
+from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance
 from inmanta.execute.util import Unknown
+from inmanta.ast import RuntimeException, AttributeException, DuplicateException
 
 
 class CreateList(ReferenceStatement):
@@ -50,6 +51,33 @@ class CreateList(ReferenceStatement):
         return "List()"
 
 
+class CreateDict(ReferenceStatement):
+
+    def __init__(self, items):
+        ReferenceStatement.__init__(self, [x[1] for x in items])
+        self.items = items
+        seen = {}
+        for x, v in items:
+            if x in seen:
+                raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
+            seen[x] = v
+
+    def execute(self, requires, resolver, queue):
+        """
+            Create this list
+        """
+        qlist = Dict()
+
+        for i in range(len(self.items)):
+            key, value = self.items[i]
+            qlist[key] = value.execute(requires, resolver, queue)
+
+        return qlist
+
+    def __repr__(self):
+        return "Dict()"
+
+
 class SetAttribute(AssignStatement):
     """
         Set an attribute of a given instance to a given value
@@ -66,9 +94,32 @@ class SetAttribute(AssignStatement):
         HangUnit(queue, resolver, reqs, None, self)
 
     def resume(self, requires, resolver, queue, target):
-        var = self.instance.execute(requires, resolver, queue).get_attribute(self.attribute_name)
+        instance = self.instance.execute(requires, resolver, queue)
+        var = instance.get_attribute(self.attribute_name)
         reqs = self.value.requires_emit(resolver, queue)
-        ExecutionUnit(queue, resolver, var, reqs, self.value)
+        SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance)
+
+    def __str__(self, *args, **kwargs):
+        return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
+
+
+class SetAttributeHelper(ExecutionUnit):
+
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression,
+                 stmt: SetAttribute, instance: Instance):
+        ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
+        self.stmt = stmt
+        self.instance = instance
+
+    def execute(self):
+        try:
+            ExecutionUnit.execute(self)
+        except RuntimeException as e:
+            e.set_statement(self.stmt)
+            raise AttributeException(self.stmt, self.instance, self.stmt.attribute_name, e)
+
+    def __str__(self):
+        return str(self.stmt)
 
 
 class Assign(AssignStatement):

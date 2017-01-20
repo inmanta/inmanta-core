@@ -29,7 +29,8 @@ from io import StringIO
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
@@ -55,7 +56,7 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-class SnippetTests(unittest.TestCase):
+class AbstractSnippetTest(object):
     libs = None
     env = None
 
@@ -110,6 +111,9 @@ class SnippetTests(unittest.TestCase):
 
     def xtearDown(self):
         shutil.rmtree(self.project_dir)
+
+
+class SnippetTests(AbstractSnippetTest, unittest.TestCase):
 
     def testIssue92(self):
         self.setUpForSnippet("""
@@ -525,6 +529,81 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         for lf in types["__config__::LogFile"].get_all_instances():
             assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
+    def testDict(self):
+        self.setUpForSnippet("""
+a = "a"
+b = { "a" : a, "b" : "b", "c" : 3}
+""")
+
+        (_, root) = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+        b = scope.lookup("b").get_value()
+        assert b["a"] == "a"
+        assert b["b"] == "b"
+        assert b["c"] == 3
+
+    def testDictCollide(self):
+        self.setUpForSnippet("""
+a = "a"
+b = { "a" : a, "a" : "b", "c" : 3}
+""")
+
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
+
+    def testDictAttr(self):
+        self.setUpForSnippet("""
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar={})
+b=Foo(bar={"a":z})
+c=Foo(bar={}, blah={"z":"y"})
+z=5
+""")
+
+        (_, root) = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        def mapAssert(in_dict, expected):
+            for (ek, ev), (k, v) in zip(expected.items(), in_dict.items()):
+                assert ek == k
+                assert ev == v
+
+        def validate(var, bar, foo, blah):
+            e = scope.lookup(var).get_value()
+            mapAssert(e.get_attribute("bar").get_value(), bar)
+            mapAssert(e.get_attribute("foo").get_value(), foo)
+            mapAssert(e.get_attribute("blah").get_value(), blah)
+
+        validate("a", {}, {}, {"a": "a"})
+        validate("b", {"a": 5}, {}, {"a": "a"})
+
+        validate("c", {}, {}, {"z": "y"})
+
+    def testDictAttrTypeError(self):
+        self.setUpForSnippet("""
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar=b)
+b=Foo(bar={"a":"A"})
+""")
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
+
     def testListAtributes(self):
         self.setUpForSnippet("""
 entity Jos:
@@ -784,6 +863,17 @@ std::print(t1.tests)
 
         assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
 
+    def testIssue170AttributeException(self):
+        self.setUpForSnippet("""
+entity Test1:
+    string a
+end
+
+Test1(a=3)
+""")
+        with pytest.raises(AttributeException):
+            compiler.do_compile()
+
     def testIssue220DepLoops(self):
         self.setUpForSnippet("""
 import std
@@ -880,7 +970,7 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
     def test_compile(self):
-        with pytest.raises(DoubleSetException):
+        with pytest.raises(AttributeException):
             compiler.do_compile()
 
 

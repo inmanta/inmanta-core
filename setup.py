@@ -19,7 +19,7 @@ setup(
     name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2016.6",
+    version="2017.1",
     description="Inmanta deployment tool",
     author="Inmanta",
     author_email="code@inmanta.com",
@@ -30,7 +30,7 @@ setup(
     include_package_data=True,
 
     install_requires=requires,
-    setup_requires=['tox-setuptools', 'tox'],
+    #setup_requires=['tox-setuptools', 'tox'],
 
     entry_points={
     'console_scripts': [

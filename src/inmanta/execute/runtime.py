@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException
 from inmanta.ast.type import Type
 
 
@@ -275,8 +275,7 @@ class OptionVariable(DelayedResultVariable):
     def get_value(self):
         result = DelayedResultVariable.get_value(self)
         if result is None:
-            raise OptionalValueException(
-                None, "Optional variable accessed that has no value (%s.%s)" % (self.myself, self.attribute))
+            raise OptionalValueException(self.myself, self.attribute)
         return result
 
     def __str__(self):
@@ -522,7 +521,10 @@ class Instance(ExecutionContext):
     def set_attribute(self, name, value, location, recur=True):
         if name not in self.slots:
             raise NotFoundException(None, name, "cannot set attribute with name %s on type %s" % (name, str(self.type)))
-        self.slots[name].set_value(value, location, recur)
+        try:
+            self.slots[name].set_value(value, location, recur)
+        except RuntimeException as e:
+            raise AttributeException(None, self, name, cause=e)
 
     def get_attribute(self, name):
         try:
@@ -532,6 +534,9 @@ class Instance(ExecutionContext):
 
     def __repr__(self):
         return "%s %02x" % (self.type, self.sid)
+
+    def __str__(self):
+        return "%s (instantiated at %s)" % (self.type, self.location)
 
     def add_implementation(self, impl):
         if impl in self.implemenations:

@@ -26,7 +26,7 @@ from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint,
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
 
@@ -467,6 +467,45 @@ a=["a]","b"]
     assert [x.value for x in stmt.value.items] == ["a]", "b"]
 
 
+def test_map_Def():
+    statements = parse_code("""
+a={ "a":"b", "b":1}
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert [(x[0], x[1].value) for x in stmt.value.items] == [("a", "b"), ("b", 1)]
+
+
+def test_map_def_var():
+    statements = parse_code("""a={ "b":b}""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert isinstance(stmt.value.items[0][1], Reference)
+
+
+def test_map_def_list():
+    statements = parse_code("""a={ "a":["a"]}""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert isinstance(stmt.value.items[0][1], CreateList)
+
+
+def test_map_def_map():
+    statements = parse_code("""a={ "a":{"a":"C"}}""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateDict)
+    assert isinstance(stmt.value.items[0][1], CreateDict)
+
+
 def test_booleans():
     statements = parse_code("""
 a=true b=false
@@ -617,6 +656,44 @@ end""")
         return comp
     compareAttr(stmt.attributes[1], "ips", "ip::ip", compareDefault(['a']))
     compareAttr(stmt.attributes[3], "floomx", "string", compareDefault(['a', 'b']))
+
+
+def test_defineDictAttribute():
+    statements = parse_code("""
+entity Jos:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineEntity)
+    assert len(stmt.attributes) == 3
+
+    def compareAttr(attr, name, type, defs):
+        assert attr.name == name
+        defs(attr.default)
+        assert not attr.multi
+        assert attr.type == "dict"
+
+    def assert_is_none(x):
+        assert x is None
+
+    def assert_equals(x, y):
+        assert x == y
+
+    compareAttr(stmt.attributes[0], "bar", "dict", assert_is_none)
+    compareAttr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
+
+    def compareDefault(list):
+        def comp(x):
+            assert len(list) == len(x.items)
+            for (ok, ov), (k, v) in zip(list, x.items):
+                assert k == ok
+                assert ov == v.value
+        return comp
+    compareAttr(stmt.attributes[2], "blah", "dict", compareDefault([('a', 'a')]))
 
 
 def test_Lexer():
