@@ -17,6 +17,7 @@
 """
 
 from copy import copy
+from collections import Mapping
 
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException
@@ -75,6 +76,9 @@ class DynamicProxy(object):
 
         if isinstance(value, DynamicProxy):
             return value
+
+        if isinstance(value, dict):
+            return DictProxy(value)
 
         if hasattr(value, "__len__"):
             return SequenceProxy(value)
@@ -136,6 +140,27 @@ class SequenceProxy(DynamicProxy):
         instance = self._get_instance()
         if isinstance(key, str):
             raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (key, self._get_instance()))
+
+        return DynamicProxy.return_value(instance[key])
+
+    def __len__(self):
+        return len(self._get_instance())
+
+    def __iter__(self):
+        instance = self._get_instance()
+
+        return IteratorProxy(instance.__iter__())
+
+
+class DictProxy(DynamicProxy, Mapping):
+
+    def __init__(self, mydict):
+        DynamicProxy.__init__(self, mydict)
+
+    def __getitem__(self, key):
+        instance = self._get_instance()
+        if not isinstance(key, str):
+            raise RuntimeException(self, "Expected string key, but got %s, %s is a dict" % (key, self._get_instance()))
 
         return DynamicProxy.return_value(instance[key])
 
