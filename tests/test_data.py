@@ -66,7 +66,7 @@ def test_document_def():
     json = t.to_dict()
 
     assert("id" in json)
-    assert("_id" in t.to_dict(mongo_pk=True))
+    assert("_id" in t.to_mongo())
 
 
 @pytest.mark.gen_test

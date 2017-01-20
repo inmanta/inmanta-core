@@ -338,13 +338,7 @@ class Server(protocol.ServerEndpoint):
             m_query["metadata." + k] = v
 
         params = yield data.Parameter.get_list(**m_query)
-
-        return_value = []
-        for p in params:
-            d = p.to_dict()
-            return_value.append(d)
-
-        return 200, {"parameters": return_value, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
+        return 200, {"parameters": params, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
 
     @protocol.handle(methods.FormMethod.put_form, form_id="id")
     @gen.coroutine
@@ -353,14 +347,15 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form_doc = yield data.Form.get_form(environment=env, form_type=form_id)
+        form_doc = yield data.Form.get_form(environment=tid, form_type=form_id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
         field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
 
         if form_doc is None:
-            form_doc = data.Form(environment=env, form_type=form_id, fields=fields, defaults=defaults,
+            form_doc = data.Form(environment=tid, form_type=form_id, fields=fields, defaults=defaults,
                                  options=form["options"], field_options=field_options)
+            yield form_doc.insert()
 
         else:
             # update the definition
@@ -369,7 +364,7 @@ class Server(protocol.ServerEndpoint):
             form_doc.options = form["options"]
             form_doc.field_options = field_options
 
-        yield form_doc.save()
+            yield form_doc.update()
 
         return 200, {"form": {"id": form_doc.id}}
 
@@ -385,7 +380,7 @@ class Server(protocol.ServerEndpoint):
         if form is None:
             return 404
 
-        return 200, {"form": form.to_dict()}
+        return 200, {"form": form}
 
     @protocol.handle(methods.FormMethod.list_forms)
     @gen.coroutine
@@ -415,7 +410,7 @@ class Server(protocol.ServerEndpoint):
             return 200, {"records": [{"record_id": r.id, "changed": r.changed} for r in records]}
 
         else:
-            return 200, {"records": [r.to_dict() for r in records]}
+            return 200, {"records": records}
 
     @protocol.handle(methods.FormRecords.get_record, record_id="id")
     @gen.coroutine
@@ -428,21 +423,19 @@ class Server(protocol.ServerEndpoint):
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % record_id}
 
-        return 200, {"record": record.to_dict()}
+        return 200, {"record": record}
 
     @protocol.handle(methods.FormRecords.update_record, record_id="id")
     @gen.coroutine
     def update_record(self, tid, record_id, form):
         f1 = data.Environment.get_by_id(tid)
-        f2 = data.FormRecord.get_by_id(id)
+        f2 = data.FormRecord.get_by_id(record_id)
         env, record = yield [f1, f2]
 
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         record.changed = datetime.datetime.now()
-
-        yield record.load_references()
 
         form_fields = record.form.fields
         for k, _v in form_fields.items():
@@ -458,10 +451,9 @@ class Server(protocol.ServerEndpoint):
         yield record.save()
 
         new_record = yield data.FormRecord.get_by_id(id)
-        record_dict = yield new_record.to_dict()
 
         self._async_recompile(tid, False, opt.server_wait_after_param.get())
-        return 200, {"record": record_dict}
+        return 200, {"record": new_record}
 
     @protocol.handle(methods.FormRecords.create_record)
     @gen.coroutine
@@ -470,17 +462,15 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        form_obj = yield data.Form.get_form(environment=env, form_type=form_type)
+        form_obj = yield data.Form.get_form(environment=tid, form_type=form_type)
 
         if form_obj is None:
             return 404, {"message": "The form %s does not exist in env %s" % (tid, form_type)}
 
-        record_id = uuid.uuid4()
-        record = data.FormRecord(uuid=record_id, environment=env, form=form_obj, fields={})
+        record = data.FormRecord(environment=tid, form=form_obj.id, fields={})
         record.changed = datetime.datetime.now()
 
-        form_fields = record.form.fields
-        for k, _v in form_fields.items():
+        for k, _v in form_obj.fields.items():
             if k in form:
                 value = form[k]
                 field_type = form_obj.fields[k]
@@ -490,14 +480,10 @@ class Server(protocol.ServerEndpoint):
                 else:
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
-        yield record.save()
+        yield record.insert()
         self._async_recompile(tid, False, opt.server_wait_after_param.get())
 
-        # need to query this again, to_dict with load_references only works on retrieved document and not on newly created
-        record = yield data.FormRecord.get_by_id(record_id)
-        record_dict = yield record.to_dict()
-
-        return 200, {"record": record_dict}
+        return 200, {"record": record}
 
     @protocol.handle(methods.FormRecords.delete_record, record_id="id")
     @gen.coroutine
@@ -888,7 +874,7 @@ class Server(protocol.ServerEndpoint):
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, tid)
 
-        return 200, {"model": model.to_dict()}
+        return 200, {"model": model}
 
     @protocol.handle(methods.DryRunMethod.dryrun_request, version_id="id")
     @gen.coroutine
@@ -918,8 +904,7 @@ class Server(protocol.ServerEndpoint):
             else:
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, tid)
 
-        dryrun_dict = dryrun.to_dict()
-        return 200, {"dryrun": dryrun_dict}
+        return 200, {"dryrun": dryrun}
 
     @protocol.handle(methods.DryRunMethod.dryrun_list)
     @gen.coroutine
@@ -953,7 +938,7 @@ class Server(protocol.ServerEndpoint):
         if dryrun is None:
             return 404, {"message": "The given dryrun does not exist!"}
 
-        return 200, {"dryrun": dryrun.to_dict()}
+        return 200, {"dryrun": dryrun}
 
     @protocol.handle(methods.DryRunMethod.dryrun_update, dryrun_id="id")
     @gen.coroutine
@@ -1044,7 +1029,7 @@ class Server(protocol.ServerEndpoint):
         except pymongo.errors.DuplicateKeyError:
             return 500, {"message": "A project with name %s already exists." % name}
 
-        return 200, {"project": project.to_dict()}
+        return 200, {"project": project}
 
     @protocol.handle(methods.Project.delete_project, project_id="id")
     @gen.coroutine
@@ -1066,7 +1051,7 @@ class Server(protocol.ServerEndpoint):
 
             yield project.update_fields(name=name)
 
-            return 200, {"project": project.to_dict()}
+            return 200, {"project": project}
 
         except pymongo.errors.DuplicateKeyError:
             return 500, {"message": "A project with name %s already exists." % name}
@@ -1075,7 +1060,7 @@ class Server(protocol.ServerEndpoint):
     @gen.coroutine
     def list_projects(self):
         projects = yield data.Project.get_list()
-        return 200, {"projects": [x.to_dict() for x in projects]}
+        return 200, {"projects": projects}
 
     @protocol.handle(methods.Project.get_project, project_id="id")
     @gen.coroutine
@@ -1116,7 +1101,7 @@ class Server(protocol.ServerEndpoint):
 
         env = data.Environment(name=name, project=project_id, repo_url=repository, repo_branch=branch)
         yield env.insert()
-        return 200, {"environment": env.to_dict()}
+        return 200, {"environment": env}
 
     @protocol.handle(methods.Environment.modify_environment, environment_id="id")
     @gen.coroutine
@@ -1138,7 +1123,7 @@ class Server(protocol.ServerEndpoint):
             fields["repo_branch"] = branch
 
         yield env.update_fields(**fields)
-        return 200, {"environment": env.to_dict()}
+        return 200, {"environment": env}
 
     @protocol.handle(methods.Environment.get_environment, environment_id="id")
     @gen.coroutine
@@ -1368,7 +1353,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         snapshots = yield data.Snapshot.get_list(environment=tid)
-        return 200, {"snapshots": [s.to_dict() for s in snapshots]}
+        return 200, {"snapshots": snapshots}
 
     @protocol.handle(methods.Snapshot.get_snapshot, snapshot_id="id")
     @gen.coroutine
@@ -1521,7 +1506,7 @@ class Server(protocol.ServerEndpoint):
                 future = client.do_restore(tid, agent, restore.id, snapshot.id, resources)
                 self.add_future(future)
 
-        return 200, {"restore": restore.to_dict()}
+        return 200, {"restore": restore}
 
     @protocol.handle(methods.RestoreSnapshot.list_restores)
     @gen.coroutine
@@ -1531,7 +1516,7 @@ class Server(protocol.ServerEndpoint):
             return 404, {"message": "The given environment id does not exist!"}
 
         restores = yield data.SnapshotRestore.get_list(environment=tid)
-        return 200, {"restores": [x.to_dict() for x in restores]}
+        return 200, {"restores": restores}
 
     @protocol.handle(methods.RestoreSnapshot.get_restore_status, restore_id="id")
     @gen.coroutine

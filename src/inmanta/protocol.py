@@ -31,7 +31,7 @@ from collections import defaultdict
 
 import tornado.web
 from tornado import gen, queues, locks
-from inmanta import methods
+from inmanta import methods, data
 from inmanta.config import Config, nodename
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
@@ -220,6 +220,9 @@ def custom_json_encoder(o):
 
     if isinstance(o, datetime):
         return o.isoformat()
+
+    if isinstance(o, data.BaseDocument):
+        return o.to_dict()
 
     raise TypeError(repr(o) + " is not JSON serializable")
 

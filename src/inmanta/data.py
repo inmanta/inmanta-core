@@ -34,9 +34,7 @@ DBLIMIT = 100000
 # TODO: Add env id validation to protocol
 # TODO: add document ser to protocol
 # TODO: disconnect
-# TODO: do not created indexes with unit tests
 # TODO: difference between None and not set
-# TODO: add to_json
 
 
 class Field(object):
@@ -207,7 +205,10 @@ class BaseDocument(object):
 
         raise AttributeError(name)
 
-    def to_dict(self, mongo_pk=False):
+    def to_mongo(self):
+        return self._to_dict(True)
+
+    def _to_dict(self, mongo_pk=False):
         """
             Return a dict representing the document
         """
@@ -234,6 +235,9 @@ class BaseDocument(object):
 
         return result
 
+    def to_dict(self):
+        return self._to_dict()
+
     @classmethod
     def _new_id(cls):
         """
@@ -246,7 +250,7 @@ class BaseDocument(object):
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
-        yield self._coll.insert_one(self.to_dict(mongo_pk=True))
+        yield self._coll.insert_one(self.to_mongo())
 
     @classmethod
     @gen.coroutine
@@ -254,7 +258,7 @@ class BaseDocument(object):
         """
             Insert multiple objects at once
         """
-        yield cls._coll.insert_many((d.to_dict(mongo_pk=True) for d in documents))
+        yield cls._coll.insert_many((d.to_mongo() for d in documents))
 
     @gen.coroutine
     def update(self, **kwargs):
@@ -265,7 +269,7 @@ class BaseDocument(object):
         for name, value in kwargs.items():
             setattr(self, name, value)
 
-        yield self._coll.update({"_id": self.id}, self.to_dict(mongo_pk=True))
+        yield self._coll.update({"_id": self.id}, self.to_mongo())
 
     @gen.coroutine
     def update_fields(self, **kwargs):
@@ -540,17 +544,15 @@ class Agent(BaseDocument):
             return "up"
         return "down"
 
-    def to_dict(self, mongo_pk=False):
-        base = BaseDocument.to_dict(self, mongo_pk)
+    def to_dict(self):
+        base = BaseDocument.to_dict(self)
+        if self.last_failover is None:
+            base["last_failover"] = ""
 
-        if not mongo_pk:
-            if self.last_failover is None:
-                base["last_failover"] = ""
+        if self.primary is None:
+            base["primary"] = ""
 
-            if self.primary is None:
-                base["primary"] = ""
-
-            base["state"] = self.get_status()
+        base["state"] = self.get_status()
 
         return base
 
@@ -624,26 +626,13 @@ class Form(BaseDocument):
     defaults = Field(field_type=dict)
     field_options = Field(field_type=dict)
 
-    def to_dict(self, mongo_pk):
-        dct = BaseDocument.to_dict(self, mongo_pk)
-        if not mongo_pk:
-            return dct
-
-        return {"form_id": self.id,
-                "form_type": self.form_type,
-                "fields": self.fields,
-                "defaults": self.defaults,
-                "options": self.options,
-                "field_options": self.field_options,
-                }
-
     @classmethod
     @gen.coroutine
     def get_form(cls, environment, form_type):
         """
             Get a form based on its typed and environment
         """
-        forms = yield cls.objects.filter(environment=environment, form_type=form_type).find_all()
+        forms = yield cls.get_list(environment=environment, form_type=form_type)
         if len(forms) == 0:
             return None
         else:
@@ -891,11 +880,9 @@ class Resource(BaseDocument):
 
         return should_purge
 
-    def to_dict(self, mongo_pk=False):
-        dct = BaseDocument.to_dict(self, mongo_pk=mongo_pk)
-        if not mongo_pk:
-            dct["id"] = dct["resource_version_id"]
-
+    def to_dict(self):
+        dct = BaseDocument.to_dict(self)
+        dct["id"] = dct["resource_version_id"]
         return dct
 
 
@@ -930,11 +917,9 @@ class ConfigurationModel(BaseDocument):
     def done(self):
         return len(self.status)
 
-    def to_dict(self, mongo_pk=False):
-        dct = BaseDocument.to_dict(self, mongo_pk=mongo_pk)
-        if not mongo_pk:
-            dct["done"] = self.done
-
+    def to_dict(self):
+        dct = BaseDocument.to_dict(self)
+        dct["done"] = self.done
         return dct
 
     @classmethod
@@ -1079,8 +1064,8 @@ class DryRun(BaseDocument):
         obj.insert()
         return obj
 
-    def to_dict(self, mongo_pk=False):
-        dict_result = BaseDocument.to_dict(self, mongo_pk=mongo_pk)
+    def to_dict(self):
+        dict_result = BaseDocument.to_dict(self)
         resources = {r["id"]: r for r in dict_result["resources"].values()}
         dict_result["resources"] = resources
         return dict_result
