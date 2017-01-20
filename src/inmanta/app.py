@@ -143,6 +143,7 @@ def deploy_parser_config(parser):
     parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map"),
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
+    parser.add_argument("--no-agent-log", help="Do not capture agents logs, print them to stdout", action="store_true", dest="no_agent_log")
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)

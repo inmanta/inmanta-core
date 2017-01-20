@@ -303,12 +303,23 @@ class AgentManager(object):
         """
         main = executable.get()
         inmanta_path = [sys.executable, main]
-        # handles can be closed, owned by child process,...s
-        with open(outfile, "wb+") as outhandle:
-            with open(errfile, "wb+") as errhandle:
-                # TODO: perhaps show in dashboard?
-                return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
-                                        stdout=outhandle, stderr=errhandle)
+        # handles can be closed, owned by child process,...
+        try:
+            outhandle = None
+            errhandle = None
+            if outfile is not None:
+                outhandle = open(outfile, "wb+")
+            if errfile is not None:
+                errhandle = open(errfile, "wb+")
+
+            # TODO: perhaps show in dashboard?
+            return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
+                                    stdout=outhandle, stderr=errhandle)
+        finally:
+            if outhandle is not None:
+                outhandle.close()
+            if errhandle is not None:
+                errhandle.close()
 
     # External APIS
 
@@ -457,8 +468,13 @@ class AgentManager(object):
         with open(config_path, "w+") as fd:
             fd.write(config)
 
-        out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
-        err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
+        if not self._server._agent_no_log:
+            out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
+            err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
+        else:
+            out = None
+            err = None
+
         proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "agent"], out, err)
 
         if agent_data["process"] is not None:
