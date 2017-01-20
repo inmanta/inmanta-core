@@ -20,6 +20,8 @@ import time
 import json
 import uuid
 from threading import Condition
+import logging
+
 
 from tornado import gen
 
@@ -30,6 +32,9 @@ import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assertEqualIsh, UNKWN
 from inmanta.config import Config
+from inmanta.server.server import Server
+
+logger = logging.getLogger("inmanta.test.server_agent")
 
 
 @resource("test::Resource", agent="agent", id_attribute="key")
@@ -153,12 +158,13 @@ waiter = Condition()
 
 
 @gen.coroutine
-def waitForDone(client, env_id, version):
+def waitForDoneWithWaiters(client, env_id, version):
     # unhang waiters
     result = yield client.get_version(env_id, version)
     assert result.code == 200
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
         result = yield client.get_version(env_id, version)
+        logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
         if result.result["model"]["done"] > 0:
             waiter.acquire()
             waiter.notifyAll()
@@ -169,6 +175,10 @@ def waitForDone(client, env_id, version):
 
 @provider("test::Wait", name="test_wait")
 class Wait(ResourceHandler):
+
+    def __init__(self, agent, io=None):
+        super().__init__(agent, io)
+        self.traceid = uuid.uuid4()
 
     def check_resource(self, resource):
         current = resource.clone()
@@ -186,9 +196,11 @@ class Wait(ResourceHandler):
         return self._diff(current, desired)
 
     def do_changes(self, resource):
+        logger.info("Haning waiter %s", self.traceid)
         waiter.acquire()
         waiter.wait()
         waiter.release()
+        logger.info("Releasing waiter %s", self.traceid)
         changes = self.list_changes(resource)
         if "purged" in changes:
             if changes["purged"][1]:
@@ -314,6 +326,124 @@ def test_dryrun_and_deploy(io_loop, server, client):
 
 
 @pytest.mark.gen_test(timeout=30)
+def test_server_restart(io_loop, server, mongo_db, client):
+    """
+        dryrun and deploy a configuration model
+    """
+    Provider.reset()
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    Provider.set("agent1", "key2", "incorrect_value")
+    Provider.set("agent1", "key3", "value")
+
+    server.stop()
+
+    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
+    server.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key3',
+                  'value': None,
+                  'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                  'requires': [],
+                  'purged': True,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # request a dryrun
+    result = yield client.dryrun_request(env_id, version)
+    assert result.code == 200
+    assert result.result["dryrun"]["total"] == len(resources)
+    assert result.result["dryrun"]["todo"] == len(resources)
+
+    # get the dryrun results
+    result = yield client.dryrun_list(env_id, version)
+    assert result.code == 200
+    assert len(result.result["dryruns"]) == 1
+
+    while result.result["dryruns"][0]["todo"] > 0:
+        result = yield client.dryrun_list(env_id, version)
+        yield gen.sleep(0.1)
+
+    dry_run_id = result.result["dryruns"][0]["id"]
+    result = yield client.dryrun_report(env_id, dry_run_id)
+    assert result.code == 200
+
+    changes = result.result["dryrun"]["resources"]
+    assert changes[resources[0]["id"]]["changes"]["purged"][0]
+    assert not changes[resources[0]["id"]]["changes"]["purged"][1]
+    assert changes[resources[0]["id"]]["changes"]["value"][0] is None
+    assert changes[resources[0]["id"]]["changes"]["value"][1] == resources[0]["value"]
+
+    assert changes[resources[1]["id"]]["changes"]["value"][0] == "incorrect_value"
+    assert changes[resources[1]["id"]]["changes"]["value"][1] == resources[1]["value"]
+
+    assert not changes[resources[2]["id"]]["changes"]["purged"][0]
+    assert changes[resources[2]["id"]]["changes"]["purged"][1]
+
+    # do a deploy
+    result = yield client.release_version(env_id, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 3
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.get_version(env_id, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(env_id, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    assert Provider.isset("agent1", "key1")
+    assert Provider.get("agent1", "key1") == "value1"
+    assert Provider.get("agent1", "key2") == "value2"
+    assert not Provider.isset("agent1", "key3")
+
+    agent.stop()
+    server.stop()
+
+
+@pytest.mark.gen_test(timeout=30)
 def test_spontaneous_deploy(io_loop, server, client):
     """
         dryrun and deploy a configuration model
@@ -326,6 +456,7 @@ def test_spontaneous_deploy(io_loop, server, client):
     env_id = result.result["environment"]["id"]
 
     Config.set("config", "agent-interval", "2")
+    Config.set("config", "agent-splay", "2")
 
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
@@ -592,7 +723,7 @@ def test_server_agent_api(client, server, io_loop):
     agent = Agent(io_loop, env_id=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.start()
-
+    yield gen.sleep(0.1)
     agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
                   code_loader=False)
     agent.start()
@@ -608,7 +739,7 @@ def test_server_agent_api(client, server, io_loop):
                                   {'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent2', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
                                    'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}]},
-                   result.result, ['name'])
+                   result.result, ['name', 'first_seen'])
 
     agentid = result.result["processes"][0]["id"]
     endpointid = result.result["processes"][0]["endpoints"][0]["id"]
@@ -879,24 +1010,37 @@ def test_fail(client, server, io_loop):
     assert states['test::Resource[agent1,key=key5],v=%d' % version] == "skipped"
 
 
-@pytest.mark.gen_test
+@pytest.mark.gen_test(timeout=15)
 def test_wait(client, server, io_loop):
     """
-        Test results for a cancel
+        If this test fail due to timeout,
+        this is probably due to the mechanism in the agent that prevents pulling resources in very rapp\id succession.
+
+        If the test server is slow, a get_resources call takes a long time,
+        this makes the back-off longer
+
+        this test deploys two models in rapid successions, if the server is slow, this may fail due to the back-off
     """
     Provider.reset()
+
+    # setup project
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
+    # setup env
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
+    # setup agent
     agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
+
+    # wait for agent
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
+    # set the deploy environment
     Provider.set("agent1", "key", "value")
 
     def makeVersion(offset=0):
@@ -951,20 +1095,6 @@ def test_wait(client, server, io_loop):
         return version, resources
 
     @gen.coroutine
-    def waitForDone(version):
-        # unhang waiters
-        result = yield client.get_version(env_id, version)
-        assert result.code == 200
-        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-            result = yield client.get_version(env_id, version)
-            if result.result["model"]["done"] > 0:
-                waiter.acquire()
-                waiter.notifyAll()
-                waiter.release()
-            yield gen.sleep(0.1)
-        assert result.result["model"]["done"] == len(resources)
-
-    @gen.coroutine
     def waitForResources(version, n):
         result = yield client.get_version(env_id, version)
         assert result.code == 200
@@ -974,25 +1104,43 @@ def test_wait(client, server, io_loop):
             yield gen.sleep(0.1)
         assert result.result["model"]["done"] == n
 
+    logger.info("setup done")
+
     version1, resources = makeVersion()
     result = yield client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
+
+    logger.info("first version pushed")
 
     # deploy and wait until one is ready
     result = yield client.release_version(env_id, version1, True)
     assert result.code == 200
 
+    logger.info("first version released")
+
     yield waitForResources(version1, 2)
+
+    logger.info("first version, 2 resources deployed")
 
     version2, resources = makeVersion(3)
     result = yield client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
+    logger.info("second version pushed %f", time.time())
+
+    yield gen.sleep(1)
+
+    logger.info("wait to expire load limiting%f", time.time())
+
     # deploy and wait until done
     result = yield client.release_version(env_id, version2, True)
     assert result.code == 200
 
-    yield waitForDone(version2)
+    logger.info("second version released")
+
+    yield waitForDoneWithWaiters(client, env_id, version2)
+
+    logger.info("second version complete")
 
     result = yield client.get_version(env_id, version2)
     assert result.code == 200
@@ -1097,7 +1245,7 @@ def test_cross_agent_deps(io_loop, server, client):
         result = yield client.get_version(env_id, version)
         yield gen.sleep(0.1)
 
-    result = yield waitForDone(client, env_id, version)
+    result = yield waitForDoneWithWaiters(client, env_id, version)
 
     assert result.result["model"]["done"] == len(resources)
 

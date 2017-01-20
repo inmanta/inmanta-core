@@ -19,11 +19,11 @@
 # pylint: disable-msg=W0613
 
 from . import ReferenceStatement
-from inmanta.ast.type import List
+from inmanta.ast.type import List, Dict
 from inmanta.ast.statements import AssignStatement
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance
 from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, AttributeException
+from inmanta.ast import RuntimeException, AttributeException, DuplicateException
 
 
 class CreateList(ReferenceStatement):
@@ -49,6 +49,33 @@ class CreateList(ReferenceStatement):
 
     def __repr__(self):
         return "List()"
+
+
+class CreateDict(ReferenceStatement):
+
+    def __init__(self, items):
+        ReferenceStatement.__init__(self, [x[1] for x in items])
+        self.items = items
+        seen = {}
+        for x, v in items:
+            if x in seen:
+                raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
+            seen[x] = v
+
+    def execute(self, requires, resolver, queue):
+        """
+            Create this list
+        """
+        qlist = Dict()
+
+        for i in range(len(self.items)):
+            key, value = self.items[i]
+            qlist[key] = value.execute(requires, resolver, queue)
+
+        return qlist
+
+    def __repr__(self):
+        return "Dict()"
 
 
 class SetAttribute(AssignStatement):

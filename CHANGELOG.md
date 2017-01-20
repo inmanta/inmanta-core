@@ -1,4 +1,12 @@
-v 2016.4 (2016-08-??)
+v 2016.6 (2017-01-08)
+Mainly a bugfix and stabilisation release. No new features.
+
+v 2016.5 (2016-11-28)
+New release with upgraded server-agent protocol
+- Upgraded server agent protocol
+- New relation syntax
+
+v 2016.4 (2016-09-05)
 New relase of the core platform
 - Various compiler improvements
 - Add list types

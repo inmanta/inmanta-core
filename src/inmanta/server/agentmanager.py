@@ -163,28 +163,35 @@ class AgentManager(object):
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
-            proc = yield AgentProcess(uuid=uuid.uuid4(),
-                                      hostname=nodename,
-                                      environment_id=tid,
-                                      first_seen=now,
-                                      last_seen=now,
-                                      sid=sid).save()
+            proc = yield AgentProcess.get_by_sid(sid)
+            if proc is None:
+                proc = yield AgentProcess(uuid=uuid.uuid4(),
+                                          hostname=nodename,
+                                          environment_id=tid,
+                                          first_seen=now,
+                                          last_seen=now,
+                                          sid=sid).save()
+            else:
+                proc.last_seen = now
+                proc = yield proc.save()
 
             for nh in session.endpoint_names:
-                LOGGER.debug("Seen agent %s on %s", nh, nodename)
+                LOGGER.debug("New session for agent %s on %s", nh, nodename)
                 yield data.AgentInstance(uuid=uuid.uuid4(),
                                          tid=tid,
                                          process=proc,
                                          name=nh).save()
+                # yield session.get_client().set_state(agent=nodename, enabled=False)
             if env is not None:
                 yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
     def expire_session(self, session: Session, now):
         with (yield self.session_lock.acquire()):
-
             tid = session.tid
             sid = session.id
+
+            LOGGER.debug("expiring session %s", sid)
 
             del self.sessions[sid]
 
@@ -193,15 +200,17 @@ class AgentManager(object):
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
             aps = yield AgentProcess.get_by_sid(sid=sid)
+            if aps is None:
+                LOGGER.info("expiring session on none existant process sid:%s", sid)
+            else:
+                aps.expired = now
 
-            aps.expired = now
+                yield aps.save()
 
-            yield aps.save()
-
-            instances = yield AgentInstance.objects.filter(process=aps).find_all()
-            for ai in instances:
-                ai.expired = now
-                yield ai.save()
+                instances = yield AgentInstance.objects.filter(process=aps).find_all()
+                for ai in instances:
+                    ai.expired = now
+                    yield ai.save()
 
             if env is not None:
                 for endpoint in session.endpoint_names:
@@ -222,6 +231,9 @@ class AgentManager(object):
             return
 
         aps = yield AgentProcess.get_by_sid(sid=sid)
+        if aps is None:
+            LOGGER.warning("No process registered for SID %s", sid)
+            return
         aps.last_seen = now
         aps.save()
 
@@ -267,6 +279,7 @@ class AgentManager(object):
     @gen.coroutine
     def clean_db(self):
         with (yield self.session_lock.acquire()):
+            LOGGER.debug("Cleaning server session DB")
             procs = yield AgentProcess.get_live()
 
             for proc in procs:
@@ -446,7 +459,7 @@ class AgentManager(object):
 
         out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
         err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
-        proc = self._fork_inmanta(["-vvv", "--config", config_path, "agent"], out, err)
+        proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "agent"], out, err)
 
         if agent_data["process"] is not None:
             LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)

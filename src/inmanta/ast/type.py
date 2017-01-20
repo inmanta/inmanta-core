@@ -299,6 +299,43 @@ class List(Type, list):
         return "list"
 
 
+class Dict(Type, dict):
+    """
+        This class represents a list type in the configuration model. (instances represent instances)
+    """
+
+    def __init__(self):
+        Type.__init__(self)
+        dict.__init__(self)
+
+    @classmethod
+    def cast(cls, value):
+        """
+            Cast the given value to a string
+
+            :see CastableType#cast
+        """
+        return dict(value)
+
+    @classmethod
+    def validate(cls, value):
+        """
+            Validate the given value to check if it satisfies the constraints
+            associated with this type
+        """
+        if value is None:
+            return True
+
+        if not isinstance(value, dict):
+            raise RuntimeException(None, "Invalid value '%s' expected dict" % value)
+
+        return True
+
+    @classmethod
+    def __str__(cls):
+        return "dict"
+
+
 class ConstraintType(Type):
     """
         A type that is based on Number or String but defines additional constraint on this type.
@@ -374,4 +411,4 @@ def create_function(expression):
 
     return function
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": List}
+TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict}

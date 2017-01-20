@@ -44,6 +44,24 @@ cfg_export = Option("config", "export", "", "The list of exporters to use", is_l
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
+class DependencyCycleException(Exception):
+
+    def __init__(self, start):
+        super().__init__()
+        self.start = start
+        self.cycle = [start]
+        self.running = True
+
+    def addToCycle(self, node):
+        if node == self.start:
+            self.running = False
+        elif self.running:
+            self.cycle.append(node)
+
+    def __str__(self, *args, **kwargs):
+        return "Cycle in dependencies: %s" % self.cycle
+
+
 class Exporter(object):
     """
         This class handles exporting the compiled configuration model
@@ -106,6 +124,8 @@ class Exporter(object):
         """
         entities = resource.get_entity_resources()
         for entity in entities:
+            if entity not in types:
+                continue
             instances = types[entity].get_all_instances()
             if len(instances) > 0:
                 for instance in instances:
@@ -154,6 +174,27 @@ class Exporter(object):
         """
             Validate the graph and if requested by the user, dump it
         """
+        done = set()
+
+        def find_cycle(current, working):
+            if current in done:
+                return
+            if current in working:
+                raise DependencyCycleException(current)
+            working.add(current)
+            for dep in current.requires:
+                try:
+                    find_cycle(dep, working)
+                except DependencyCycleException as e:
+                    e.addToCycle(current)
+                    raise e
+            done.add(current)
+            working.remove(current)
+
+        for res in self._resources.values():
+            if res not in done:
+                find_cycle(res, set())
+
         if self.options and self.options.depgraph:
             dot = "digraph G {\n"
             for res in self._resources.values():
@@ -317,7 +358,7 @@ class Exporter(object):
         return resources
 
     def run_sync(self, function):
-        return self._io_loop.run_sync(function, 60)
+        return self._io_loop.run_sync(function, 300)
 
     def deploy_code(self, tid, version=None):
         """

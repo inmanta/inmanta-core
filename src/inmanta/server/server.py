@@ -49,6 +49,8 @@ from inmanta.server import config as opt
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
 
+DBLIMIT = 100000
+
 
 class Server(protocol.ServerEndpoint):
     """
@@ -91,6 +93,8 @@ class Server(protocol.ServerEndpoint):
                                          fact_back_off=opt.server_fact_resource_block.get())
 
         self.setup_dashboard()
+
+        self.dryrun_lock = locks.Lock()
 
     def new_session(self, sid, tid, endpoint_names, nodename):
         session = protocol.ServerEndpoint.new_session(self, sid, tid, endpoint_names, nodename)
@@ -222,7 +226,7 @@ class Server(protocol.ServerEndpoint):
             else:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id,
                              u.environment.uuid)
-                self.agentmanager._request_parameter(u.environment, u.resource_id)
+                yield self.agentmanager._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 
@@ -643,8 +647,9 @@ class Server(protocol.ServerEndpoint):
         env = yield data.Environment.get_uuid(tid)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
-
-        resv = yield data.ResourceVersion.objects.filter(environment=env, rid=id).find_all()  # @UndefinedVariable
+        # @UndefinedVariable
+        resv = yield (data.ResourceVersion.objects.filter(environment=env, rid=id)
+                      .limit(DBLIMIT).find_all())
         if len(resv) == 0:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
@@ -656,7 +661,9 @@ class Server(protocol.ServerEndpoint):
 
         action_list = []
         if bool(logs):
-            actions = yield data.ResourceAction.objects.filter(resource_version=resv[0]).find_all()  # @UndefinedVariable
+            # @UndefinedVariable
+            actions = yield (data.ResourceAction.objects.filter(resource_version=resv[0])
+                             .limit(DBLIMIT).find_all())
             for action in actions:
                 action_list.append(action.to_dict())
 
@@ -687,12 +694,14 @@ class Server(protocol.ServerEndpoint):
             cm = versions[0]
 
         deploy_model = []
-        resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).find_all()  # @UndefinedVariable
+        # @UndefinedVariable
+        resources = yield data.ResourceVersion.objects.filter(environment=env, model=cm).limit(DBLIMIT).find_all()
 
         for rv in resources:
-            yield rv.load_references()
-            if rv.resource.agent == agent:
-                deploy_model.append(rv.to_dict())
+            rv_dict = rv.to_dict()
+
+            if rv_dict["id_fields"]["agent_name"] == agent:
+                deploy_model.append(rv_dict)
                 ra = data.ResourceAction(resource_version=rv, action="pull", level="INFO", timestamp=datetime.datetime.now(),
                                          message="Resource version pulled by client for agent %s state" % agent)
                 yield ra.save()
@@ -740,7 +749,7 @@ class Server(protocol.ServerEndpoint):
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.ResourceVersion.objects.filter(model=version).find_all()  # @UndefinedVariable
+        resources = yield data.ResourceVersion.objects.filter(model=version).limit(DBLIMIT).find_all()  # @UndefinedVariable
 
         version_dict = yield version.to_dict()
         d = {"model": version_dict}
@@ -949,9 +958,8 @@ class Server(protocol.ServerEndpoint):
             rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
             agents = set()
             for rv in rvs:
-                yield rv.load_references()
-                yield rv.resource.load_references()
-                agents.add(rv.resource.agent)
+                rv_dict = rv.to_dict()
+                agents.add(rv_dict["id_fields"]["agent_name"])
 
             yield self.agentmanager._ensure_agents(str(tid), agents)
 
@@ -983,15 +991,15 @@ class Server(protocol.ServerEndpoint):
         dryrun = data.DryRun(uuid=dryrun_id, environment=env, model=model, date=datetime.datetime.now(), resources={})
 
         # fetch all resource in this cm and create a list of distinct agents
-        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).find_all()  # @UndefinedVariable
+        # @UndefinedVariable
+        rvs = yield data.ResourceVersion.objects.filter(model=model, environment=env).limit(DBLIMIT).find_all()
         dryrun.resource_total = len(rvs)
         dryrun.resource_todo = dryrun.resource_total
 
         agents = set()
         for rv in rvs:
-            yield rv.load_references()
-            yield rv.resource.load_references()
-            agents.add(rv.resource.agent)
+            rv_dict = rv.to_dict()
+            agents.add(rv_dict["id_fields"]["agent_name"])
 
         yield self.agentmanager._ensure_agents(str(tid), agents)
 
@@ -1056,21 +1064,22 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        dryrun = yield data.DryRun.get_uuid(id)
-        if dryrun is None:
-            return 404, {"message": "The given dryrun does not exist!"}
+        with (yield self.dryrun_lock.acquire()):
+            dryrun = yield data.DryRun.get_uuid(id)
+            if dryrun is None:
+                return 404, {"message": "The given dryrun does not exist!"}
 
-        if resource in dryrun.resources:
-            return 500, {"message": "A dryrun was already stored for this resource."}
+            if resource in dryrun.resources:
+                return 500, {"message": "A dryrun was already stored for this resource."}
 
-        payload = {"changes": changes,
-                   "log": log_msg,
-                   "id_fields": Id.parse_id(resource).to_dict()
-                   }
+            payload = {"changes": changes,
+                       "log": log_msg,
+                       "id_fields": Id.parse_id(resource).to_dict()
+                       }
 
-        dryrun.resources[resource] = payload
-        dryrun.resource_todo -= 1
-        yield dryrun.save()
+            dryrun.resources[resource] = payload
+            dryrun.resource_todo -= 1
+            yield dryrun.save()
 
         return 200
 

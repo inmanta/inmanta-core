@@ -55,7 +55,7 @@ Pushing config to the machine
 To install config::
 
     #put a file on the machine
-    std::ConfigFile(hosts = host1, path="/tmp/test", content="I did it!")
+    std::ConfigFile(host = host1, path="/tmp/test", content="I did it!")
 
 
 Actual usage

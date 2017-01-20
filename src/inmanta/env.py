@@ -57,11 +57,13 @@ class VirtualEnv(object):
         python_bin = os.path.join(self.env_path, "bin", python_name)
 
         if not os.path.exists(python_bin):
-            virtualenv_path = os.path.join(os.path.dirname(python_exec), "virtualenv")
-            if not os.path.exists(virtualenv_path):
-                raise Exception("Unable to find virtualenv script (%s does not exist)" % virtualenv_path)
+            venv_call = [python_exec, "-m", "virtualenv"]
+            try:
+                subprocess.check_call(venv_call + ["--version"])
+            except subprocess.CalledProcessError:
+                raise Exception("Virtualenv not installed for python %s" % python_exec)
 
-            proc = subprocess.Popen([virtualenv_path, "-p", python_exec, self.env_path], env=os.environ.copy(),
+            proc = subprocess.Popen(venv_call + ["-p", python_exec, self.env_path], env=os.environ.copy(),
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, err = proc.communicate()
 

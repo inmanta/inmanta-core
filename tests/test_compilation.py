@@ -36,6 +36,7 @@ from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
 import pytest
 from inmanta.execute.util import Unknown
+from inmanta.export import DependencyCycleException
 
 
 class CompilerBaseTest(object):
@@ -55,7 +56,7 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-class SnippetTests(unittest.TestCase):
+class AbstractSnippetTest(object):
     libs = None
     env = None
 
@@ -91,8 +92,28 @@ class SnippetTests(unittest.TestCase):
 
         Project.set(Project(self.project_dir))
 
+    def do_export(self):
+        config.Config.load_config()
+        from inmanta.export import Exporter
+
+        (types, scopes) = compiler.do_compile()
+
+        class Options(object):
+            pass
+        options = Options()
+        options.json = True
+        options.depgraph = False
+        options.deploy = False
+        options.ssl = False
+
+        export = Exporter(options=options)
+        return export.run(types, scopes)
+
     def xtearDown(self):
         shutil.rmtree(self.project_dir)
+
+
+class SnippetTests(AbstractSnippetTest, unittest.TestCase):
 
     def testIssue92(self):
         self.setUpForSnippet("""
@@ -508,6 +529,81 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         for lf in types["__config__::LogFile"].get_all_instances():
             assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
+    def testDict(self):
+        self.setUpForSnippet("""
+a = "a"
+b = { "a" : a, "b" : "b", "c" : 3}
+""")
+
+        (_, root) = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+        b = scope.lookup("b").get_value()
+        assert b["a"] == "a"
+        assert b["b"] == "b"
+        assert b["c"] == 3
+
+    def testDictCollide(self):
+        self.setUpForSnippet("""
+a = "a"
+b = { "a" : a, "a" : "b", "c" : 3}
+""")
+
+        with pytest.raises(DuplicateException):
+            compiler.do_compile()
+
+    def testDictAttr(self):
+        self.setUpForSnippet("""
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar={})
+b=Foo(bar={"a":z})
+c=Foo(bar={}, blah={"z":"y"})
+z=5
+""")
+
+        (_, root) = compiler.do_compile()
+
+        scope = root.get_child("__config__").scope
+
+        def mapAssert(in_dict, expected):
+            for (ek, ev), (k, v) in zip(expected.items(), in_dict.items()):
+                assert ek == k
+                assert ev == v
+
+        def validate(var, bar, foo, blah):
+            e = scope.lookup(var).get_value()
+            mapAssert(e.get_attribute("bar").get_value(), bar)
+            mapAssert(e.get_attribute("foo").get_value(), foo)
+            mapAssert(e.get_attribute("blah").get_value(), blah)
+
+        validate("a", {}, {}, {"a": "a"})
+        validate("b", {"a": 5}, {}, {"a": "a"})
+
+        validate("c", {}, {}, {"z": "y"})
+
+    def testDictAttrTypeError(self):
+        self.setUpForSnippet("""
+entity Foo:
+  dict bar
+  dict foo = {}
+  dict blah = {"a":"a"}
+end
+
+implement Foo using std::none
+
+a=Foo(bar=b)
+b=Foo(bar={"a":"A"})
+""")
+        with pytest.raises(RuntimeException):
+            compiler.do_compile()
+
     def testListAtributes(self):
         self.setUpForSnippet("""
 entity Jos:
@@ -777,6 +873,26 @@ Test1(a=3)
 """)
         with pytest.raises(AttributeException):
             compiler.do_compile()
+
+    def testIssue220DepLoops(self):
+        self.setUpForSnippet("""
+import std
+
+host = std::Host(name="Test", os=std::unix)
+f1 = std::ConfigFile(host=host, path="/f1", content="")
+f2 = std::ConfigFile(host=host, path="/f2", content="")
+f3 = std::ConfigFile(host=host, path="/f3", content="")
+f4 = std::ConfigFile(host=host, path="/f4", content="")
+f1.requires = f2
+f2.requires = f3
+f3.requires = f1
+f4.requires = f1
+""")
+        with pytest.raises(DependencyCycleException) as e:
+            self.do_export()
+
+        cyclenames = [r.id.resource_str() for r in e.value.cycle]
+        assert set(cyclenames) == set(['std::File[Test,path=/f3]', 'std::File[Test,path=/f2]', 'std::File[Test,path=/f1]'])
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):

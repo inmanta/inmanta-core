@@ -80,7 +80,7 @@ def server(io_loop, mongo_db, mongo_client):
     config.Config.set("client_rest_transport", "port", PORT)
     config.Config.set("cmdline_rest_transport", "port", PORT)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
-    config.Config.set("server", "agent-timeout", "4")
+    config.Config.set("server", "agent-timeout", "10")
 
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
     server.start()

@@ -65,8 +65,8 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"agents": status_list}
 
-    def expire(self, session):
-        protocol.ServerEndpoint.expire(self, session)
+    def expire(self, session, timeout):
+        protocol.ServerEndpoint.expire(self, session, timeout)
         print(session._sid)
         self.expires += 1
 

@@ -506,6 +506,7 @@ class RESTTransport(Transport):
     def return_error_msg(self, status=500, msg="", headers={}):
         body = {"message": msg}
         headers["Content-Type"] = "application/json"
+        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
         return body, headers, status
 
     @gen.coroutine
@@ -593,6 +594,7 @@ class RESTTransport(Transport):
             method_call = getattr(config[1][0], config[1][1])
 
             result = yield method_call(**message)
+
             if result is None:
                 raise Exception("Handlers for method calls should at least return a status code. %s on %s" % config[1])
 
@@ -974,18 +976,6 @@ class Endpoint(object):
     node_name = property(get_node_name)
 
 
-def _set_timeout(io_loop, future_list, future_key, future, timeout, log_message):
-    def on_timeout():
-        LOGGER.warning(log_message)
-        future.set_exception(gen.TimeoutError())
-
-    timeout_handle = io_loop.add_timeout(io_loop.time() + timeout, on_timeout)
-    future.add_done_callback(lambda _: io_loop.remove_timeout(timeout_handle))
-
-    if future_key in future_list:
-        del future_list[future_key]
-
-
 class Session(object):
     """
         An environment that segments agents connected to the server
@@ -997,6 +987,8 @@ class Session(object):
         self._timeout = timout
         self._sessionstore = sessionstore
         self._seen = time.time()
+        self._callhandle = None
+        self.expired = False
 
         self.tid = tid
         self.endpoint_names = endpoint_names
@@ -1011,11 +1003,13 @@ class Session(object):
         self.client = ReturnClient(str(sid), self)
 
     def check_expire(self):
+        if self.expired:
+            LOGGER.exception("Tried to expire session already expired")
         ttw = self._timeout + self._seen - time.time()
         if ttw < 0:
             self.expire(self._seen - time.time())
         else:
-            self._io_loop.call_later(ttw, self.check_expire)
+            self._callhandle = self._io_loop.call_later(ttw, self.check_expire)
 
     def get_id(self):
         return self._sid
@@ -1023,21 +1017,35 @@ class Session(object):
     id = property(get_id)
 
     def expire(self, timeout):
+        self.expired = True
+        if self._callhandle is not None:
+            self._io_loop.remove_timeout(self._callhandle)
         self._sessionstore.expire(self, timeout)
 
     def seen(self):
         self._seen = time.time()
 
+    def _set_timeout(self, future, timeout, log_message):
+        def on_timeout():
+            if not self.expired:
+                LOGGER.warning(log_message)
+            future.set_exception(gen.TimeoutError())
+
+        timeout_handle = self._io_loop.add_timeout(self._io_loop.time() + timeout, on_timeout)
+        future.add_done_callback(lambda _: self._io_loop.remove_timeout(timeout_handle))
+
     def put_call(self, call_spec, timeout=10):
         future = tornado.concurrent.Future()
 
-        LOGGER.debug("Putting call %s %s for agent %s in queue", call_spec["method"], call_spec["url"], self._sid)
+        id = uuid.uuid4()
+
+        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", id, call_spec["method"], call_spec["url"], self._sid)
 
         q = self._queue
-        call_spec["reply_id"] = uuid.uuid4()
+        call_spec["reply_id"] = id
         q.put(call_spec)
-        _set_timeout(self._io_loop, self._replies, call_spec["reply_id"], future, timeout,
-                     "Call %s %s for agent %s timed out." % (call_spec["method"], call_spec["url"], self._sid))
+        self._set_timeout(future, timeout,
+                          "Call %s: %s %s for agent %s timed out." % (id, call_spec["method"], call_spec["url"], self._sid))
         self._replies[call_spec["reply_id"]] = future
 
         return future
@@ -1063,11 +1071,14 @@ class Session(object):
             return None
 
     def set_reply(self, reply_id, data):
+        LOGGER.log(3, "Received Reply: %s", reply_id)
         if reply_id in self._replies:
             future = self._replies[reply_id]
             del self._replies[reply_id]
             if not future.done():
                 future.set_result(data)
+        else:
+            LOGGER.debug("Received Reply that is unknown: %s", reply_id)
 
     def get_client(self):
         return self.client
@@ -1112,6 +1123,9 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         if self._transport_instance is not None:
             self._transport_instance.stop_endpoint()
             LOGGER.debug("Stopped %s", self._transport_instance)
+        # terminate all sessions cleanly
+        for session in self._sessions.copy().values():
+            session.expire(0)
 
     def validate_sid(self, sid):
         if isinstance(sid, str):
@@ -1228,6 +1242,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
         assert self._env_id is not None
+        LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
         self._io_loop.add_callback(self.perform_heartbeat)
 
@@ -1235,65 +1250,80 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         self.running = False
 
     @gen.coroutine
+    def on_reconnect(self):
+        pass
+
+    @gen.coroutine
     def perform_heartbeat(self):
         """
             Start a continuous heartbeat call
         """
+        connected = False
         while self.running:
+            LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
             result = yield self._client.heartbeat(sid=str(self.sessionid),
                                                   tid=str(self._env_id),
                                                   endpoint_names=self.end_point_names,
                                                   nodename=self.node_name)
+            LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
             if result.code == 200:
+                if not connected:
+                    connected = True
+                    self.add_future(self.on_reconnect())
                 if result.result is not None:
                     if "method_calls" in result.result:
                         method_calls = result.result["method_calls"]
                         transport = self._transport(self)
 
                         for method_call in method_calls:
-                            LOGGER.debug("Received call through heartbeat: %s %s", method_call["method"], method_call["url"])
-                            kwargs, config = transport.match_call(method_call["url"], method_call["method"])
-
-                            if config is None:
-                                msg = "An error occurred during heartbeat method call (%s %s): %s" % (
-                                    method_call["method"], method_call["url"], "No such method")
-                                LOGGER.error(msg)
-                                self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
-                                                             {"result": msg, "code": 500})
-
-                            body = {}
-                            if "body" in method_call and method_call["body"] is not None:
-                                body = method_call["body"]
-
-                            query_string = urllib.parse.urlparse(method_call["url"]).query
-                            for key, value in urllib.parse.parse_qs(query_string, keep_blank_values=True):
-                                if len(value) == 1:
-                                    body[key] = value[0].decode("latin-1")
-                                else:
-                                    body[key] = [v.decode("latin-1") for v in value]
-
-                            call_result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body,
-                                                                              method_call["headers"])
-
-                            def submit_result(future):
-                                if future is None:
-                                    return
-
-                                result_body, _, status = future.result()
-                                if status == 500:
-                                    msg = ""
-                                    if result_body is not None and "message" in result_body:
-                                        msg = result_body["message"]
-                                    LOGGER.error("An error occurred during heartbeat method call (%s %s): %s",
-                                                 method_call["method"], method_call["url"], msg)
-                                self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
-                                                             {"result": result_body, "code": status})
-
-                            self._io_loop.add_future(call_result, submit_result)
+                            self.dispatch_method(transport, method_call)
             else:
                 LOGGER.warning("Heartbeat failed with status %d and message: %s, going to sleep for %d s",
                                result.code, result.result, self.reconnect_delay)
+                connected = False
                 yield gen.sleep(self.reconnect_delay)
+
+    def dispatch_method(self, transport, method_call):
+        LOGGER.debug("Received call through heartbeat: %s %s %s", method_call[
+                     "reply_id"], method_call["method"], method_call["url"])
+        kwargs, config = transport.match_call(method_call["url"], method_call["method"])
+
+        if config is None:
+            msg = "An error occurred during heartbeat method call (%s %s %s): %s" % (
+                method_call["reply_id"], method_call["method"], method_call["url"], "No such method")
+            LOGGER.error(msg)
+            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
+                                                         {"result": msg, "code": 500}))
+
+        body = {}
+        if "body" in method_call and method_call["body"] is not None:
+            body = method_call["body"]
+
+        query_string = urllib.parse.urlparse(method_call["url"]).query
+        for key, value in urllib.parse.parse_qs(query_string, keep_blank_values=True):
+            if len(value) == 1:
+                body[key] = value[0].decode("latin-1")
+            else:
+                body[key] = [v.decode("latin-1") for v in value]
+
+        call_result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body,
+                                                          method_call["headers"])
+
+        def submit_result(future):
+            if future is None:
+                return
+
+            result_body, _, status = future.result()
+            if status == 500:
+                msg = ""
+                if result_body is not None and "message" in result_body:
+                    msg = result_body["message"]
+                LOGGER.error("An error occurred during heartbeat method call (%s %s %s): %s",
+                             method_call["reply_id"], method_call["method"], method_call["url"], msg)
+            self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
+                                         {"result": result_body, "code": status})
+
+        self._io_loop.add_future(call_result, submit_result)
 
 
 class ClientMeta(type):
@@ -1401,6 +1431,6 @@ class ReturnClient(Client, metaclass=ClientMeta):
         try:
             return_value = yield self.session.put_call(call_spec, timeout=timeout)
         except gen.TimeoutError:
-            return Result(code=500, result="")
+            return Result(code=500, result="Call timed out")
 
         return Result(code=return_value["code"], result=return_value["result"])

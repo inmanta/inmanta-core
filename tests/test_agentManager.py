@@ -43,7 +43,7 @@ class Collector():
 
 
 @gen.coroutine
-def emptyFuture(*args):
+def emptyFuture(*args, **kwargs):
     pass
 
 

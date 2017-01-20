@@ -146,11 +146,11 @@ server_no_recompile = \
 #############################
 
 dash_enable = \
-    Option("dashboard", "enabled", False,
+    Option("dashboard", "enabled", True,
            "Determines whether the server should host the dashboard or not", is_bool)
 
 dash_path = \
-    Option("dashboard", "path", None,
+    Option("dashboard", "path", "/usr/share/inmanta/dashboard",
            "The path on the local file system where the dashboard can be found")
 
 agent_timeout = \
