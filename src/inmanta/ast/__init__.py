@@ -253,17 +253,6 @@ class CompilerException(Exception):
             self.location = location
 
 
-class TypeNotFoundException(CompilerException):
-
-    def __init__(self, type, ns):
-        CompilerException.__init__(self)
-        self.type = type
-        self.ns = ns
-
-    def __str__(self, *args, **kwargs):
-        return "could not find type %s in namespace %s (%s)" % (self.type, self.ns, self.location)
-
-
 class RuntimeException(CompilerException):
 
     def __init__(self, stmt, msg, root_cause_chance=10):
@@ -280,64 +269,89 @@ class RuntimeException(CompilerException):
         self.stmt = stmt
 
     def __str__(self, *args, **kwargs):
-        return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
+        if self.stmt is None and self.location is None:
+            return self.msg
+        else:
+            return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
 
     def __le__(self, other):
         return self.root_cause_chance < other.root_cause_chance
 
 
+class TypeNotFoundException(RuntimeException):
+
+    def __init__(self, type, ns):
+        RuntimeException.__init__(self, stmt=None, msg="could not find type %s in namespace %s" % (type, ns))
+        self.type = type
+        self.ns = ns
+
+
+def stringifyException(exn: Exception):
+    if isinstance(exn, CompilerException):
+        return str(exn)
+    return "%s: %s" % (exn.__class__.__name__, str(exn))
+
+
+class WrappingRuntimeException(RuntimeException):
+
+    def __init__(self, stmt, msg, cause):
+        if stmt is None:
+            if isinstance(cause, RuntimeException):
+                stmt = cause.stmt
+        longmsg = "%s caused by %s" % (msg, stringifyException(cause))
+        RuntimeException.__init__(self, stmt=stmt, msg=longmsg)
+        self.__cause__ = cause
+
+
+class AttributeException(WrappingRuntimeException):
+
+    def __init__(self, stmt, entity, attribute, cause):
+        WrappingRuntimeException.__init__(
+            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(entity)), cause=cause)
+        self.attribute = attribute
+        self.entity = entity
+
+
 class OptionalValueException(RuntimeException):
+
+    def __init__(self, instance, attribute):
+        RuntimeException.__init__(self, None, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute))
+        self.instance = instance
+        self.attribute = attribute
+
+
+class TypingException(RuntimeException):
     pass
-
-
-class TypingException(CompilerException):
-
-    def __init__(self, stmt, msg):
-        CompilerException.__init__(self)
-        self.set_location(stmt.location)
-        self.msg = msg
-        self.stmt = stmt
-
-    def __str__(self, *args, **kwargs):
-        return "%s (reported in type: %s) (%s)" % (self.msg, self.stmt, self.location)
 
 
 class ModuleNotFoundException(RuntimeException):
 
     def __init__(self, name, stmt, msg=None):
+        if msg is None:
+            msg = "could not find module %s" % name
         RuntimeException.__init__(self, stmt, msg)
         self.name = name
-
-    def __str__(self, *args, **kwargs):
-        if self.msg is not None:
-            return " %s (reported at (%s))" % (self.msg, self.location)
-        return "could not find module %s (reported at (%s))" % (self.name, self.location)
 
 
 class NotFoundException(RuntimeException):
 
     def __init__(self, stmt, name, msg=None):
+        if msg is None:
+            msg = "could not find value %s" % name
         RuntimeException.__init__(self, stmt, msg)
         self.name = name
-
-    def __str__(self, *args, **kwargs):
-        if self.msg is not None:
-            return " %s (reported at (%s))" % (self.msg, self.location)
-        return "could not find value %s (reported at (%s))" % (self.name, self.location)
 
 
 class DoubleSetException(RuntimeException):
 
     def __init__(self, stmt, value, location, newvalue, newlocation):
-        RuntimeException.__init__(self, stmt, None)
         self.value = value
         self.location = location
         self.newvalue = newvalue
         self.newlocation = newlocation
-
-    def __str__(self, *args, **kwargs):
-        return ("Value set twice: old value: %s (set at (%s)), new value: %s (set at (%s)) (reported at (%s))"
-                % (self.value, self.location, self.newvalue, self.newlocation, self.location))
+        msg = ("Value set twice: old value: %s (set at (%s)), new value: %s (set at (%s))"
+               % (self.value, self.location, self.newvalue, self.newlocation))
+        RuntimeException.__init__(self, stmt, msg)
 
 
 class DuplicateException(TypingException):

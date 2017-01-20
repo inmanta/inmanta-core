@@ -29,7 +29,8 @@ from io import StringIO
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DoubleSetException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
@@ -862,6 +863,17 @@ std::print(t1.tests)
 
         assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
 
+    def testIssue170AttributeException(self):
+        self.setUpForSnippet("""
+entity Test1:
+    string a
+end
+
+Test1(a=3)
+""")
+        with pytest.raises(AttributeException):
+            compiler.do_compile()
+
     def testIssue220DepLoops(self):
         self.setUpForSnippet("""
 import std
@@ -958,7 +970,7 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
     def test_compile(self):
-        with pytest.raises(DoubleSetException):
+        with pytest.raises(AttributeException):
             compiler.do_compile()
 
 

@@ -107,7 +107,7 @@ class DefineEntity(TypeDefinitionStatement):
                 entity_type.parent_entities.add(parent_type)
                 parent_type.child_entities.add(entity_type)
         except TypeNotFoundException as e:
-            e.set_location(self.location)
+            e.set_statement(self)
             raise e
 
 
@@ -191,7 +191,7 @@ class DefineImplement(DefinitionStatement):
 
             entity_type.add_implement(implement)
         except TypeNotFoundException as e:
-            e.set_location(self.location)
+            e.set_statement(self)
             raise e
 
 
