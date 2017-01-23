@@ -17,6 +17,16 @@
 """
 
 
+"""
+This module enables tracking of object construction.
+
+Tracker object are attached to all created Instances in the field trackers. Every Instance can have one or more Trackers.
+
+If the Tracker object is a ModuleTracker, the object is created at module level
+If the Tracker object is an ImplementsTracker, the object is created in an Implementation block
+
+"""
+
 class Tracker(object):
 
     pass
