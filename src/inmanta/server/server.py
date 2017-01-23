@@ -209,7 +209,7 @@ class Server(protocol.ServerEndpoint):
                 yield param.delete()
             else:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
-                             param.environment.id)
+                             param.environment)
                 yield self.agentmanager._request_parameter(param.environment, param.resource_id)
 
         unknown_parameters = yield data.UnknownParameter.get_list(resolved=False)
@@ -241,7 +241,7 @@ class Server(protocol.ServerEndpoint):
         # check if it was expired
         now = datetime.datetime.now()
         if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
-            return 200, {"parameter": params[0].to_dict()}
+            return 200, {"parameter": params[0]}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
         out = yield self.agentmanager._request_parameter(tid, resource_id)
@@ -300,7 +300,7 @@ class Server(protocol.ServerEndpoint):
 
         params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
-        return 200, {"parameter": params[0].to_dict()}
+        return 200, {"parameter": params[0]}
 
     @protocol.handle(methods.ParametersMethod.set_parameters)
     @gen.coroutine
@@ -333,7 +333,7 @@ class Server(protocol.ServerEndpoint):
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        m_query = {"environment": env}
+        m_query = {"environment": tid}
         for k, v in query.items():
             m_query["metadata." + k] = v
 

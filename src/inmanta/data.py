@@ -258,7 +258,8 @@ class BaseDocument(object):
         """
             Insert multiple objects at once
         """
-        yield cls._coll.insert_many((d.to_mongo() for d in documents))
+        if len(documents) > 0:
+            yield cls._coll.insert_many((d.to_mongo() for d in documents))
 
     @gen.coroutine
     def update(self, **kwargs):
