@@ -22,6 +22,7 @@ from . import GeneratorStatement
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext
 from inmanta.ast import RuntimeException, TypingException, NotFoundException
+from inmanta.execute.tracking import ImplementsTracker
 
 
 class SubConstructor(GeneratorStatement):
@@ -55,16 +56,18 @@ class SubConstructor(GeneratorStatement):
         if not expr.execute(requires, instance, queue):
             return
 
+        myqueue = queue.for_tracker(ImplementsTracker(self, instance))
+
         implementations = self.implements.implementations
 
         for impl in implementations:
             if instance.add_implementation(impl):
                 # generate a subscope/namespace for each loop
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
-                xc.emit(queue)
+                xc.emit(myqueue)
 
     def __repr__(self):
-        return "EntityImplement(%s)" % self.type
+        return "SubConstructor(%s)" % self.type
 
 
 class For(GeneratorStatement):
@@ -220,6 +223,8 @@ class Constructor(GeneratorStatement):
 
         if self.register:
             raise "don't know this feature"
+
+        object_instance.trackers.append(queue.get_tracker())
 
         return object_instance
 

@@ -287,12 +287,13 @@ class QueueScheduler(object):
         Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
     """
 
-    def __init__(self, compiler, runqueue, waitqueue, types, allwaiters):
+    def __init__(self, compiler, runqueue, waitqueue, types, allwaiters, tracer=None):
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
         self.allwaiters = allwaiters
+        self.tracker = tracer
 
     def add_running(self, item: "Waiter"):
         return self.runqueue.append(item)
@@ -308,6 +309,12 @@ class QueueScheduler(object):
 
     def add_to_all(self, item):
         self.allwaiters.append(item)
+
+    def get_tracker(self):
+        return self.tracker
+
+    def for_tracker(self, tracer):
+        return QueueScheduler(self.compiler, self.runqueue, self.waitqueue, self.types, self.allwaiters, tracer)
 
 
 class Waiter(object):
@@ -514,6 +521,9 @@ class Instance(ExecutionContext):
         self.slots["self"].set_value(self, None)
         self.sid = id(self)
         self.implemenations = set()
+
+        # see inmanta.ast.execute.scheduler.QueueScheduler
+        self.trackers = []
 
     def get_type(self):
         return self.type
