@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+
 import logging
 
 import pytest
@@ -23,14 +24,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_param(server):
-    """
-        Test creating and updating forms
-    """
+@pytest.mark.slowtest
+def test_compile_report(server):
     from inmanta import protocol
 
     client = protocol.Client("client")
-
     result = yield client.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
@@ -38,5 +36,14 @@ def test_param(server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    result = yield client.list_params(tid=env_id)
+    result = yield client.notify_change(id=env_id)
     assert(result.code == 200)
+
+    while True:
+        result = yield client.get_reports(environment=env_id)
+        assert(result.code == 200)
+        if len(result.result["reports"]) > 0:
+            break
+
+    report = result.result["reports"][0]
+    assert(len(report["reports"]) == 1)

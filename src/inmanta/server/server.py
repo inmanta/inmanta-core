@@ -631,9 +631,9 @@ class Server(protocol.ServerEndpoint):
         if bool(logs):
             actions = yield data.ResourceAction.get_list(resource_version_id=resource_id)
             for action in actions:
-                action_list.append(action.to_dict())
+                action_list.append(action)
 
-        return 200, {"resource": resv.to_dict(), "logs": action_list}
+        return 200, {"resource": resv, "logs": action_list}
 
     @protocol.handle(methods.ResourceMethod.get_resources_for_agent)
     @gen.coroutine
@@ -1291,14 +1291,14 @@ class Server(protocol.ServerEndpoint):
         finally:
             end = datetime.datetime.now()
             self._recompiles[environment_id] = end
-            stage_ids = []
-            for stage in stages:
-                yield stage.insert()
-                stage_ids.append(stage.id)
 
-            comp = data.Compile(environment=environment_id, started=requested, completed=end,
-                                reports=stage_ids)
+            comp = data.Compile(environment=environment_id, started=requested, completed=end)
             yield comp.insert()
+
+            for stage in stages:
+                stage.compile = comp.id
+
+            data.Report.insert_many(stages)
 
     @protocol.handle(methods.CompileReport.get_reports)
     @gen.coroutine
@@ -1314,7 +1314,7 @@ class Server(protocol.ServerEndpoint):
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
 
-            queryparts["environment"] = env
+            queryparts["environment"] = env.id
 
         if start is not None:
             queryparts["started"] = {"$gt": dateutil.parser.parse(start)}
@@ -1322,25 +1322,9 @@ class Server(protocol.ServerEndpoint):
         if end is not None:
             queryparts["started"] = {"$lt": dateutil.parser.parse(end)}
 
-        if limit is not None and end is not None:
-            cursor = data.Compile._coll.find(**queryparts).sort("started").limit(int(limit))
-            models = []
-            while (yield cursor.fetch_next):
-                models.append(data.Compile(from_mongo=True, **cursor.next_object()))
+        models = yield data.Compile.get_reports(queryparts, limit, start, end)
 
-            models.reverse()
-        else:
-            cursor = data.Compile._coll.find(**queryparts).sort("started", pymongo.DESCENDING).limit(int(limit))
-            models = []
-            while (yield cursor.fetch_next):
-                models.append(data.Compile(from_mongo=True, **cursor.next_object()))
-
-        reports = []
-        for m in models:
-            report_dict = yield m.to_dict()
-            reports.append(report_dict)
-
-        return 200, {"reports": reports}
+        return 200, {"reports": models}
 
     @protocol.handle(methods.Snapshot.list_snapshots)
     @gen.coroutine

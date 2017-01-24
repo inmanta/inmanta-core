@@ -584,7 +584,8 @@ class Report(BaseDocument):
     errstream = Field(field_type=str, default="")
     outstream = Field(field_type=str, default="")
     returncode = Field(field_type=int)
-    # compile = ReferenceField(reference_document_type="inmanta.data.Compile")
+
+    compile = Field(field_type=uuid.UUID)
 
 
 class Compile(BaseDocument):
@@ -599,21 +600,39 @@ class Compile(BaseDocument):
     environment = Field(field_type=uuid.UUID, required=True)
     started = Field(field_type=datetime.datetime)
     completed = Field(field_type=datetime.datetime)
-    reports = Field(field_type=list)  # Report UUID
 
-#     def to_dict(self, mongo_pk=False):
-#         # TODO: let report reference to this compile so this can be done in one query
-#         result = BaseDocument.to_dict(self, mongo_pk)
-#
-#         if not mongo_pk:
-#             reports = []
-#             for report_id in result["reports"]:
-#                 report = yield Report.get_by_id(report_id)
-#                 reports.append(report.to_dict())
-#
-#             result["reports"] = reports
-#
-#         return result
+    @classmethod
+    @gen.coroutine
+    def get_reports(cls, queryparts, limit, start, end):
+        if limit is not None and end is not None:
+            cursor = Compile._coll.find(queryparts).sort("started").limit(int(limit))
+            models = []
+            while (yield cursor.fetch_next):
+                models.append(cls(from_mongo=True, **cursor.next_object()))
+
+            models.reverse()
+        else:
+            cursor = Compile._coll.find(queryparts).sort("started", pymongo.DESCENDING)
+            if limit is not None:
+                cursor = cursor.limit(int(limit))
+            models = []
+            while (yield cursor.fetch_next):
+                models.append(cls(from_mongo=True, **cursor.next_object()))
+
+        # load the report stages
+        result = []
+        for model in models:
+            dict_model = model.to_dict()
+            cursor = Report._coll.find({"compile": model.id})
+
+            dict_model["reports"] = []
+            while (yield cursor.fetch_next):
+                obj = Report(from_mongo=True, **cursor.next_object())
+                dict_model["reports"].append(obj.to_dict())
+
+            result.append(dict_model)
+
+        return result
 
 
 class Form(BaseDocument):
@@ -770,6 +789,10 @@ class Resource(BaseDocument):
                 deployed = latest
 
             result.append({"resource_id": res,
+                           "resource_type": latest["resource_type"],
+                           "agent": latest["agent"],
+                           "id_attribute_name": latest["id_attribute_name"],
+                           "id_attribute_value": latest["id_attribute_value"],
                            "latest_version": latest["model"],
                            "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
                            "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
@@ -802,7 +825,8 @@ class Resource(BaseDocument):
             Get a resource with the given resource version id
         """
         value = yield cls._coll.find_one({"environment": environment, "resource_version_id": resource_version_id})
-        return cls(from_mongo=True, **value)
+        if value is not None:
+            return cls(from_mongo=True, **value)
 
     @classmethod
     @gen.coroutine
