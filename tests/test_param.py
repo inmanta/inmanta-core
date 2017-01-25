@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import logging
+import uuid
 
 import pytest
 
@@ -27,5 +28,9 @@ def test_param(client, environment):
     """
         Test creating and updating forms
     """
+    fake_uuid = uuid.uuid4()
+    result = yield client.list_params(tid=fake_uuid)
+    assert(result.code == 404)
+
     result = yield client.list_params(tid=environment)
     assert(result.code == 200)

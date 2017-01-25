@@ -109,6 +109,9 @@ def test_records(client, environment):
     result = yield client.update_record(tid=environment, id=record_id, form={"field1": 20, "field2": "value2"})
     assert(result.code == 200)
 
+    result = yield client.get_record(tid=environment, id=record_id)
+    assert(result.code == 200)
+
     result = yield client.list_records(tid=environment, form_type=form_id)
     assert(result.code == 200)
     assert(len(result.result["records"]) == 1)
