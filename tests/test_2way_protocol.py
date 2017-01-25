@@ -19,6 +19,7 @@
 import logging
 import sys
 import uuid
+import random
 
 import colorlog
 from inmanta import methods
@@ -111,8 +112,15 @@ def test_2way_protocol(logs=False):
         logging.root.addHandler(stream)
         logging.root.setLevel(logging.DEBUG)
 
-    io_loop = IOLoop.current()
+    PORT = str(random.randint(30000, 60000))
     Config.load_config()
+    Config.set("server_rest_transport", "port", PORT)
+    Config.set("agent_rest_transport", "port", PORT)
+    Config.set("compiler_rest_transport", "port", PORT)
+    Config.set("client_rest_transport", "port", PORT)
+    Config.set("cmdline_rest_transport", "port", PORT)
+
+    io_loop = IOLoop.current()
     server = Server("server", io_loop)
     server.start()
 
@@ -157,10 +165,15 @@ def test_timeout():
     import inmanta.server.config  # nopep8
 
     io_loop = IOLoop.current()
-    Config.load_config()
 
     # start server
+    PORT = str(random.randint(30000, 60000))
     Config.load_config()
+    Config.set("server_rest_transport", "port", PORT)
+    Config.set("agent_rest_transport", "port", PORT)
+    Config.set("compiler_rest_transport", "port", PORT)
+    Config.set("client_rest_transport", "port", PORT)
+    Config.set("cmdline_rest_transport", "port", PORT)
     server = Server("server", io_loop, interval=2)
     server.start()
 

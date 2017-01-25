@@ -816,7 +816,7 @@ class Server(protocol.ServerEndpoint):
             # TODO: handle delete relations
             attributes["requires"] = []
 
-            res_obj = data.Resource.new(tid, rid="%s,v=%s" % (res.resource_id, version), attributes=attributes)
+            res_obj = data.Resource.new(tid, resource_version_id="%s,v=%s" % (res.resource_id, version), attributes=attributes)
             yield res_obj.insert()
 
             ra = data.ResourceAction(resource_version_id=res_obj.resource_version_id, action="store", level="INFO",
@@ -1293,12 +1293,12 @@ class Server(protocol.ServerEndpoint):
             self._recompiles[environment_id] = end
 
             comp = data.Compile(environment=environment_id, started=requested, completed=end)
-            yield comp.insert()
 
             for stage in stages:
                 stage.compile = comp.id
 
-            data.Report.insert_many(stages)
+            yield data.Report.insert_many(stages)
+            yield comp.insert()
 
     @protocol.handle(methods.CompileReport.get_reports)
     @gen.coroutine

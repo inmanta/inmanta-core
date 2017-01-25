@@ -23,21 +23,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_form(server):
+def test_form(client, environment):
     """
         Test creating and updating forms
     """
-    from inmanta import protocol
-
-    client = protocol.Client("client")
-
-    result = yield client.create_project("env-test")
-    assert(result.code == 200)
-    project_id = result.result["project"]["id"]
-
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
     form_id = "cwdemo::forms::ClearwaterSize"
     form_data = {
         'attributes': {
@@ -51,36 +40,25 @@ def test_form(server):
         'options': {'title': 'VNF replication', 'help': 'help', 'record_count': 1},
         'type': 'cwdemo::forms::ClearwaterSize'
     }
-    result = yield client.put_form(tid=env_id, id=form_id, form=form_data)
+    result = yield client.put_form(tid=environment, id=form_id, form=form_data)
     assert(result.code == 200)
 
-    result = yield client.get_form(env_id, form_id)
+    result = yield client.get_form(environment, form_id)
     assert(result.code == 200)
 
-    result = yield client.list_forms(env_id)
+    result = yield client.list_forms(environment)
     assert(result.code == 200)
     assert(len(result.result["forms"]) == 1)
     assert(result.result["forms"][0]["form_type"] == form_id)
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_records(server):
+def test_records(client, environment):
     """
         Test creating and updating forms
     """
-    from inmanta import protocol
-
-    client = protocol.Client("client")
-
-    result = yield client.create_project("env-test")
-    assert(result.code == 200)
-    project_id = result.result["project"]["id"]
-
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
     form_id = "FormType"
-    result = yield client.put_form(tid=env_id, id=form_id,
+    result = yield client.put_form(tid=environment, id=form_id,
                                    form={'attributes': {'field1': {'default': 1, 'options': {'min': 1, 'max': 100},
                                                                    'type': 'number'},
                                                         'field2': {'default': "", 'options': {}, 'type': 'string'}},
@@ -89,22 +67,22 @@ def test_records(server):
                                    )
     assert(result.code == 200)
 
-    result = yield client.create_record(tid=env_id, form_type=form_id, form={"field1": 10, "field2": "value"})
+    result = yield client.create_record(tid=environment, form_type=form_id, form={"field1": 10, "field2": "value"})
     assert(result.code == 200)
 
     record_id = result.result["record"]["id"]
-    result = yield client.update_record(tid=env_id, id=record_id, form={"field1": 20, "field2": "value2"})
+    result = yield client.update_record(tid=environment, id=record_id, form={"field1": 20, "field2": "value2"})
     assert(result.code == 200)
 
-    result = yield client.list_records(tid=env_id, form_type=form_id)
+    result = yield client.list_records(tid=environment, form_type=form_id)
     assert(result.code == 200)
     assert(len(result.result["records"]) == 1)
 
-    yield client.create_record(tid=env_id, form_type=form_id, form={"field1": 10, "field2": "value"})
-    result = yield client.list_records(tid=env_id, form_type=form_id, include_record=True)
+    yield client.create_record(tid=environment, form_type=form_id, form={"field1": 10, "field2": "value"})
+    result = yield client.list_records(tid=environment, form_type=form_id, include_record=True)
     assert(result.code == 200)
     assert(len(result.result["records"]) == 2)
     assert("field1" in result.result["records"][0]["fields"])
 
-    result = yield client.delete_record(tid=env_id, id=record_id)
+    result = yield client.delete_record(tid=environment, id=record_id)
     assert(result.code == 200)

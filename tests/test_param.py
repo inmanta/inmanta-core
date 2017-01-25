@@ -23,20 +23,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_param(server):
+def test_param(client, environment):
     """
         Test creating and updating forms
     """
-    from inmanta import protocol
-
-    client = protocol.Client("client")
-
-    result = yield client.create_project("env-test")
-    assert(result.code == 200)
-    project_id = result.result["project"]["id"]
-
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    result = yield client.list_params(tid=env_id)
+    result = yield client.list_params(tid=environment)
     assert(result.code == 200)
