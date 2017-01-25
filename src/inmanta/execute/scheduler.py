@@ -28,6 +28,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineT
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
 from inmanta.ast import RuntimeException, MultiException
+from inmanta.execute.tracking import ModuleTracker
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -171,7 +172,7 @@ class Scheduler(object):
 
         # emit all top level statements
         for block in blocks:
-            block.context.emit(queue)
+            block.context.emit(queue.for_tracker(ModuleTracker(block)))
 
         # start an evaluation loop
         i = 0

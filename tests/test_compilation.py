@@ -894,6 +894,56 @@ f4.requires = f1
         cyclenames = [r.id.resource_str() for r in e.value.cycle]
         assert set(cyclenames) == set(['std::File[Test,path=/f3]', 'std::File[Test,path=/f2]', 'std::File[Test,path=/f1]'])
 
+    def testIssue261Tracing(self):
+        self.setUpForSnippet("""
+entity Test1:
+end
+
+implementation test11 for Test1:
+    Test2(name="test11")
+end
+
+implementation test12 for Test1:
+    Test2(name="test12")
+end
+
+implement Test1 using test11
+implement Test1 using test12
+
+entity Test2:
+    string name
+end
+
+implement Test2 using std::none
+
+Test1()
+        """)
+        (types, _) = compiler.do_compile()
+
+        t1s = types["__config__::Test1"].get_all_instances()
+        assert len(t1s) == 1
+        t1 = t1s[0]
+        l3 = t1.trackers
+        assert len(l3) == 1
+        assert l3[0].namespace.name == "__config__"
+
+        instances = types["__config__::Test2"].get_all_instances()
+        assert len(instances) == 2
+        for instance in instances:
+            l1 = instance.trackers
+            name = instance.get_attribute("name").get_value()
+            assert len(l1) == 1
+            implementations = l1[0].implements.implementations
+            assert len(implementations) == 1
+            implement = implementations[0]
+            assert implement.name == name
+            l2 = l1[0].instance
+            assert l2 == t1
+
+        for instance in instances:
+            l1 = instance.trackers
+            assert l1[0].get_next()[0].namespace.name == "__config__"
+
     def test_str_on_instance_pos(self):
         self.setUpForSnippet("""
 import std
