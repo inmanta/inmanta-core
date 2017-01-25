@@ -727,7 +727,6 @@ def test_snapshot_restore(client, server, io_loop):
     assert(result.code == 200)
 
 
-
 @pytest.mark.gen_test
 def test_server_agent_api(client, server, io_loop):
     result = yield client.create_project("env-test")
