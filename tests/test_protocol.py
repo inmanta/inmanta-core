@@ -53,3 +53,24 @@ def test_client_files(client):
     other_files = ["testtest"]
     result = yield client.stat_files(files=file_names + other_files)
     assert len(result.result["files"]) == len(other_files)
+
+
+@pytest.mark.gen_test
+def test_diff(client):
+    result = yield client.upload_file(id="a", content=base64.b64encode(b"Hello world\n").decode("ascii"))
+    assert(result.code == 200)
+
+    result = yield client.upload_file(id="b", content=base64.b64encode(b"Bye bye world\n").decode("ascii"))
+    assert(result.code == 200)
+
+    diff = yield client.diff("a", "b")
+    assert(diff.code == 200)
+    assert(len(diff.result["diff"]) == 5)
+
+    diff = yield client.diff(0, "b")
+    assert(diff.code == 200)
+    assert(len(diff.result["diff"]) == 4)
+
+    diff = yield client.diff("a", 0)
+    assert(diff.code == 200)
+    assert(len(diff.result["diff"]) == 4)

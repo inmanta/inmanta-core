@@ -713,6 +713,20 @@ def test_snapshot_restore(client, server, io_loop):
 
     assert Provider.get("agent1", "key") == "value"
 
+    # get a snapshot
+    result = yield client.get_snapshot(env_id, snapshot_id)
+    assert(result.code == 200)
+    assert(result.result["snapshot"]["id"] == snapshot_id)
+
+    # delete the restore
+    result = yield client.delete_restore(env_id, restore_id)
+    assert(result.code == 200)
+
+    # delete the snapshot
+    result = yield client.delete_snapshot(env_id, snapshot_id)
+    assert(result.code == 200)
+
+
 
 @pytest.mark.gen_test
 def test_server_agent_api(client, server, io_loop):

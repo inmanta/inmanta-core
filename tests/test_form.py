@@ -53,6 +53,41 @@ def test_form(client, environment):
 
 
 @pytest.mark.gen_test(timeout=60)
+def test_update_form(client, environment):
+    """
+        Test creating and updating forms
+    """
+    form_id = "cwdemo::forms::ClearwaterSize"
+    form_data = {
+        'attributes': {
+            'bono': {'default': 1,
+                     'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
+                     'type': 'number'},
+            'ralf': {'default': 1,
+                     'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
+                     'type': 'number'}
+        },
+        'options': {'title': 'VNF replication', 'help': 'help', 'record_count': 1},
+        'type': 'cwdemo::forms::ClearwaterSize'
+    }
+    result = yield client.put_form(tid=environment, id=form_id, form=form_data)
+    assert(result.code == 200)
+
+    result = yield client.get_form(environment, form_id)
+    assert(result.code == 200)
+    assert(len(result.result["form"]["field_options"]) == 2)
+
+    form_data["attributes"]["sprout"] = {'default': 1, 'options': {'min': 1, 'max': 100, 'widget': 'slider', 'help': 'help'},
+                                         'type': 'number'}
+    result = yield client.put_form(tid=environment, id=form_id, form=form_data)
+    assert(result.code == 200)
+
+    result = yield client.get_form(environment, form_id)
+    assert(result.code == 200)
+    assert(len(result.result["form"]["field_options"]) == 3)
+
+
+@pytest.mark.gen_test(timeout=60)
 def test_records(client, environment):
     """
         Test creating and updating forms

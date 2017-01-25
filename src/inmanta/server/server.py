@@ -1533,7 +1533,7 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
-    @protocol.handle(methods.RestoreSnapshot.delete_restore, resource_id="id")
+    @protocol.handle(methods.RestoreSnapshot.delete_restore, restore_id="id")
     @gen.coroutine
     def delete_restore(self, tid, restore_id):
         env = yield data.Environment.get_by_id(tid)
@@ -1549,13 +1549,13 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.Decommision.decomission_environment, restore_id="id")
     @gen.coroutine
-    def decomission_environment(self, restore_id):
-        env = yield data.Environment.get_by_id(id)
+    def decomission_environment(self, env_id):
+        env = yield data.Environment.get_by_id(env_id)
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
         version = int(time.time())
-        result = yield self.put_version(restore_id, version, [], [], {})
+        result = yield self.put_version(env_id, version, [], [], {})
         return result, {"version": version}
 
     @protocol.handle(methods.Decommision.clear_environment, env_id="id")
