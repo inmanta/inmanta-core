@@ -620,7 +620,7 @@ def test_dual_agent(io_loop, server, client):
     myagent.stop()
 
 
-@pytest.mark.gen_test
+@pytest.mark.gen_test(timeout=60)
 def test_snapshot_restore(client, server, io_loop):
     """
         create a snapshot and restore it again
