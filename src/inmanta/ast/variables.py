@@ -31,7 +31,7 @@ class Reference(ExpressionStatement):
         This class represents a reference to a value
     """
 
-    def __init__(self, name):
+    def __init__(self, name: str):
         super().__init__()
         self.name = name
         self.full_name = name
@@ -162,7 +162,8 @@ class AttributeReference(Reference):
     """
 
     def __init__(self, instance, attribute):
-        Reference.__init__(self, instance)
+        # don't init superclass, we override everything
+        Reference.__init__(self, "%s.%s" % (instance.full_name, attribute))
         self.attribute = attribute
 
         # a reference to the instance

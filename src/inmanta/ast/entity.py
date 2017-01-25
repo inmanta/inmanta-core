@@ -367,7 +367,7 @@ class Entity(Type):
             Update indexes based on the instance and the attribute that has
             been set
         """
-        attributes = {k: v.get_value() for (k, v) in instance.slots.items() if v.is_ready()}
+        attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
         # check if an index entry can be added
         for index_attributes in self._index_def:
             index_ok = True
@@ -406,7 +406,7 @@ class Entity(Type):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params))
 
-        key = ", ".join(["%s=%s" % x for x in params])
+        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in params])
 
         if target is None:
             if key in self._index:

@@ -944,6 +944,58 @@ Test1()
             l1 = instance.trackers
             assert l1[0].get_next()[0].namespace.name == "__config__"
 
+    def test_str_on_instance_pos(self):
+        self.setUpForSnippet("""
+import std
+
+entity Hg:
+end
+
+Hg.hosts [0:] -- std::Host
+
+implement Hg using std::none
+
+hg = Hg()
+
+for i in [1,2,3]:
+ hg.hosts = std::Host(name="Test{{i}}", os=std::unix)
+end
+
+
+for i in hg.hosts:
+    std::ConfigFile(host=i, path="/fx", content="")
+end
+""")
+        (types, _) = compiler.do_compile()
+        files = types["std::File"].get_all_instances()
+        assert len(files) == 3
+
+    def test_str_on_instance_neg(self):
+        self.setUpForSnippet("""
+import std
+
+entity Hg:
+end
+
+Hg.hosts [0:] -- std::Host
+
+implement Hg using std::none
+
+hg = Hg()
+
+for i in [1,2,3]:
+ hg.hosts = std::Host(name="Test", os=std::unix)
+end
+
+
+for i in hg.hosts:
+    std::ConfigFile(host=i, path="/fx", content="")
+end
+""")
+        (types, _) = compiler.do_compile()
+        files = types["std::File"].get_all_instances()
+        assert len(files) == 1
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
