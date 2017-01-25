@@ -894,6 +894,58 @@ f4.requires = f1
         cyclenames = [r.id.resource_str() for r in e.value.cycle]
         assert set(cyclenames) == set(['std::File[Test,path=/f3]', 'std::File[Test,path=/f2]', 'std::File[Test,path=/f1]'])
 
+    def test_str_on_instance_pos(self):
+        self.setUpForSnippet("""
+import std
+
+entity Hg:
+end
+
+Hg.hosts [0:] -- std::Host
+
+implement Hg using std::none
+
+hg = Hg()
+
+for i in [1,2,3]:
+ hg.hosts = std::Host(name="Test{{i}}", os=std::unix)
+end
+
+
+for i in hg.hosts:
+    std::ConfigFile(host=i, path="/fx", content="")
+end
+""")
+        (types, _) = compiler.do_compile()
+        files = types["std::File"].get_all_instances()
+        assert len(files) == 3
+
+    def test_str_on_instance_neg(self):
+        self.setUpForSnippet("""
+import std
+
+entity Hg:
+end
+
+Hg.hosts [0:] -- std::Host
+
+implement Hg using std::none
+
+hg = Hg()
+
+for i in [1,2,3]:
+ hg.hosts = std::Host(name="Test", os=std::unix)
+end
+
+
+for i in hg.hosts:
+    std::ConfigFile(host=i, path="/fx", content="")
+end
+""")
+        (types, _) = compiler.do_compile()
+        files = types["std::File"].get_all_instances()
+        assert len(files) == 1
+
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
