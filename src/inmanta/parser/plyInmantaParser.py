@@ -679,6 +679,7 @@ def myparse(ns, tfile, content):
     file = tfile
     global namespace
     namespace = ns
+    lexer.begin('INITIAL')
     try:
         if content is None:
             with open(tfile, 'r') as myfile:
