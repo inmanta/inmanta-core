@@ -1,0 +1,6 @@
+name: lexer_reset
+description: Model to test basic compiler functions
+modulepath: libs
+downloadpath: libs
+version: 1.0
+repo: "."
