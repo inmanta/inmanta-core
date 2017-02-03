@@ -26,6 +26,8 @@ def retry_limited(fun, timeout):
     start = time.time()
     while time.time() - start < timeout and not fun():
         yield sleep(0.1)
+    if not fun():
+        raise AssertionError("Bounded wait failed")
 
 
 UNKWN = object()

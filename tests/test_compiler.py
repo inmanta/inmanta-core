@@ -705,6 +705,16 @@ b=""
 """)
 
 
+def test_MLS():
+    parse_code("""
+entity MANO:
+    \"""
+        This entity provides mangement, orchestration and monitoring
+    \"""
+end
+""")
+
+
 def test_Bad():
     with pytest.raises(ParserException):
         parse_code("""

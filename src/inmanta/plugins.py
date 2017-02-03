@@ -44,7 +44,7 @@ class Context(object):
         self.queue = queue
         self.owner = owner
         self.result = result
-        self.compiler = queue.compiler
+        self.compiler = queue.get_compiler()
 
     def emit_expression(self, stmt):
         """
@@ -60,7 +60,7 @@ class Context(object):
 
     def get_type(self, name):
         try:
-            return self.queue.types[name]
+            return self.queue.get_types()[name]
         except KeyError:
             raise TypeNotFoundException(name, self.owner.namespace)
 
