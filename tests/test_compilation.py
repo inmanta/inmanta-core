@@ -70,7 +70,7 @@ class AbstractSnippetTest(object):
         shutil.rmtree(cls.libs)
         shutil.rmtree(cls.env)
 
-    def setUpForSnippet(self, snippet):
+    def setUpForSnippet(self, snippet, autostd=True):
         # init project
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
@@ -90,7 +90,7 @@ class AbstractSnippetTest(object):
         with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
             x.write(snippet)
 
-        Project.set(Project(self.project_dir))
+        Project.set(Project(self.project_dir, autostd=autostd))
 
     def do_export(self):
         config.Config.load_config()
@@ -994,6 +994,61 @@ end
 """)
         (types, _) = compiler.do_compile()
         files = types["std::File"].get_all_instances()
+        assert len(files) == 1
+
+    def test_trackingbug(self):
+        self.setUpForSnippet("""
+entity A:
+    bool z = true
+end
+
+entity B:
+end
+
+entity C:
+end
+
+entity E:
+end
+
+A.b [0:] -- B.a [0:]
+A.b2 [0:] -- B.a2 [0:]
+A.e [0:] -- E.a [0:]
+
+C.a [0:] -- A.c [0:]
+
+implement E using std::none
+implement A using std::none
+
+
+
+implementation c for C:
+   E(a=self.a)
+end
+implement C using c
+
+implementation b for B:
+    C(a=self.a2)
+end
+
+implement B using b when std::count(self.a)>0
+
+entity D:
+end
+
+implementation d for D:
+    a = A()
+    b = B()
+    b.a = a
+    b.a2 = a
+end
+
+implement D using d
+
+D()
+""")
+        (types, _) = compiler.do_compile()
+        files = types["__config__::C"].get_all_instances()
         assert len(files) == 1
 
 
