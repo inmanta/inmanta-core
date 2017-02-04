@@ -285,15 +285,16 @@ class OptionVariable(DelayedResultVariable):
 class QueueScheduler(object):
     """
         Object representing the compiler to the AST nodes. It provides access to the queueing mechanism and the type system.
+
+        MUTABLE!
     """
 
-    def __init__(self, compiler, runqueue, waitqueue, types, allwaiters, tracer=None):
+    def __init__(self, compiler, runqueue, waitqueue, types, allwaiters):
         self.compiler = compiler
         self.runqueue = runqueue
         self.waitqueue = waitqueue
         self.types = types
         self.allwaiters = allwaiters
-        self.tracker = tracer
 
     def add_running(self, item: "Waiter"):
         return self.runqueue.append(item)
@@ -311,10 +312,38 @@ class QueueScheduler(object):
         self.allwaiters.append(item)
 
     def get_tracker(self):
-        return self.tracker
+        return None
 
     def for_tracker(self, tracer):
-        return QueueScheduler(self.compiler, self.runqueue, self.waitqueue, self.types, self.allwaiters, tracer)
+        return DelegateQueueScheduler(self, tracer)
+
+
+class DelegateQueueScheduler(QueueScheduler):
+
+    def __init__(self, delegate, tracker):
+        self.__delegate = delegate
+        self.__tracker = tracker
+
+    def add_running(self, item: "Waiter"):
+        return self.__delegate.add_running(item)
+
+    def add_possible(self, rv: ResultVariable):
+        return self.__delegate.add_possible(rv)
+
+    def get_compiler(self):
+        return self.__delegate.get_compiler()
+
+    def get_types(self):
+        return self.__delegate.get_types()
+
+    def add_to_all(self, item):
+        self.__delegate.add_to_all(item)
+
+    def get_tracker(self):
+        return self.__tracker
+
+    def for_tracker(self, tracer):
+        return DelegateQueueScheduler(self.__delegate, tracer)
 
 
 class Waiter(object):
