@@ -1547,7 +1547,7 @@ class Server(protocol.ServerEndpoint):
         yield restore.delete()
         return 200
 
-    @protocol.handle(methods.Decommision.decomission_environment, restore_id="id")
+    @protocol.handle(methods.Decommision.decomission_environment, env_id="id")
     @gen.coroutine
     def decomission_environment(self, env_id):
         env = yield data.Environment.get_by_id(env_id)
