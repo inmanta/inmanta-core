@@ -30,6 +30,10 @@ PORT_START = 40000
 MAX_TRIES = 25
 
 
+cfg_prj = config.Option("deploy", "project", "deploy", "The project name to use in the deploy", config.is_str_opt)
+cfg_env = config.Option("deploy", "environment", "deploy", "The environment name to use in the deploy", config.is_str_opt)
+
+
 class Deploy(object):
 
     def __init__(self, io_loop):
@@ -144,12 +148,12 @@ class Deploy(object):
         self._client = protocol.Client("client")
 
         # get config
-        project_name = config.Config.get("deploy", "project", None)
+        project_name = cfg_prj.get()
         if project_name is None:
             LOGGER.error("The name of the project should be configured for an all-in-one deploy")
             return False
 
-        environment_name = config.Config.get("deploy", "environment", None)
+        environment_name = cfg_env.get()
         if environment_name is None:
             LOGGER.error("The name of the environment in the project should be configured for an all-in-one deploy")
             return False
