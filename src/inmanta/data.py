@@ -815,7 +815,7 @@ class Resource(BaseDocument):
                                  "resource_id": resource_id}).sort("model", pymongo.DESCENDING).limit(1)
         resource = yield cursor.to_list(1)
 
-        if resource is not None:
+        if resource is not None and len(resource) > 0:
             return cls(from_mongo=True, **resource[0])
 
     @classmethod
