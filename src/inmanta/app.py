@@ -211,7 +211,7 @@ def export(options):
 
     module.Project.get(options.main_file)
 
-    from inmanta.export import Exporter
+    from inmanta.export import Exporter  # noqa: H307
 
     exp = None
     try:
