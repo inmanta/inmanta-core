@@ -592,6 +592,8 @@ def test_dual_agent(io_loop, server, client):
     result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
+    # expire rate limiting
+    yield gen.sleep(0.5)
     # do a deploy
     result = yield client.release_version(env_id, version, True)
     assert result.code == 200
