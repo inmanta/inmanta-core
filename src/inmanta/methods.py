@@ -24,7 +24,7 @@ from inmanta.data import ACTIONS, LOGLEVEL
 from tornado import gen
 
 
-def protocol(index=False, id=False, broadcast=False, operation="POST", data_type="message", reply=True, destination="",
+def protocol(index=False, id=False, operation="POST", reply=True,
              mt=False, timeout=None, api=None, server_agent=False, agent_server=False, validate_sid=None):
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -32,11 +32,7 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
 
         :param index A method that returns a list of resources. The url of this method is only the method/resource name.
         :param id This method requires an id of a resource. The python function should have an id parameter.
-        :param reply This method returns data
         :param operation The type of HTTP operation (verb)
-        :param data_type The type of data (message or blob) (not used at the moment)
-        :param destination If destination is empty only the server should get the message. When destination is *, the server
-                           will forward it to all other clients as well.
         :param mt Is this a multi-tenant call? If it is multi-tenant a tenant id is required. This id is transported as an
                   HTTP header. The method that has mt=True, should have an attribute tid
         :param timeout nr of seconds before request it terminated
@@ -54,10 +50,7 @@ def protocol(index=False, id=False, broadcast=False, operation="POST", data_type
         "index": index,
         "id": id,
         "reply": reply,
-        "broadcast": broadcast,
         "operation": operation,
-        "data_type": data_type,
-        "destination": destination,
         "mt": mt,
         "timeout": timeout,
         "api": api,
@@ -241,7 +234,7 @@ class FileMethod(Method):
     """
     __method_name__ = "file"
 
-    @protocol(operation="PUT", id=True, data_type="blob", api=True, agent_server=True)
+    @protocol(operation="PUT", id=True, api=True, agent_server=True)
     def upload_file(self, id: str, content: str):
         """
             Upload a new file
@@ -258,7 +251,7 @@ class FileMethod(Method):
             :param id The id of the file to check
         """
 
-    @protocol(operation="GET", id=True, data_type="blob", api=True, agent_server=True)
+    @protocol(operation="GET", id=True, api=True, agent_server=True)
     def get_file(self, id: str):
         """
             Retrieve a file

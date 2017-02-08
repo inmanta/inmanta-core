@@ -118,11 +118,6 @@ class Transport(object):
         :param end_point_name The name of the endpoint to which this transport belongs. This is used
             for logging and configuration purposes
     """
-    __data__ = tuple()
-    __transport_name__ = None
-    __broadcast__ = False
-    __network__ = True
-
     @classmethod
     def create(cls, TransportClass, endpoint=None):
         """
