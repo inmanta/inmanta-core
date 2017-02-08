@@ -21,6 +21,7 @@ import tempfile
 import random
 import string
 import shutil
+import socket
 
 from mongobox import MongoBox
 import pytest
@@ -51,7 +52,6 @@ def mongo_client(mongo_db):
     '''Returns an instance of :class:`pymongo.MongoClient` connected
     to MongoBox database instance.
     '''
-
     port = int(mongo_db.port)
     return pymongo.MongoClient(port=port)
 
@@ -72,12 +72,23 @@ def data_module(io_loop, motor):
     io_loop.run_sync(data.create_indexes)
 
 
+def get_free_tcp_port():
+    """
+        Semi safe method for getting a random port. This may contain a race condition.
+    """
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.bind(('', 0))
+    _addr, port = tcp.getsockname()
+    tcp.close()
+    return str(port)
+
+
 @pytest.fixture(scope="function")
 def server(io_loop, mongo_db, mongo_client, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
-    PORT = str(random.randint(30000, 60000))
+    PORT = get_free_tcp_port()
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
@@ -133,7 +144,7 @@ def server_multi(io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "username", testuser)
             config.Config.set(x, "password", testpass)
 
-    PORT = str(random.randint(30000, 60000))
+    PORT = get_free_tcp_port()
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
