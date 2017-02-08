@@ -378,7 +378,7 @@ class Project(ModuleLike):
     PROJECT_FILE = "project.yml"
     _project = None
 
-    def __init__(self, path, autostd=True):
+    def __init__(self, path, autostd=True, main_file="main.cf"):
         """
             Initialize the project, this includes
              * Loading the project.yaml (into self._meta)
@@ -392,6 +392,7 @@ class Project(ModuleLike):
         """
         super().__init__(path)
         self.project_path = path
+        self.main_file = main_file
 
         if not os.path.exists(path):
             raise Exception("Unable to find project directory %s" % path)
@@ -469,12 +470,12 @@ class Project(ModuleLike):
         return cls.get_project_dir(parent_dir)
 
     @classmethod
-    def get(cls):
+    def get(cls, main_file="main.cf"):
         """
             Get the instance of the project
         """
         if cls._project is None:
-            cls._project = Project(cls.get_project_dir(os.curdir))
+            cls._project = Project(cls.get_project_dir(os.curdir), main_file=main_file)
 
         return cls._project
 
@@ -566,7 +567,7 @@ class Project(ModuleLike):
 
     def __load_ast(self):
         main_ns = Namespace("__config__", self.root_ns)
-        return self._load_file(main_ns, os.path.join(self.project_path, "main.cf"))
+        return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
 
     def load_module(self, module_name):
         try:

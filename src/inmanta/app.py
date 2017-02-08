@@ -25,9 +25,8 @@ import colorlog
 from inmanta.command import command, Commander
 from inmanta.compiler import do_compile
 from inmanta.config import Config
-from inmanta.module import ModuleTool
 from tornado.ioloop import IOLoop
-from inmanta import protocol
+from inmanta import protocol, module
 from inmanta.export import cfg_env
 from inmanta.ast import CompilerException
 
@@ -77,6 +76,7 @@ def compiler_config(parser):
     parser.add_argument("--password", dest="password", help="The password of the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
+    parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
 @command("compile", help_msg="Compile the project to a configuration model",
@@ -103,6 +103,7 @@ def compile_project(options):
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
+    module.Project.get(options.main_file)
     try:
         if options.profile:
             import cProfile
@@ -130,9 +131,9 @@ def list_commands(options):
 
 
 @command("modules", help_msg="Subcommand to manage modules",
-         parser_config=ModuleTool.modules_parser_config)
+         parser_config=module.ModuleTool.modules_parser_config)
 def modules(options):
-    tool = ModuleTool()
+    tool = module.ModuleTool()
     tool.execute(options.cmd, options)
 
 
@@ -145,10 +146,12 @@ def deploy_parser_config(parser):
     parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
     parser.add_argument("--no-agent-log", help="Do not capture agents logs, print them to stdout", action="store_true",
                         dest="no_agent_log")
+    parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
 def deploy(options):
+    module.Project.get(options.main_file)
     from inmanta import deploy
 
     io_loop = IOLoop.current()
@@ -180,6 +183,7 @@ def export_parser_config(parser):
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument("-X", "--extended-errors", dest="errors",
                         help="Show stack traces for compile errors", action="store_true", default=False)
+    parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -205,7 +209,9 @@ def export(options):
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
-    from inmanta.export import Exporter
+    module.Project.get(options.main_file)
+
+    from inmanta.export import Exporter  # noqa: H307
 
     exp = None
     try:

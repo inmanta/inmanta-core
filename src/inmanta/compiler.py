@@ -35,8 +35,8 @@ def do_compile():
     """
         Run run run
     """
-
-    compiler = Compiler(os.path.join(Project.get().project_path, "main.cf"))
+    project = Project.get()
+    compiler = Compiler(os.path.join(project.project_path, project.main_file))
 
     LOGGER.debug("Starting compile")
 
