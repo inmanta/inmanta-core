@@ -38,6 +38,7 @@ DBLIMIT = 100000
 
 
 class Field(object):
+
     def __init__(self, field_type, required=False, unique=False, **kwargs):
 
         self._field_type = field_type
@@ -297,7 +298,7 @@ class BaseDocument(object):
 
     @classmethod
     @gen.coroutine
-    def get_list(cls, limit=DBLIMIT, **query):
+    def get_list(cls, **query):
         """
             Get a list of documents matching the filter args
         """

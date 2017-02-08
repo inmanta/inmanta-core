@@ -593,9 +593,10 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine
     def list_agent_processes(self, environment, expired):
-        env = yield data.Environment.get_by_id(environment)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
+        if environment is not None:
+            env = yield data.Environment.get_by_id(environment)
+            if env is None:
+                return 404, {"message": "The given environment id does not exist!"}
 
         return (yield self.agentmanager.list_agent_processes(environment, expired))
 

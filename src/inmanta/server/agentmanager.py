@@ -319,7 +319,7 @@ class AgentManager(object):
                 aps = yield data.AgentProcess.get_live_by_env(tid)
         else:
             if expired:
-                aps = yield data.AgentProcess.get()
+                aps = yield data.AgentProcess.get_list()
             else:
                 aps = yield data.AgentProcess.get_live()
 
