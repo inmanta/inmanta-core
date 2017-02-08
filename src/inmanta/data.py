@@ -79,6 +79,10 @@ class Field(object):
     unique = property(is_unique)
 
 
+ESCAPE_CHARS = {".": "\uff0E", "\\": "\\\\", "$": "\u0024"}
+ESCAPE_CHARS_R = {v: k for k, v in ESCAPE_CHARS.items()}
+
+
 class BaseDocument(object):
     """
         A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
@@ -118,6 +122,8 @@ class BaseDocument(object):
         self.__fields = {}
 
         if from_mongo:
+            kwargs = self._decode_keys(kwargs)
+
             if "id" in kwargs:
                 raise AttributeError("A mongo document should not contain a field 'id'")
 
@@ -206,8 +212,38 @@ class BaseDocument(object):
 
         raise AttributeError(name)
 
+    # TODO: make this a generator
+    def _encode_keys(self, data):
+        new_data = {}
+        for key, value in data.items():
+            new_key = key
+            for p, s in ESCAPE_CHARS.items():
+                new_key = new_key.replace(p, s)
+
+            if isinstance(value, dict):
+                new_data[new_key] = self._encode_keys(value)
+            else:
+                new_data[new_key] = value
+
+        return new_data
+
+    # TODO: make this a generator
+    def _decode_keys(self, data):
+        new_data = {}
+        for key, value in data.items():
+            new_key = key
+            for p, s in ESCAPE_CHARS_R.items():
+                new_key = new_key.replace(p, s)
+
+            if isinstance(value, dict):
+                new_data[new_key] = self._decode_keys(value)
+            else:
+                new_data[new_key] = value
+
+        return new_data
+
     def to_mongo(self):
-        return self._to_dict(True)
+        return self._encode_keys(self._to_dict(True))
 
     def _to_dict(self, mongo_pk=False):
         """

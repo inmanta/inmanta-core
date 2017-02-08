@@ -814,7 +814,7 @@ class AgentRestore(Method):
 
             :param tid The environment the snapshot is created in
             :param agent The name of the agent
-            :parma restore_id THe id of the restore operation
+            :param restore_id THe id of the restore operation
             :param snapshot_id The id of the snapshot to restore
             :param resource A list of resources to restore
         """
