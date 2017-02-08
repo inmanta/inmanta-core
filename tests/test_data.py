@@ -30,6 +30,7 @@ class Doc(data.BaseDocument):
     field1 = data.Field(field_type=str, default=None)
     field2 = data.Field(field_type=bool, default=False)
     field3 = data.Field(field_type=list, default=[])
+    field4 = data.Field(field_type=dict, default={})
 
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING)], unique=True)
@@ -164,6 +165,15 @@ def test_document_delete(motor):
 
     docs = yield Doc.get_list()
     assert(len(docs) == 0)
+
+
+@pytest.mark.gen_test
+def test_key_escape(motor):
+    Doc.set_connection(motor)
+
+    d = Doc(name="test")
+    d.field4 = {"a.b": "1", "a$b": "2", "a\\b": "3"}
+    yield d.insert()
 
 
 @pytest.mark.gen_test
