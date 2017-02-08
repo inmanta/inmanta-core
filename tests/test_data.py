@@ -172,8 +172,13 @@ def test_key_escape(motor):
     Doc.set_connection(motor)
 
     d = Doc(name="test")
-    d.field4 = {"a.b": "1", "a$b": "2", "a\\b": "3"}
+    d.field4 = {"a.b": "1", "a$b": "2", "a\\b": "3", "a.b.c": 4}
     yield d.insert()
+
+    d2 = yield Doc.get_by_id(d.id)
+
+    for k in d.field4.keys():
+        assert(k in d2.field4)
 
 
 @pytest.mark.gen_test

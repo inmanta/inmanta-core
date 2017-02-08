@@ -19,7 +19,6 @@
 import logging
 import uuid
 import datetime
-import re
 
 from inmanta.resources import Id
 from tornado import gen
@@ -80,17 +79,7 @@ class Field(object):
 
 
 ESCAPE_CHARS = {".": "\uff0E", "\\": "\\\\", "$": "\u0024"}
-ESCAPE_CHARS_R = {v:k for k, v in ESCAPE_CHARS.items()}
-ENCODE_RE = re.compile("|".join([re.escape(x) for x in ESCAPE_CHARS.keys()]))
-DECODE_RE = re.compile("|".join([re.escape(x) for x in ESCAPE_CHARS_R.values()]))
-
-
-def sub_encode(match):
-    return ESCAPE_CHARS[match.group(0)]
-
-
-def sub_decode(match):
-    return ESCAPE_CHARS_R[match.group(0)]
+ESCAPE_CHARS_R = {v: k for k, v in ESCAPE_CHARS.items()}
 
 
 class BaseDocument(object):
@@ -226,19 +215,25 @@ class BaseDocument(object):
     def _encode_keys(self, data):
         new_data = {}
         for key, value in data.items():
-            new_key = ENCODE_RE.sub(sub_encode, key)
+            new_key = key
+            for p, s in ESCAPE_CHARS.items():
+                new_key = new_key.replace(p, s)
+
             if isinstance(value, dict):
                 new_data[new_key] = self._encode_keys(value)
             else:
                 new_data[new_key] = value
-        print(new_data)
+
         return new_data
 
     # TODO: make this a generator
     def _decode_keys(self, data):
         new_data = {}
         for key, value in data.items():
-            new_key = DECODE_RE.sub(sub_decode, key)
+            new_key = key
+            for p, s in ESCAPE_CHARS_R.items():
+                new_key = new_key.replace(p, s)
+
             if isinstance(value, dict):
                 new_data[new_key] = self._decode_keys(value)
             else:
