@@ -173,6 +173,7 @@ class Resource(metaclass=ResourceMeta):
         """
         Clear the cache of created resources
         """
+        cls.__create_cache = {}
 
     @classmethod
     def convert_requires(cls):
@@ -186,12 +187,9 @@ class Resource(metaclass=ResourceMeta):
                 if r in cls.__create_cache:
                     final_requires.add(cls.__create_cache[r])
                 else:
-                    new_requires = r.requires
-                    if len(new_requires) == 0:
-                        LOGGER.warning("A resource (%s) depends on a non resource that has no dependencies (%s)", res, r)
-                    else:
-                        inital_requires.extend(new_requires)
-
+                    LOGGER.warning("A resource (%s) depends on a non resource that has no dependencies (%s)", res, r)
+            if len(final_requires) == 0 and not len(inital_requires) == 0:
+                raise Exception("Requirement lost", res, inital_requires)
             res.requires = final_requires
 
     @classmethod

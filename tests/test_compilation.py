@@ -37,6 +37,8 @@ from inmanta.parser import ParserException
 import pytest
 from inmanta.execute.util import Unknown
 from inmanta.export import DependencyCycleException
+from tempfile import mktemp
+from utils import assertGraph
 
 
 class CompilerBaseTest(object):
@@ -93,6 +95,8 @@ class AbstractSnippetTest(object):
         Project.set(Project(self.project_dir, autostd=autostd))
 
     def do_export(self):
+        templfile = mktemp("json", "dump", self.project_dir)
+
         config.Config.load_config()
         from inmanta.export import Exporter
 
@@ -101,7 +105,7 @@ class AbstractSnippetTest(object):
         class Options(object):
             pass
         options = Options()
-        options.json = True
+        options.json = templfile
         options.depgraph = False
         options.deploy = False
         options.ssl = False
@@ -1050,6 +1054,89 @@ D()
         (types, _) = compiler.do_compile()
         files = types["__config__::C"].get_all_instances()
         assert len(files) == 1
+
+    def testAbstractRequres(self):
+        self.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
+
+entity A:
+    string name
+end
+
+implementation a for A:
+    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    two.requires = one
+end
+
+implement A using a
+
+pre = std::ConfigFile(path="host0", host=host, content="")
+post = std::ConfigFile(path="hosts4", host=host, content="")
+
+inter = A(name = "inter")
+""")
+
+        v, resources = self.do_export()
+        assertGraph(resources, """inter2: inter1""")
+
+    def testAbstractRequres2(self):
+        self.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
+
+entity A:
+    string name
+end
+
+implementation a for A:
+    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    two.requires = one
+end
+
+implement A using a
+
+pre = std::ConfigFile(path="host0", host=host, content="")
+post = std::ConfigFile(path="hosts4", host=host, content="")
+
+inter = A(name = "inter")
+inter.requires = pre
+post.requires = inter
+""")
+
+        with pytest.raises(Exception):
+            self.do_export()
+
+    def testAbstractRequres3(self):
+        self.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
+
+entity A:
+    string name
+end
+
+implementation a for A:
+    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    two.requires = one
+    one.requires = self.requires
+    two.provides = self.provides
+end
+
+implement A using a
+
+pre = std::ConfigFile(path="pre", host=host, content="")
+post = std::ConfigFile(path="post", host=host, content="")
+
+inter = A(name = "inter")
+inter.requires = pre
+post.requires = inter
+""")
+
+        v, resources = self.do_export()
+        assertGraph(resources, """post: inter2
+                                  inter2: inter1
+                                  inter1: pre""")
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
