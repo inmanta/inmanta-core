@@ -35,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 class StatusMethod(methods.Method):
     __method_name__ = "status"
 
-    @methods.protocol(operation="GET", index=True, mt=True)
+    @methods.protocol(operation="GET", index=True)
     def get_statusX(self, tid: uuid.UUID):
         pass
 

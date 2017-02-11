@@ -521,17 +521,6 @@ class RESTTransport(Transport):
             if "id" in config[0] and config[0]["id"] and "id" not in message:
                 return self.return_error_msg(500, "Invalid request. It should contain an id in the url.", headers)
 
-            if "mt" in config[0] and config[0]["mt"]:
-                if INMANTA_MT_HEADER not in request_headers:
-                    return self.return_error_msg(500, "This is multi-tenant method, it should contain a tenant id", headers)
-
-                else:
-                    message["tid"] = request_headers[INMANTA_MT_HEADER]
-                    if message["tid"] == "":
-                        return self.return_error_msg(500, "%s header set without value." % INMANTA_MT_HEADER, headers)
-
-                    headers[INMANTA_MT_HEADER] = message["tid"]
-
             validate_sid = config[0]["validate_sid"]
             if validate_sid:
                 if 'sid' not in message:
@@ -556,6 +545,18 @@ class RESTTransport(Transport):
 
             for i in range(len(args)):
                 arg = args[i]
+
+                opts = {}
+                # handle defaults and header mapping
+                if arg in config[0]["arg_options"]:
+                    opts = config[0]["arg_options"][arg]
+
+                    if "header" in opts:
+                        message[arg] = request_headers[opts["header"]]
+                        if "reply_header" in opts and opts["reply_header"]:
+                            headers[opts["header"]] = message[arg]
+                    all_fields.add(arg)
+
                 if arg not in message:
                     if (defaults_start >= 0 and (i - defaults_start) < len(argspec.defaults)):
                         message[arg] = argspec.defaults[i - defaults_start]
@@ -574,9 +575,18 @@ class RESTTransport(Transport):
                                 message[arg] = datetime.strptime(message[arg], "%Y-%m-%dT%H:%M:%S.%f")
                             else:
                                 message[arg] = arg_type(message[arg])
+
                         except (ValueError, TypeError):
                             return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
                                                          (arg, arg_type, message[arg].__class__), headers)
+
+                # execute any getters that are defined
+                if "getter" in opts:
+                    try:
+                        result = yield opts["getter"](message[arg])
+                        message[arg] = result
+                    except methods.HTTPException as e:
+                        return self.return_error_msg(e.code, e.message, headers)
 
             if config[0]["agent_server"]:
                 if 'sid' in all_fields:
@@ -724,12 +734,13 @@ class RESTTransport(Transport):
         url = self._create_base_url(properties, msg)
 
         headers = {}
-        if properties["mt"]:
-            if "tid" not in msg:
-                raise Exception("A multi-tenant method call should contain a tid parameter.")
 
-            headers[INMANTA_MT_HEADER] = str(msg["tid"])
-            del msg["tid"]
+        for arg_name in list(msg.keys()):
+            if arg_name in properties["arg_options"]:
+                opts = properties["arg_options"][arg_name]
+                if "header" in opts:
+                    headers[opts["header"]] = str(msg[arg_name])
+                    del msg[arg_name]
 
         if not (method == "POST" or method == "PUT" or method == "PATCH"):
             qs_map = msg.copy()
@@ -1160,13 +1171,12 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         LOGGER.debug("Seen session with id %s" % (session.get_id()))
         session.seen()
 
-    @handle(methods.HeartBeatMethod.heartbeat)
+    @handle(methods.HeartBeatMethod.heartbeat, env="tid")
     @gen.coroutine
-    def heartbeat(self, sid, tid, endpoint_names, nodename):
-        LOGGER.debug("Received heartbeat from %s for agents %s in %s",
-                     nodename, ",".join(endpoint_names), tid)
+    def heartbeat(self, sid, env, endpoint_names, nodename):
+        LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
-        session = self.get_or_create_session(sid, tid, endpoint_names, nodename)
+        session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
         call_list = yield session.get_calls()

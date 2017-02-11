@@ -20,12 +20,12 @@ from functools import wraps
 import uuid
 import datetime
 
-from inmanta.data import ACTIONS, LOGLEVEL
+from inmanta import data
 from tornado import gen
 
 
-def protocol(index=False, id=False, operation="POST", reply=True,
-             mt=False, timeout=None, api=None, server_agent=False, agent_server=False, validate_sid=None):
+def protocol(index=False, id=False, operation="POST", reply=True, arg_options={}, timeout=None, api=None, server_agent=False,
+             agent_server=False, validate_sid=None):
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.
@@ -33,13 +33,12 @@ def protocol(index=False, id=False, operation="POST", reply=True,
         :param index A method that returns a list of resources. The url of this method is only the method/resource name.
         :param id This method requires an id of a resource. The python function should have an id parameter.
         :param operation The type of HTTP operation (verb)
-        :param mt Is this a multi-tenant call? If it is multi-tenant a tenant id is required. This id is transported as an
-                  HTTP header. The method that has mt=True, should have an attribute tid
         :param timeout nr of seconds before request it terminated
         :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
         :param server_agent This is a call from the Server to the Agent
         :param agent_server This is a call from the Agent to the Server
         :param validate_sid This call requires a valid session, true by default if agent_server and not api
+        :param arg_options Options related to arguments passed to the method
     """
     if api is None:
         api = not server_agent and not agent_server
@@ -51,12 +50,12 @@ def protocol(index=False, id=False, operation="POST", reply=True,
         "id": id,
         "reply": reply,
         "operation": operation,
-        "mt": mt,
         "timeout": timeout,
         "api": api,
         "server_agent": server_agent,
         "agent_server": agent_server,
-        "validate_sid": validate_sid
+        "validate_sid": validate_sid,
+        "arg_options": arg_options
     }
 
     def wrapper(func):
@@ -83,11 +82,30 @@ def protocol(index=False, id=False, operation="POST", reply=True,
     return wrapper
 
 
+class HTTPException(Exception):
+    def __init__(self, code, message=None):
+        super().__init__(code, message)
+        self.code = code
+        self.message = message
+
+
 class Method(object):
     """
         A decorator to add methods to the protocol.
     """
     __method_name__ = None
+
+
+@gen.coroutine
+def get_environment(env):
+    env = yield data.Environment.get_by_id(env)
+    if env is None:
+        raise HTTPException(code=404, message="The given environment id does not exist!")
+    return env
+
+
+ENV_ARG = {"header": "X-Inmanta-tid", "getter": get_environment, "reply_header": True}
+ENV_OPTS = {"tid": ENV_ARG}
 
 
 class Project(Method):
@@ -184,14 +202,14 @@ class Decommision(Method):
     """
     __method_name__ = "decommission"
 
-    @protocol(operation="POST", id=True)
+    @protocol(operation="POST", id=True, arg_options={"id": ENV_ARG})
     def decomission_environment(self, id: uuid.UUID):
         """
             Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
             removal.
         """
 
-    @protocol(operation="DELETE", id=True)
+    @protocol(operation="DELETE", id=True, arg_options={"id": ENV_ARG})
     def clear_environment(self, id: uuid.UUID):
         """
             Clear all data from this environment
@@ -204,7 +222,7 @@ class HeartBeatMethod(Method):
     """
     __method_name__ = "heartbeat"
 
-    @protocol(operation="POST", mt=True, agent_server=True, validate_sid=False)
+    @protocol(operation="POST", agent_server=True, validate_sid=False, arg_options=ENV_OPTS)
     def heartbeat(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: str):
         """
             Send a heartbeat to the server
@@ -275,7 +293,7 @@ class ResourceMethod(Method):
     """
     __method_name__ = "resource"
 
-    @protocol(operation="GET", id=True, mt=True, agent_server=True, api=True, validate_sid=False)
+    @protocol(operation="GET", id=True, agent_server=True, api=True, validate_sid=False, arg_options=ENV_OPTS)
     def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None):
         """
             Return a resource with the given id.
@@ -286,7 +304,7 @@ class ResourceMethod(Method):
             :param status return only resou
         """
 
-    @protocol(operation="GET", mt=True, index=True, agent_server=True)
+    @protocol(operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS)
     def get_resources_for_agent(self, tid: uuid.UUID, agent: str, version: int=None):
         """
             Return the most recent state for the resources associated with agent, or the version requested
@@ -297,7 +315,7 @@ class ResourceMethod(Method):
                            that version is returned, even if it has not been released yet.
         """
 
-    @protocol(operation="POST", mt=True, id=True, agent_server=True)
+    @protocol(operation="POST", id=True, agent_server=True, arg_options=ENV_OPTS)
     def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, status: str, extra_data: dict):
         """
             Send a resource update to the server
@@ -310,20 +328,20 @@ class ResourceMethod(Method):
             :param status The current status of the resource (if known)
             :param extra_data A map with additional data
         """
-        if level not in LOGLEVEL:
-            raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(LOGLEVEL)))
+        if level not in data.LOGLEVEL:
+            raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(data.LOGLEVEL)))
 
-        if action not in ACTIONS:
-            raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(ACTIONS)))
+        if action not in data.ACTIONS:
+            raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(data.ACTIONS)))
 
 
-class CMVersionMethod(Method):
+class VersionMethod(Method):
     """
         Manage configuration model versions
     """
-    __method_name__ = "cmversion"
+    __method_name__ = "version"
 
-    @protocol(index=True, operation="GET", mt=True)
+    @protocol(index=True, operation="GET", arg_options=ENV_OPTS)
     def list_versions(self, tid: uuid.UUID, start: int=None, limit: int=None):
         """
             Returns a list of all available versions
@@ -333,7 +351,7 @@ class CMVersionMethod(Method):
             :param limit Optional, parameter to control the amount of results returned.
         """
 
-    @protocol(operation="GET", id=True, mt=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def get_version(self, tid: uuid.UUID, id: int, include_logs: bool=None, log_filter: str=None, limit: int=None):
         """
             Get a particular version and a list of all resources in this version
@@ -345,7 +363,7 @@ class CMVersionMethod(Method):
             :param limit The maximal number of actions to return per resource (starting from the latest)
         """
 
-    @protocol(operation="DELETE", id=True, mt=True)
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS)
     def delete_version(self, tid: uuid.UUID, id: int):
         """
             Delete a particular version and resources
@@ -354,7 +372,7 @@ class CMVersionMethod(Method):
             :param id The id of the version to retrieve
         """
 
-    @protocol(operation="PUT", mt=True)
+    @protocol(operation="PUT", arg_options=ENV_OPTS)
     def put_version(self, tid: uuid.UUID, version: int, resources: list, unknowns: list=None, version_info: dict=None):
         """
             Store a new version of the configuration model
@@ -366,7 +384,7 @@ class CMVersionMethod(Method):
             :param version_info Module version information
         """
 
-    @protocol(operation="POST", mt=True, id=True)
+    @protocol(operation="POST", id=True, arg_options=ENV_OPTS)
     def release_version(self, tid: uuid.UUID, id: int, push: bool):
         """
             Release version of the configuration model for deployment.
@@ -383,7 +401,7 @@ class DryRunMethod(Method):
     """
     __method_name__ = "dryrun"
 
-    @protocol(operation="POST", mt=True, id=True)
+    @protocol(operation="POST", id=True, arg_options=ENV_OPTS)
     def dryrun_request(self, tid: uuid.UUID, id: int):
         """
             Do a dryrun
@@ -392,7 +410,7 @@ class DryRunMethod(Method):
             :param id The version of the CM to deploy
         """
 
-    @protocol(operation="GET", mt=True)
+    @protocol(operation="GET", arg_options=ENV_OPTS)
     def dryrun_list(self, tid: uuid.UUID, version: int=None):
         """
             Create a list of dry runs
@@ -401,7 +419,7 @@ class DryRunMethod(Method):
             :param version Only for this version
         """
 
-    @protocol(operation="GET", mt=True, id=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def dryrun_report(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Create a dryrun report
@@ -410,7 +428,7 @@ class DryRunMethod(Method):
             :param id The version dryrun to report
         """
 
-    @protocol(operation="PUT", mt=True, id=True, agent_server=True)
+    @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
     def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
         """
             Store dryrun results at the server
@@ -429,7 +447,7 @@ class AgentDryRun(Method):
     """
     __method_name__ = "agent_dryrun"
 
-    @protocol(operation="POST", mt=True, id=True, server_agent=True, timeout=5)
+    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
     def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
         """
             Do a dryrun on an agent
@@ -447,7 +465,7 @@ class NotifyMethod(Method):
     """
     __method_name__ = "notify"
 
-    @protocol(operation="GET", id=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def notify_change(self, id: uuid.UUID, update: int=1):
         """
             Notify the server that the repository of the environment with the given id, has changed.
@@ -471,7 +489,7 @@ class ParameterMethod(Method):
     """
     __method_name__ = "parameter"
 
-    @protocol(operation="GET", mt=True, id=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def get_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Get a parameter from the server.
@@ -486,7 +504,7 @@ class ParameterMethod(Method):
                     503: The parameter is not found but its value is requested from an agent
         """
 
-    @protocol(operation="PUT", mt=True, id=True)
+    @protocol(operation="PUT", id=True, arg_options=ENV_OPTS)
     def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={}):
         """
             Set a parameter on the server
@@ -499,7 +517,7 @@ class ParameterMethod(Method):
             :param metadata metadata about the parameter
         """
 
-    @protocol(operation="POST", index=True, mt=True)
+    @protocol(operation="POST", index=True, arg_options=ENV_OPTS)
     def list_params(self, tid: uuid.UUID, query: dict={}):
         """
             List the parameter of this environment
@@ -515,7 +533,7 @@ class ParametersMethod(Method):
     """
     __method_name__ = "parameters"
 
-    @protocol(operation="PUT", mt=True, index=True, agent_server=True)
+    @protocol(operation="PUT", index=True, agent_server=True, arg_options=ENV_OPTS)
     def set_parameters(self, tid: uuid.UUID, parameters: list):
         """
             Set a parameter on the server
@@ -536,7 +554,7 @@ class AgentParameterMethod(Method):
     """
     __method_name__ = "agent_parameter"
 
-    @protocol(operation="POST", mt=True, server_agent=True, timeout=5)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
     def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
         """
             Get all parameters/facts known by the agents for the given resource
@@ -553,19 +571,19 @@ class FormMethod(Method):
     """
     __method_name__ = "form"
 
-    @protocol(operation="GET", mt=True, index=True)
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS)
     def list_forms(self, tid: uuid.UUID):
         """
             List all available forms in an environment
         """
 
-    @protocol(operation="GET", mt=True, id=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def get_form(self, tid: uuid.UUID, id: str):
         """
             Get a form
         """
 
-    @protocol(operation="PUT", mt=True, id=True)
+    @protocol(operation="PUT", id=True, arg_options=ENV_OPTS)
     def put_form(self, tid: uuid.UUID, id: str, form: dict):
         """
             Upload a form
@@ -578,7 +596,7 @@ class FormRecords(Method):
     """
     __method_name__ = "records"
 
-    @protocol(operation="GET", mt=True, index=True)
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS)
     def list_records(self, tid: uuid.UUID, form_type: str, include_record: bool=False):
         """
             Get a list of all records of a specific form
@@ -588,7 +606,7 @@ class FormRecords(Method):
             :param include_record Include all the data contained in the record as well
         """
 
-    @protocol(operation="GET", mt=True, id=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def get_record(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Get a record from the server
@@ -597,7 +615,7 @@ class FormRecords(Method):
             :param record_id The id of the record
         """
 
-    @protocol(operation="PUT", mt=True, id=True)
+    @protocol(operation="PUT", id=True, arg_options=ENV_OPTS)
     def update_record(self, tid: uuid.UUID, id: uuid.UUID, form: dict):
         """
             Update a record
@@ -607,7 +625,7 @@ class FormRecords(Method):
             :param form The values of each field
         """
 
-    @protocol(operation="POST", mt=True, index=True)
+    @protocol(operation="POST", index=True, arg_options=ENV_OPTS)
     def create_record(self, tid: uuid.UUID, form_type: str, form: dict):
         """
             Get a list of all records of a specific form
@@ -617,7 +635,7 @@ class FormRecords(Method):
             :param form The values for each field
         """
 
-    @protocol(operation="DELETE", mt=True, id=True)
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS)
     def delete_record(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Delete a record
@@ -633,7 +651,7 @@ class CodeMethod(Method):
     """
     __method_name__ = "code"
 
-    @protocol(operation="PUT", id=True, mt=True)
+    @protocol(operation="PUT", id=True, arg_options=ENV_OPTS)
     def upload_code(self, tid: uuid.UUID, id: int, resource: str, sources: dict):
         """
             Upload the supporting code to the server
@@ -643,7 +661,7 @@ class CodeMethod(Method):
             :param sources The source files that contain handlers and inmanta plug-ins
         """
 
-    @protocol(operation="GET", id=True, mt=True, agent_server=True)
+    @protocol(operation="GET", id=True, agent_server=True, arg_options=ENV_OPTS)
     def get_code(self, tid: uuid.UUID, id: int, resource: str):
         """
             Get the code for a given version of the configuration model
@@ -690,25 +708,25 @@ class Snapshot(Method):
     """
     __method_name__ = "snapshot"
 
-    @protocol(operation="GET", index=True, mt=True)
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS)
     def list_snapshots(self, tid: uuid.UUID):
         """
             Create a list of all snapshots
         """
 
-    @protocol(operation="GET", id=True, mt=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def get_snapshot(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Get details about a snapshot and a list of resources that can be snapshotted
         """
 
-    @protocol(operation="POST", mt=True, index=True)
+    @protocol(operation="POST", index=True, arg_options=ENV_OPTS)
     def create_snapshot(self, tid: uuid.UUID, name: str=None):
         """
             Request a new snapshot
         """
 
-    @protocol(operation="PUT", mt=True, id=True, agent_server=True)
+    @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
     def update_snapshot(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, snapshot_data: str, error: bool, success: bool,
                         start: datetime.datetime, stop: datetime.datetime, size: int, msg: str=None):
         """
@@ -724,7 +742,7 @@ class Snapshot(Method):
             :param msg An optional message about the snapshot
         """
 
-    @protocol(operation="DELETE", mt=True, id=True)
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS)
     def delete_snapshot(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Delete a snapshot
@@ -737,7 +755,7 @@ class AgentSnapshot(Method):
     """
     __method_name__ = "agent_snapshot"
 
-    @protocol(operation="POST", mt=True, server_agent=True, timeout=5)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
     def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -755,7 +773,7 @@ class RestoreSnapshot(Method):
     """
     __method_name__ = "restore"
 
-    @protocol(operation="POST", mt=True, index=True)
+    @protocol(operation="POST", index=True, arg_options=ENV_OPTS)
     def restore_snapshot(self, tid: uuid.UUID, snapshot: uuid.UUID):
         """
             Restore a snapshot
@@ -764,7 +782,7 @@ class RestoreSnapshot(Method):
             :param snapshot The id of the snapshot to restore
         """
 
-    @protocol(operation="POST", mt=True, id=True, agent_server=True)
+    @protocol(operation="POST", id=True, agent_server=True, arg_options=ENV_OPTS)
     def update_restore(self, tid: uuid.UUID, id: uuid.UUID, resource_id: str, success: bool, error: bool, msg: str,
                        start: datetime.datetime, stop: datetime.datetime):
         """
@@ -775,19 +793,19 @@ class RestoreSnapshot(Method):
             :param resource_id The state id of the resource that was restored.
         """
 
-    @protocol(operation="GET", mt=True, index=True)
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS)
     def list_restores(self, tid: uuid.UUID):
         """
             List finished and ongoing restores
         """
 
-    @protocol(operation="GET", mt=True, id=True)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
     def get_restore_status(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Get the status of a restore
         """
 
-    @protocol(operation="DELETE", mt=True, id=True)
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS)
     def delete_restore(self, tid: uuid.UUID, id: uuid.UUID):
         """
             Cancel a restore
@@ -800,7 +818,7 @@ class AgentRestore(Method):
     """
     __method_name__ = "agent_restore"
 
-    @protocol(operation="POST", mt=True, server_agent=True, timeout=5)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
     def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -845,7 +863,7 @@ class ServerAgentApiMethod(Method):
     """
     __method_name__ = "agent"
 
-    @protocol(operation="POST", id=True, mt=True, api=True, timeout=5)
+    @protocol(operation="POST", id=True, api=True, timeout=5, arg_options=ENV_OPTS)
     def trigger_agent(self, tid: uuid.UUID, id: str):
         """
             Request the server to reload an agent
@@ -855,13 +873,14 @@ class ServerAgentApiMethod(Method):
             :return The requested node
         """
 
-    @protocol(operation="GET", mt=True, api=True, timeout=5)
+    @protocol(operation="GET", api=True, timeout=5, arg_options=ENV_OPTS)
     def list_agents(self, tid: uuid.UUID):
         """
             List all agent for an environment
 
             :param tid The environment the agents are defined in
         """
+        print(tid)
 
 
 class AgentReporting(Method):
@@ -889,7 +908,7 @@ class AgentState(Method):
             Set the state of the agent.
         """
 
-    @protocol(operation="POST", id=True, mt=True, server_agent=True, timeout=5)
+    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
     def trigger(self, tid: uuid.UUID, id: str):
         """
             Request an agent to reload resources
@@ -905,7 +924,7 @@ class AgentResourceEvent(Method):
     """
     __method_name__ = "event"
 
-    @protocol(operation="PUT", id=True, mt=True, server_agent=True, timeout=5)
+    @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
     def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
         """
             Tell an agent a resource it waits for has been updated
@@ -923,7 +942,7 @@ class AgentRecovery(Method):
     """
     __method_name__ = "agentrecovery"
 
-    @protocol(operation="GET", mt=True, agent_server=True)
+    @protocol(operation="GET", agent_server=True, arg_options=ENV_OPTS)
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
         """
             Get the state for this agent.
