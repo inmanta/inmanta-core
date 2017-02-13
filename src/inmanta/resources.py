@@ -235,9 +235,31 @@ class Resource(metaclass=ResourceMeta):
                 raise Exception("Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"
                                 % (model_object, agent_attribute, el))
 
-        attribute_value = getattr(model_object, attribute_name)
+        attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
 
         return Id(entity_name, agent_value, attribute_name, attribute_value)
+
+    @classmethod
+    def map_field(cls, exporter, entity_name, field_name, model_object):
+        try:
+            try:
+                if hasattr(cls, "get_" + field_name):
+                    mthd = getattr(cls, "get_" + field_name)
+                    value = mthd(exporter, DynamicProxy.return_value(model_object))
+                elif hasattr(cls, "map") and field_name in cls.map:
+                    value = cls.map[field_name](exporter, DynamicProxy.return_value(model_object))
+                else:
+                    value = getattr(model_object, field_name)
+
+                if isinstance(value, DictProxy):
+                    value = serialize_dict_proxy(value)
+
+                return value
+            except UnknownException as e:
+                return e.unknown
+
+        except AttributeError:
+            raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
     def create_from_model(cls, exporter, entity_name, model_object):
@@ -255,25 +277,8 @@ class Resource(metaclass=ResourceMeta):
         obj = cls(obj_id)
 
         for field in cls.fields:
-            try:
-                try:
-                    if hasattr(cls, "get_" + field):
-                        mthd = getattr(cls, "get_" + field)
-                        value = mthd(exporter, DynamicProxy.return_value(model_object))
-                    elif hasattr(cls, "map") and field in cls.map:
-                        value = cls.map[field](exporter, DynamicProxy.return_value(model_object))
-                    else:
-                        value = getattr(model_object, field)
-
-                    if isinstance(value, DictProxy):
-                        value = serialize_dict_proxy(value)
-
-                    setattr(obj, field, value)
-                except UnknownException as e:
-                    setattr(obj, field, e.unknown)
-
-            except AttributeError:
-                raise AttributeError("Attribute %s does not exist on entity of type %s" % (field, entity_name))
+            value = cls.map_field(exporter, entity_name, field, model_object)
+            setattr(obj, field, value)
 
         obj.requires = getattr(model_object, "requires")
         obj.model = model_object
