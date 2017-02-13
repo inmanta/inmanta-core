@@ -152,7 +152,7 @@ post.requires = inter
 """)
 
     executor.do_export()
-    warning = [x for x in caplog.records() if x.msg ==
+    warning = [x for x in caplog.records if x.msg ==
                "The resource %s had requirements before flattening, but not after flattening."
                " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
     assert len(warning) == 1
