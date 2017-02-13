@@ -25,8 +25,12 @@ import shutil
 from mongobox import MongoBox
 import pytest
 from inmanta import config
+import inmanta.compiler as compiler
 import pymongo
 from motorengine.connection import connect, disconnect
+from inmanta.module import Project
+from tempfile import mktemp
+from inmanta.ast import CompilerException
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -156,3 +160,78 @@ def client(server):
     client = protocol.Client("client")
 
     yield client
+
+
+class SnippetCompilationTest(object):
+    libs = None
+    env = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.libs = tempfile.mkdtemp()
+        cls.env = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.libs)
+        shutil.rmtree(cls.env)
+
+    def setUpForSnippet(self, snippet, autostd=True):
+        # init project
+        self.project_dir = tempfile.mkdtemp()
+        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
+
+        with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
+            cfg.write(
+                """
+            name: snippet test
+            modulepath: [%s, %s]
+            downloadpath: %s
+            version: 1.0
+            repo: ['https://github.com/inmanta/']"""
+                % (self.__class__.libs,
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
+                    self.__class__.libs))
+
+        with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
+            x.write(snippet)
+
+        Project.set(Project(self.project_dir, autostd=autostd))
+
+    def do_export(self):
+        templfile = mktemp("json", "dump", self.project_dir)
+
+        config.Config.load_config()
+        from inmanta.export import Exporter
+
+        (types, scopes) = compiler.do_compile()
+
+        class Options(object):
+            pass
+        options = Options()
+        options.json = templfile
+        options.depgraph = False
+        options.deploy = False
+        options.ssl = False
+
+        export = Exporter(options=options)
+        return export.run(types, scopes)
+
+    def setup_for_error(self, snippet, shouldbe):
+        self.setUpForSnippet(snippet)
+        try:
+            compiler.do_compile()
+            assert False, "Should get exception"
+        except CompilerException as e:
+            text = str(e)
+            print(text)
+            shouldbe = shouldbe.format(dir=self.project_dir)
+            assert shouldbe == text
+
+
+@pytest.fixture(scope="session")
+def snippetcompiler():
+    ast = SnippetCompilationTest()
+    ast.setUpClass()
+    yield ast
+    ast.tearDownClass()

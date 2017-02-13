@@ -37,10 +37,8 @@ from inmanta.parser import ParserException
 import pytest
 from inmanta.execute.util import Unknown
 from inmanta.export import DependencyCycleException
-from tempfile import mktemp
 from utils import assertGraph
-
-import pytest_catchlog
+from conftest import SnippetCompilationTest
 
 
 class CompilerBaseTest(object):
@@ -60,75 +58,8 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-class AbstractSnippetTest(object):
-    libs = None
-    env = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.libs = tempfile.mkdtemp()
-        cls.env = tempfile.mkdtemp()
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.libs)
-        shutil.rmtree(cls.env)
-
-    def setUpForSnippet(self, snippet, autostd=True):
-        # init project
-        self.project_dir = tempfile.mkdtemp()
-        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
-
-        with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
-            cfg.write(
-                """
-            name: snippet test
-            modulepath: [%s, %s]
-            downloadpath: %s
-            version: 1.0
-            repo: ['https://github.com/inmanta/']"""
-                % (self.__class__.libs,
-                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.__class__.libs))
-
-        with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
-            x.write(snippet)
-
-        Project.set(Project(self.project_dir, autostd=autostd))
-
-    def do_export(self):
-        templfile = mktemp("json", "dump", self.project_dir)
-
-        config.Config.load_config()
-        from inmanta.export import Exporter
-
-        (types, scopes) = compiler.do_compile()
-
-        class Options(object):
-            pass
-        options = Options()
-        options.json = templfile
-        options.depgraph = False
-        options.deploy = False
-        options.ssl = False
-
-        export = Exporter(options=options)
-        return export.run(types, scopes)
-
-    def xtearDown(self):
-        shutil.rmtree(self.project_dir)
-
-
-@pytest.fixture(scope="module")
-def executor():
-    ast = AbstractSnippetTest()
-    ast.setUpClass()
-    yield ast
-    ast.tearDownClass()
-
-
-def testAbstractRequres2(executor, caplog):
-    executor.setUpForSnippet("""
+def testAbstractRequres2(snippetcompiler, caplog):
+    snippetcompiler.setUpForSnippet("""
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -151,14 +82,14 @@ inter.requires = pre
 post.requires = inter
 """)
 
-    executor.do_export()
+    snippetcompiler.do_export()
     warning = [x for x in caplog.records if x.msg ==
                "The resource %s had requirements before flattening, but not after flattening."
                " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
     assert len(warning) == 1
 
 
-class SnippetTests(AbstractSnippetTest, unittest.TestCase):
+class SnippetTests(SnippetCompilationTest, unittest.TestCase):
 
     def testIssue92(self):
         self.setUpForSnippet("""

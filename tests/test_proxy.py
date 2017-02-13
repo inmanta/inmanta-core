@@ -19,12 +19,12 @@
 import unittest
 
 import pytest
-from test_compilation import AbstractSnippetTest
+from test_compilation import SnippetCompilationTest
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import DynamicProxy
 
 
-class TestDynamicProxy(AbstractSnippetTest, unittest.TestCase):
+class TestDynamicProxy(SnippetCompilationTest, unittest.TestCase):
 
     def proxyObject(self, snippet, var):
         self.setUpForSnippet(snippet)
