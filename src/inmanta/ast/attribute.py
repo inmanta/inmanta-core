@@ -77,7 +77,7 @@ class Attribute(object):
         if (not hasattr(value, "is_unknown") or not value.is_unknown()) and not isinstance(value, Unknown):
             self.type.validate(value)
 
-    def get_new_Result_Variable(self, instance, queue):
+    def get_new_result_variable(self, instance, queue):
         out = ResultVariable()
         if self.__multi:
             out.set_type(TypedList(self.__type))
@@ -109,7 +109,7 @@ class RelationAttribute(Attribute):
         self.low = values[0]
         self.high = values[1]
 
-    def get_new_Result_Variable(self, instance, queue):
+    def get_new_result_variable(self, instance, queue):
         if self.low == 1 and self.high == 1:
             out = AttributeVariable(self, instance)
         elif self.low == 0 and self.high == 1:

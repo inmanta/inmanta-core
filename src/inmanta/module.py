@@ -67,7 +67,7 @@ class ProjectNotFoundExcpetion(Exception):
     """
 
 
-class GitProvider:
+class GitProvider(object):
 
     def clone(self, src, dest):
         pass
@@ -224,7 +224,7 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
-class ModuleRepo:
+class ModuleRepo(object):
 
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
@@ -293,7 +293,7 @@ class RemoteRepo(ModuleRepo):
         raise NotImplementedError("Should only be called on local repos")
 
 
-def makeRepo(path, root=None):
+def make_repo(path, root=None):
     if ":" in path:
         return RemoteRepo(path)
     else:
@@ -310,7 +310,7 @@ def merge_specs(mainspec, new):
             mainspec[key] = mainspec[key] + [req]
 
 
-class ModuleLike:
+class ModuleLike(object):
     """
         Commons superclass for projects and modules, which are both versioned by git
     """
@@ -413,7 +413,7 @@ class Project(ModuleLike):
         if not isinstance(modulepath, list):
             modulepath = [modulepath]
         self.modulepath = [os.path.abspath(os.path.join(path, x)) for x in modulepath]
-        self.resolver = CompositeModuleRepo([makeRepo(x) for x in self.modulepath])
+        self.resolver = CompositeModuleRepo([make_repo(x) for x in self.modulepath])
 
         if "repo" not in self._meta:
             raise Exception("repo is required in the project(.yml) file")
@@ -422,7 +422,7 @@ class Project(ModuleLike):
         if not isinstance(repo, list):
             repo = [repo]
         self.repolist = [x for x in repo]
-        self.externalResolver = CompositeModuleRepo([makeRepo(x, root=path) for x in self.repolist])
+        self.externalResolver = CompositeModuleRepo([make_repo(x, root=path) for x in self.repolist])
 
         self.downloadpath = None
         if "downloadpath" in self._meta:

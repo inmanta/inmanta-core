@@ -265,7 +265,7 @@ class ResourceScheduler(object):
         return self.agent.get_client()
 
 
-class AgentInstance():
+class AgentInstance(object):
 
     def __init__(self, process, name: str, hostname: str):
         self.process = process

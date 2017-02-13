@@ -286,7 +286,7 @@ class TypeNotFoundException(RuntimeException):
         self.ns = ns
 
 
-def stringifyException(exn: Exception):
+def stringify_exception(exn: Exception):
     if isinstance(exn, CompilerException):
         return str(exn)
     return "%s: %s" % (exn.__class__.__name__, str(exn))
@@ -298,7 +298,7 @@ class WrappingRuntimeException(RuntimeException):
         if stmt is None:
             if isinstance(cause, RuntimeException):
                 stmt = cause.stmt
-        longmsg = "%s caused by %s" % (msg, stringifyException(cause))
+        longmsg = "%s caused by %s" % (msg, stringify_exception(cause))
         RuntimeException.__init__(self, stmt=stmt, msg=longmsg)
         self.__cause__ = cause
 

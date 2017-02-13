@@ -545,7 +545,7 @@ class Instance(ExecutionContext):
     def __init__(self, type, resolver, queue):
         self.resolver = resolver.get_root_resolver()
         self.type = type
-        self.slots = {n: type.get_attribute(n).get_new_Result_Variable(self, queue) for n in type.get_all_attribute_names()}
+        self.slots = {n: type.get_attribute(n).get_new_result_variable(self, queue) for n in type.get_all_attribute_names()}
         self.slots["self"] = ResultVariable()
         self.slots["self"].set_value(self, None)
         self.sid = id(self)

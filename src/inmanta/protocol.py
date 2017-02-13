@@ -119,11 +119,11 @@ class Transport(object):
             for logging and configuration purposes
     """
     @classmethod
-    def create(cls, TransportClass, endpoint=None):
+    def create(cls, transport_class, endpoint=None):
         """
             Create an instance of the transport class
         """
-        return TransportClass(endpoint)
+        return transport_class(endpoint)
 
     def __init__(self, endpoint=None):
         self.__end_point = endpoint
@@ -261,7 +261,7 @@ class LoginHandler(tornado.web.RequestHandler):
             self.respond(*self._transport.return_error_msg(400, "Field password is missing"))
             return
 
-        if self._aa.get_authn().isValid(message["user"], message["password"]):
+        if self._aa.get_authn().is_valid(message["user"], message["password"]):
             self.write(
                 json_encode({"token": create_signed_value(self._aa.secret, "user", message["user"]).decode("utf8")}))
         else:
@@ -300,7 +300,7 @@ class HasUserAuthManager(AuthManager):
 
 class AuthNManager(object):
 
-    def isValid(self, user, credential):
+    def is_valid(self, user, credential):
         raise NotImplementedError()
 
 
@@ -310,13 +310,13 @@ class SingleUserAuthManager(AuthNManager):
         self.user = user
         self.crediation = credential
 
-    def isValid(self, user, credential):
+    def is_valid(self, user, credential):
         return user == self.user and self.crediation == credential
 
 
 class NoAuthManager(AuthNManager):
 
-    def isValid(self, user, credential):
+    def is_valid(self, user, credential):
         return False
 
 
@@ -850,7 +850,7 @@ class RESTTransport(Transport):
         return self.endpoint.validate_sid(sid)
 
 
-class handle(object):
+class handle(object):  # noqa: H801
     """
         Decorator for subclasses of an endpoint to handle protocol methods
 

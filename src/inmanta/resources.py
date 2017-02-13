@@ -29,7 +29,7 @@ from inmanta.module import Project
 LOGGER = logging.getLogger(__name__)
 
 
-class resource(object):
+class resource(object):  # noqa: H801
     """
     A decorator that registers a new resource and the typename used in the protocol
     """

@@ -37,8 +37,8 @@ def test_bad_module():
         module.Module(project=mock.Mock(), path=bad_mod_dir)
 
 
-class testModuleName(unittest.TestCase):
-    def __init__(self, methodName='runTest'):
+class TestModuleName(unittest.TestCase):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
 
         self.stream = None

@@ -18,7 +18,7 @@
 
 
 def test_id_mapping_export(snippetcompiler):
-    snippetcompiler.setUpForSnippet("""import exp
+    snippetcompiler.setup_for_snippet("""import exp
 
         exp::Test(name="a", agent="b")
         """)
@@ -31,7 +31,7 @@ def test_id_mapping_export(snippetcompiler):
 
 
 def test_unknown_agent(snippetcompiler):
-    snippetcompiler.setUpForSnippet("""import exp
+    snippetcompiler.setup_for_snippet("""import exp
         import tests
 
         exp::Test(name="a", agent=tests::unknown())
@@ -42,7 +42,7 @@ def test_unknown_agent(snippetcompiler):
 
 
 def test_unknown_attribute_value(snippetcompiler):
-    snippetcompiler.setUpForSnippet("""import exp
+    snippetcompiler.setup_for_snippet("""import exp
         import tests
 
         exp::Test(name=tests::unknown(), agent="b")

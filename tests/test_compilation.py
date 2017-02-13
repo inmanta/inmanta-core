@@ -37,7 +37,7 @@ from inmanta.parser import ParserException
 import pytest
 from inmanta.execute.util import Unknown
 from inmanta.export import DependencyCycleException
-from utils import assertGraph
+from utils import assert_graph
 from conftest import SnippetCompilationTest
 
 
@@ -58,8 +58,8 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-def testAbstractRequres2(snippetcompiler, caplog):
-    snippetcompiler.setUpForSnippet("""
+def test_abstract_requres_2(snippetcompiler, caplog):
+    snippetcompiler.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -91,8 +91,8 @@ post.requires = inter
 
 class SnippetTests(SnippetCompilationTest, unittest.TestCase):
 
-    def testIssue92(self):
-        self.setUpForSnippet("""
+    def test_issue_92(self):
+        self.setup_for_snippet("""
         entity Host extends std::NotThere:
         end
 """)
@@ -102,15 +102,15 @@ class SnippetTests(SnippetCompilationTest, unittest.TestCase):
         except TypeNotFoundException as e:
             assert e.location.lnr == 2
 
-    def testIssue73(self):
-        self.setUpForSnippet("""
+    def test_issue_73(self):
+        self.setup_for_snippet("""
 vm1 = std::floob()
 """)
         with pytest.raises(TypeNotFoundException):
             compiler.do_compile()
 
-    def testOptionValues(self):
-        self.setUpForSnippet("""
+    def test_option_values(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -134,8 +134,8 @@ Test1()
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
-    def testIsset(self):
-        self.setUpForSnippet("""
+    def test_isset(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -158,8 +158,8 @@ Test1(other=Test2())
 """)
         compiler.do_compile()
 
-    def testIssue93(self):
-        self.setUpForSnippet("""
+    def test_issue_93(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -185,8 +185,8 @@ std::print(t.test2.attribute)
         except RuntimeException as e:
             assert e.location.lnr == 18
 
-    def testIssue121_non_matching_index(self):
-        self.setUpForSnippet("""
+    def test_issue_121_non_matching_index(self):
+        self.setup_for_snippet("""
         a=std::Host[name="test"]
         """)
 
@@ -196,8 +196,8 @@ std::print(t.test2.attribute)
         except NotFoundException as e:
             assert e.location.lnr == 2
 
-    def testIssue122IndexInheritance(self):
-        self.setUpForSnippet("""
+    def test_issue_122_index_inheritance(self):
+        self.setup_for_snippet("""
 entity Repository extends std::File:
     string name
     bool gpgcheck=false
@@ -233,8 +233,8 @@ Repository(host=h1, name="flens-demo",
         except TypingException as e:
             assert e.location.lnr == 24
 
-    def testIssue110Resolution(self):
-        self.setUpForSnippet("""
+    def test_issue_110_resolution(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -250,24 +250,24 @@ t = Test1()
         with pytest.raises(NotFoundException):
             compiler.do_compile()
 
-    def testIssue120BadImport(self):
-        self.setUpForSnippet("""import ip::ip""")
+    def test_issue_120_bad_import(self):
+        self.setup_for_snippet("""import ip::ip""")
         try:
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except ModuleNotFoundException as e:
             assert e.location.lnr == 1
 
-    def testIssue120BadImport_extra(self):
-        self.setUpForSnippet("""import slorpf""")
+    def test_issue_120_bad_import_extra(self):
+        self.setup_for_snippet("""import slorpf""")
         try:
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except ModuleNotFoundException as e:
             assert e.location.lnr == 1
 
-    def testOrderOfExecution(self):
-        self.setUpForSnippet("""
+    def test_order_of_execution(self):
+        self.setup_for_snippet("""
 for i in std::sequence(10):
     std::print(i)
 end
@@ -283,16 +283,16 @@ end
         finally:
             sys.stdout = saved_stdout
 
-    def testIssue127DefaultOverrides(self):
-        self.setUpForSnippet("""
+    def test_issue_127_default_overrides(self):
+        self.setup_for_snippet("""
 f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
         """)
         (types, _) = compiler.do_compile()
         instances = types["std::File"].get_all_instances()
         assert instances[0].get_attribute("owner").get_value() == "wouter"
 
-    def testIssue135DuploRelations(self):
-        self.setUpForSnippet("""
+    def test_issue_135_duplo_relations(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -308,8 +308,8 @@ Test1 test1 [0:1] -- [0:] Test2 test2
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue135DuploRelations2(self):
-        self.setUpForSnippet("""
+    def test_issue_135_duplo_relations_2(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -325,8 +325,8 @@ Test1 test1 [1] -- [0:] Test2 floem
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue135DuploRelations3(self):
-        self.setUpForSnippet("""
+    def test_issue_135_duplo_relations_3(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -342,8 +342,8 @@ Test1 test1 [1] -- [0:] Test1 test2
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue135DuploRelations4(self):
-        self.setUpForSnippet("""
+    def test_issue_135_duplo_relations_4(self):
+        self.setup_for_snippet("""
 entity Stdhost:
 
 end
@@ -364,8 +364,8 @@ Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue135DuploRelations5(self):
-        self.setUpForSnippet("""
+    def test_issue_135_duplo_relations_5(self):
+        self.setup_for_snippet("""
 entity Stdhost:
 
 end
@@ -387,15 +387,15 @@ Stdhost deploy_host [1] -- [0:1] Agent inmanta_agent
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue132RelationOnDefault(self):
-        self.setUpForSnippet("""
+    def test_issue_132_relation_on_default(self):
+        self.setup_for_snippet("""
 std::ConfigFile cfg [1] -- [1] std::File stuff
 """)
         with pytest.raises(TypingException):
             compiler.do_compile()
 
-    def testIssue141(self):
-        self.setUpForSnippet("""
+    def test_issue_141(self):
+        self.setup_for_snippet("""
 h = std::Host(name="test", os=std::linux)
 
 entity SpecialService extends std::Service:
@@ -406,9 +406,9 @@ std::Host host [1] -- [0:] SpecialService services_list""")
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue140IndexError(self):
+    def test_issue_140_index_error(self):
         try:
-            self.setUpForSnippet("""
+            self.setup_for_snippet("""
         h = std::Host(name="test", os=std::linux)
         test = std::Service[host=h, path="test"]""")
             compiler.do_compile()
@@ -416,9 +416,9 @@ std::Host host [1] -- [0:] SpecialService services_list""")
         except NotFoundException as e:
             assert re.match('.*No index defined on std::Service for this lookup:.*', str(e))
 
-    def testIssue134CollidingUmplementations(self):
+    def test_issue_134_colliding_umplementations(self):
 
-        self.setUpForSnippet("""
+        self.setup_for_snippet("""
 implementation test for std::Entity:
 end
 implementation test for std::Entity:
@@ -426,8 +426,8 @@ end""")
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue126HangingStatements(self):
-        self.setUpForSnippet("""entity LogFile:
+    def test_issue_126_hanging_statements(self):
+        self.setup_for_snippet("""entity LogFile:
 string name
 end
 
@@ -448,8 +448,8 @@ c2 = LogCollector(name="c2", logfiles=lf1)
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
-    def testIssue139Scheduler(self):
-        self.setUpForSnippet("""import std
+    def test_issue_139_scheduler(self):
+        self.setup_for_snippet("""import std
 
 entity Host extends std::Host:
     string attr
@@ -466,8 +466,8 @@ ref = std::Service[host=host, name="svc"]
         with pytest.raises(MultiException):
             compiler.do_compile()
 
-    def testMtoN(self):
-        self.setUpForSnippet("""
+    def test_m_to_n(self):
+        self.setup_for_snippet("""
 entity LogFile:
   string name
   number members
@@ -505,8 +505,8 @@ std::print([c1,c2,lf1,lf2,lf3,lf4,lf5,lf6,lf7,lf8])
         for lf in types["__config__::LogFile"].get_all_instances():
             assert lf.get_attribute("members").get_value() == len(lf.get_attribute("collectors").get_value())
 
-    def testDict(self):
-        self.setUpForSnippet("""
+    def test_dict(self):
+        self.setup_for_snippet("""
 a = "a"
 b = { "a" : a, "b" : "b", "c" : 3}
 """)
@@ -519,8 +519,8 @@ b = { "a" : a, "b" : "b", "c" : 3}
         assert b["b"] == "b"
         assert b["c"] == 3
 
-    def testDictCollide(self):
-        self.setUpForSnippet("""
+    def test_dict_collide(self):
+        self.setup_for_snippet("""
 a = "a"
 b = { "a" : a, "a" : "b", "c" : 3}
 """)
@@ -528,8 +528,8 @@ b = { "a" : a, "a" : "b", "c" : 3}
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testDictAttr(self):
-        self.setUpForSnippet("""
+    def test_dict_attr(self):
+        self.setup_for_snippet("""
 entity Foo:
   dict bar
   dict foo = {}
@@ -548,24 +548,24 @@ z=5
 
         scope = root.get_child("__config__").scope
 
-        def mapAssert(in_dict, expected):
+        def map_assert(in_dict, expected):
             for (ek, ev), (k, v) in zip(expected.items(), in_dict.items()):
                 assert ek == k
                 assert ev == v
 
         def validate(var, bar, foo, blah):
             e = scope.lookup(var).get_value()
-            mapAssert(e.get_attribute("bar").get_value(), bar)
-            mapAssert(e.get_attribute("foo").get_value(), foo)
-            mapAssert(e.get_attribute("blah").get_value(), blah)
+            map_assert(e.get_attribute("bar").get_value(), bar)
+            map_assert(e.get_attribute("foo").get_value(), foo)
+            map_assert(e.get_attribute("blah").get_value(), blah)
 
         validate("a", {}, {}, {"a": "a"})
         validate("b", {"a": 5}, {}, {"a": "a"})
 
         validate("c", {}, {}, {"z": "y"})
 
-    def testDictAttrTypeError(self):
-        self.setUpForSnippet("""
+    def test_dict_attr_type_error(self):
+        self.setup_for_snippet("""
 entity Foo:
   dict bar
   dict foo = {}
@@ -580,8 +580,8 @@ b=Foo(bar={"a":"A"})
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
-    def testListAtributes(self):
-        self.setUpForSnippet("""
+    def test_list_atributes(self):
+        self.setup_for_snippet("""
 entity Jos:
   bool[] bar
   std::package_state[] ips = ["installed"]
@@ -615,8 +615,8 @@ d = Jos(bar = [], floom=["test","test2"])
         check_jos(scope.lookup("c"), [])
         check_jos(scope.lookup("d"), [], floom=["test", "test2"])
 
-    def testListAtributeTypeViolation1(self):
-        self.setUpForSnippet("""
+    def test_list_atribute_type_violation_1(self):
+        self.setup_for_snippet("""
 entity Jos:
   bool[] bar = true
 end
@@ -626,8 +626,8 @@ c = Jos()
         with pytest.raises(ParserException):
             compiler.do_compile()
 
-    def testListAtributeTypeViolation2(self):
-        self.setUpForSnippet("""
+    def test_list_atribute_type_violation_2(self):
+        self.setup_for_snippet("""
 entity Jos:
   bool[] bar = ["x"]
 end
@@ -637,8 +637,8 @@ c = Jos()
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
-    def testListAtributeTypeViolation3(self):
-        self.setUpForSnippet("""
+    def test_list_atribute_type_violation_3(self):
+        self.setup_for_snippet("""
 entity Jos:
   bool[] bar
 end
@@ -648,8 +648,8 @@ c = Jos(bar = ["X"])
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
-    def testNewRelationSyntax(self):
-        self.setUpForSnippet("""
+    def test_new_relation_syntax(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -672,8 +672,8 @@ Test2(test1 = b)
         assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
         assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
 
-    def testNewRelationWithAnnotationSyntax(self):
-        self.setUpForSnippet("""
+    def test_new_relation_with_annotation_syntax(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -698,8 +698,8 @@ Test2(test1 = b)
         assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
         assert len(scope.lookup("b").get_value().get_attribute("tests").get_value()) == 1
 
-    def testNewRelationUniDir(self):
-        self.setUpForSnippet("""
+    def test_new_relation_uni_dir(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -720,8 +720,8 @@ a = Test1(tests=[Test2(),Test2()])
 
         assert len(scope.lookup("a").get_value().get_attribute("tests").get_value()) == 2
 
-    def testNewRelationUniDirDoubleDefine(self):
-        self.setUpForSnippet("""
+    def test_new_relation_uni_dir_double_define(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -738,8 +738,8 @@ Test2.xx [1] -- Test1.tests [0:]
         with pytest.raises(DuplicateException):
             compiler.do_compile()
 
-    def testIssue164FQNInWhen(self):
-        self.setUpForSnippet("""
+    def test_issue_164_fqn_in_when(self):
+        self.setup_for_snippet("""
 import ubuntu
 implementation linux for std::HostConfig:
 end
@@ -750,8 +750,8 @@ std::Host(name="vm1", os=ubuntu::ubuntu1404)
 """)
         compiler.do_compile()
 
-    def testIssue201DoubleSet(self):
-        self.setUpForSnippet("""
+    def test_issue_201_double_set(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -776,8 +776,8 @@ std::print(b.test1)
         a = types["__config__::Test1"].get_all_instances()[0]
         assert len(a.get_attribute("test2").value)
 
-    def testIssue212BadIndexDefintion(self):
-        self.setUpForSnippet("""
+    def test_issue_212_bad_index_defintion(self):
+        self.setup_for_snippet("""
 entity Test1:
     string x
 end
@@ -786,8 +786,8 @@ index Test1(x,y)
         with pytest.raises(RuntimeException):
             compiler.do_compile()
 
-    def testIssue224DefaultOverInheritance(self):
-        self.setUpForSnippet("""
+    def test_issue_224_default_over_inheritance(self):
+        self.setup_for_snippet("""
 entity Test1:
     string a = "a"
 end
@@ -805,8 +805,8 @@ Test3()
         i = instances[0]
         assert i.get_attribute("a").get_value() == "a"
 
-    def testIssue219UnknowsInTemplate(self):
-        self.setUpForSnippet("""
+    def test_issue_219_unknows_in_template(self):
+        self.setup_for_snippet("""
 import tests
 
 a = tests::unknown()
@@ -818,8 +818,8 @@ b = "abc{{a}}"
         assert isinstance(scope.lookup("a").get_value(), Unknown)
         assert isinstance(scope.lookup("b").get_value(), Unknown)
 
-    def testIssue235EmptyLists(self):
-        self.setUpForSnippet("""
+    def test_issue_235_empty_lists(self):
+        self.setup_for_snippet("""
 entity Test1:
 
 end
@@ -839,8 +839,8 @@ std::print(t1.tests)
 
         assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
 
-    def testIssue170AttributeException(self):
-        self.setUpForSnippet("""
+    def test_issue_170_attribute_exception(self):
+        self.setup_for_snippet("""
 entity Test1:
     string a
 end
@@ -850,8 +850,8 @@ Test1(a=3)
         with pytest.raises(AttributeException):
             compiler.do_compile()
 
-    def testIssue220DepLoops(self):
-        self.setUpForSnippet("""
+    def test_issue_220_dep_loops(self):
+        self.setup_for_snippet("""
 import std
 
 host = std::Host(name="Test", os=std::unix)
@@ -870,8 +870,8 @@ f4.requires = f1
         cyclenames = [r.id.resource_str() for r in e.value.cycle]
         assert set(cyclenames) == set(['std::File[Test,path=/f3]', 'std::File[Test,path=/f2]', 'std::File[Test,path=/f1]'])
 
-    def testIssue261Tracing(self):
-        self.setUpForSnippet("""
+    def test_issue_261_tracing(self):
+        self.setup_for_snippet("""
 entity Test1:
 end
 
@@ -921,7 +921,7 @@ Test1()
             assert l1[0].get_next()[0].namespace.name == "__config__"
 
     def test_str_on_instance_pos(self):
-        self.setUpForSnippet("""
+        self.setup_for_snippet("""
 import std
 
 entity Hg:
@@ -947,7 +947,7 @@ end
         assert len(files) == 3
 
     def test_str_on_instance_neg(self):
-        self.setUpForSnippet("""
+        self.setup_for_snippet("""
 import std
 
 entity Hg:
@@ -973,7 +973,7 @@ end
         assert len(files) == 1
 
     def test_trackingbug(self):
-        self.setUpForSnippet("""
+        self.setup_for_snippet("""
 entity A:
     bool z = true
 end
@@ -1027,8 +1027,8 @@ D()
         files = types["__config__::C"].get_all_instances()
         assert len(files) == 1
 
-    def testAbstractRequres(self):
-        self.setUpForSnippet("""
+    def test_abstract_requres(self):
+        self.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -1050,10 +1050,10 @@ inter = A(name = "inter")
 """)
 
         v, resources = self.do_export()
-        assertGraph(resources, """inter2: inter1""")
+        assert_graph(resources, """inter2: inter1""")
 
-    def testAbstractRequres3(self):
-        self.setUpForSnippet("""
+    def test_abstract_requres_3(self):
+        self.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -1079,14 +1079,14 @@ post.requires = inter
 """)
 
         v, resources = self.do_export()
-        assertGraph(resources, """post: inter2
+        assert_graph(resources, """post: inter2
                                   inter2: inter1
                                   inter1: pre""")
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_1")
 
@@ -1101,7 +1101,7 @@ class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
 class TestForCompile(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_2")
 
@@ -1113,7 +1113,7 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
 
 class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index_collission")
 
@@ -1124,7 +1124,7 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
 
 class TestLexerReset(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "lexer_reset")
 
@@ -1134,7 +1134,7 @@ class TestLexerReset(CompilerBaseTest, unittest.TestCase):
 
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index")
 
@@ -1164,7 +1164,7 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
 class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
@@ -1175,7 +1175,7 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
 
 class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_138")
 

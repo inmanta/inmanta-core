@@ -52,7 +52,7 @@ class DependencyCycleException(Exception):
         self.cycle = [start]
         self.running = True
 
-    def addToCycle(self, node):
+    def add_to_cycle(self, node):
         if node == self.start:
             self.running = False
         elif self.running:
@@ -186,7 +186,7 @@ class Exporter(object):
                 try:
                     find_cycle(dep, working)
                 except DependencyCycleException as e:
-                    e.addToCycle(current)
+                    e.add_to_cycle(current)
                     raise e
             done.add(current)
             working.remove(current)
@@ -495,7 +495,7 @@ class Exporter(object):
         return hash_id
 
 
-class dependency_manager(object):
+class dependency_manager(object):  # noqa: H801
     """
     Register a function that manages dependencies in the configuration model that will be deployed.
     """
@@ -504,7 +504,7 @@ class dependency_manager(object):
         Exporter.add_dependency_manager(function)
 
 
-class export(object):
+class export(object):  # noqa: H801
     """
         A decorator that registers an export function
     """

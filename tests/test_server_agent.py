@@ -30,7 +30,7 @@ from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
 from inmanta.agent.agent import Agent
-from utils import retry_limited, assertEqualIsh, UNKWN
+from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 
@@ -158,7 +158,7 @@ waiter = Condition()
 
 
 @gen.coroutine
-def waitForDoneWithWaiters(client, env_id, version):
+def wait_for_done_with_waiters(client, env_id, version):
     # unhang waiters
     result = yield client.get_version(env_id, version)
     assert result.code == 200
@@ -740,13 +740,9 @@ def test_server_agent_api(client, server, io_loop):
                   code_loader=False)
     agent.start()
 
-    yield gen.sleep(0.1)
-
     agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
                   code_loader=False)
     agent.start()
-
-    yield gen.sleep(0.2)
 
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
     assert len(server.agentmanager.sessions) == 2
@@ -760,16 +756,24 @@ def test_server_agent_api(client, server, io_loop):
         yield gen.sleep(0.1)
 
     assert(len(result.result["processes"]) == 2)
-    assertEqualIsh({'processes': [{'expired': None, 'environment': env_id, 'endpoints':
-                                   [{'name': 'agent1', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
-                                   'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN},
-                                  {'expired': None, 'environment': env_id, 'endpoints':
-                                   [{'name': 'agent2', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
-                                   'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}]},
-                   result.result, ['name', 'first_seen'])
+    agents = ["agent1", "agent2"]
+    for proc in result.result["processes"]:
+        assert(proc["environment"] == env_id)
+        assert(len(proc["endpoints"]) == 1)
+        assert(proc["endpoints"][0]["name"] in agents)
+        agents.remove(proc["endpoints"][0]["name"])
+
+    assert_equal_ish({'processes': [{'expired': None, 'environment': env_id,
+                                     'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
+                                     'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN},
+                                    {'expired': None, 'environment': env_id,
+                                     'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}],
+                                     'id': UNKWN, 'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}
+                                    ]},
+                     result.result, ['name', 'first_seen'])
 
     agentid = result.result["processes"][0]["id"]
-    endpointid = result.result["processes"][0]["endpoints"][0]["id"]
+    endpointid = [x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == "agent1"][0]
 
     result = yield client.get_agent_process(id=agentid)
     assert result.code == 200
@@ -808,7 +812,7 @@ def test_server_agent_api(client, server, io_loop):
         {'last_failover': UNKWN, 'environment': env_id, 'paused': False,
          'primary': endpointid, 'name': 'agent1', 'state': 'up'}]}
 
-    assertEqualIsh(shouldbe, result.result)
+    assert_equal_ish(shouldbe, result.result)
 
     result = yield client.list_agents(tid=uuid.uuid4())
     assert result.code == 404
@@ -1064,7 +1068,7 @@ def test_wait(client, server, io_loop):
     # set the deploy environment
     Provider.set("agent1", "key", "value")
 
-    def makeVersion(offset=0):
+    def make_version(offset=0):
         version = int(time.time() + offset)
 
         resources = [{'key': 'key',
@@ -1116,7 +1120,7 @@ def test_wait(client, server, io_loop):
         return version, resources
 
     @gen.coroutine
-    def waitForResources(version, n):
+    def wait_for_resources(version, n):
         result = yield client.get_version(env_id, version)
         assert result.code == 200
 
@@ -1127,7 +1131,7 @@ def test_wait(client, server, io_loop):
 
     logger.info("setup done")
 
-    version1, resources = makeVersion()
+    version1, resources = make_version()
     result = yield client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
@@ -1139,11 +1143,11 @@ def test_wait(client, server, io_loop):
 
     logger.info("first version released")
 
-    yield waitForResources(version1, 2)
+    yield wait_for_resources(version1, 2)
 
     logger.info("first version, 2 resources deployed")
 
-    version2, resources = makeVersion(3)
+    version2, resources = make_version(3)
     result = yield client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
@@ -1159,7 +1163,7 @@ def test_wait(client, server, io_loop):
 
     logger.info("second version released")
 
-    yield waitForDoneWithWaiters(client, env_id, version2)
+    yield wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
 
@@ -1266,7 +1270,7 @@ def test_cross_agent_deps(io_loop, server, client):
         result = yield client.get_version(env_id, version)
         yield gen.sleep(0.1)
 
-    result = yield waitForDoneWithWaiters(client, env_id, version)
+    result = yield wait_for_done_with_waiters(client, env_id, version)
 
     assert result.result["model"]["done"] == len(resources)
 

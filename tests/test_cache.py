@@ -34,13 +34,13 @@ class Resource(Resource):
 
 class CacheTests(unittest.TestCase):
 
-    def testBase(self):
+    def test_base(self):
         cache = AgentCache()
         value = "test too"
         cache.cache_value("test", value)
         assert value == cache.find("test")
 
-    def testTimout(self):
+    def test_timout(self):
         cache = AgentCache()
         value = "test too"
         cache.cache_value("test", value, timeout=0.1)
@@ -56,20 +56,20 @@ class CacheTests(unittest.TestCase):
 
         assert value == cache.find("test2")
 
-    def testBaseFail(self):
+    def test_base_fail(self):
         cache = AgentCache()
         value = "test too"
         with pytest.raises(KeyError):
             assert value == cache.find("test")
 
-    def testResource(self):
+    def test_resource(self):
         cache = AgentCache()
         value = "test too"
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
         cache.cache_value("test", value, resource=resource)
         assert value == cache.find("test", resource=resource)
 
-    def testResourceFail(self):
+    def test_resource_fail(self):
         cache = AgentCache()
         value = "test too"
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -78,7 +78,7 @@ class CacheTests(unittest.TestCase):
         with pytest.raises(KeyError):
             assert value == cache.find("test")
 
-    def testVersionClosed(self):
+    def test_version_closed(self):
         cache = AgentCache()
         value = "test too"
         version = 200
@@ -86,7 +86,7 @@ class CacheTests(unittest.TestCase):
             cache.cache_value("test", value, version=version)
             assert value == cache.find("test", version=version)
 
-    def testVersion(self):
+    def test_version(self):
         cache = AgentCache()
         value = "test too"
         version = 200
@@ -94,7 +94,7 @@ class CacheTests(unittest.TestCase):
         cache.cache_value("test", value, version=version)
         assert value == cache.find("test", version=version)
 
-    def testVersionClose(self):
+    def test_version_close(self):
         cache = AgentCache()
         value = "test too"
         version = 200
@@ -114,7 +114,7 @@ class CacheTests(unittest.TestCase):
         except KeyError:
             pass
 
-    def testTimoutAndVersion(self):
+    def test_timout_and_version(self):
         cache = AgentCache()
         version = 200
 
@@ -136,7 +136,7 @@ class CacheTests(unittest.TestCase):
             cache.find("test", version=version)
         assert value == cache.find("testx")
 
-    def testVersionAndTimout(self):
+    def test_version_and_timout(self):
         cache = AgentCache()
         version = 200
 
@@ -157,7 +157,7 @@ class CacheTests(unittest.TestCase):
         with pytest.raises(KeyError):
             cache.find("test", version=version)
 
-    def testVersionFail(self):
+    def test_version_fail(self):
         cache = AgentCache()
         value = "test too"
         version = 200
@@ -167,7 +167,7 @@ class CacheTests(unittest.TestCase):
         with pytest.raises(KeyError):
             assert value == cache.find("test")
 
-    def testResourceAndVersion(self):
+    def test_resource_and_version(self):
         cache = AgentCache()
         value = "test too"
         resource = Id("test::Resource", "test", "key", "test", 100).get_instance()
@@ -176,7 +176,7 @@ class CacheTests(unittest.TestCase):
         cache.cache_value("test", value, resource=resource, version=version)
         assert value == cache.find("test", resource=resource, version=version)
 
-    def testGetOrElse(self):
+    def test_get_or_else(self):
         called = []
 
         def creator(param, resource, version):
@@ -199,14 +199,14 @@ class CacheTests(unittest.TestCase):
         assert len(called) == 1
         assert value2 == cache.get_or_else("test", creator, resource=resource, version=version, param=value2)
 
-    def testGetOrElseNone(self):
+    def test_get_or_else_none(self):
         called = []
 
         def creator(param, resource, version):
             called.append("x")
             return param
 
-        class sequencer(object):
+        class Sequencer(object):
 
             def __init__(self, sequence):
                 self.seq = sequence
@@ -230,7 +230,7 @@ class CacheTests(unittest.TestCase):
         assert value == cache.get_or_else("test", creator, resource=resource, version=version, cache_none=False, param=value)
         assert len(called) == 3
 
-        seq = sequencer([None, None, "A"])
+        seq = Sequencer([None, None, "A"])
         assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
         assert seq.count == 1
         assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
@@ -242,7 +242,7 @@ class CacheTests(unittest.TestCase):
         assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
         assert seq.count == 3
 
-    def testDecorator(self):
+    def test_decorator(self):
 
         xcache = AgentCache()
 
@@ -254,17 +254,17 @@ class CacheTests(unittest.TestCase):
                 self.c2 = 0
 
             @cache
-            def testMethod(self):
+            def test_method(self):
                 self.count += 1
                 return "x"
 
             @cache
-            def testMethod2(self, version):
+            def test_method_2(self, version):
                 self.count += 1
                 return "x2"
 
             @cache(cacheNone=False)
-            def testMethod3(self):
+            def test_method_3(self):
                 self.c2 += 1
                 if self.c2 < 2:
                     return None
@@ -272,27 +272,27 @@ class CacheTests(unittest.TestCase):
                     return "X"
 
         test = DT(xcache)
-        assert "x" == test.testMethod()
-        assert "x" == test.testMethod()
-        assert "x" == test.testMethod()
+        assert "x" == test.test_method()
+        assert "x" == test.test_method()
+        assert "x" == test.test_method()
         assert 1 == test.count
 
         xcache.open_version(1)
         xcache.open_version(2)
-        assert "x2" == test.testMethod2(version=1)
-        assert "x2" == test.testMethod2(version=1)
+        assert "x2" == test.test_method_2(version=1)
+        assert "x2" == test.test_method_2(version=1)
         assert 2 == test.count
-        assert "x2" == test.testMethod2(version=2)
+        assert "x2" == test.test_method_2(version=2)
         assert 3 == test.count
         xcache.close_version(1)
         xcache.open_version(1)
-        assert "x2" == test.testMethod2(version=1)
-        assert "x2" == test.testMethod2(version=1)
+        assert "x2" == test.test_method_2(version=1)
+        assert "x2" == test.test_method_2(version=1)
         assert 4 == test.count
 
-        assert None is test.testMethod3()
+        assert None is test.test_method_3()
         assert 1 == test.c2
-        assert "X" == test.testMethod3()
+        assert "X" == test.test_method_3()
         assert 2 == test.c2
-        assert "X" == test.testMethod3()
+        assert "X" == test.test_method_3()
         assert 2 == test.c2
