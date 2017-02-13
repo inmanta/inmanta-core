@@ -22,6 +22,7 @@ import time
 from inmanta import data
 import pytest
 import pymongo
+from tornado import gen
 from inmanta.data import ConfigurationModel
 
 
@@ -369,6 +370,7 @@ def test_snapshot(data_module):
     yield s.resource_updated(10)
     assert(s.resources_todo == 0)
     assert(s.total_size == 10)
+    yield gen.sleep(1)
     assert(s.finished is not None)
 
     s = yield data.Snapshot.get_by_id(snap.id)
