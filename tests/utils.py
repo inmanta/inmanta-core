@@ -52,3 +52,13 @@ def assertEqualIsh(minimal, actual, sortby=[]):
         return
     else:
         assert minimal == actual
+
+
+def assertGraph(graph, expected):
+    lines = ["%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.requires]
+    lines = sorted(lines)
+
+    elines = [x.strip() for x in expected.split("\n")]
+    elines = sorted(elines)
+
+    assert elines == lines, (lines, elines)
