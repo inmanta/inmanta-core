@@ -40,6 +40,8 @@ from inmanta.export import DependencyCycleException
 from tempfile import mktemp
 from utils import assertGraph
 
+import pytest_catchlog
+
 
 class CompilerBaseTest(object):
 
@@ -115,6 +117,45 @@ class AbstractSnippetTest(object):
 
     def xtearDown(self):
         shutil.rmtree(self.project_dir)
+
+
+@pytest.fixture(scope="module")
+def executor():
+    ast = AbstractSnippetTest()
+    ast.setUpClass()
+    yield ast
+    ast.tearDownClass()
+
+
+def testAbstractRequres2(executor, caplog):
+    executor.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
+
+entity A:
+string name
+end
+
+implementation a for A:
+one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+two.requires = one
+end
+
+implement A using a
+
+pre = std::ConfigFile(path="host0", host=host, content="")
+post = std::ConfigFile(path="hosts4", host=host, content="")
+
+inter = A(name = "inter")
+inter.requires = pre
+post.requires = inter
+""")
+
+    executor.do_export()
+    warning = [x for x in caplog.records() if x.msg ==
+               "The resource %s had requirements before flattening, but not after flattening."
+               " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
+    assert len(warning) == 1
 
 
 class SnippetTests(AbstractSnippetTest, unittest.TestCase):
@@ -1079,33 +1120,6 @@ inter = A(name = "inter")
 
         v, resources = self.do_export()
         assertGraph(resources, """inter2: inter1""")
-
-    def testAbstractRequres2(self):
-        self.setUpForSnippet("""
-host = std::Host(name="host", os=std::unix)
-
-entity A:
-    string name
-end
-
-implementation a for A:
-    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
-    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
-    two.requires = one
-end
-
-implement A using a
-
-pre = std::ConfigFile(path="host0", host=host, content="")
-post = std::ConfigFile(path="hosts4", host=host, content="")
-
-inter = A(name = "inter")
-inter.requires = pre
-post.requires = inter
-""")
-
-        with pytest.raises(Exception):
-            self.do_export()
 
     def testAbstractRequres3(self):
         self.setUpForSnippet("""

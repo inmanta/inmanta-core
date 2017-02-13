@@ -186,10 +186,10 @@ class Resource(metaclass=ResourceMeta):
             for r in inital_requires:
                 if r in cls.__create_cache:
                     final_requires.add(cls.__create_cache[r])
-                else:
-                    LOGGER.warning("A resource (%s) depends on a non resource that has no dependencies (%s)", res, r)
             if len(final_requires) == 0 and not len(inital_requires) == 0:
-                raise Exception("Requirement lost", res, inital_requires)
+                LOGGER.warning(
+                    "The resource %s had requirements before flattening, but not after flattening."
+                    " Initial set was %s. Perhaps provides relation is not wired through correctly?", res, inital_requires)
             res.requires = final_requires
 
     @classmethod
