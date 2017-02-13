@@ -183,25 +183,6 @@ def client(server):
     yield client
 
 
-class SnippetCompilationTest(object):
-    libs = None
-    env = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.libs = tempfile.mkdtemp()
-        cls.env = tempfile.mkdtemp()
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.libs)
-        shutil.rmtree(cls.env)
-
-    def setUpForSnippet(self, snippet, autostd=True):
-        # init project
-        self.project_dir = tempfile.mkdtemp()
-        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
-
 @pytest.fixture(scope="function")
 def environment(client, server, io_loop):
     """
@@ -221,6 +202,27 @@ def environment(client, server, io_loop):
     env_id = result.result["environment"]["id"]
 
     yield env_id
+
+
+class SnippetCompilationTest(object):
+    libs = None
+    env = None
+
+    @classmethod
+    def setUpClass(cls):
+        cls.libs = tempfile.mkdtemp()
+        cls.env = tempfile.mkdtemp()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.libs)
+        shutil.rmtree(cls.env)
+
+    def setUpForSnippet(self, snippet, autostd=True):
+        # init project
+        self.project_dir = tempfile.mkdtemp()
+        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
+
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
