@@ -145,7 +145,7 @@ def is_bool(value):
 
 def is_list(value):
     """list"""
-    return value.split(",")
+    return [x.strip() for x in value.split(",")]
 
 
 def is_map(map_in):
