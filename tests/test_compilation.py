@@ -37,6 +37,8 @@ from inmanta.parser import ParserException
 import pytest
 from inmanta.execute.util import Unknown
 from inmanta.export import DependencyCycleException
+from utils import assertGraph
+from conftest import SnippetCompilationTest
 
 
 class CompilerBaseTest(object):
@@ -56,64 +58,38 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-class AbstractSnippetTest(object):
-    libs = None
-    env = None
+def testAbstractRequres2(snippetcompiler, caplog):
+    snippetcompiler.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.libs = tempfile.mkdtemp()
-        cls.env = tempfile.mkdtemp()
+entity A:
+string name
+end
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.libs)
-        shutil.rmtree(cls.env)
+implementation a for A:
+one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+two.requires = one
+end
 
-    def setUpForSnippet(self, snippet, autostd=True):
-        # init project
-        self.project_dir = tempfile.mkdtemp()
-        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
+implement A using a
 
-        with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
-            cfg.write(
-                """
-            name: snippet test
-            modulepath: [%s, %s]
-            downloadpath: %s
-            version: 1.0
-            repo: ['https://github.com/inmanta/']"""
-                % (self.__class__.libs,
-                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.__class__.libs))
+pre = std::ConfigFile(path="host0", host=host, content="")
+post = std::ConfigFile(path="hosts4", host=host, content="")
 
-        with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
-            x.write(snippet)
+inter = A(name = "inter")
+inter.requires = pre
+post.requires = inter
+""")
 
-        Project.set(Project(self.project_dir, autostd=autostd))
-
-    def do_export(self):
-        config.Config.load_config()
-        from inmanta.export import Exporter
-
-        (types, scopes) = compiler.do_compile()
-
-        class Options(object):
-            pass
-        options = Options()
-        options.json = True
-        options.depgraph = False
-        options.deploy = False
-        options.ssl = False
-
-        export = Exporter(options=options)
-        return export.run(types, scopes)
-
-    def xtearDown(self):
-        shutil.rmtree(self.project_dir)
+    snippetcompiler.do_export()
+    warning = [x for x in caplog.records if x.msg ==
+               "The resource %s had requirements before flattening, but not after flattening."
+               " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
+    assert len(warning) == 1
 
 
-class SnippetTests(AbstractSnippetTest, unittest.TestCase):
+class SnippetTests(SnippetCompilationTest, unittest.TestCase):
 
     def testIssue92(self):
         self.setUpForSnippet("""
@@ -1050,6 +1026,62 @@ D()
         (types, _) = compiler.do_compile()
         files = types["__config__::C"].get_all_instances()
         assert len(files) == 1
+
+    def testAbstractRequres(self):
+        self.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
+
+entity A:
+    string name
+end
+
+implementation a for A:
+    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    two.requires = one
+end
+
+implement A using a
+
+pre = std::ConfigFile(path="host0", host=host, content="")
+post = std::ConfigFile(path="hosts4", host=host, content="")
+
+inter = A(name = "inter")
+""")
+
+        v, resources = self.do_export()
+        assertGraph(resources, """inter2: inter1""")
+
+    def testAbstractRequres3(self):
+        self.setUpForSnippet("""
+host = std::Host(name="host", os=std::unix)
+
+entity A:
+    string name
+end
+
+implementation a for A:
+    one = std::ConfigFile(path="{{self.name}}1", host=host, content="")
+    two = std::ConfigFile(path="{{self.name}}2", host=host, content="")
+    two.requires = one
+    one.requires = self.requires
+    two.provides = self.provides
+end
+
+implement A using a
+
+pre = std::ConfigFile(path="pre", host=host, content="")
+post = std::ConfigFile(path="post", host=host, content="")
+
+inter = A(name = "inter")
+inter.requires = pre
+post.requires = inter
+""")
+
+        v, resources = self.do_export()
+        assertGraph(resources, """post: inter2
+                                  inter2: inter1
+                                  inter1: pre""")
 
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
