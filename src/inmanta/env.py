@@ -59,7 +59,7 @@ class VirtualEnv(object):
         if not os.path.exists(python_bin):
             venv_call = [python_exec, "-m", "virtualenv"]
             try:
-                subprocess.check_call(venv_call + ["--version"])
+                subprocess.check_output(venv_call + ["--version"])
             except subprocess.CalledProcessError:
                 raise Exception("Virtualenv not installed for python %s" % python_exec)
 

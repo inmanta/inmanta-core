@@ -16,62 +16,380 @@
     Contact: code@inmanta.com
 """
 
-import json
 import logging
+import uuid
+import datetime
 
-
-from motorengine import Document
-from motorengine.fields import (StringField, ReferenceField, DateTimeField, IntField, UUIDField, BooleanField)
-from motorengine.fields.json_field import JsonField
 from inmanta.resources import Id
 from tornado import gen
-from motorengine.fields.list_field import ListField
-from motorengine.fields.embedded_document_field import EmbeddedDocumentField
+from motor import motor_tornado
+import pymongo
+
 
 LOGGER = logging.getLogger(__name__)
 
+DBLIMIT = 100000
 
-class IdDocument(Document):
+# TODO: disconnect
+# TODO: difference between None and not set
+
+
+class Field(object):
+
+    def __init__(self, field_type, required=False, unique=False, **kwargs):
+
+        self._field_type = field_type
+        self._required = required
+
+        if "default" in kwargs:
+            self._default = True
+            self._default_value = kwargs["default"]
+        else:
+            self._default = False
+            self._default_value = None
+
+        self._unique = unique
+
+    def get_field_type(self):
+        return self._field_type
+
+    field_type = property(get_field_type)
+
+    def is_required(self):
+        return self._required
+
+    required = property(is_required)
+
+    def get_default(self):
+        return self._default
+
+    default = property(get_default)
+
+    def get_default_value(self):
+        return self._default_value
+
+    default_value = property(get_default_value)
+
+    def is_unique(self):
+        return self._unique
+
+    unique = property(is_unique)
+
+
+ESCAPE_CHARS = {".": "\uff0E", "\\": "\\\\", "$": "\u0024"}
+ESCAPE_CHARS_R = {v: k for k, v in ESCAPE_CHARS.items()}
+
+
+class BaseDocument(object):
     """
-        A document that has a uuid as id that is required and unique
+        A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
+        bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
-    uuid = UUIDField(required=True, unique=True)
+    id = Field(field_type=uuid.UUID, required=True)
+
+    _coll = None
+
+    @classmethod
+    def collection_name(cls):
+        """
+            Return the name of the collection
+        """
+        return cls.__name__
+
+    @classmethod
+    def set_connection(cls, motor):
+        cls._coll = motor[cls.collection_name()]
 
     @classmethod
     @gen.coroutine
-    def get_uuid(cls, uuid):
-        objects = yield cls.objects.filter(uuid=uuid).find_all()
-        if len(objects) == 0:
-            return None
-        elif len(objects) > 1:
-            raise Exception("Multiple objects with the same unique id found!")
+    def create_indexes(cls):
+        # first define all unique indexes
+        for name, field in cls._get_all_fields().items():
+            if field.unique:
+                yield cls._coll.create_index([(name, pymongo.ASCENDING)], unique=True, background=True)
+
+        if hasattr(cls, "__indexes__"):
+            for i in cls.__indexes__:
+                keys = i["keys"]
+                other = i.copy()
+                del other["keys"]
+                yield cls._coll.create_index(keys, background=True, **other)
+
+    def __init__(self, from_mongo=False, **kwargs):
+        self.__fields = {}
+
+        if from_mongo:
+            kwargs = self._decode_keys(kwargs)
+
+            if "id" in kwargs:
+                raise AttributeError("A mongo document should not contain a field 'id'")
+
+            kwargs["id"] = kwargs["_id"]
+            del kwargs["_id"]
         else:
-            return objects[0]
+            if "id" in kwargs:
+                raise AttributeError("The id attribute is generated per collection by the document class.")
+
+            kwargs["id"] = self.__class__._new_id()
+
+        fields = self.__class__._get_all_fields()
+        for name, value in kwargs.items():
+            if name not in fields:
+                raise AttributeError("%s field is not defined for this document %s" % (name, self.__class__.collection_name()))
+
+            if value is None and fields[name].required:
+                raise TypeError("%s field is required" % name)
+
+            if value is not None and not isinstance(value, fields[name].field_type):
+                raise TypeError("Field %s should have the correct type (%s instead of %s)" %
+                                (name, fields[name].field_type.__name__, type(value).__name__))
+
+            if value is not None:
+                setattr(self, name, value)
+
+            elif fields[name].default:
+                setattr(self, name, fields[name].default_value)
+
+            del fields[name]
+
+        for name in list(fields.keys()):
+            if fields[name].default:
+                setattr(self, name, fields[name].default_value)
+                del fields[name]
+
+            elif not fields[name].required:
+                del fields[name]
+
+        if len(fields) > 0:
+            raise AttributeError("%s fields are required." % ", ".join(fields.keys()))
+
+    def _get_field(self, name):
+
+        if hasattr(self.__class__, name):
+            field = getattr(self.__class__, name)
+            if isinstance(field, Field):
+                return field
+
+        return None
+
+    @classmethod
+    def _get_all_fields(cls):
+        fields = {}
+        for attr in dir(cls):
+            value = getattr(cls, attr)
+            if isinstance(value, Field):
+                fields[attr] = value
+        return fields
+
+    def __getattribute__(self, name):
+        if name.startswith("_"):
+            return object.__getattribute__(self, name)
+
+        field = self._get_field(name)
+        if field is not None:
+            if name in self.__fields:
+                return self.__fields[name]
+            else:
+                return None
+
+        return object.__getattribute__(self, name)
+
+    def __setattr__(self, name, value):
+        if name.startswith("_"):
+            return object.__setattr__(self, name, value)
+
+        field = self._get_field(name)
+        if field is not None:
+            # validate
+            if value is not None and not isinstance(value, field.field_type):
+                raise TypeError("Field %s should be of type %s" % (name, field.field_type))
+
+            self.__fields[name] = value
+            return
+
+        raise AttributeError(name)
+
+    # TODO: make this a generator
+    def _encode_keys(self, data):
+        new_data = {}
+        for key, value in data.items():
+            new_key = key
+            for p, s in ESCAPE_CHARS.items():
+                new_key = new_key.replace(p, s)
+
+            if isinstance(value, dict):
+                new_data[new_key] = self._encode_keys(value)
+            else:
+                new_data[new_key] = value
+
+        return new_data
+
+    # TODO: make this a generator
+    def _decode_keys(self, data):
+        new_data = {}
+        for key, value in data.items():
+            new_key = key
+            for p, s in ESCAPE_CHARS_R.items():
+                new_key = new_key.replace(p, s)
+
+            if isinstance(value, dict):
+                new_data[new_key] = self._decode_keys(value)
+            else:
+                new_data[new_key] = value
+
+        return new_data
+
+    def to_mongo(self):
+        return self._encode_keys(self._to_dict(True))
+
+    def _to_dict(self, mongo_pk=False):
+        """
+            Return a dict representing the document
+        """
+        result = {}
+        for name, typing in self.__class__._get_all_fields().items():
+            value = None
+            if name in self.__fields:
+                value = self.__fields[name]
+
+            if typing.required and value is None:
+                raise TypeError("%s should have field '%s'" % (self.__class__.__name__, name))
+
+            if value is not None:
+                if not isinstance(value, typing.field_type):
+                    raise TypeError("Value of field %s does not have the correct type" % name)
+
+                if mongo_pk and name == "id":
+                    result["_id"] = value
+                else:
+                    result[name] = value
+
+            elif typing.default:
+                result[name] = typing.default_value
+
+        return result
+
+    def to_dict(self):
+        return self._to_dict()
+
+    @classmethod
+    def _new_id(cls):
+        """
+            Generate a new ID. Override to use something else than uuid4
+        """
+        return uuid.uuid4()
+
+    @gen.coroutine
+    def insert(self):
+        """
+            Insert a new document based on the instance passed. Validation is done based on the defined fields.
+        """
+        yield self._coll.insert_one(self.to_mongo())
+
+    @classmethod
+    @gen.coroutine
+    def insert_many(cls, documents):
+        """
+            Insert multiple objects at once
+        """
+        if len(documents) > 0:
+            yield cls._coll.insert_many((d.to_mongo() for d in documents))
+
+    @gen.coroutine
+    def update(self, **kwargs):
+        """
+            Update this document in the database. It will update the fields in this object and send a full update to mongodb.
+            Use update_fields to only update specific fields.
+        """
+        for name, value in kwargs.items():
+            setattr(self, name, value)
+
+        yield self._coll.update({"_id": self.id}, self.to_mongo())
+
+    @gen.coroutine
+    def update_fields(self, **kwargs):
+        """
+            Update the given fields of this document in the database. It will update the fields in this object and do a specific
+            $set in the mongodb on this document.
+        """
+        for name, value in kwargs.items():
+            setattr(self, name, value)
+
+        yield self._coll.update({"_id": self.id}, {"$set": kwargs})
+
+    @classmethod
+    @gen.coroutine
+    def get_by_id(cls, doc_id: uuid.UUID):
+        """
+            Get a specific document based on its ID
+
+            :return An instance of this class with its fields filled from the database.
+        """
+        result = yield cls._coll.find_one({"_id": doc_id})
+        if result is not None:
+            return cls(from_mongo=True, **result)
+
+    @classmethod
+    @gen.coroutine
+    def get_list(cls, **query):
+        """
+            Get a list of documents matching the filter args
+        """
+        result = []
+        cursor = cls._coll.find(query)
+
+        while (yield cursor.fetch_next):
+            obj = cls(from_mongo=True, **cursor.next_object())
+            result.append(obj)
+
+        return result
+
+    @classmethod
+    @gen.coroutine
+    def delete_all(cls, **query):
+        """
+            Delete all documents that match the given query
+        """
+        result = yield cls._coll.delete_many(query)
+        return result.deleted_count
+
+    @gen.coroutine
+    def delete(self):
+        """
+            Delete this document
+        """
+        yield self._coll.remove({"_id": self.id})
+
+    @gen.coroutine
+    def delete_cascade(self):
+        yield self.delete()
+
+    @classmethod
+    @gen.coroutine
+    def query(cls, query):
+        cursor = cls._coll.find(query)
+        objects = []
+        while (yield cursor.fetch_next):
+            objects.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return objects
 
 
-class Project(IdDocument):
+class Project(BaseDocument):
     """
         An inmanta configuration project
 
         :param name The name of the configuration project.
     """
-    name = StringField(required=True, unique=True)
-
-    def to_dict(self):
-        return {"name": self.name,
-                "id": self.uuid
-                }
+    name = Field(field_type=str, required=True, unique=True)
 
     @gen.coroutine
     def delete_cascade(self):
-        envs = yield Environment.objects.filter(project_id=self.uuid).find_all()
-        for env in envs:
-            yield env.delete_cascade()
-
+        yield Environment.delete_all(project=self.id)
         yield self.delete()
 
 
-class Environment(IdDocument):
+class Environment(BaseDocument):
     """
         A deployment environment of a project
 
@@ -81,32 +399,27 @@ class Environment(IdDocument):
         :param repo_url The repository url that contains the configuration model code for this environment
         :param repo_url The repository branch that contains the configuration model code for this environment
     """
-    name = StringField(required=True)
-    project_id = UUIDField(required=True)
-    repo_url = StringField()
-    repo_branch = StringField()
+    name = Field(field_type=str, required=True)
+    project = Field(field_type=uuid.UUID, required=True)
+    repo_url = Field(field_type=str, default="")
+    repo_branch = Field(field_type=str, default="")
 
-    def to_dict(self):
-        return {"id": self.uuid,
-                "name": self.name,
-                "project": self.project_id,
-                "repo_url": self.repo_url,
-                "repo_branch": self.repo_branch
-                }
+    __indexes__ = [
+        dict(keys=[("name", pymongo.ASCENDING), ("project", pymongo.ASCENDING)], unique=True)
+    ]
 
     @gen.coroutine
     def delete_cascade(self):
-        models = yield ConfigurationModel.objects.filter(environment=self).find_all()
-        for model in models:
-            yield model.delete_cascade()
-
+        yield Agent.delete_all(environment=self.id)
+        yield Compile.delete_all(environment=self.id)
+        yield ConfigurationModel.delete_all(environment=self.id)
         yield self.delete()
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")
 
 
-class Parameter(Document):
+class Parameter(BaseDocument):
     """
         A parameter that can be used in the configuration model
 
@@ -119,25 +432,27 @@ class Parameter(Document):
 
         :todo Add history
     """
-    name = StringField(required=True)
-    value = StringField(default="", required=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
-    source = StringField(required=True)
-    resource_id = StringField(default="")
-    updated = DateTimeField()
-    metadata = JsonField(sparse=True)
+    name = Field(field_type=str, required=True)
+    value = Field(field_type=str, default="", required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    source = Field(field_type=str, required=True)
+    resource_id = Field(field_type=str, default="")
+    updated = Field(field_type=datetime.datetime)
+    metadata = Field(field_type=dict)
 
-    def to_dict(self):
-        return {"name": self.name,
-                "value": self.value,
-                "source": self.source,
-                "resource_id": self.resource_id,
-                "updated": self.updated,
-                "metadata": self.metadata,
-                }
+    @classmethod
+    @gen.coroutine
+    def get_updated_before(cls, updated_before):
+        cursor = cls._coll.find({"updated": {"$lt": updated_before}})
+
+        params = []
+        while (yield cursor.fetch_next):
+            params.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return params
 
 
-class UnknownParameter(Document):
+class UnknownParameter(BaseDocument):
     """
         A parameter that the compiler indicated that was unknown. This parameter causes the configuration model to be
         incomplete for a specific environment.
@@ -148,25 +463,16 @@ class UnknownParameter(Document):
         :param environment
         :param version The version id of the configuration model on which this parameter was reported
     """
-    name = StringField(required=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
-    source = StringField(required=True)
-    resource_id = StringField(default="")
-    version = IntField(required=True)
-    metadata = JsonField(sparse=True)
-    resolved = BooleanField(default=False)
-
-    def to_dict(self):
-        return {"name": self.name,
-                "source": self.source,
-                "resource_id": self.resource_id,
-                "version": self.version,
-                "resolved": self.resolved,
-                "metadata": self.metadata,
-                }
+    name = Field(field_type=str, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    source = Field(field_type=str, required=True)
+    resource_id = Field(field_type=str, default="")
+    version = Field(field_type=int, required=True)
+    metadata = Field(field_type=dict)
+    resolved = Field(field_type=bool, default=False)
 
 
-class AgentProcess(IdDocument):
+class AgentProcess(BaseDocument):
     """
         A process in the infrastructure that has (had) a session as an agent.
 
@@ -174,100 +480,79 @@ class AgentProcess(IdDocument):
         :prama environment To what environment is this process bound
         :param last_seen When did the server receive data from the node for the last time.
     """
-    hostname = StringField(required=True, sparse=True)
-    # environment = ReferenceField(reference_document_type=Environment, required=False, sparse=True)
-    # for unknown environments
-    environment_id = UUIDField(required=True, sparse=True)
-    first_seen = DateTimeField(required=True)
-    last_seen = DateTimeField()
-    expired = DateTimeField()
-    sid = UUIDField(required=True, sparse=True)
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        out = {"id": self.uuid,
-               "hostname": self.hostname,
-               "environment": str(self.environment_id),
-               "first_seen": self.first_seen.isoformat(),
-               "last_seen": self.last_seen.isoformat()}
-        if self.expired is not None:
-            out["expired"] = self.expired.isoformat()
-        else:
-            out["expired"] = None
-
-        return out
+    hostname = Field(field_type=str, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    first_seen = Field(field_type=datetime.datetime, default=None)
+    last_seen = Field(field_type=datetime.datetime, default=None)
+    expired = Field(field_type=datetime.datetime, default=None)
+    sid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
     @gen.coroutine
-    def get_live(cls):
-        nodes = yield cls.objects.filter(expired__is_null=True).find_all()
-        return nodes
+    def get_live(cls, environment=None):
+        query = {"$or": [{"expired": {"$exists": False}}, {"expired": None}]}
+        if environment is not None:
+            query["environment"] = environment
+
+        cursor = cls._coll.find(query)
+        nodes = yield cursor.to_list(DBLIMIT)
+        return [cls(from_mongo=True, **node) for node in nodes]
 
     @classmethod
     @gen.coroutine
     def get_live_by_env(cls, env):
-        nodes = yield cls.objects.filter(expired__is_null=True, environment_id=env.uuid).find_all()
-        return nodes
-
-    @classmethod
-    @gen.coroutine
-    def get(cls):
-        nodes = yield cls.objects.find_all()
-        return nodes
+        result = yield cls.get_live(env)
+        return result
 
     @classmethod
     @gen.coroutine
     def get_by_env(cls, env):
-        nodes = yield cls.objects.filter(environment_id=env.uuid).find_all()
+        nodes = yield cls.get_list(environment=env)
         return nodes
 
     @classmethod
     @gen.coroutine
     def get_by_sid(cls, sid):
-        objects = yield cls.objects.filter(expired__is_null=True, sid=sid).find_all()
+        # TODO: unique index?
+        cursor = cls._coll.find({"$or": [{"expired": {"$exists": False}}, {"expired": None}], "sid": sid})
+        objects = yield cursor.to_list(DBLIMIT)
+
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
             LOGGER.exception("Multiple objects with the same unique id found!")
-            return objects[0]
+            return cls(from_mongo=True, **objects[0])
         else:
-            return objects[0]
+            return cls(from_mongo=True, **objects[0])
 
 
-class AgentInstance(IdDocument):
+class AgentInstance(BaseDocument):
     """
         A physical server/node in the infrastructure that reports to the management server.
 
         :param hostname The hostname of the device.
         :param last_seen When did the server receive data from the node for the last time.
     """
-    process = ReferenceField(reference_document_type=AgentProcess, required=True)
-    name = StringField(required=True)
-    expired = DateTimeField()
-    tid = UUIDField(required=True)
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"process": str(self.process.uuid),
-                "name": self.name,
-                "id": self.uuid}
+    # TODO: add env to speed up cleanup
+    process = Field(field_type=uuid.UUID, required=True)
+    name = Field(field_type=str, required=True)
+    expired = Field(field_type=datetime.datetime)
+    tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
     @gen.coroutine
-    def activeFor(cls, tid, endpoint):
-        objects = yield cls.objects.filter(tid=tid, name=endpoint, expired__is_null=True).find_all()
+    def active_for(cls, tid, endpoint):
+        objects = yield cls.query({"$or": [{"expired": {"$exists": False}}, {"expired": None}], "tid": tid, "name": endpoint})
         return objects
 
     @classmethod
     @gen.coroutine
     def active(cls):
-        objects = yield cls.objects.filter(expired__is_null=True).find_all()
+        objects = yield cls.query({"$or": [{"expired": {"$exists": False}}, {"expired": None}]})
         return objects
 
 
-class Agent(Document):
+class Agent(BaseDocument):
     """
         An inmanta agent
 
@@ -277,11 +562,15 @@ class Agent(Document):
         :param paused is this agent paused (if so, skip it)
         :param primary what is the current active instance (if none, state is down)
     """
-    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
-    name = StringField(required=True)
-    last_failover = DateTimeField()
-    paused = BooleanField(required=True)
-    primary = ReferenceField(reference_document_type=AgentInstance)
+    environment = Field(field_type=uuid.UUID, required=True)
+    name = Field(field_type=str, required=True)
+    last_failover = Field(field_type=datetime.datetime)
+    paused = Field(field_type=bool, default=False)
+    primary = Field(field_type=uuid.UUID)  # AgentInstance
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("name", pymongo.ASCENDING)], unique=True)
+    ]
 
     def get_status(self):
         if self.paused:
@@ -290,46 +579,28 @@ class Agent(Document):
             return "up"
         return "down"
 
-    @gen.coroutine
     def to_dict(self):
-        yield self.load_references()
+        base = BaseDocument.to_dict(self)
         if self.last_failover is None:
-            fo = ""
-        else:
-            fo = self.last_failover.isoformat()
+            base["last_failover"] = ""
 
         if self.primary is None:
-            prim = ""
-        else:
-            prim = str(self.primary.uuid)
+            base["primary"] = ""
 
-        return {"environment": str(self.environment.uuid),
-                "name": self.name,
-                "last_failover": fo,
-                "paused": self.paused,
-                "primary": prim,
-                "state": self.get_status()
-                }
+        base["state"] = self.get_status()
+
+        return base
 
     @classmethod
     @gen.coroutine
     def get(cls, env, endpoint):
-        objects = yield cls.objects.filter(environment=env, name=endpoint).find_all()
-        if len(objects) == 0:
-            return None
-        elif len(objects) > 1:
-            raise Exception("Multiple objects with the same unique id found!")
-        else:
-            return objects[0]
+        obj = yield cls._coll.find_one({"environment": env, "name": endpoint})
 
-    @classmethod
-    @gen.coroutine
-    def by_env(cls, env):
-        nodes = yield cls.objects.filter(environment=env).find_all()
-        return nodes
+        if obj is not None:
+            return cls(from_mongo=True, **obj)
 
 
-class Report(Document):
+class Report(BaseDocument):
     """
         A report of a substep of compilation
 
@@ -340,27 +611,18 @@ class Report(Document):
         :param errstream what was reported on system err
         :param outstream what was reported on system out
     """
-    started = DateTimeField(required=True)
-    completed = DateTimeField(required=True)
-    command = StringField(required=True)
-    name = StringField(required=True)
-    errstream = StringField(default="")
-    outstream = StringField(default="")
-    returncode = IntField()
-    # compile = ReferenceField(reference_document_type="inmanta.data.Compile")
+    started = Field(field_type=datetime.datetime, required=True)
+    completed = Field(field_type=datetime.datetime, required=True)
+    command = Field(field_type=str, required=True)
+    name = Field(field_type=str, required=True)
+    errstream = Field(field_type=str, default="")
+    outstream = Field(field_type=str, default="")
+    returncode = Field(field_type=int)
 
-    def to_dict(self):
-        return {"started": self.started.isoformat(),
-                "completed": self.completed.isoformat(),
-                "command": self.command,
-                "name": self.name,
-                "errstream": self.errstream,
-                "outstream": self.outstream,
-                "returncode": self.returncode
-                }
+    compile = Field(field_type=uuid.UUID)
 
 
-class Compile(Document):
+class Compile(BaseDocument):
     """
         A run of the compiler
 
@@ -369,40 +631,54 @@ class Compile(Document):
         :param completed Time to compile was completed
         :param reports Per stage reports
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    started = DateTimeField()
-    completed = DateTimeField()
-    reports = ListField(EmbeddedDocumentField(embedded_document_type=Report))
+    environment = Field(field_type=uuid.UUID, required=True)
+    started = Field(field_type=datetime.datetime)
+    completed = Field(field_type=datetime.datetime)
 
+    @classmethod
     @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"environment": str(self.environment.uuid),
-                "started": self.started.isoformat(),
-                "completed": self.completed.isoformat(),
-                "reports": [v.to_dict() for v in self.reports],
-                }
+    def get_reports(cls, queryparts, limit, start, end):
+        if limit is not None and end is not None:
+            cursor = Compile._coll.find(queryparts).sort("started").limit(int(limit))
+            models = []
+            while (yield cursor.fetch_next):
+                models.append(cls(from_mongo=True, **cursor.next_object()))
+
+            models.reverse()
+        else:
+            cursor = Compile._coll.find(queryparts).sort("started", pymongo.DESCENDING)
+            if limit is not None:
+                cursor = cursor.limit(int(limit))
+            models = []
+            while (yield cursor.fetch_next):
+                models.append(cls(from_mongo=True, **cursor.next_object()))
+
+        # load the report stages
+        result = []
+        for model in models:
+            dict_model = model.to_dict()
+            cursor = Report._coll.find({"compile": model.id})
+
+            dict_model["reports"] = []
+            while (yield cursor.fetch_next):
+                obj = Report(from_mongo=True, **cursor.next_object())
+                dict_model["reports"].append(obj.to_dict())
+
+            result.append(dict_model)
+
+        return result
 
 
-class Form(IdDocument):
+class Form(BaseDocument):
     """
         A form in the dashboard defined by the configuration model
     """
-    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
-    form_type = StringField(required=True, sparse=True)
-    options = JsonField()
-    fields = JsonField()
-    defaults = JsonField()
-    field_options = JsonField()
-
-    def to_dict(self):
-        return {"form_id": self.uuid,
-                "form_type": self.form_type,
-                "fields": self.fields,
-                "defaults": self.defaults,
-                "options": self.options,
-                "field_options": self.field_options,
-                }
+    environment = Field(field_type=uuid.UUID, required=True)
+    form_type = Field(field_type=str, required=True)
+    options = Field(field_type=dict)
+    fields = Field(field_type=dict)
+    defaults = Field(field_type=dict)
+    field_options = Field(field_type=dict)
 
     @classmethod
     @gen.coroutine
@@ -410,80 +686,29 @@ class Form(IdDocument):
         """
             Get a form based on its typed and environment
         """
-        forms = yield cls.objects.filter(environment=environment, form_type=form_type).find_all()
+        forms = yield cls.get_list(environment=environment, form_type=form_type)
         if len(forms) == 0:
             return None
         else:
             return forms[0]
 
 
-class FormRecord(IdDocument):
+class FormRecord(BaseDocument):
     """
         A form record
     """
-    form = ReferenceField(reference_document_type=Form, required=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True)
-    fields = JsonField()
-    changed = DateTimeField()
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"record_id": self.uuid,
-                "form_id": self.form.uuid,
-                "form_type": self.form.form_type,
-                "changed": self.changed,
-                "fields": self.fields
-                }
-
-
-class Resource(Document):
-    """
-        A resource that can be managed by an agent.
-
-        :param environment The environment this resource is defined in
-        :param resource_id The resource id of this resource
-
-        The following parameters are derived directly from the resource_id:
-        :param resource_type The type of the resource
-        :param agent The agent that manages this resource (not a reference but can be used to query for agents)
-        :param attribute_name The name of the identifying attribute
-        :param attribute_value The value of the identifying attribute
-        :param last_deploy When was the last deploy this resource
-    """
-    environment = ReferenceField(reference_document_type=Environment, sparse=True)
-    resource_id = StringField(required=True, sparse=True)
-
-    resource_type = StringField(required=True)
-    agent = StringField(required=True)
-    attribute_name = StringField(required=True)
-    attribute_value = StringField(required=True)
-
-    holds_state = BooleanField(default=False)
-
-    version_latest = IntField(default=0)
-    version_deployed = IntField(default=0)
-    last_deploy = DateTimeField()
-
-    def to_dict(self):
-        return {"id": self.resource_id,
-                "id_fields": {"type": self.resource_type,
-                              "agent": self.agent,
-                              "attribute": self.attribute_name,
-                              "value": self.attribute_value,
-                              },
-                "latest_version": self.version_latest,
-                "deployed_version": self.version_deployed,
-                "last_deploy": self.last_deploy,
-                "holds_state": self.holds_state,
-                }
+    form = Field(field_type=uuid.UUID, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    fields = Field(field_type=dict)
+    changed = Field(field_type=datetime.datetime)
 
 
 ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "other")
 LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "TRACE")
 
 
-class ResourceAction(Document):
+class ResourceAction(BaseDocument):
+    # TODO: add environment here!
     """
         Log related to actions performed on a specific resource version by Inmanta.
 
@@ -494,25 +719,35 @@ class ResourceAction(Document):
         :param level The "urgency" of this action
         :param data A python dictionary that can be serialized to json with additional data
     """
-    resource_version = ReferenceField(reference_document_type="inmanta.data.ResourceVersion", sparse=True)
-    action = StringField(required=True, sparse=True)
-    timestamp = DateTimeField(required=True)
-    message = StringField()
-    level = StringField(default="INFO")
-    data = StringField()
-    status = StringField()
+    resource_version_id = Field(field_type=str, required=True)
+    action = Field(field_type=str, required=True)
+    timestamp = Field(field_type=datetime.datetime, required=True)
+    message = Field(field_type=str)
+    level = Field(field_type=str, default="INFO")
+    data = Field(field_type=dict)
+    status = Field(field_type=str)
 
-    def to_dict(self):
-        return {"action": self.action,
-                "timestamp": self.timestamp.isoformat(),
-                "message": self.message,
-                "level": self.level,
-                "status": self.status,
-                "data": json.loads(self.data) if self.data is not None else None,
-                }
+    @classmethod
+    @gen.coroutine
+    def get_log(cls, resource_version_id, action, limit=0):
+        if action is not None:
+            cursor = yield cls._coll.filter(resource_version_id=resource_version_id,
+                                            action=action).sort("timestamp", direction=pymongo.DESCENDING)
+        else:
+            cursor = yield cls._coll.filter(resource_version_id=resource_version_id,
+                                            action=action).sort("timestamp", direction=pymongo.DESCENDING)
+
+        if limit > 0:
+            cursor = cursor.limit(limit)
+
+        log = []
+        while (yield cursor.fetch_next):
+            log.append(from_mongo=True, **cursor.next_object())
+
+        return log
 
 
-class ResourceVersion(Document):
+class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
 
@@ -522,35 +757,195 @@ class ResourceVersion(Document):
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
     """
-    environment = ReferenceField(reference_document_type=Environment, required=True, sparse=True)
-    rid = StringField(required=True, sparse=True)
-    resource = ReferenceField(reference_document_type=Resource, required=True, sparse=True)
-    model = ReferenceField(reference_document_type="inmanta.data.ConfigurationModel", required=True)
-    attributes = JsonField()
-    status = StringField(default="")
+    environment = Field(field_type=uuid.UUID, required=True)
+    model = Field(field_type=int, required=True)
+
+    # ID related
+    resource_id = Field(field_type=str, required=True)
+    resource_version_id = Field(field_type=str, required=True)
+
+    resource_type = Field(field_type=str, required=True)
+    agent = Field(field_type=str, required=True)
+    id_attribute_name = Field(field_type=str, required=True)
+    id_attribute_value = Field(field_type=str, required=True)
+
+    # Field based on content from the resource actions
+    last_deploy = Field(field_type=datetime.datetime)
+
+    # State related
+    attributes = Field(field_type=dict)
+    status = Field(field_type=str, default="")
+
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
-    provides = ListField(StringField(), default=[])
+    provides = Field(field_type=list, default=[])  # List of resource versions
 
-    def to_dict(self):
-        data = {}
-        data["fields"] = self.attributes
-        data["id"] = self.rid
-        data["id_fields"] = Id.parse_id(self.rid).to_dict()
-        data["status"] = self.status
-
-        return data
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.ASCENDING)]),
+        dict(keys=[("environment", pymongo.ASCENDING), ("resource_id", pymongo.ASCENDING)]),
+        dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_id", pymongo.ASCENDING)], unique=True),
+    ]
 
     @gen.coroutine
     def delete_cascade(self):
-        resource_actions = yield ResourceAction.objects.filter(resource_version=self).find_all()
-        for r in resource_actions:
-            yield r.delete()
+        yield ResourceAction.delete_all(resource=self.id)
         yield self.delete()
 
+    @classmethod
+    @gen.coroutine
+    def get_resources_report(cls, environment):
+        """
+            This method generates a report of all resources in the database, with their latest version, if they are deleted
+            and when they are last deployed.
+                    return {"id": self.resource_id,
+                "id_fields": {"type": self.resource_type,
+                              "agent": self.agent,
+                              "attribute": self.attribute_name,
+                              "value": self.attribute_value,
+                              },
+                "latest_version": self.version_latest,
+                "deployed_version": self.version_deployed,
+                "last_deploy": self.last_deploy,
+                "holds_state": self.holds_state,
+                }
+        """
+        resources = yield cls._coll.find({"environment": environment}, ["resource_id"]).distinct("resource_id")
+        result = []
+        for res in resources:
+            latest = (yield cls._coll.find({"environment": environment,
+                                            "resource_id": res}).sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
+            if latest["status"] != "":
+                deployed = (yield cls._coll.find({"environment": environment, "resource_id": res,
+                                                  "status": {"$ne": ""}}).sort("version",
+                                                                               pymongo.DESCENDING).limit(1).to_list(1))[0]
+            else:
+                deployed = latest
 
-class ConfigurationModel(Document):
+            result.append({"resource_id": res,
+                           "resource_type": latest["resource_type"],
+                           "agent": latest["agent"],
+                           "id_attribute_name": latest["id_attribute_name"],
+                           "id_attribute_value": latest["id_attribute_value"],
+                           "latest_version": latest["model"],
+                           "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
+                           "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
+
+        return result
+
+    @classmethod
+    @gen.coroutine
+    def get_resources_for_version(cls, environment, version, agent=None):
+        if agent is not None:
+            resources = yield cls.get_list(environment=environment, model=version, agent=agent)
+        else:
+            resources = yield cls.get_list(environment=environment, model=version)
+        return resources
+
+    @classmethod
+    @gen.coroutine
+    def get_latest_version(cls, environment, resource_id):
+        cursor = cls._coll.find({"environment": environment,
+                                 "resource_id": resource_id}).sort("model", pymongo.DESCENDING).limit(1)
+        resource = yield cursor.to_list(1)
+
+        if resource is not None and len(resource) > 0:
+            return cls(from_mongo=True, **resource[0])
+
+    @classmethod
+    @gen.coroutine
+    def get(cls, environment, resource_version_id):
+        """
+            Get a resource with the given resource version id
+        """
+        value = yield cls._coll.find_one({"environment": environment, "resource_version_id": resource_version_id})
+        if value is not None:
+            return cls(from_mongo=True, **value)
+
+    @classmethod
+    @gen.coroutine
+    def get_with_state(cls, environment, version):
+        """
+            Get all resources from the given version that have "state_id" defined
+        """
+        cursor = cls._coll.find({"environment": environment, "model": version, "attributes.state_id": {"$exists": True}})
+
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
+
+    @classmethod
+    def new(cls, environment, resource_version_id, **kwargs):
+        vid = Id.parse_id(resource_version_id)
+
+        attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
+                    resource_version_id=resource_version_id, resource_type=vid.entity_type, agent=vid.agent_name,
+                    id_attribute_name=vid.attribute, id_attribute_value=vid.attribute_value)
+        attr.update(kwargs)
+
+        return cls(**attr)
+
+    @classmethod
+    @gen.coroutine
+    def get_deleted_resources(cls, environment, current_version):
+        """
+            This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
+            the latest version of the resource from a released model.
+        """
+        # find all resources in previous version that have "purge_on_delete" set
+        resources = yield cls._coll.find({"model": {"$lt": current_version}, "environment": environment,
+                                          "$or": [{"attributes.purge_on_delete": {"$exists": True}},
+                                                  {"attributes.purge_on_delete": True}]},
+                                         ["resource_id"]).distinct("resource_id")
+
+        # get all models that have been released
+        models = yield ConfigurationModel._coll.find({"environment": environment, "released": True},
+                                                     {"version": True, "_id": False}).to_list(DBLIMIT)
+        versions = set()
+        for model in models:
+            versions.add(model["version"])
+
+        # all resources on current model
+        current_resources = yield cls._coll.find({"model": current_version, "environment": environment},
+                                                 ["resource_id"]).to_list(DBLIMIT)
+
+        # determined deleted resources
+        deleted = set(resources) - set([x["resource_id"] for x in current_resources])
+
+        # filter out resources that should not be purged:
+        # 1- resources from versions that have not been deployed
+        # 2- resources that are already recorded as purged (purged and deployed)
+        should_purge = []
+        for deleted_resource in deleted:
+            # get the full resource history, and determine the purge status of this resource
+            cursor = cls._coll.find({"environment": environment, "model": {"$lt": current_version},
+                                     "resource_id": deleted_resource}).sort("version", pymongo.DESCENDING)
+            while (yield cursor.fetch_next):
+                obj = cursor.next_object()
+
+                # check filter cases
+                if obj["model"] not in versions:
+                    # ignore because not in a deployed version
+                    break
+
+                if obj["attributes"]["purged"]:
+                    # it has already been deleted
+                    break
+
+                should_purge.append(cls(from_mongo=True, **obj))
+                break
+
+        return should_purge
+
+    def to_dict(self):
+        dct = BaseDocument.to_dict(self)
+        dct["id"] = dct["resource_version_id"]
+        return dct
+
+
+class ConfigurationModel(BaseDocument):
     """
         A specific version of the configuration model.
 
@@ -561,70 +956,105 @@ class ConfigurationModel(Document):
         :param deployed Is this model deployed?
         :param result The result of the deployment. Success or error.
     """
-    version = IntField(required=True)
-    environment = ReferenceField(reference_document_type=Environment, required=True)
-    date = DateTimeField()
+    version = Field(field_type=int, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    date = Field(field_type=datetime.datetime)
 
-    released = BooleanField(default=False)
-    deployed = BooleanField(default=False)
-    result = StringField(default="pending")
-    status = JsonField(default={})
-    version_info = JsonField()
+    released = Field(field_type=bool, default=False)
+    deployed = Field(field_type=bool, default=False)
+    result = Field(field_type=str, default="pending")
+    status = Field(field_type=dict, default={})
+    version_info = Field(field_type=dict)
 
-    resources_total = IntField(default=0)
-    resources_done = IntField(default=0)
+    total = Field(field_type=int, default=0)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING)], unique=True)
+    ]
+
+    @property
+    def done(self):
+        return len(self.status)
+
+    def to_dict(self):
+        dct = BaseDocument.to_dict(self)
+        dct["done"] = self.done
+        return dct
 
     @classmethod
     @gen.coroutine
     def get_version(cls, environment, version):
-        versions = yield cls.objects.filter(environment=environment, version=version).find_all()
+        """
+            Get a specific version
+        """
+        result = yield cls._coll.find_one({"environment": environment, "version": version})
+        if result is not None:
+            return cls(from_mongo=True, **result)
+
+        return None
+
+    @classmethod
+    @gen.coroutine
+    def get_latest_version(cls, environment):
+        """
+            Get the latest released (most recent) version for the given environment
+        """
+        cursor = cls._coll.find({"environment": environment, "released": True}).sort("version", pymongo.DESCENDING).limit(1)
+
+        versions = yield cursor.to_list(1)
+
         if len(versions) == 0:
             return None
 
-        return versions[0]
+        return cls(from_mongo=True, **versions[0])
 
+    @classmethod
     @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"version": self.version,
-                "environment": str(self.environment.uuid),
-                "date": self.date,
-                "released": self.released,
-                "deployed": self.deployed,
-                "result": self.result,
-                "status": self.status,
-                "total": self.resources_total,
-                "done": self.resources_done,
-                "version_info": self.version_info,
-                }
+    def get_agents(cls, environment, version):
+        """
+            Returns a list of all agents that have resources defined in this configuration model
+        """
+        agents = yield Resource._coll.find({"environment": environment, "model": version},
+                                           projection={"_id": False, "agent": True}).distinct("agent")
+
+        return agents
+
+    @classmethod
+    @gen.coroutine
+    def get_versions(cls, environment, start=0, limit=DBLIMIT):
+        """
+            Get all versions for an environment ordered descending
+        """
+        cursor = cls._coll.find({"environment": environment}).sort("version", pymongo.DESCENDING).skip(start).limit(limit)
+
+        versions = []
+        while (yield cursor.fetch_next):
+            versions.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return versions
+
+    @classmethod
+    @gen.coroutine
+    def set_ready(cls, environment, version, resource_uuid, resource_id, status):
+        """
+            Mark a resource as deployed in the configuration model status
+        """
+        entry_uuid = uuid.uuid5(resource_uuid, resource_id)
+        resource_key = "status.%s" % entry_uuid
+        yield cls._coll.update({"environment": environment, "version": version},
+                               {"$set": {resource_key: {"status": status, "id": resource_id}}})
 
     @gen.coroutine
     def delete_cascade(self):
-        yield self.load_references()
-        res_versions = yield ResourceVersion.objects.filter(model=self).find_all()
-        for resv in res_versions:
-            yield resv.delete_cascade()
-
-        snapshots = yield Snapshot.objects.filter(model=self).find_all()
-        for snapshot in snapshots:
-            yield snapshot.delete_cascade()
-
-        unknowns = yield UnknownParameter.objects.filter(environment=self.environment, version=self.version).find_all()
-        for u in unknowns:
-            yield u.delete()
-
-        code = yield Code.objects.filter(environment=self.environment, version=self.version).find_all()
-        for c in code:
-            yield c.delete()
-
-        drs = yield DryRun.objects.filter(model=self).find_all()
-        for d in drs:
-            yield d.delete()
-
+        yield Resource.delete_all(environment=self.environment, model=self.version)
+        yield Snapshot.delete_all(environment=self.environment, model=self.version)
+        yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
+        yield Code.delete_all(environment=self.environment, model=self.version)
+        yield DryRun.delete_all(environment=self.environment, model=self.version)
         yield self.delete()
 
 
-class Code(Document):
+class Code(BaseDocument):
     """
         A code deployment
 
@@ -633,22 +1063,22 @@ class Code(Document):
         :param sources The source code of plugins
         :param requires Python requires for the source code above
     """
-    environment = ReferenceField(reference_document_type=Environment, sparse=True, required=True)
-    resource = StringField(sparse=True, required=True)
-    version = IntField(sparse=True, required=True)
-    sources = JsonField()
+    environment = Field(field_type=uuid.UUID, required=True)
+    resource = Field(field_type=str, required=True)
+    version = Field(field_type=int, required=True)
+    sources = Field(field_type=dict)
 
     @classmethod
     @gen.coroutine
     def get_version(cls, environment, version, resource):
-        codes = yield cls.objects.filter(environment=environment, version=version, resource=resource).find_all()
+        codes = yield cls.get_list(environment=environment, version=version, resource=resource)
         if len(codes) == 0:
             return None
 
         return codes[0]
 
 
-class DryRun(IdDocument):
+class DryRun(BaseDocument):
     """
         A dryrun of a model version
 
@@ -660,117 +1090,107 @@ class DryRun(IdDocument):
         :param resource_todo The number of resources left to do
         :param resources Changes for each of the resources in the version
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    model = ReferenceField(reference_document_type=ConfigurationModel)
-    date = DateTimeField()
-    resource_total = IntField()
-    resource_todo = IntField()
-    resources = JsonField()
+    environment = Field(field_type=uuid.UUID, required=True)
+    model = Field(field_type=int, required=True)
+    date = Field(field_type=datetime.datetime)
+    total = Field(field_type=int, default=0)
+    todo = Field(field_type=int, default=0)
+    resources = Field(field_type=dict, default={})
 
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.DESCENDING)], unique=True)
+    ]
+
+    @classmethod
     @gen.coroutine
+    def update_resource(cls, dryrun_id, resource_id, dryrun_data):
+        """
+            Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
+            if the resource has not been saved yet.
+        """
+        entry_uuid = uuid.uuid5(dryrun_id, resource_id)
+        resource_key = "resources.%s" % entry_uuid
+
+        query = {"_id": dryrun_id, resource_key: {"$exists": False}}
+        update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: dryrun_data}}
+
+        yield cls._coll.update(query, update)
+
+    @classmethod
+    @gen.coroutine
+    def create(cls, environment, model, total, todo):
+        obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
+        obj.insert()
+        return obj
+
     def to_dict(self):
-        yield self.load_references()
-        return {"id": self.uuid,
-                "environment": str(self.environment.uuid),
-                "model": str(self.model.version),
-                "date": self.date.isoformat(),
-                "total": self.resource_total,
-                "todo": self.resource_todo,
-                "resources": self.resources,
-                }
+        dict_result = BaseDocument.to_dict(self)
+        resources = {r["id"]: r for r in dict_result["resources"].values()}
+        dict_result["resources"] = resources
+        return dict_result
 
 
-class ResourceSnapshot(Document):
+class ResourceSnapshot(BaseDocument):
     """
         Snapshot of a resource
 
         :param error Indicates if an error made the snapshot fail
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    snapshot = ReferenceField(reference_document_type="inmanta.data.Snapshot")
-    resource_id = StringField()
-    state_id = StringField()
-    started = DateTimeField()
-    finished = DateTimeField()
-    content_hash = StringField()
-    success = BooleanField()
-    error = BooleanField()
-    msg = StringField()
-    size = IntField()
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"snapshot_id": self.snapshot.uuid,
-                "state_id": self.state_id,
-                "started": self.started,
-                "finished": self.finished,
-                "content_hash": self.content_hash,
-                "success": self.success,
-                "error": self.error,
-                "msg": self.msg,
-                "size": self.size,
-                }
+    environment = Field(field_type=uuid.UUID, required=True)
+    snapshot = Field(field_type=uuid.UUID, required=True)
+    resource_id = Field(field_type=str, required=True)
+    state_id = Field(field_type=str, required=True)
+    started = Field(field_type=datetime.datetime, default=None)
+    finished = Field(field_type=datetime.datetime, default=None)
+    content_hash = Field(field_type=str)
+    success = Field(field_type=bool)
+    error = Field(field_type=bool)
+    msg = Field(field_type=str)
+    size = Field(field_type=int)
 
 
-class ResourceRestore(Document):
+class ResourceRestore(BaseDocument):
     """
         A restore of a resource from a snapshot
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    restore = ReferenceField(reference_document_type="inmanta.data.SnapshotRestore")
-    state_id = StringField()
-    resource_id = StringField()
-    started = DateTimeField()
-    finished = DateTimeField()
-    success = BooleanField()
-    error = BooleanField()
-    msg = StringField()
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"restore_id": self.restore.uuid,
-                "state_id": self.state_id,
-                "resource_id": self.resource_id,
-                "started": self.started,
-                "finished": self.finished,
-                "success": self.success,
-                "error": self.error,
-                "msg": self.msg
-                }
+    environment = Field(field_type=uuid.UUID, required=True)
+    restore = Field(field_type=uuid.UUID, required=True)
+    state_id = Field(field_type=str)
+    resource_id = Field(field_type=str)
+    started = Field(field_type=datetime.datetime, default=None)
+    finished = Field(field_type=datetime.datetime, default=None)
+    success = Field(field_type=bool)
+    error = Field(field_type=bool)
+    msg = Field(field_type=str)
 
 
-class SnapshotRestore(IdDocument):
+class SnapshotRestore(BaseDocument):
     """
         Information about a snapshot restore
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    snapshot = ReferenceField(reference_document_type="inmanta.data.Snapshot")
-    started = DateTimeField()
-    finished = DateTimeField()
-    resources_todo = IntField(default=0)
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"id": self.uuid,
-                "snapshot": self.snapshot.uuid,
-                "started": self.started,
-                "finished": self.finished,
-                "resources_todo": self.resources_todo,
-                }
+    environment = Field(field_type=uuid.UUID, required=True)
+    snapshot = Field(field_type=uuid.UUID, required=True)
+    started = Field(field_type=datetime.datetime, default=None)
+    finished = Field(field_type=datetime.datetime, default=None)
+    resources_todo = Field(field_type=int, default=0)
 
     @gen.coroutine
     def delete_cascade(self):
-        restores = yield ResourceRestore.objects.filter(restore=self).find_all()
-        for restore in restores:
-            yield restore.delete()
-
+        yield ResourceRestore.delete_all(restore=self.id)
         yield self.delete()
 
+    @gen.coroutine
+    def resource_updated(self):
+        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
+        self.resources_todo -= 1
 
-class Snapshot(IdDocument):
+        now = datetime.datetime.now()
+        result = yield SnapshotRestore._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
+            self.finished = now
+
+
+class Snapshot(BaseDocument):
     """
         A snapshot of an environment
 
@@ -780,34 +1200,54 @@ class Snapshot(IdDocument):
         :param finished When was this snapshot finished
         :param total_size The total size of this snapshot
     """
-    environment = ReferenceField(reference_document_type=Environment)
-    model = ReferenceField(reference_document_type=ConfigurationModel)
-    name = StringField()
-    started = DateTimeField()
-    finished = DateTimeField()
-    total_size = IntField(default=0)
-    resources_todo = IntField(default=0)
-
-    @gen.coroutine
-    def to_dict(self):
-        yield self.load_references()
-        return {"id": self.uuid,
-                "model": self.model.version,
-                "name": self.name,
-                "started": self.started,
-                "finished": self.finished,
-                "total_size": self.total_size,
-                "resources_todo": self.resources_todo,
-                }
+    environment = Field(field_type=uuid.UUID, required=True)
+    model = Field(field_type=int, required=True)
+    name = Field(field_type=str)
+    started = Field(field_type=datetime.datetime, default=None)
+    finished = Field(field_type=datetime.datetime, default=None)
+    total_size = Field(field_type=int, default=0)
+    resources_todo = Field(field_type=int, default=0)
 
     @gen.coroutine
     def delete_cascade(self):
-        snapshots = yield ResourceSnapshot.objects.filter(snapshot=self).find_all()
-        for snap in snapshots:
-            yield snap.delete()
-
-        restores = yield SnapshotRestore.objects.filter(snapshot=self).find_all()
+        yield ResourceSnapshot.delete_all(snapshot=self.id)
+        restores = yield SnapshotRestore.get_list(snapshot=self.id)
         for restore in restores:
             yield restore.delete_cascade()
 
         yield self.delete()
+
+    @gen.coroutine
+    def resource_updated(self, size):
+        yield Snapshot._coll.update({"_id": self.id},
+                                    {"$inc": {"resources_todo": int(-1), "total_size": size}})
+        self.total_size += size
+        self.resources_todo -= 1
+
+        now = datetime.datetime.now()
+        result = yield Snapshot._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
+            self.finished = now
+
+
+_classes = [Project, Environment, Parameter, UnknownParameter, AgentProcess, AgentInstance, Agent, Report, Compile, Form,
+            FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun, ResourceSnapshot, ResourceRestore,
+            SnapshotRestore, Snapshot]
+
+
+def use_motor(motor):
+    for cls in _classes:
+        cls.set_connection(motor)
+
+
+@gen.coroutine
+def create_indexes():
+    for cls in _classes:
+        yield cls.create_indexes()
+
+
+def connect(host, port, database, io_loop):
+    client = motor_tornado.MotorClient(host, port, io_loop=io_loop)
+    db = client[database]
+
+    use_motor(db)

@@ -18,11 +18,12 @@
 
 import time
 import logging
+import uuid
 
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta.data import Environment
+from inmanta import data
 
 LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def test_autostart(server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    env = yield Environment.get_uuid(env_id)
+    env = yield data.Environment.get_by_id(uuid.UUID(env_id))
 
     yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
     yield server.agentmanager.ensure_agent_registered(env, "iaas_josx")
@@ -92,8 +93,8 @@ def test_autostart_dual_env(server):
     result = yield client.create_environment(project_id=project_id, name="devx")
     env_id2 = result.result["environment"]["id"]
 
-    env = yield Environment.get_uuid(env_id)
-    env2 = yield Environment.get_uuid(env_id2)
+    env = yield data.Environment.get_by_id(uuid.UUID(env_id))
+    env2 = yield data.Environment.get_by_id(uuid.UUID(env_id2))
 
     yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
     yield server.agentmanager.ensure_agent_registered(env2, "iaas_jos")
@@ -126,7 +127,7 @@ def test_autostart_batched(server):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    env = yield Environment.get_uuid(env_id)
+    env = yield data.Environment.get_by_id(uuid.UUID(env_id))
 
     yield server.agentmanager.ensure_agent_registered(env, "iaas_jos")
     yield server.agentmanager.ensure_agent_registered(env, "iaas_josx")
@@ -182,9 +183,10 @@ def test_version_removal(server):
         assert versions.result["count"] <= 3
 
 
+# TODO: fix multi again
 @pytest.mark.gen_test(timeout=30)
 @pytest.mark.slowtest
-def test_get_resource_for_agent(io_loop, server_multi):
+def test_get_resource_for_agent(io_loop, motor, server_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -280,3 +282,44 @@ def test_get_resource_for_agent(io_loop, server_multi):
     result = yield client.get_version(env_id, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
+
+
+@pytest.mark.gen_test(timeout=10)
+def test_get_environment(server):
+    from inmanta import protocol
+
+    client = protocol.Client("client")
+
+    result = yield client.create_project("env-test")
+    assert result.code == 200
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    version = int(time.time())
+
+    for i in range(10):
+        version += 1
+
+        resources = []
+        for j in range(i):
+            resources.append({
+                'group': 'root',
+                'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                'id': 'std::File[vm1.dev.inmanta.com,path=/tmp/file%d],v=%d' % (j, version),
+                'owner': 'root',
+                'path': '/tmp/file%d' % j,
+                'permissions': 644,
+                'purged': False,
+                'reload': False,
+                'requires': [],
+                'version': version})
+
+        res = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+        assert res.code, 200
+
+    result = yield client.get_environment(env_id, versions=5, resources=1)
+    assert(result.code == 200)
+    assert(len(result.result["environment"]["versions"]) == 5)
+    assert(len(result.result["environment"]["resources"]) == 9)

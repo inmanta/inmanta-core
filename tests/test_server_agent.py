@@ -170,6 +170,7 @@ def waitForDoneWithWaiters(client, env_id, version):
             waiter.notifyAll()
             waiter.release()
         yield gen.sleep(0.1)
+
     return result
 
 
@@ -591,6 +592,8 @@ def test_dual_agent(io_loop, server, client):
     result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
+    # expire rate limiting
+    yield gen.sleep(0.5)
     # do a deploy
     result = yield client.release_version(env_id, version, True)
     assert result.code == 200
@@ -712,6 +715,19 @@ def test_snapshot_restore(client, server, io_loop):
 
     assert Provider.get("agent1", "key") == "value"
 
+    # get a snapshot
+    result = yield client.get_snapshot(env_id, snapshot_id)
+    assert(result.code == 200)
+    assert(result.result["snapshot"]["id"] == snapshot_id)
+
+    # delete the restore
+    result = yield client.delete_restore(env_id, restore_id)
+    assert(result.code == 200)
+
+    # delete the snapshot
+    result = yield client.delete_snapshot(env_id, snapshot_id)
+    assert(result.code == 200)
+
 
 @pytest.mark.gen_test
 def test_server_agent_api(client, server, io_loop):
@@ -723,16 +739,27 @@ def test_server_agent_api(client, server, io_loop):
     agent = Agent(io_loop, env_id=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.start()
+
     yield gen.sleep(0.1)
+
     agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
                   code_loader=False)
     agent.start()
+
+    yield gen.sleep(0.2)
 
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
     assert len(server.agentmanager.sessions) == 2
 
     result = yield client.list_agent_processes(env_id)
     assert result.code == 200
+
+    while len(result.result["processes"]) != 2:
+        result = yield client.list_agent_processes(env_id)
+        assert result.code == 200
+        yield gen.sleep(0.1)
+
+    assert(len(result.result["processes"]) == 2)
     assertEqualIsh({'processes': [{'expired': None, 'environment': env_id, 'endpoints':
                                    [{'name': 'agent1', 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
                                    'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN},
@@ -830,13 +857,10 @@ def test_get_facts(client, server, io_loop):
     result = yield client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 503
 
-    env = yield data.Environment.get_uuid(env_id)
-
-    params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                 resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+    env_uuid = uuid.UUID(env_id)
+    params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
         yield gen.sleep(0.1)
 
     result = yield client.get_param(env_id, "key1", resource_id_wov)
@@ -904,13 +928,10 @@ def test_unkown_parameters(client, server, io_loop):
 
     yield server.renew_expired_facts()
 
-    env = yield data.Environment.get_uuid(env_id)
-
-    params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                 resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+    env_id = uuid.UUID(env_id)
+    params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.objects.filter(environment=env,  # @UndefinedVariable
-                                                     resource_id=resource_id_wov).find_all()  # @UndefinedVariable
+        params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
         yield gen.sleep(0.1)
 
     result = yield client.get_param(env_id, "length", resource_id_wov)
@@ -1256,3 +1277,60 @@ def test_cross_agent_deps(io_loop, server, client):
 
     agent.stop()
     agent2.stop()
+
+
+@pytest.mark.gen_test
+def test_dryrun_scale(io_loop, server, client):
+    """
+        test dryrun scaling
+    """
+    Provider.reset()
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    resources = []
+    for i in range(1, 100):
+        resources.append({'key': 'key%d' % i,
+                          'value': 'value%d' % i,
+                          'id': 'test::Resource[agent1,key=key%d],v=%d' % (i, version),
+                          'purged': False,
+                          'state_id': '',
+                          'allow_restore': True,
+                          'allow_snapshot': True,
+                          'requires': [],
+                          })
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # request a dryrun
+    result = yield client.dryrun_request(env_id, version)
+    assert result.code == 200
+    assert result.result["dryrun"]["total"] == len(resources)
+    assert result.result["dryrun"]["todo"] == len(resources)
+
+    # get the dryrun results
+    result = yield client.dryrun_list(env_id, version)
+    assert result.code == 200
+    assert len(result.result["dryruns"]) == 1
+
+    while result.result["dryruns"][0]["todo"] > 0:
+        result = yield client.dryrun_list(env_id, version)
+        yield gen.sleep(0.1)
+
+    dry_run_id = result.result["dryruns"][0]["id"]
+    result = yield client.dryrun_report(env_id, dry_run_id)
+    assert result.code == 200
+
+    agent.stop()
