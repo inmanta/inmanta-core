@@ -22,7 +22,6 @@ import time
 from inmanta import data
 import pytest
 import pymongo
-from tornado import gen
 from inmanta.data import ConfigurationModel
 
 
