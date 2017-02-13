@@ -269,10 +269,13 @@ class LoginHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def options(self, *args, **kwargs):
+        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        if len(self._transport.headers):
+            allow_headers += ", " + ", ".join(self._transport.headers)
+
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
-                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
+        self.set_header("Access-Control-Allow-Headers", allow_headers)
 
         self.set_status(200)
 
@@ -425,10 +428,13 @@ class RESTHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def options(self, *args, **kwargs):
+        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        if len(self._transport.headers):
+            allow_headers += ", " + ", ".join(self._transport.headers)
+
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
-                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
+        self.set_header("Access-Control-Allow-Headers", allow_headers)
 
         self.set_status(200)
 
@@ -444,7 +450,6 @@ class RESTTransport(Transport):
         A REST (json body over http) transport. Only methods that operate on resource can use all
         HTTP verbs. For other methods the POST verb is used.
     """
-    __data__ = ("message", "blob")
     __transport_name__ = "rest"
 
     def __init__(self, endpoint, connection_timout=120):
@@ -454,6 +459,7 @@ class RESTTransport(Transport):
         self.token = None
         self.token_lock = locks.Lock()
         self.connection_timout = connection_timout
+        self.headers = set()
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -478,13 +484,21 @@ class RESTTransport(Transport):
             Build a mapping between urls, ops and methods
         """
         url_map = defaultdict(dict)
+        headers = set()
         for method, method_handlers in self.endpoint.__methods__.items():
             properties = method.__protocol_properties__
             call = (self.endpoint, method_handlers[0])
 
+            if "arg_options" in properties:
+                for opts in properties["arg_options"].values():
+                    if "header" in opts:
+                        headers.add(opts["header"])
+
             url = self._create_base_url(properties)
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
+        headers.add(INMANTA_AUTH_HEADER)
+        self.headers = headers
         return url_map
 
     def match_call(self, url, method):

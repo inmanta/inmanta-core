@@ -30,9 +30,6 @@ LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
 
-# TODO: Add embedded document key sanitation
-# TODO: Add env id validation to protocol
-# TODO: add document ser to protocol
 # TODO: disconnect
 # TODO: difference between None and not set
 

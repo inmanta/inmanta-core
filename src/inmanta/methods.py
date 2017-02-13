@@ -38,7 +38,12 @@ def protocol(index=False, id=False, operation="POST", reply=True, arg_options={}
         :param server_agent This is a call from the Server to the Agent
         :param agent_server This is a call from the Agent to the Server
         :param validate_sid This call requires a valid session, true by default if agent_server and not api
-        :param arg_options Options related to arguments passed to the method
+        :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
+            which the options apply. The value is another dict that can contain the following options:
+                header: Map this argument to a header with the following name.
+                reply_header: If the argument is mapped to a header, this header will also be included in the reply
+                getter: Call this method after validation and pass its return value to the method call. This may change the
+                        type of the argument. This method can raise an HTTPException to return a 404 for example.
     """
     if api is None:
         api = not server_agent and not agent_server
@@ -97,7 +102,7 @@ class Method(object):
 
 
 @gen.coroutine
-def get_environment(env):
+def get_environment(env: uuid.UUID) -> data.Environment:
     env = yield data.Environment.get_by_id(env)
     if env is None:
         raise HTTPException(code=404, message="The given environment id does not exist!")

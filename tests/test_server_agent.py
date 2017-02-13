@@ -746,6 +746,8 @@ def test_server_agent_api(client, server, io_loop):
                   code_loader=False)
     agent.start()
 
+    yield gen.sleep(0.2)
+
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
     assert len(server.agentmanager.sessions) == 2
 
