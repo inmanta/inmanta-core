@@ -173,6 +173,7 @@ class Resource(metaclass=ResourceMeta):
         """
         Clear the cache of created resources
         """
+        cls.__create_cache = {}
 
     @classmethod
     def convert_requires(cls):
@@ -230,6 +231,8 @@ class Resource(metaclass=ResourceMeta):
                 agent_value = getattr(agent_value, el)
 
             except UnsetException as e:
+                raise e
+            except UnknownException as e:
                 raise e
             except Exception:
                 raise Exception("Unable to get the name of agent %s belongs to. In path %s, '%s' does not exist"

@@ -27,4 +27,4 @@ class Test(resources.Resource):
 
     @staticmethod
     def get_test(exp, obj):
-        return "test_value"
+        return "test_value_" + obj.name
