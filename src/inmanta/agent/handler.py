@@ -33,7 +33,7 @@ from inmanta.agent.cache import AgentCache
 LOGGER = logging.getLogger(__name__)
 
 
-class provider(object):
+class provider(object):  # noqa: H801
     """
         A decorator that registers a new implementation
     """
@@ -58,7 +58,7 @@ class ResourcePurged(Exception):
     pass
 
 
-def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
+def cache(f=None, ignore=[], timeout=5000, for_version=True, cacheNone=True):  # noqa: H801
     """
         decorator for methods in resource handlers to provide caching
 
@@ -68,13 +68,13 @@ def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
 
         The name of the method + the arguments of the method form the cache key
 
-        If an argument named version is present and forVersion is True,
+        If an argument named version is present and for_version is True,
         the cache entry is flushed after this version has been deployed
         If an argument named resource is present,
         it is assumed to be a resource and its ID is used, without the version information
 
         :param timeout the number of second this cache entry should live
-        :param forVersion if true, this value is evicted from the cache when this deploy is ready
+        :param for_version if true, this value is evicted from the cache when this deploy is ready
         :param ignore a list of argument names that should not be part of the cache key
     """
 
@@ -89,7 +89,7 @@ def cache(f=None, ignore=[], timeout=5000, forVersion=True, cacheNone=True):
             def bound(**kwds):
                 return f(self, **kwds)
 
-            return self.cache.get_or_else(f.__name__, bound, forVersion, timeout, myignore, cacheNone, **kwds)
+            return self.cache.get_or_else(f.__name__, bound, for_version, timeout, myignore, cacheNone, **kwds)
 
         return wrapper
 
@@ -118,7 +118,7 @@ class ResourceHandler(object):
     def run_sync(self, func):
         f = Future()
 
-        def futureToFuture(future):
+        def future_to_future(future):
             exc = future.exception()
             if exc is not None:
                 f.set_exception(exc)
@@ -131,7 +131,7 @@ class ResourceHandler(object):
                 if result is not None:
                     from tornado.gen import convert_yielded
                     result = convert_yielded(result)
-                    result.add_done_callback(futureToFuture)
+                    result.add_done_callback(future_to_future)
             except Exception as e:
                 f.set_exception(e)
         self._ioloop.add_callback(run)
@@ -160,7 +160,7 @@ class ResourceHandler(object):
         pass
 
     @classmethod
-    def is_available(self, io):
+    def is_available(cls, io):
         """
             Check if this handler is available on the current system
         """

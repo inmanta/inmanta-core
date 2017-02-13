@@ -89,7 +89,7 @@ repo: %s""" % reporoot)
     return path
 
 
-def addFile(modpath, file, content, msg, version=None):
+def add_file(modpath, file, content, msg, version=None):
     with open(os.path.join(modpath, file), "w") as projectfile:
         projectfile.write(content)
 
@@ -103,7 +103,7 @@ def addFile(modpath, file, content, msg, version=None):
         os.curdir = ocd
 
 
-def addFileAndCompilerConstraint(modpath, file, content, msg, version, compiler_version):
+def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
     cfgfile = os.path.join(modpath, "module.yml")
     with open(cfgfile, "r") as fd:
         cfg = ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
@@ -112,7 +112,7 @@ def addFileAndCompilerConstraint(modpath, file, content, msg, version, compiler_
 
     with open(cfgfile, "w") as fd:
         fd.write(ruamel.yaml.dump(cfg, Dumper=ruamel.yaml.RoundTripDumper))
-    addFile(modpath, file, content, msg, version)
+    add_file(modpath, file, content, msg, version)
 
 
 def commitmodule(modpath, mesg):
@@ -126,7 +126,7 @@ def startbranch(modpath, branch):
     subprocess.check_output(["git", "checkout", "-b", branch], cwd=modpath, stderr=subprocess.STDOUT)
 
 
-def addTag(modpath, tag):
+def add_tag(modpath, tag):
     subprocess.check_output(["git", "tag", tag], cwd=modpath, stderr=subprocess.STDOUT)
 
 
@@ -144,10 +144,10 @@ class BadModProvider(object):
         return delegator
 
 
-class testModuleTool(unittest.TestCase):
+class TestModuleTool(unittest.TestCase):
     tempdir = None
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         unittest.TestCase.__init__(self, methodName)
 
         self.stream = None
@@ -156,7 +156,7 @@ class testModuleTool(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        super(testModuleTool, cls).setUpClass()
+        super(TestModuleTool, cls).setUpClass()
         cls.oldcwd = os.getcwd()
         cls.tempdir = tempfile.mkdtemp()
 
@@ -166,51 +166,53 @@ class testModuleTool(unittest.TestCase):
 
         std = makemodule(reporoot, "std", [])
         commitmodule(std, "first commit")
-        addFile(std, "signal", "present", "second commit", version="3.2")
+        add_file(std, "signal", "present", "second commit", version="3.2")
 
         mod1 = makemodule(reporoot, "mod1", [("mod3", "~=0.1")])
         commitmodule(mod1, "first commit")
-        addFile(mod1, "signal", "present", "second commit", version="3.2")
+        add_file(mod1, "signal", "present", "second commit", version="3.2")
 
         mod2 = makemodule(reporoot, "mod2", [])
         commitmodule(mod2, "first commit")
-        addFile(mod2, "signal", "present", "second commit", version="2106.1")
+        add_file(mod2, "signal", "present", "second commit", version="2106.1")
 
         mod3 = makemodule(reporoot, "mod3", [])
         commitmodule(mod3, "first commit")
-        addFile(mod3, "signal", "present", "second commit", version="0.1")
-        addFile(mod3, "badsignal", "present", "third commit")
+        add_file(mod3, "signal", "present", "second commit", version="0.1")
+        add_file(mod3, "badsignal", "present", "third commit")
 
         mod4 = makemodule(reporoot, "badmod", [("mod2", "<2016")])
         commitmodule(mod4, "first commit")
-        addFile(mod4, "signal", "present", "second commit", version="0.1")
-        addFile(mod4, "badsignal", "present", "third commit")
+        add_file(mod4, "signal", "present", "second commit", version="0.1")
+        add_file(mod4, "badsignal", "present", "third commit")
 
         mod5 = makemodule(reporoot, "mod5", [])
         commitmodule(mod5, "first commit")
-        addFile(mod5, "signal", "present", "second commit", version="0.1")
-        addFile(mod5, "badsignal", "present", "third commit")
+        add_file(mod5, "signal", "present", "second commit", version="0.1")
+        add_file(mod5, "badsignal", "present", "third commit")
 
         mod6 = makemodule(reporoot, "mod6", [])
         commitmodule(mod6, "first commit")
-        addFile(mod6, "signal", "present", "second commit", version="3.2")
-        addFile(mod6, "badsignal", "present", "third commit")
+        add_file(mod6, "signal", "present", "second commit", version="3.2")
+        add_file(mod6, "badsignal", "present", "third commit")
 
         mod7 = makemodule(reporoot, "mod7", [])
         commitmodule(mod7, "first commit")
-        addFile(mod7, "nsignal", "present", "second commit", version="3.2")
-        addFile(mod7, "nsignal", "present", "third commit", version="3.2.1")
-        addFile(mod7, "signal", "present", "fourth commit", version="3.2.2")
-        addFileAndCompilerConstraint(mod7, "badsignal", "present", "fifth commit", version="4.0", compiler_version="1000000.4")
-        addFile(mod7, "badsignal", "present", "sixth commit", version="4.1")
-        addFileAndCompilerConstraint(mod7, "badsignal", "present", "fifth commit", version="4.2", compiler_version="1000000.5")
-        addFile(mod7, "badsignal", "present", "sixth commit", version="4.3")
+        add_file(mod7, "nsignal", "present", "second commit", version="3.2")
+        add_file(mod7, "nsignal", "present", "third commit", version="3.2.1")
+        add_file(mod7, "signal", "present", "fourth commit", version="3.2.2")
+        add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
+                                         version="4.0", compiler_version="1000000.4")
+        add_file(mod7, "badsignal", "present", "sixth commit", version="4.1")
+        add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
+                                         version="4.2", compiler_version="1000000.5")
+        add_file(mod7, "badsignal", "present", "sixth commit", version="4.3")
 
         mod8 = makemodule(reporoot, "mod8", [])
         commitmodule(mod8, "first commit")
-        addFile(mod8, "signal", "present", "second commit", version="3.2")
-        addFile(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
-        addFile(mod8, "mastersignal", "present", "last commit")
+        add_file(mod8, "signal", "present", "second commit", version="3.2")
+        add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
+        add_file(mod8, "mastersignal", "present", "last commit")
 
         proj = makemodule(reporoot, "testproject",
                           [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"])
@@ -231,14 +233,14 @@ class testModuleTool(unittest.TestCase):
 
         nover = makemodule(reporoot, "nover", [])
         commitmodule(nover, "first commit")
-        addFile(nover, "signal", "present", "second commit")
+        add_file(nover, "signal", "present", "second commit")
 
         noverproject = makemodule(reporoot, "noverproject", project=True, imports=["nover"])
         commitmodule(noverproject, "first commit")
 
     @classmethod
     def tearDownClass(cls):
-        super(testModuleTool, cls).tearDownClass()
+        super(TestModuleTool, cls).tearDownClass()
         shutil.rmtree(cls.tempdir)
         os.chdir(cls.oldcwd)
 
@@ -259,32 +261,32 @@ class testModuleTool(unittest.TestCase):
 license: Apache 2.0
 version: '3.2'
 """
-        assert result == gitprovider.get_file_for_version(os.path.join(testModuleTool.reporoot, "mod6"), "3.2", "module.yml")
+        assert result == gitprovider.get_file_for_version(os.path.join(TestModuleTool.reporoot, "mod6"), "3.2", "module.yml")
 
-    def test_localRepo_good(self):
-        repo = LocalFileRepo(testModuleTool.reporoot)
-        coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
+    def test_local_repo_good(self):
+        repo = LocalFileRepo(TestModuleTool.reporoot)
+        coroot = os.path.join(TestModuleTool.tempdir, "clone_local_good")
         result = repo.clone("mod1", coroot)
         assert result
         assert os.path.exists(os.path.join(coroot, "mod1", "module.yml"))
 
-    def test_remoteRepo_good(self):
+    def test_remote_repo_good(self):
         repo = RemoteRepo("https://github.com/rmccue/")
-        coroot = os.path.join(testModuleTool.tempdir, "clone_remote_good")
+        coroot = os.path.join(TestModuleTool.tempdir, "clone_remote_good")
         result = repo.clone("test-repository", coroot)
         assert result
         assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
 
-    def test_localRepo_bad(self):
-        repo = LocalFileRepo(testModuleTool.reporoot)
-        coroot = os.path.join(testModuleTool.tempdir, "clone_local_good")
+    def test_local_repo_bad(self):
+        repo = LocalFileRepo(TestModuleTool.reporoot)
+        coroot = os.path.join(TestModuleTool.tempdir, "clone_local_good")
         result = repo.clone("thatotherthing", coroot)
         assert not result
 
-    def test_BadCheckout(self):
-        coroot = os.path.join(testModuleTool.tempdir, "badproject")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "badproject")],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+    def test_bad_checkout(self):
+        coroot = os.path.join(TestModuleTool.tempdir, "badproject")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "badproject")],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
@@ -292,26 +294,26 @@ version: '3.2'
         with pytest.raises(ModuleNotFoundException):
             ModuleTool().execute("install", [])
 
-    def test_BadSetup(self):
-        coroot = os.path.join(testModuleTool.tempdir, "badprojectx")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "badproject"), coroot],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+    def test_bad_setup(self):
+        coroot = os.path.join(TestModuleTool.tempdir, "badprojectx")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "badproject"), coroot],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
 
         mod1 = os.path.join(coroot, "libs", "mod1")
         os.makedirs(mod1)
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "mod2"), mod1],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "mod2"), mod1],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
 
         with pytest.raises(ModuleNotFoundException):
             ModuleTool().execute("verify", [])
 
-    def test_complexCheckout(self):
-        coroot = os.path.join(testModuleTool.tempdir, "testproject")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject")],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+    def test_complex_checkout(self):
+        coroot = os.path.join(TestModuleTool.tempdir, "testproject")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "testproject")],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
@@ -332,9 +334,9 @@ version: '3.2'
         ModuleTool().execute("push", [])
 
     def test_for_git_failures(self):
-        coroot = os.path.join(testModuleTool.tempdir, "testproject2")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject"), "testproject2"],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        coroot = os.path.join(TestModuleTool.tempdir, "testproject2")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "testproject"), "testproject2"],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
@@ -354,9 +356,9 @@ version: '3.2'
             module.gitprovider = gp
 
     def test_install_for_git_failures(self):
-        coroot = os.path.join(testModuleTool.tempdir, "testproject3")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "testproject"), "testproject3"],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        coroot = os.path.join(TestModuleTool.tempdir, "testproject3")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "testproject"), "testproject3"],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
@@ -370,19 +372,19 @@ version: '3.2'
             module.gitprovider = gp
 
     def test_for_repo_without_versions(self):
-        coroot = os.path.join(testModuleTool.tempdir, "noverproject")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "noverproject")],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+        coroot = os.path.join(TestModuleTool.tempdir, "noverproject")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "noverproject")],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
 
         ModuleTool().execute("install", [])
 
-    def test_badDepCheckout(self):
-        coroot = os.path.join(testModuleTool.tempdir, "baddep")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "baddep")],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+    def test_bad_dep_checkout(self):
+        coroot = os.path.join(TestModuleTool.tempdir, "baddep")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "baddep")],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
@@ -390,10 +392,10 @@ version: '3.2'
         with pytest.raises(CompilerException):
             ModuleTool().execute("install", [])
 
-    def test_MasterCheckout(self):
-        coroot = os.path.join(testModuleTool.tempdir, "masterproject")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "masterproject")],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+    def test_master_checkout(self):
+        coroot = os.path.join(TestModuleTool.tempdir, "masterproject")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "masterproject")],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()
@@ -404,10 +406,10 @@ version: '3.2'
         assert os.path.exists(os.path.join(dirname, "devsignal"))
         assert os.path.exists(os.path.join(dirname, "mastersignal"))
 
-    def test_DevCheckout(self):
-        coroot = os.path.join(testModuleTool.tempdir, "devproject")
-        subprocess.check_output(["git", "clone", os.path.join(testModuleTool.tempdir, "repos", "devproject")],
-                                cwd=testModuleTool.tempdir, stderr=subprocess.STDOUT)
+    def test_dev_checkout(self):
+        coroot = os.path.join(TestModuleTool.tempdir, "devproject")
+        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "devproject")],
+                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
         os.chdir(coroot)
         os.curdir = coroot
         Config.load_config()

@@ -33,10 +33,10 @@ def retry_limited(fun, timeout):
 UNKWN = object()
 
 
-def assertEqualIsh(minimal, actual, sortby=[]):
+def assert_equal_ish(minimal, actual, sortby=[]):
     if isinstance(minimal, dict):
         for k in minimal.keys():
-            assertEqualIsh(minimal[k], actual[k], sortby)
+            assert_equal_ish(minimal[k], actual[k], sortby)
     elif isinstance(minimal, list):
         assert len(minimal) == len(actual), "list not equal %s != %s" % (minimal, actual)
         if len(sortby) > 0:
@@ -47,14 +47,14 @@ def assertEqualIsh(minimal, actual, sortby=[]):
                 return '_'.join(key)
             actual = sorted(actual, key=keyfunc)
         for (m, a) in zip(minimal, actual):
-            assertEqualIsh(m, a, sortby)
+            assert_equal_ish(m, a, sortby)
     elif minimal is UNKWN:
         return
     else:
         assert minimal == actual
 
 
-def assertGraph(graph, expected):
+def assert_graph(graph, expected):
     lines = ["%s: %s" % (f.id.get_attribute_value(), t.id.get_attribute_value()) for f in graph.values() for t in f.requires]
     lines = sorted(lines)
 

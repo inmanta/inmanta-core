@@ -36,7 +36,7 @@ class StatusMethod(methods.Method):
     __method_name__ = "status"
 
     @methods.protocol(operation="GET", index=True)
-    def get_statusX(self, tid: uuid.UUID):
+    def get_status_x(self, tid: uuid.UUID):
         pass
 
     @methods.protocol(operation="GET", id=True, server_agent=True, timeout=10)
@@ -54,9 +54,9 @@ class Server(protocol.ServerEndpoint):
         protocol.ServerEndpoint.__init__(self, name, io_loop, interval=interval)
         self.expires = 0
 
-    @protocol.handle(StatusMethod.get_statusX)
+    @protocol.handle(StatusMethod.get_status_x)
     @gen.coroutine
-    def get_statusX(self, tid):
+    def get_status_x(self, tid):
         status_list = []
         for session in self._sessions.values():
             client = session.get_client()
@@ -112,13 +112,13 @@ def test_2way_protocol(logs=False):
         logging.root.addHandler(stream)
         logging.root.setLevel(logging.DEBUG)
 
-    PORT = str(random.randint(30000, 60000))
+    port = str(random.randint(30000, 60000))
     Config.load_config()
-    Config.set("server_rest_transport", "port", PORT)
-    Config.set("agent_rest_transport", "port", PORT)
-    Config.set("compiler_rest_transport", "port", PORT)
-    Config.set("client_rest_transport", "port", PORT)
-    Config.set("cmdline_rest_transport", "port", PORT)
+    Config.set("server_rest_transport", "port", port)
+    Config.set("agent_rest_transport", "port", port)
+    Config.set("compiler_rest_transport", "port", port)
+    Config.set("client_rest_transport", "port", port)
+    Config.set("cmdline_rest_transport", "port", port)
 
     io_loop = IOLoop.current()
     server = Server("server", io_loop)
@@ -132,7 +132,7 @@ def test_2way_protocol(logs=False):
     @gen.coroutine
     def do_call():
         client = protocol.Client("client")
-        status = yield client.get_statusX(str(agent.environment))
+        status = yield client.get_status_x(str(agent.environment))
         assert status.code == 200
         assert "agents" in status.result
         assert len(status.result["agents"]) == 1
@@ -167,13 +167,13 @@ def test_timeout():
     io_loop = IOLoop.current()
 
     # start server
-    PORT = str(random.randint(30000, 60000))
+    port = str(random.randint(30000, 60000))
     Config.load_config()
-    Config.set("server_rest_transport", "port", PORT)
-    Config.set("agent_rest_transport", "port", PORT)
-    Config.set("compiler_rest_transport", "port", PORT)
-    Config.set("client_rest_transport", "port", PORT)
-    Config.set("cmdline_rest_transport", "port", PORT)
+    Config.set("server_rest_transport", "port", port)
+    Config.set("agent_rest_transport", "port", port)
+    Config.set("compiler_rest_transport", "port", port)
+    Config.set("client_rest_transport", "port", port)
+    Config.set("cmdline_rest_transport", "port", port)
     server = Server("server", io_loop, interval=2)
     server.start()
 

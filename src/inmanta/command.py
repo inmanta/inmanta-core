@@ -48,7 +48,7 @@ class Commander(object):
         return cls.__command_functions
 
 
-class command(object):
+class command(object):  # noqa: N801
     """
         A decorator that registers an export function
     """

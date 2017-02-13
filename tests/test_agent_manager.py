@@ -23,7 +23,7 @@ from inmanta.server.agentmanager import AgentManager
 from inmanta import data
 from tornado import gen
 from inmanta.protocol import Result
-from utils import assertEqualIsh, UNKWN
+from utils import assert_equal_ish, UNKWN
 
 
 class Collector(object):
@@ -43,7 +43,7 @@ class Collector(object):
 
 
 @gen.coroutine
-def emptyFuture(*args, **kwargs):
+def empty_future(*args, **kwargs):
     pass
 
 
@@ -58,7 +58,7 @@ class MockSession(object):
         self.endpoint_names = endpoint_names
         self.nodename = nodename
         self.client = Mock()
-        self.client.set_state.side_effect = emptyFuture
+        self.client.set_state.side_effect = empty_future
 
     def get_id(self):
         return self._sid
@@ -149,7 +149,7 @@ def test_primary_selection(motor):
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_API(motor):
+def test_api(motor):
     data.use_motor(motor)
 
     env = data.Environment(name="testenv", project=uuid4())
@@ -198,7 +198,7 @@ def test_API(motor):
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
                                'environment': env3}]}
 
-    assertEqualIsh(shouldbe, all_agents, ['hostname', 'name'])
+    assert_equal_ish(shouldbe, all_agents, ['hostname', 'name'])
     agentid = all_agents['processes'][0]['id']
 
     code, all_agents = yield am.list_agent_processes(env.id, None)
@@ -215,14 +215,14 @@ def test_API(motor):
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id}]}
 
-    assertEqualIsh(shouldbe, all_agents)
+    assert_equal_ish(shouldbe, all_agents)
 
     code, all_agents = yield am.list_agent_processes(env2.id, None)
     assert code == 200
 
     shouldbe = {'processes': []}
 
-    assertEqualIsh(shouldbe, all_agents)
+    assert_equal_ish(shouldbe, all_agents)
 
     @gen.coroutine
     def dummy_status():
@@ -245,18 +245,18 @@ def test_API(motor):
                                'primary': UNKWN, 'environment': env.id, "state": "up"},
                            {'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
                             'environment': env2.id, "state": "down"}]}
-    assertEqualIsh(shouldbe, all_agents, ['name'])
+    assert_equal_ish(shouldbe, all_agents, ['name'])
 
     code, all_agents = yield am.list_agents(env2.id)
     assert code == 200
     shouldbe = {
         'agents': [{'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
                     'environment': env2.id, "state": "down"}]}
-    assertEqualIsh(shouldbe, all_agents)
+    assert_equal_ish(shouldbe, all_agents)
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_DB_Clean(motor):
+def test_db_clean(motor):
     data.use_motor(motor)
 
     env = data.Environment(name="testenv", project=uuid4())

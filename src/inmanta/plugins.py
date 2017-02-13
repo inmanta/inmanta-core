@@ -105,7 +105,7 @@ class PluginMeta(type):
     __functions = {}
 
     @classmethod
-    def add_function(mcs, plugin_class):
+    def add_function(cls, plugin_class):
         """
             Add a function plugin class
         """
@@ -117,7 +117,7 @@ class PluginMeta(type):
                 "All plugin modules should be loaded in the inmanta_plugins package")
 
         name = "::".join(ns_parts[1:])
-        mcs.__functions[name] = plugin_class
+        cls.__functions[name] = plugin_class
 
     @classmethod
     def get_functions(cls):
@@ -337,7 +337,7 @@ class Plugin(object, metaclass=PluginMeta):
         return value
 
 
-def plugin(function=None, commands=None, emits_statements=False):
+def plugin(function=None, commands=None, emits_statements=False):  # noqa: H801
     """
         Python 3 decorator to register functions with inmanta
     """

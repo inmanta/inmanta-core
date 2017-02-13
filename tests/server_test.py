@@ -34,7 +34,7 @@ PORT = "45678"
 
 class ServerTest(MongoTestCase, AsyncTestCase):
 
-    def __init__(self, methodName='runTest'):
+    def __init__(self, methodName='runTest'):  # noqa: H803
         MongoTestCase.__init__(self, methodName)
         AsyncTestCase.__init__(self, methodName)
 

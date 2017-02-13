@@ -27,7 +27,7 @@ class ParserException(CompilerException):
         self.value = value
         self.position = position
 
-    def findCollumn(self, content):
+    def findCollumn(self, content):  # noqa: N802
         last_cr = content.rfind('\n', 0, self.position)
         if last_cr < 0:
             last_cr = 0

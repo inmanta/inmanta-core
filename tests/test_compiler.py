@@ -340,7 +340,7 @@ implement Test using test, blah when (self > 5)
     assert stmt.select.children[1].value == 5
 
 
-def test_implements_Selector():
+def test_implements_selector():
     """Test implements with selector
     """
     statements = parse_code("""
@@ -455,7 +455,7 @@ file( )
     assert stmt.name == "file"
 
 
-def test_list_Def():
+def test_list_def():
     statements = parse_code("""
 a=["a]","b"]
 """)
@@ -467,7 +467,7 @@ a=["a]","b"]
     assert [x.value for x in stmt.value.items] == ["a]", "b"]
 
 
-def test_map_Def():
+def test_map_def():
     statements = parse_code("""
 a={ "a":"b", "b":1}
 """)
@@ -518,7 +518,7 @@ a=true b=false
     assert not statements[1].value.value
 
 
-def test_Numbers():
+def test_numbers():
     statements = parse_code("""
 a=1
 b=2.0
@@ -534,7 +534,7 @@ d=-0.256
         assert stmt.value.value == values[i]
 
 
-def test_StringFormat():
+def test_string_format():
     statements = parse_code("""
 a="j{{o}}s"
 """)
@@ -547,7 +547,7 @@ a="j{{o}}s"
     assert [x[0].name for x in stmt.value._variables] == ["o"]
 
 
-def test_StringFormat_2():
+def test_string_format_2():
     statements = parse_code("""
 a="j{{c.d}}s"
 """)
@@ -563,7 +563,7 @@ a="j{{c.d}}s"
     assert stmt.value._variables[0][0].attribute == "d"
 
 
-def test_AttributeReference():
+def test_attribute_reference():
     statements = parse_code("""
 a=a::b::c.d
 """)
@@ -577,7 +577,7 @@ a=a::b::c.d
     assert stmt.value.attribute == "d"
 
 
-def test_isDefined():
+def test_is_defined():
     statements = parse_code("""
 implement Test1 using tt when self.other is defined
 """)
@@ -590,7 +590,7 @@ implement Test1 using tt when self.other is defined
     assert stmt.select.name == 'other'
 
 
-def test_isDefined_implicit_self():
+def test_is_defined_implicit_self():
     statements = parse_code("""
 implement Test1 using tt when other is defined
 """)
@@ -603,7 +603,7 @@ implement Test1 using tt when other is defined
     assert stmt.select.name == 'other'
 
 
-def test_isDefined_short():
+def test_is_defined_short():
     statements = parse_code("""
 implement Test1 using tt when a.other is defined
 """)
@@ -618,7 +618,7 @@ implement Test1 using tt when a.other is defined
     assert stmt.select.name == 'other'
 
 
-def test_defineListAttribute():
+def test_define_list_attribute():
     statements = parse_code("""
 entity Jos:
   bool[] bar
@@ -632,7 +632,7 @@ end""")
     assert isinstance(stmt, DefineEntity)
     assert len(stmt.attributes) == 4
 
-    def compareAttr(attr, name, type, defs):
+    def compare_attr(attr, name, type, defs):
         assert attr.name == name
         defs(attr.default)
         assert attr.multi
@@ -644,21 +644,21 @@ end""")
     def assert_equals(x, y):
         assert x == y
 
-    compareAttr(stmt.attributes[0], "bar", "bool", assert_is_none)
-    compareAttr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items))
+    compare_attr(stmt.attributes[0], "bar", "bool", assert_is_none)
+    compare_attr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items))
 
-    def compareDefault(list):
+    def compare_default(list):
         def comp(x):
             assert len(list) == len(x.items)
             for one, it in zip(list, x.items):
                 assert isinstance(it, Literal)
                 assert it.value == one
         return comp
-    compareAttr(stmt.attributes[1], "ips", "ip::ip", compareDefault(['a']))
-    compareAttr(stmt.attributes[3], "floomx", "string", compareDefault(['a', 'b']))
+    compare_attr(stmt.attributes[1], "ips", "ip::ip", compare_default(['a']))
+    compare_attr(stmt.attributes[3], "floomx", "string", compare_default(['a', 'b']))
 
 
-def test_defineDictAttribute():
+def test_define_dict_attribute():
     statements = parse_code("""
 entity Jos:
   dict bar
@@ -671,7 +671,7 @@ end""")
     assert isinstance(stmt, DefineEntity)
     assert len(stmt.attributes) == 3
 
-    def compareAttr(attr, name, type, defs):
+    def compare_attr(attr, name, type, defs):
         assert attr.name == name
         defs(attr.default)
         assert not attr.multi
@@ -683,20 +683,20 @@ end""")
     def assert_equals(x, y):
         assert x == y
 
-    compareAttr(stmt.attributes[0], "bar", "dict", assert_is_none)
-    compareAttr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
+    compare_attr(stmt.attributes[0], "bar", "dict", assert_is_none)
+    compare_attr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
 
-    def compareDefault(list):
+    def compare_default(list):
         def comp(x):
             assert len(list) == len(x.items)
             for (ok, ov), (k, v) in zip(list, x.items):
                 assert k == ok
                 assert ov == v.value
         return comp
-    compareAttr(stmt.attributes[2], "blah", "dict", compareDefault([('a', 'a')]))
+    compare_attr(stmt.attributes[2], "blah", "dict", compare_default([('a', 'a')]))
 
 
-def test_Lexer():
+def test_lexer():
     parse_code("""
 #test
 //test2
@@ -705,7 +705,7 @@ b=""
 """)
 
 
-def test_MLS():
+def test_mls():
     parse_code("""
 entity MANO:
     \"""
@@ -715,7 +715,7 @@ end
 """)
 
 
-def test_Bad():
+def test_bad():
     with pytest.raises(ParserException):
         parse_code("""
 a = b.c
@@ -723,7 +723,7 @@ a=a::b::c.
 """)
 
 
-def test_Bad2():
+def test_bad_2():
     with pytest.raises(ParserException):
         parse_code("""
 a=|

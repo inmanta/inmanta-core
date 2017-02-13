@@ -253,13 +253,13 @@ class AgentManager(object):
             if sid not in self.sessions:
                 LOGGER.warn("session marked as live in DB, but not found. sid: %s" % sid)
             else:
-                yield self._setPrimary(env, agent, instance, self.sessions[sid])
+                yield self._set_primary(env, agent, instance, self.sessions[sid])
                 return
 
         yield agent.update_fields(primary=None, last_failover=datetime.now())
 
     @gen.coroutine
-    def _setPrimary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: Session):
+    def _set_primary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: Session):
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
         yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)

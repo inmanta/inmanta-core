@@ -92,16 +92,16 @@ def server(io_loop, mongo_db, mongo_client, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
-    PORT = get_free_tcp_port()
+    port = get_free_tcp_port()
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("server_rest_transport", "port", PORT)
-    config.Config.set("agent_rest_transport", "port", PORT)
-    config.Config.set("compiler_rest_transport", "port", PORT)
-    config.Config.set("client_rest_transport", "port", PORT)
-    config.Config.set("cmdline_rest_transport", "port", PORT)
+    config.Config.set("server_rest_transport", "port", port)
+    config.Config.set("agent_rest_transport", "port", port)
+    config.Config.set("compiler_rest_transport", "port", port)
+    config.Config.set("client_rest_transport", "port", port)
+    config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
 
@@ -148,16 +148,16 @@ def server_multi(io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "username", testuser)
             config.Config.set(x, "password", testpass)
 
-    PORT = get_free_tcp_port()
+    port = get_free_tcp_port()
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
-    config.Config.set("server_rest_transport", "port", PORT)
-    config.Config.set("agent_rest_transport", "port", PORT)
-    config.Config.set("compiler_rest_transport", "port", PORT)
-    config.Config.set("client_rest_transport", "port", PORT)
-    config.Config.set("cmdline_rest_transport", "port", PORT)
+    config.Config.set("server_rest_transport", "port", port)
+    config.Config.set("agent_rest_transport", "port", port)
+    config.Config.set("compiler_rest_transport", "port", port)
+    config.Config.set("client_rest_transport", "port", port)
+    config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
 
@@ -218,7 +218,7 @@ class SnippetCompilationTest(object):
         shutil.rmtree(cls.libs)
         shutil.rmtree(cls.env)
 
-    def setUpForSnippet(self, snippet, autostd=True):
+    def setup_for_snippet(self, snippet, autostd=True):
         # init project
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
@@ -260,7 +260,7 @@ class SnippetCompilationTest(object):
         return export.run(types, scopes)
 
     def setup_for_error(self, snippet, shouldbe):
-        self.setUpForSnippet(snippet)
+        self.setup_for_snippet(snippet)
         try:
             compiler.do_compile()
             assert False, "Should get exception"

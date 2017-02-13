@@ -26,8 +26,8 @@ from inmanta.execute.proxy import DynamicProxy
 
 class TestDynamicProxy(SnippetCompilationTest, unittest.TestCase):
 
-    def proxyObject(self, snippet, var):
-        self.setUpForSnippet(snippet)
+    def proxy_object(self, snippet, var):
+        self.setup_for_snippet(snippet)
         (_, root) = compiler.do_compile()
 
         scope = root.get_child("__config__").scope
@@ -35,8 +35,8 @@ class TestDynamicProxy(SnippetCompilationTest, unittest.TestCase):
         value = scope.lookup(var).get_value()
         return DynamicProxy.return_value(value)
 
-    def testBasicObject(self):
-        px = self.proxyObject("""
+    def test_basic_object(self):
+        px = self.proxy_object("""
 entity Test1:
     string x
 end
@@ -49,8 +49,8 @@ a = Test1(x="a")
         with pytest.raises(Exception):
             px.x = "b"
 
-    def testDictAttr(self):
-        px = self.proxyObject("""
+    def test_dict_attr(self):
+        px = self.proxy_object("""
 entity Test1:
     dict x = {}
 end

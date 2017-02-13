@@ -165,7 +165,7 @@ class AgentCache(object):
         key = '__'.join(key)
         return self._get(key).value
 
-    def get_or_else(self, key, function, forVerion=True, timeout=5000, ignore=set(), cache_none=True, **kwargs):
+    def get_or_else(self, key, function, for_version=True, timeout=5000, ignore=set(), cache_none=True, **kwargs):
         """
             Attempt to find a value in the cache.
 
@@ -181,7 +181,7 @@ class AgentCache(object):
 
         """
         acceptable = set(["resource"])
-        if forVerion:
+        if for_version:
             acceptable.add("version")
         args = {k: v for k, v in kwargs.items() if k in acceptable and k not in ignore}
         others = sorted([k for k in kwargs.keys() if k not in acceptable and k not in ignore])
