@@ -67,7 +67,7 @@ class ProjectNotFoundExcpetion(Exception):
     """
 
 
-class GitProvider:
+class GitProvider(object):
 
     def clone(self, src, dest):
         pass
@@ -224,7 +224,7 @@ class CLIGitProvider(GitProvider):
 gitprovider = CLIGitProvider()
 
 
-class ModuleRepo:
+class ModuleRepo(object):
 
     def clone(self, name: str, dest: str) -> bool:
         raise NotImplementedError("Abstract method")
@@ -310,7 +310,7 @@ def merge_specs(mainspec, new):
             mainspec[key] = mainspec[key] + [req]
 
 
-class ModuleLike:
+class ModuleLike(object):
     """
         Commons superclass for projects and modules, which are both versioned by git
     """

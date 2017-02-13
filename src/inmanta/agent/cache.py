@@ -40,7 +40,7 @@ class CacheItem(object):
         return self.time < other.time
 
 
-class AgentCache():
+class AgentCache(object):
     """
         Caching system for the agent:
 

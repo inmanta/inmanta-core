@@ -26,7 +26,7 @@ from inmanta.protocol import Result
 from utils import assertEqualIsh, UNKWN
 
 
-class Collector():
+class Collector(object):
 
     def __init__(self):
         self.values = []

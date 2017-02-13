@@ -26,7 +26,7 @@ import inmanta.compiler as compiler
 from inmanta.config import Config
 
 
-class CompilerFixture():
+class CompilerFixture(object):
 
     def __init__(self):
         self.libs = tempfile.mkdtemp()
