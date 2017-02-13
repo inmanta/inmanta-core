@@ -370,8 +370,6 @@ def test_snapshot(data_module):
     yield s.resource_updated(10)
     assert(s.resources_todo == 0)
     assert(s.total_size == 10)
-    print(s)
-    print(s.finished)
     assert(s.finished is not None)
 
     s = yield data.Snapshot.get_by_id(snap.id)

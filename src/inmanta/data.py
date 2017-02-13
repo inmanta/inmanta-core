@@ -1226,6 +1226,7 @@ class Snapshot(BaseDocument):
 
         now = datetime.datetime.now()
         result = yield Snapshot._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        print(result)
         if "nModified" in result and result["nModified"] == 1:
             self.finished = now
 
