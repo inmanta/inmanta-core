@@ -1,0 +1,6 @@
+entity Test:
+    string name
+    string agent
+end
+
+implement Test using std::none
