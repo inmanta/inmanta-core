@@ -10,8 +10,9 @@ requires=[
         'ply',
         'ruamel.yaml',
         'virtualenv',
-        'motorengine',
+        'motor',
         'pymongo',
+        'mongobox',
         'blessings']
 
 setup(

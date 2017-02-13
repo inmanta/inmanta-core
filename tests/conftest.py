@@ -22,14 +22,15 @@ import random
 import string
 import shutil
 from tempfile import mktemp
+import socket
 
 
 from mongobox import MongoBox
 import pytest
-from inmanta import config
+from inmanta import config, data
 import inmanta.compiler as compiler
 import pymongo
-from motorengine.connection import connect, disconnect
+from motor import motor_tornado
 from inmanta.module import Project
 from inmanta.ast import CompilerException
 
@@ -55,26 +56,43 @@ def mongo_client(mongo_db):
     '''Returns an instance of :class:`pymongo.MongoClient` connected
     to MongoBox database instance.
     '''
-
     port = int(mongo_db.port)
     return pymongo.MongoClient(port=port)
 
 
 @pytest.fixture(scope="function")
-def motorengine(mongo_db, mongo_client, io_loop):
-    c = connect(db="inmanta", host="localhost", port=int(mongo_db.port), io_loop=io_loop)
-    yield c
-    disconnect()
+def motor(mongo_db, mongo_client, io_loop):
+    client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
+    db = client["inmanta"]
+    yield db
+
     for db_name in mongo_client.database_names():
         mongo_client.drop_database(db_name)
 
 
 @pytest.fixture(scope="function")
-def server(io_loop, mongo_db, mongo_client):
+def data_module(io_loop, motor):
+    data.use_motor(motor)
+    io_loop.run_sync(data.create_indexes)
+
+
+def get_free_tcp_port():
+    """
+        Semi safe method for getting a random port. This may contain a race condition.
+    """
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.bind(('', 0))
+    _addr, port = tcp.getsockname()
+    tcp.close()
+    return str(port)
+
+
+@pytest.fixture(scope="function")
+def server(io_loop, mongo_db, mongo_client, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
-    PORT = "45678"
+    PORT = get_free_tcp_port()
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
@@ -86,6 +104,8 @@ def server(io_loop, mongo_db, mongo_client):
     config.Config.set("cmdline_rest_transport", "port", PORT)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
+
+    data.use_motor(motor)
 
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
     server.start()
@@ -128,7 +148,7 @@ def server_multi(io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "username", testuser)
             config.Config.set(x, "password", testpass)
 
-    PORT = "45678"
+    PORT = get_free_tcp_port()
     config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
@@ -182,6 +202,25 @@ class SnippetCompilationTest(object):
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
 
+@pytest.fixture(scope="function")
+def environment(client, server, io_loop):
+    """
+        Create a project and environment. This fixture returns the uuid of the environment
+    """
+    def create_project():
+        return client.create_project("env-test")
+
+    result = io_loop.run_sync(create_project)
+    assert(result.code == 200)
+    project_id = result.result["project"]["id"]
+
+    def create_env():
+        return client.create_environment(project_id=project_id, name="dev")
+
+    result = io_loop.run_sync(create_env)
+    env_id = result.result["environment"]["id"]
+
+    yield env_id
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """

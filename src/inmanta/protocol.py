@@ -31,7 +31,7 @@ from collections import defaultdict
 
 import tornado.web
 from tornado import gen, queues, locks
-from inmanta import methods
+from inmanta import methods, data
 from inmanta.config import Config, nodename
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
@@ -118,11 +118,6 @@ class Transport(object):
         :param end_point_name The name of the endpoint to which this transport belongs. This is used
             for logging and configuration purposes
     """
-    __data__ = tuple()
-    __transport_name__ = None
-    __broadcast__ = False
-    __network__ = True
-
     @classmethod
     def create(cls, TransportClass, endpoint=None):
         """
@@ -221,6 +216,9 @@ def custom_json_encoder(o):
     if isinstance(o, datetime):
         return o.isoformat()
 
+    if isinstance(o, data.BaseDocument):
+        return o.to_dict()
+
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
@@ -271,10 +269,13 @@ class LoginHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def options(self, *args, **kwargs):
+        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        if len(self._transport.headers):
+            allow_headers += ", " + ", ".join(self._transport.headers)
+
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
-                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
+        self.set_header("Access-Control-Allow-Headers", allow_headers)
 
         self.set_status(200)
 
@@ -427,10 +428,13 @@ class RESTHandler(tornado.web.RequestHandler):
 
     @gen.coroutine
     def options(self, *args, **kwargs):
+        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        if len(self._transport.headers):
+            allow_headers += ", " + ", ".join(self._transport.headers)
+
         self.set_header("Access-Control-Allow-Origin", "*")
         self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s, %s" %
-                        (INMANTA_MT_HEADER, INMANTA_AUTH_HEADER))
+        self.set_header("Access-Control-Allow-Headers", allow_headers)
 
         self.set_status(200)
 
@@ -446,7 +450,6 @@ class RESTTransport(Transport):
         A REST (json body over http) transport. Only methods that operate on resource can use all
         HTTP verbs. For other methods the POST verb is used.
     """
-    __data__ = ("message", "blob")
     __transport_name__ = "rest"
 
     def __init__(self, endpoint, connection_timout=120):
@@ -456,6 +459,7 @@ class RESTTransport(Transport):
         self.token = None
         self.token_lock = locks.Lock()
         self.connection_timout = connection_timout
+        self.headers = set()
 
     def _create_base_url(self, properties, msg=None):
         """
@@ -480,13 +484,21 @@ class RESTTransport(Transport):
             Build a mapping between urls, ops and methods
         """
         url_map = defaultdict(dict)
+        headers = set()
         for method, method_handlers in self.endpoint.__methods__.items():
             properties = method.__protocol_properties__
             call = (self.endpoint, method_handlers[0])
 
+            if "arg_options" in properties:
+                for opts in properties["arg_options"].values():
+                    if "header" in opts:
+                        headers.add(opts["header"])
+
             url = self._create_base_url(properties)
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
+        headers.add(INMANTA_AUTH_HEADER)
+        self.headers = headers
         return url_map
 
     def match_call(self, url, method):
@@ -523,17 +535,6 @@ class RESTTransport(Transport):
             if "id" in config[0] and config[0]["id"] and "id" not in message:
                 return self.return_error_msg(500, "Invalid request. It should contain an id in the url.", headers)
 
-            if "mt" in config[0] and config[0]["mt"]:
-                if INMANTA_MT_HEADER not in request_headers:
-                    return self.return_error_msg(500, "This is multi-tenant method, it should contain a tenant id", headers)
-
-                else:
-                    message["tid"] = request_headers[INMANTA_MT_HEADER]
-                    if message["tid"] == "":
-                        return self.return_error_msg(500, "%s header set without value." % INMANTA_MT_HEADER, headers)
-
-                    headers[INMANTA_MT_HEADER] = message["tid"]
-
             validate_sid = config[0]["validate_sid"]
             if validate_sid:
                 if 'sid' not in message:
@@ -558,6 +559,18 @@ class RESTTransport(Transport):
 
             for i in range(len(args)):
                 arg = args[i]
+
+                opts = {}
+                # handle defaults and header mapping
+                if arg in config[0]["arg_options"]:
+                    opts = config[0]["arg_options"][arg]
+
+                    if "header" in opts:
+                        message[arg] = request_headers[opts["header"]]
+                        if "reply_header" in opts and opts["reply_header"]:
+                            headers[opts["header"]] = message[arg]
+                    all_fields.add(arg)
+
                 if arg not in message:
                     if (defaults_start >= 0 and (i - defaults_start) < len(argspec.defaults)):
                         message[arg] = argspec.defaults[i - defaults_start]
@@ -576,9 +589,18 @@ class RESTTransport(Transport):
                                 message[arg] = datetime.strptime(message[arg], "%Y-%m-%dT%H:%M:%S.%f")
                             else:
                                 message[arg] = arg_type(message[arg])
+
                         except (ValueError, TypeError):
                             return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
                                                          (arg, arg_type, message[arg].__class__), headers)
+
+                # execute any getters that are defined
+                if "getter" in opts:
+                    try:
+                        result = yield opts["getter"](message[arg])
+                        message[arg] = result
+                    except methods.HTTPException as e:
+                        return self.return_error_msg(e.code, e.message, headers)
 
             if config[0]["agent_server"]:
                 if 'sid' in all_fields:
@@ -592,6 +614,12 @@ class RESTTransport(Transport):
             LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
                                                                            for name, value in message.items()]))
             method_call = getattr(config[1][0], config[1][1])
+
+            if hasattr(method_call, "__protocol_mapping__"):
+                for k, v in method_call.__protocol_mapping__.items():
+                    if v in message:
+                        message[k] = message[v]
+                        del message[v]
 
             result = yield method_call(**message)
 
@@ -720,12 +748,13 @@ class RESTTransport(Transport):
         url = self._create_base_url(properties, msg)
 
         headers = {}
-        if properties["mt"]:
-            if "tid" not in msg:
-                raise Exception("A multi-tenant method call should contain a tid parameter.")
 
-            headers[INMANTA_MT_HEADER] = str(msg["tid"])
-            del msg["tid"]
+        for arg_name in list(msg.keys()):
+            if arg_name in properties["arg_options"]:
+                opts = properties["arg_options"][arg_name]
+                if "header" in opts:
+                    headers[opts["header"]] = str(msg[arg_name])
+                    del msg[arg_name]
 
         if not (method == "POST" or method == "PUT" or method == "PATCH"):
             qs_map = msg.copy()
@@ -826,13 +855,11 @@ class handle(object):
         Decorator for subclasses of an endpoint to handle protocol methods
 
         :param method A subclass of method that defines the method
-        :param operation The operation to use (POST, GET, PUT, HEAD, ...)
-        :param id Is the special parameter id required
-        :param index Does this method handle the index
     """
 
-    def __init__(self, method):
+    def __init__(self, method, **kwargs):
         self.method = method
+        self.mapping = kwargs
 
     def __call__(self, function):
         """
@@ -849,6 +876,7 @@ class handle(object):
             self.method.__protocol_properties__["method_name"] = method_class.__method_name__
 
         function.__protocol_method__ = self.method
+        function.__protocol_mapping__ = self.mapping
         return function
 
 
@@ -1037,15 +1065,15 @@ class Session(object):
     def put_call(self, call_spec, timeout=10):
         future = tornado.concurrent.Future()
 
-        id = uuid.uuid4()
+        reply_id = uuid.uuid4()
 
-        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", id, call_spec["method"], call_spec["url"], self._sid)
+        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec["method"], call_spec["url"], self._sid)
 
         q = self._queue
-        call_spec["reply_id"] = id
+        call_spec["reply_id"] = reply_id
         q.put(call_spec)
-        self._set_timeout(future, timeout,
-                          "Call %s: %s %s for agent %s timed out." % (id, call_spec["method"], call_spec["url"], self._sid))
+        self._set_timeout(future, timeout, "Call %s: %s %s for agent %s timed out." %
+                          (reply_id, call_spec["method"], call_spec["url"], self._sid))
         self._replies[call_spec["reply_id"]] = future
 
         return future
@@ -1157,13 +1185,12 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         LOGGER.debug("Seen session with id %s" % (session.get_id()))
         session.seen()
 
-    @handle(methods.HeartBeatMethod.heartbeat)
+    @handle(methods.HeartBeatMethod.heartbeat, env="tid")
     @gen.coroutine
-    def heartbeat(self, sid, tid, endpoint_names, nodename):
-        LOGGER.debug("Received heartbeat from %s for agents %s in %s",
-                     nodename, ",".join(endpoint_names), tid)
+    def heartbeat(self, sid, env, endpoint_names, nodename):
+        LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
-        session = self.get_or_create_session(sid, tid, endpoint_names, nodename)
+        session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
         call_list = yield session.get_calls()

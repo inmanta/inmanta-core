@@ -1,6 +1,5 @@
 # Inmanta
 [![Documentation Status](https://readthedocs.org/projects/inmanta/badge/?version=latest)](http://inmanta.readthedocs.io/en/latest/?badge=latest)
-[![Jenkins Build Status](https://jenkins.inmanta.com/buildStatus/icon?job=inmanta/inmanta/master)](https://jenkins.inmanta.com/job/inmanta/job/inmanta/job/master/)
 [![Build Status](https://travis-ci.org/inmanta/inmanta.svg?branch=master)](https://travis-ci.org/inmanta/inmanta)
 [![pypi version](https://img.shields.io/pypi/v/inmanta.svg)](https://pypi.python.org/pypi/inmanta/)
 

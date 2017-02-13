@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import protocol, agent
+from inmanta import agent
 import pytest
 from utils import retry_limited
 from inmanta.agent import reporting
@@ -23,23 +23,16 @@ from inmanta.agent import reporting
 
 @pytest.mark.slowtest
 @pytest.mark.gen_test
-def testagent_get_status(io_loop, server):
-    client = protocol.Client("client")
-    result = yield client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
+def test_agent_get_status(io_loop, server, environment):
     myagent = agent.Agent(io_loop,
                           hostname="node1",
-                          env_id=env_id,
+                          env_id=environment,
                           agent_map={"agent1": "localhost"},
                           code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()
 
-    yield retry_limited(lambda: len(server._sessions) == 1, 0.1)
+    yield retry_limited(lambda: len(server._sessions) == 1, 0.5)
     clients = server._sessions.values()
     assert len(clients) == 1
     clients = [x for x in clients]

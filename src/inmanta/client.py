@@ -545,7 +545,7 @@ class VersionReport(InmantaCommand, Command):
             if (len(res["actions"]) > 0 and
                     res["actions"][0]["data"] is not None and
                     len(res["actions"][0]["data"]) > 0) or parsed_args.details:
-                agents[res["id_fields"]["agent_name"]][res["id_fields"]["entity_type"]].append(res)
+                agents[res["agent_name"]][res["entity_type"]].append(res)
 
         for agent in sorted(agents.keys()):
             print(term.bold("Agent: %s" % agent))
@@ -553,12 +553,12 @@ class VersionReport(InmantaCommand, Command):
 
             for type in sorted(agents[agent].keys()):
                 print("{t.bold}Resource type:{t.normal} {type} ({attr})".
-                      format(type=type, attr=agents[agent][type][0]["id_fields"]["attribute"], t=term))
+                      format(type=type, attr=agents[agent][type][0]["id_attribute_name"], t=term))
                 print("-" * 72)
 
                 for res in agents[agent][type]:
                     print((term.bold + "%s" + term.normal + " (#actions=%d)") %
-                          (res["id_fields"]["attribute_value"], len(res["actions"])))
+                          (res["id_attribute_value"], len(res["actions"])))
                     # for dryrun show only the latest, for deploy all
                     if parsed_args.release == "dryrun":
                         if len(res["actions"]) > 0:

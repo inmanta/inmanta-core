@@ -372,12 +372,12 @@ class AgentInstance():
                 LOGGER.warning("Got an error while pulling resources for agent %s. %s", self.name, result.result)
 
             else:
-                restypes = set([res["id_fields"]["entity_type"] for res in result.result["resources"]])
+                restypes = set([res["resource_type"] for res in result.result["resources"]])
                 resources = []
                 yield self.process._ensure_code(self._env_id, result.result["version"], restypes)
                 try:
                     for res in result.result["resources"]:
-                        data = res["fields"]
+                        data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
                         resources.append(resource)
@@ -409,7 +409,7 @@ class AgentInstance():
 
                 resources = result.result["resources"]
 
-                restypes = set([res["id_fields"]["entity_type"] for res in resources])
+                restypes = set([res["resource_type"] for res in resources])
 
                 # TODO: handle different versions for dryrun and deploy!
                 yield self.process._ensure_code(self._env_id, version, restypes)
@@ -419,7 +419,7 @@ class AgentInstance():
                 for res in resources:
                     provider = None
                     try:
-                        data = res["fields"]
+                        data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
                         LOGGER.debug("Running dryrun for %s", resource.id)
@@ -452,17 +452,17 @@ class AgentInstance():
 
             LOGGER.info("Start a restore %s", restore_id)
 
-            yield self.process._ensure_code(self._env_id, resources[0][1]["id_fields"]["version"],
-                                            [res[1]["id_fields"]["entity_type"] for res in resources])
+            yield self.process._ensure_code(self._env_id, resources[0][1]["model"],
+                                            [res[1]["resource_type"] for res in resources])
 
-            version = resources[0][1]["id_fields"]["version"]
+            version = resources[0][1]["model"]
             self._cache.open_version(version)
 
             for restore, resource in resources:
                 start = datetime.datetime.now()
                 provider = None
                 try:
-                    data = resource["fields"]
+                    data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
                     provider = Commander.get_provider(self._cache, self, resource_obj)
@@ -513,17 +513,17 @@ class AgentInstance():
         with (yield self.ratelimiter.acquire()):
             LOGGER.info("Start snapshot %s", snapshot_id)
 
-            yield self.process._ensure_code(self._env_id, resources[0]["id_fields"]["version"],
-                                            [res["id_fields"]["entity_type"] for res in resources])
+            yield self.process._ensure_code(self._env_id, resources[0]["model"],
+                                            [res["resource_type"] for res in resources])
 
-            version = resources[0]["id_fields"]["version"]
+            version = resources[0]["model"]
             self._cache.open_version(version)
 
             for resource in resources:
                 start = datetime.datetime.now()
                 provider = None
                 try:
-                    data = resource["fields"]
+                    data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
                     provider = Commander.get_provider(self._cache, self, resource_obj)
@@ -590,12 +590,11 @@ class AgentInstance():
     @gen.coroutine
     def get_facts(self, resource):
         with (yield self.ratelimiter.acquire()):
-            yield self.process._ensure_code(self._env_id, resource["id_fields"]["version"],
-                                            [resource["id_fields"]["entity_type"]])
+            yield self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
 
             provider = None
             try:
-                data = resource["fields"]
+                data = resource["attributes"]
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
 
@@ -747,9 +746,9 @@ class Agent(AgentEndPoint):
         yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
         yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
-    @protocol.handle(methods.AgentState.trigger)
+    @protocol.handle(methods.AgentState.trigger, env="tid")
     @gen.coroutine
-    def trigger_update(self, tid, id):
+    def trigger_update(self, env, id):
         """
             Trigger an update
         """
@@ -759,46 +758,46 @@ class Agent(AgentEndPoint):
         if not self._instances[id].is_enabled():
             return 500, "Agent is not _enabled"
 
-        LOGGER.info("Agent %s got a trigger to update in environment %s", id, tid)
+        LOGGER.info("Agent %s got a trigger to update in environment %s", id, env.id)
         future = self._instances[id].get_latest_version_for_agent()
         self.add_future(future)
         return 200
 
-    @protocol.handle(methods.AgentResourceEvent.resource_event)
+    @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid")
     @gen.coroutine
-    def resource_event(self, tid, id: str, resource: str, state: str):
-        if tid != self._env_id:
+    def resource_event(self, env, id: str, resource: str, state: str):
+        if env.id != self._env_id:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
-                        tid, id, resource, state)
+                        env.id, id, resource, state)
             return 200
 
         if id not in self._instances:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                        tid, id, resource, state)
+                        env.id, id, resource, state)
             return 200
 
         if state != "deployed":
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                        tid, id, resource, state)
+                        env.id, id, resource, state)
         else:
             LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                         tid, id, resource, state)
+                         env.id, id, resource, state)
             self._instances[id].notify_ready(resource)
 
         return 200
 
-    @protocol.handle(methods.AgentDryRun.do_dryrun)
+    @protocol.handle(methods.AgentDryRun.do_dryrun, env="tid")
     @gen.coroutine
-    def run_dryrun(self, tid, id, agent, version):
+    def run_dryrun(self, env, id, agent, version):
         """
            Run a dryrun of the given version
         """
-        assert tid == self._env_id
+        assert env.id == self._env_id
 
         if agent not in self._instances:
             return 200
 
-        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, id, version, tid)
+        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, id, version, env.id)
 
         return (yield self._instances[agent].dryrun(id, version))
 
@@ -831,9 +830,9 @@ class Agent(AgentEndPoint):
 
         return dir_map
 
-    @protocol.handle(methods.AgentRestore.do_restore)
+    @protocol.handle(methods.AgentRestore.do_restore, env="tid")
     @gen.coroutine
-    def do_restore(self, tid, agent, restore_id, snapshot_id, resources):
+    def do_restore(self, env, agent, restore_id, snapshot_id, resources):
         """
             Restore a snapshot
         """
@@ -842,9 +841,9 @@ class Agent(AgentEndPoint):
 
         return (yield self._instances[agent].do_restore(restore_id, snapshot_id, resources))
 
-    @protocol.handle(methods.AgentSnapshot.do_snapshot)
+    @protocol.handle(methods.AgentSnapshot.do_snapshot, env="tid")
     @gen.coroutine
-    def do_snapshot(self, tid, agent, snapshot_id, resources):
+    def do_snapshot(self, env, agent, snapshot_id, resources):
         """
             Create a snapshot of stateful resources managed by this agent
         """
@@ -853,9 +852,9 @@ class Agent(AgentEndPoint):
 
         return (yield self._instances[agent].do_snapshot(snapshot_id, resources))
 
-    @protocol.handle(methods.AgentParameterMethod.get_parameter)
+    @protocol.handle(methods.AgentParameterMethod.get_parameter, env="tid")
     @gen.coroutine
-    def get_facts(self, tid, agent, resource):
+    def get_facts(self, env, agent, resource):
         if agent not in self._instances:
             return 200
 

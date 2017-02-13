@@ -12,8 +12,9 @@ python-dateutil
 ply
 ruamel.yaml
 virtualenv
-motorengine
+motor
 mongobox
+pymongo
 pytest
 pytest-tornado
 sphinx_rtd_theme
