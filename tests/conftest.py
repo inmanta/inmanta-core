@@ -21,6 +21,8 @@ import tempfile
 import random
 import string
 import shutil
+from tempfile import mktemp
+
 
 from mongobox import MongoBox
 import pytest
@@ -29,7 +31,6 @@ import inmanta.compiler as compiler
 import pymongo
 from motorengine.connection import connect, disconnect
 from inmanta.module import Project
-from tempfile import mktemp
 from inmanta.ast import CompilerException
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
