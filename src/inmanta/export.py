@@ -137,7 +137,6 @@ class Exporter(object):
                         LOGGER.debug("Skipped resource of type %s because its id contains an unknown (location: %s)",
                                      entity, instance.location)
 
-
                     except IgnoreResourceException:
                         LOGGER.info("Ignoring resource of type %s because it requested to ignore it. (location: %s)",
                                     entity, instance.location)
