@@ -28,7 +28,7 @@ import base64
 from inmanta import protocol
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
-from inmanta.resources import resource, Resource, to_id
+from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Config, Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException
@@ -136,6 +136,11 @@ class Exporter(object):
                         # We can safely ignore this resource == prune it
                         LOGGER.debug("Skipped resource of type %s because its id contains an unknown (location: %s)",
                                      entity, instance.location)
+
+
+                    except IgnoreResourceException:
+                        LOGGER.info("Ignoring resource of type %s because it requested to ignore it. (location: %s)",
+                                    entity, instance.location)
 
         Resource.convert_requires()
 

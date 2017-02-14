@@ -102,7 +102,13 @@ class resource(object):  # noqa: H801
 
 class ResourceNotFoundExcpetion(Exception):
     """
-    This exception is thrown when a resource is not found
+        This exception is thrown when a resource is not found
+    """
+
+
+class IgnoreResourceException(Exception):
+    """
+        Throw this exception when a resource should not be included by the exported.
     """
 
 
@@ -258,7 +264,7 @@ class Resource(metaclass=ResourceMeta):
             except UnknownException as e:
                 return e.unknown
 
-        except AttributeError:
+        except AttributeError as e:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod

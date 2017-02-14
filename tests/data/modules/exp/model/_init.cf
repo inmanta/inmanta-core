@@ -1,6 +1,7 @@
 entity Test:
     string name
     string agent
+    bool managed=true
 end
 
 implement Test using std::none

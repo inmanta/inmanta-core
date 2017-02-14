@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from conftest import snippetcompiler
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -46,6 +47,17 @@ def test_unknown_attribute_value(snippetcompiler):
         import tests
 
         exp::Test(name=tests::unknown(), agent="b")
+        """)
+    _version, json_value = snippetcompiler.do_export()
+
+    assert(len(json_value) == 0)
+
+
+def test_ignore_resource(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""import exp
+        import tests
+
+        exp::Test(name="a", agent="b", managed=false)
         """)
     _version, json_value = snippetcompiler.do_export()
 

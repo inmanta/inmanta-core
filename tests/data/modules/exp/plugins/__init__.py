@@ -23,8 +23,15 @@ class Test(resources.Resource):
     """
         This class represents a service on a system.
     """
-    fields = ("name", "agent")
+    fields = ("name", "agent", "managed")
 
     @staticmethod
     def get_test(exp, obj):
         return "test_value_" + obj.name
+
+
+    @staticmethod
+    def get_managed(exp, obj):
+        if not obj.managed:
+            raise resources.IgnoreResourceException()
+        return obj.managed
