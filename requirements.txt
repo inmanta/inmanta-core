@@ -17,4 +17,5 @@ mongobox
 pymongo
 pytest
 pytest-tornado
+pytest-catchlog
 sphinx_rtd_theme
