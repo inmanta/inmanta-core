@@ -394,7 +394,7 @@ class Resource(metaclass=ResourceMeta):
 
 class PurgeableResource(Resource):
     """
-        :see std::ManagedResource
+        :see std::PurgeableResource
     """
     fields = ("purged", "purge_on_delete")
 
