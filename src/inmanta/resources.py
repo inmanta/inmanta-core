@@ -137,6 +137,9 @@ class ResourceMeta(type):
         fields = []
         for base in bases:
             if "fields" in base.__dict__:
+                if not isinstance(base.__dict__["fields"], (tuple, list)):
+                    raise Exception("fields attribute of %s should be a tuple or list" % base)
+
                 fields.extend(base.__dict__["fields"])
 
             fields.extend(cls._get_parent_fields(base.__bases__))
@@ -146,6 +149,9 @@ class ResourceMeta(type):
     def __new__(cls, class_name, bases, dct):
         fields = cls._get_parent_fields(bases)
         if "fields" in dct:
+            if not isinstance(dct["fields"], (tuple, list)):
+                raise Exception("fields attribute of %s should be a tuple or list" % class_name)
+
             fields.extend(dct["fields"])
 
         dct["fields"] = tuple(set(fields))
@@ -185,12 +191,13 @@ class Resource(metaclass=ResourceMeta):
             initial_requires = [x for x in res.requires]
 
             for r in initial_requires:
-                if r in resources:
+                if r in resources and len(resources[r].unknowns) == 0:
                     final_requires.add(resources[r])
 
             if len(final_requires) == 0 and not len(initial_requires) == 0:
                 for r in initial_requires:
-                    if r in ignored_resources:
+                    # do not warn about resources that either contain unknowns or are ignored
+                    if r in ignored_resources or (r in resources and len(resources[r].unknowns) > 0):
                         initial_requires.remove(r)
 
                 if len(initial_requires) > 0:
@@ -386,7 +393,23 @@ class Resource(metaclass=ResourceMeta):
 
 
 class PurgeableResource(Resource):
+    """
+        :see std::ManagedResource
+    """
     fields = ("purged", "purge_on_delete")
+
+
+class ManagedResource(Resource):
+    """
+        :see std::ManagedResource
+    """
+    fields = ("managed",)
+
+    @staticmethod
+    def get_managed(exp, obj):
+        if not obj.managed:
+            raise IgnoreResourceException()
+        return obj.managed
 
 
 class Id(object):

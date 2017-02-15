@@ -19,19 +19,12 @@
 from inmanta import resources
 
 @resources.resource("exp::Test", agent="agent", id_attribute="test")
-class Test(resources.Resource):
+class Test(resources.ManagedResource):
     """
         This class represents a service on a system.
     """
-    fields = ("name", "agent", "managed")
+    fields = ("name", "agent", "field1")
 
     @staticmethod
     def get_test(exp, obj):
         return "test_value_" + obj.name
-
-
-    @staticmethod
-    def get_managed(exp, obj):
-        if not obj.managed:
-            raise resources.IgnoreResourceException()
-        return obj.managed

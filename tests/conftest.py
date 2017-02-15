@@ -212,6 +212,7 @@ class SnippetCompilationTest(object):
     def setUpClass(cls):
         cls.libs = tempfile.mkdtemp()
         cls.env = tempfile.mkdtemp()
+        config.Config.load_config()
 
     @classmethod
     def tearDownClass(cls):
@@ -243,7 +244,6 @@ class SnippetCompilationTest(object):
     def do_export(self):
         templfile = mktemp("json", "dump", self.project_dir)
 
-        config.Config.load_config()
         from inmanta.export import Exporter
 
         (types, scopes) = compiler.do_compile()

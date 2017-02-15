@@ -1,6 +1,7 @@
 entity Test:
     string name
     string agent
+    string field1=""
     bool managed=true
 end
 

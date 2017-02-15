@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from inmanta import config
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -63,7 +64,7 @@ def test_ignore_resource(snippetcompiler):
     assert(len(json_value) == 0)
 
 
-def test_ignore_resource_requires(snippetcompiler):
+def test_ignore_resource_requires(snippetcompiler, caplog):
     snippetcompiler.setup_for_snippet("""import exp
         import tests
 
@@ -83,4 +84,72 @@ def test_ignore_resource_requires(snippetcompiler):
             assert(len(resource.requires) == 1)
             assert_count += 1
 
+    warning = [x for x in caplog.records if x.msg ==
+               "The resource %s had requirements before flattening, but not after flattening."
+               " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
+    assert len(warning) == 0
+    assert(assert_count == 2)
+
+
+def test_unknown_in_id_requires(snippetcompiler, caplog):
+    """
+        Test to validate that resources that have an unknown in their ID attributes, are removed from requires
+    """
+    snippetcompiler.setup_for_snippet("""import exp
+        import tests
+
+        a = exp::Test(name=tests::unknown(), agent="aa")
+        b = exp::Test(name="b", agent="aa", requires=a)
+        c = exp::Test(name="c", agent="aa", requires=b)
+        """)
+    config.Config.set("unknown_handler", "default", "prune-resource")
+    _version, json_value = snippetcompiler.do_export()
+
+    assert(len(json_value) == 2)
+    assert_count = 0
+    for resource_id, resource in json_value.items():
+        if resource_id.attribute_value == "test_value_b":
+            assert(len(resource.requires) == 0)
+            assert_count += 1
+
+        elif resource_id.attribute_value == "test_value_c":
+            assert(len(resource.requires) == 1)
+            assert_count += 1
+
+    warning = [x for x in caplog.records if x.msg ==
+               "The resource %s had requirements before flattening, but not after flattening."
+               " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
+    assert len(warning) == 0
+    assert(assert_count == 2)
+
+
+def test_unknown_in_attribute_requires(snippetcompiler, caplog):
+    """
+        Test to validate that resources that have an unknown in their ID attributes, are removed from requires
+    """
+    snippetcompiler.setup_for_snippet("""import exp
+        import tests
+
+        a = exp::Test(name="a", agent="aa", field1=tests::unknown())
+        b = exp::Test(name="b", agent="aa", requires=a)
+        c = exp::Test(name="c", agent="aa", requires=b)
+        """)
+    config.Config.set("unknown_handler", "default", "prune-resource")
+    _version, json_value = snippetcompiler.do_export()
+
+    assert(len(json_value) == 2)
+    assert_count = 0
+    for resource_id, resource in json_value.items():
+        if resource_id.attribute_value == "test_value_b":
+            assert(len(resource.requires) == 0)
+            assert_count += 1
+
+        elif resource_id.attribute_value == "test_value_c":
+            assert(len(resource.requires) == 1)
+            assert_count += 1
+
+    warning = [x for x in caplog.records if x.msg ==
+               "The resource %s had requirements before flattening, but not after flattening."
+               " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
+    assert len(warning) == 0
     assert(assert_count == 2)

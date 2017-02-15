@@ -58,7 +58,7 @@ class CompilerBaseTest(object):
         shutil.rmtree(self.state_dir)
 
 
-def test_abstract_requres_2(snippetcompiler, caplog):
+def test_abstract_requires_2(snippetcompiler, caplog):
     snippetcompiler.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
