@@ -172,45 +172,33 @@ class Resource(metaclass=ResourceMeta):
         superclasses. If a field it not available directly in the model object the serializer will look for static methods in
         the class with the name "get_$fieldname".
     """
-    __create_cache = {}
-
     @classmethod
-    def clear_cache(cls):
+    def convert_requires(cls, resources: dict, ignored_resources: set):
         """
-        Clear the cache of created resources
-        """
-        cls.__create_cache = {}
+            Convert all requires
 
-    @classmethod
-    def convert_requires(cls):
+            :param resources A dict with a mapping from model objects to resource objects
+            :param ignored_resources A set of model objects that have been ignored (and not converted to resources)
         """
-        Convert all requires
-        """
-        for res in cls.__create_cache.values():
+        for res in resources.values():
             final_requires = set()
-            inital_requires = [x for x in res.requires]
-            for r in inital_requires:
-                if r in cls.__create_cache:
-                    final_requires.add(cls.__create_cache[r])
-            if len(final_requires) == 0 and not len(inital_requires) == 0:
-                LOGGER.warning(
-                    "The resource %s had requirements before flattening, but not after flattening."
-                    " Initial set was %s. Perhaps provides relation is not wired through correctly?", res, inital_requires)
+            initial_requires = [x for x in res.requires]
+
+            for r in initial_requires:
+                if r in resources:
+                    final_requires.add(resources[r])
+
+            if len(final_requires) == 0 and not len(initial_requires) == 0:
+                for r in initial_requires:
+                    if r in ignored_resources:
+                        initial_requires.remove(r)
+
+                if len(initial_requires) > 0:
+                    LOGGER.warning("The resource %s had requirements before flattening, but not after flattening."
+                                   " Initial set was %s. Perhaps provides relation is not wired through correctly?",
+                                   res, initial_requires)
+
             res.requires = final_requires
-
-    @classmethod
-    def get_resource(cls, model_object):
-        """
-        Get the converted resource for the given model object. If the object has not been converted, return None
-
-        @param model_object:
-        @return:
-        """
-        model_object = model_object._get_instance()
-        if model_object in cls.__create_cache:
-            return cls.__create_cache[model_object]
-
-        return None
 
     @classmethod
     def object_to_id(cls, model_object, entity_name, attribute_name, agent_attribute):
@@ -289,7 +277,6 @@ class Resource(metaclass=ResourceMeta):
         obj.requires = getattr(model_object, "requires")
         obj.model = model_object
 
-        cls.__create_cache[model_object] = obj
         return obj
 
     @classmethod
@@ -394,8 +381,8 @@ class Resource(metaclass=ResourceMeta):
 
         return dictionary
 
-    def is_type(self, type: str):
-        return str(self.model._get_instance().get_type()) == type
+    def is_type(self, type_name: str):
+        return str(self.model._get_instance().get_type()) == type_name
 
 
 class PurgeableResource(Resource):
