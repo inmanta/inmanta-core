@@ -704,6 +704,7 @@ class FormRecord(BaseDocument):
 
 
 ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "snapshot", "restore", "other")
+STATUS = ("success", "failed", "failed", "skipped")
 LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "CRITICAL")
 
 
