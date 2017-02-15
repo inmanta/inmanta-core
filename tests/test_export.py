@@ -61,3 +61,26 @@ def test_ignore_resource(snippetcompiler):
     _version, json_value = snippetcompiler.do_export()
 
     assert(len(json_value) == 0)
+
+
+def test_ignore_resource_requires(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""import exp
+        import tests
+
+        a = exp::Test(name="a", agent="aa", managed=false)
+        b = exp::Test(name="b", agent="aa", requires=a)
+        c = exp::Test(name="c", agent="aa", requires=b)
+        """)
+    _version, json_value = snippetcompiler.do_export()
+    assert(len(json_value) == 2)
+    assert_count = 0
+    for resource_id, resource in json_value.items():
+        if resource_id.attribute_value == "test_value_b":
+            assert(len(resource.requires) == 0)
+            assert_count += 1
+
+        elif resource_id.attribute_value == "test_value_c":
+            assert(len(resource.requires) == 1)
+            assert_count += 1
+
+    assert(assert_count == 2)
