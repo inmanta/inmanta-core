@@ -16,12 +16,13 @@
     Contact: code@inmanta.com
 """
 
-from collections import defaultdict
 import hashlib
 import inspect
 import logging
 import base64
+import datetime
 from concurrent.futures import Future
+from collections import defaultdict
 
 
 from inmanta.agent.io import get_io, remote
@@ -365,6 +366,16 @@ class HandlerContext(object):
     def fields_updated(self, fields):
         pass
 
+    def log_msg(self, level, msg, args, kwargs):
+        record = {
+            "msg": msg % args,
+            "level": level,
+            "extra": kwargs,
+            "resource": str(self._resource.id),
+            "dryrun": self.is_dry_run(),
+            "timestamp": datetime.datetime.now(),
+        }
+
     def debug(self, msg, *args, **kwargs):
         """
         Log 'msg % args' with severity 'DEBUG'.
@@ -374,6 +385,7 @@ class HandlerContext(object):
 
         logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
         """
+        self.log_msg(logging.DEBUG, msg, args, kwargs)
 
     def info(self, msg, *args, **kwargs):
         """
@@ -384,6 +396,7 @@ class HandlerContext(object):
 
         logger.info("Houston, we have a %s", "interesting problem", exc_info=1)
         """
+        self.log_msg(logging.INFO, msg, args, kwargs)
 
     def warning(self, msg, *args, **kwargs):
         """
@@ -394,6 +407,7 @@ class HandlerContext(object):
 
         logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)
         """
+        self.log_msg(logging.WARNING, msg, args, kwargs)
 
     def error(self, msg, *args, **kwargs):
         """
@@ -404,6 +418,7 @@ class HandlerContext(object):
 
         logger.error("Houston, we have a %s", "major problem", exc_info=1)
         """
+        self.log_msg(logging.ERROR, msg, args, kwargs)
 
     def exception(self, msg, *args, exc_info=True, **kwargs):
         """
@@ -420,6 +435,7 @@ class HandlerContext(object):
 
         logger.critical("Houston, we have a %s", "major disaster", exc_info=1)
         """
+        self.log_msg(logging.CRITICAL, msg, args, kwargs)
 
 
 class CRUDHandler(ResourceHandler):
@@ -476,7 +492,7 @@ class CRUDHandler(ResourceHandler):
         """
         raise NotImplemented()
 
-    def execute(self, resource, dry_run=False):
+    def execute(self, resource, dry_run=None):
         """
             Update the given resource
         """

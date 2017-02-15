@@ -339,6 +339,16 @@ class ResourceMethod(Method):
         if action not in data.ACTIONS:
             raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(data.ACTIONS)))
 
+    @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
+    def resource_log(self, tid: uuid.UUID, id: str, log_messages: list):
+        """
+            Send log concerning a resource to the server and save them.
+
+            :param tid The id of the environment this resource belongs to
+            :param id Get the status of the resource with the given id from the agent
+            :param log_messages A list of log entries. Each entry is a dict with fields level, msg, extra, resource, dryrun,
+                                timestamp.
+        """
 
 class VersionMethod(Method):
     """

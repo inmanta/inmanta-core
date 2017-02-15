@@ -703,8 +703,8 @@ class FormRecord(BaseDocument):
     changed = Field(field_type=datetime.datetime)
 
 
-ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "other")
-LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "TRACE")
+ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "snapshot", "restore", "other")
+LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "CRITICAL")
 
 
 class ResourceAction(BaseDocument):
@@ -713,19 +713,27 @@ class ResourceAction(BaseDocument):
         Log related to actions performed on a specific resource version by Inmanta.
 
         :param resource_version The resource on which the actions are performed
+        :param environment The environment this action belongs to.
+        :param action_id This is id distinguishes action from each other.
         :param action The action performed on the resource
-        :param timestamp When did the action occur
+        :param started When did the action start
+        :param finished When did the action finish
         :param message The log message associated with this action
-        :param level The "urgency" of this action
+        :param status The status of the resource when this action was finished
         :param data A python dictionary that can be serialized to json with additional data
     """
-    resource_version_id = Field(field_type=str, required=True)
+    resource_version_ids = Field(field_type=list, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+
+    action_id = Field(field_type=uuid.UUID)
     action = Field(field_type=str, required=True)
-    timestamp = Field(field_type=datetime.datetime, required=True)
-    message = Field(field_type=str)
-    level = Field(field_type=str, default="INFO")
-    data = Field(field_type=dict)
+
+    started = Field(field_type=datetime.datetime, required=True)
+    finished = Field(field_type=datetime.datetime, required=True)
+
+    messages = Field(field_type=dict)
     status = Field(field_type=str)
+    data = Field(field_type=dict)
 
     @classmethod
     @gen.coroutine

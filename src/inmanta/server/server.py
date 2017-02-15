@@ -910,6 +910,11 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
+    @protocol.handle(methods.ResourceMethod.resource_log, env="tid", resource_version_id="id")
+    @gen.coroutine
+    def resource_log(self, env, resource_version_id):
+        pass
+
     # Project handlers
     @protocol.handle(methods.Project.create_project)
     @gen.coroutine
