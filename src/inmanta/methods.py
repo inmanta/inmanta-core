@@ -306,7 +306,7 @@ class ResourceMethod(Method):
             :param tid The id of the environment this resource belongs to
             :param id Get the resource with the given id
             :param logs Include the logs in the response
-            :param status return only resou
+            :param status return only resources of this status
         """
 
     @protocol(operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS)
@@ -320,35 +320,35 @@ class ResourceMethod(Method):
                            that version is returned, even if it has not been released yet.
         """
 
-    @protocol(operation="POST", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, status: str, extra_data: dict):
+    @protocol(operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS)
+    def resource_action_update(self, tid: uuid.UUID, resource_ids: list, action_id: uuid.UUID, action: str,
+                               started: datetime.datetime=None, finished: datetime.datetime=None, status: str=None,
+                               messages: list=[], changes: dict={}):
         """
             Send a resource update to the server
 
             :param tid The id of the environment this resource belongs to
-            :param id Get the status of the resource with the given id from the agent
-            :param level The loglevel of the update
+            :param resource_ids The resource with the given id from the agent
+            :param action_id A unique id to indicate the resource action that has be updated
             :param action The action performed
-            :param message The log message
-            :param status The current status of the resource (if known)
-            :param extra_data A map with additional data
-        """
-        if level not in data.LOGLEVEL:
-            raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(data.LOGLEVEL)))
 
+            :param started The timestamp when this action was started. When this action (action_id) has not been saved yet,
+                           started has to be defined.
+
+            :param finished The timestamp when this action was finished. Afterwars, no changes with the same action_id
+                            can be stored. The status field also has to be set.
+            :param status The current status of the resource (if known)
+
+            :param messages A list of log entries to add to this entry.
+            :param changes A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+                           have been changed. The value contains the new value and/or the orignal value.
+        """
         if action not in data.ACTIONS:
             raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(data.ACTIONS)))
 
-    @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def resource_log(self, tid: uuid.UUID, id: str, log_messages: list):
-        """
-            Send log concerning a resource to the server and save them.
+        if status is not None and status not in data.STATUS:
+            raise Exception("Invalid resource update status (%s) should be %s" % (status, ", ".join(data.STATUS)))
 
-            :param tid The id of the environment this resource belongs to
-            :param id Get the status of the resource with the given id from the agent
-            :param log_messages A list of log entries. Each entry is a dict with fields level, msg, extra, resource, dryrun,
-                                timestamp.
-        """
 
 class VersionMethod(Method):
     """

@@ -379,3 +379,53 @@ def test_snapshot(data_module):
     yield s.delete_cascade()
     result = yield data.Snapshot.get_list()
     assert(len(result) == 0)
+
+
+@pytest.mark.gen_test
+def test_resource_action(data_module):
+    env_id = uuid.uuid4()
+    action_id = uuid.uuid4()
+
+    resource_action = data.ResourceAction(environment=env_id, resource_version_ids=[], action_id=action_id, action="test",
+                                          started=datetime.datetime.now())
+    yield resource_action.insert()
+
+    resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
+    yield resource_action.save()
+
+    resource_action.add_changes({"rid": {"field2": {"old": "c", "new": "d"}, "field3": {}}})
+    yield resource_action.save()
+
+    resource_action.add_logs([{}, {}])
+    yield resource_action.save()
+
+    resource_action.add_logs([{}, {}])
+    yield resource_action.save()
+
+    ra = yield data.ResourceAction.get_by_id(resource_action.id)
+    assert(len(ra.changes["rid"]) == 3)
+    assert(len(ra.messages) == 4)
+
+    assert(ra.changes["rid"]["field1"]["old"] == "a")
+    assert(ra.changes["rid"]["field1"]["new"] == "b")
+    assert(ra.changes["rid"]["field2"]["old"] == "c")
+    assert(ra.changes["rid"]["field2"]["new"] == "d")
+    assert(ra.changes["rid"]["field3"] == {})
+
+
+@pytest.mark.gen_test
+def test_get_resources(data_module):
+    env_id = uuid.uuid4()
+    resource_ids = []
+    for i in range(1, 11):
+        res = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/tmp/file%d],v=1" % i,
+                                status="deployed", attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        yield res.insert()
+        resource_ids.append(res.resource_version_id)
+
+    resources = yield data.Resource.get_resources(env_id, resource_ids)
+    assert(len(resources) == len(resource_ids))
+    assert(sorted([x.resource_version_id for x in resources]) == sorted(resource_ids))
+
+    resources = yield data.Resource.get_resources(env_id, [resource_ids[0], "abcd"])
+    assert(len(resources) == 1)

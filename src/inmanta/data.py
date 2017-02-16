@@ -704,37 +704,58 @@ class FormRecord(BaseDocument):
 
 
 ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "snapshot", "restore", "other")
-STATUS = ("success", "failed", "failed", "skipped")
-LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "CRITICAL")
+STATUS = ("success", "failed", "skipped", "deployed")
+
+
+def log(level, msg, timestamp=None, **kwargs):
+    """
+        Create an new logrecord
+    """
+    if timestamp is None:
+        timestamp = datetime.datetime.now()
+
+    log_line = msg % kwargs
+    return {"level": level, "msg": msg, "log": log_line, "args": [], "kwargs": kwargs, "timestamp": timestamp}
 
 
 class ResourceAction(BaseDocument):
-    # TODO: add environment here!
     """
         Log related to actions performed on a specific resource version by Inmanta.
 
         :param resource_version The resource on which the actions are performed
         :param environment The environment this action belongs to.
-        :param action_id This is id distinguishes action from each other.
+        :param action_id This is id distinguishes action from each other. Action ids have to be unique per environment.
         :param action The action performed on the resource
         :param started When did the action start
         :param finished When did the action finish
-        :param message The log message associated with this action
+        :param messages The log messages associated with this action
         :param status The status of the resource when this action was finished
-        :param data A python dictionary that can be serialized to json with additional data
+        :param changes A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
+                       contain old and current keys and the associated values. An empty dict indicates that the field
+                       was changed but not data was provided by the agent.
     """
     resource_version_ids = Field(field_type=list, required=True)
     environment = Field(field_type=uuid.UUID, required=True)
 
-    action_id = Field(field_type=uuid.UUID)
+    action_id = Field(field_type=uuid.UUID, required=True)
     action = Field(field_type=str, required=True)
 
     started = Field(field_type=datetime.datetime, required=True)
-    finished = Field(field_type=datetime.datetime, required=True)
+    finished = Field(field_type=datetime.datetime)
 
-    messages = Field(field_type=dict)
+    messages = Field(field_type=list)
+
     status = Field(field_type=str)
-    data = Field(field_type=dict)
+
+    changes = Field(field_type=dict)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("action_id", pymongo.ASCENDING)], unique=True),
+    ]
+
+    def __init__(self, from_mongo=False, **kwargs):
+        super().__init__(from_mongo, **kwargs)
+        self._updates = {}
 
     @classmethod
     @gen.coroutine
@@ -754,6 +775,44 @@ class ResourceAction(BaseDocument):
             log.append(from_mongo=True, **cursor.next_object())
 
         return log
+
+    @classmethod
+    @gen.coroutine
+    def get(cls, environment, action_id):
+        resources = yield ResourceAction.get_list(environment=environment, action_id=action_id)
+        if len(resources) == 0:
+            return None
+        return resources[0]
+
+    def set_field(self, name, value):
+        if "$set" not in self._updates:
+            self._updates["$set"] = {}
+
+        self._updates["$set"][name] = value
+
+    def add_logs(self, messages):
+        if "$push" not in self._updates:
+            self._updates["$push"] = {}
+
+        self._updates["$push"]["messages"] = {"$each": messages}
+
+    def add_changes(self, changes):
+        if "$set" not in self._updates:
+            self._updates["$set"] = {}
+
+        for resource, values in changes.items():
+            for field, change in values.items():
+                self._updates["$set"]["changes.%s.%s" % (resource, field)] = change
+
+    @gen.coroutine
+    def save(self):
+        """
+            Save the accumulated changes
+        """
+        query = {"environment": self.environment, "action_id": self.action_id}
+        if len(self._updates) > 0:
+            yield ResourceAction._coll.update(query, self._updates)
+            self._updates = {}
 
 
 class Resource(BaseDocument):
@@ -795,6 +854,19 @@ class Resource(BaseDocument):
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_id", pymongo.ASCENDING)]),
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_id", pymongo.ASCENDING)], unique=True),
     ]
+
+    @classmethod
+    @gen.coroutine
+    def get_resources(cls, environment, resource_version_ids):
+        """
+            Get all resources listed in resource_version_ids
+        """
+        cursor = cls._coll.find({"environment": environment, "resource_version_id": {"$in": resource_version_ids}})
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
 
     @gen.coroutine
     def delete_cascade(self):

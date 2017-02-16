@@ -91,7 +91,6 @@ class Server(protocol.ServerEndpoint):
                                          fact_back_off=opt.server_fact_resource_block.get())
 
         self.setup_dashboard()
-
         self.dryrun_lock = locks.Lock()
 
     def new_session(self, sid, tid, endpoint_names, nodename):
@@ -567,17 +566,16 @@ class Server(protocol.ServerEndpoint):
         if status is not None and status:
             return 200, {"status": resv.status}
 
-        action_list = []
+        actions = []
         if bool(logs):
-            actions = yield data.ResourceAction.get_list(resource_version_id=resource_id)
-            for action in actions:
-                action_list.append(action)
+            actions = yield data.ResourceAction.get_list(environment=env.id, resource_version_ids=resource_id)
 
-        return 200, {"resource": resv, "logs": action_list}
+        return 200, {"resource": resv, "logs": actions}
 
     @protocol.handle(methods.ResourceMethod.get_resources_for_agent, env="tid")
     @gen.coroutine
     def get_resources_for_agent(self, env, agent, version):
+        started = datetime.datetime.now()
         if version is None:
             cm = yield data.ConfigurationModel.get_latest_version(env.id)
             if cm is None:
@@ -594,12 +592,19 @@ class Server(protocol.ServerEndpoint):
 
         resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
 
+        resource_ids = []
         for rv in resources:
             deploy_model.append(rv.to_dict())
-            ra = data.ResourceAction(resource_version_id=rv.resource_version_id, action="pull", level="INFO",
-                                     timestamp=datetime.datetime.now(),
-                                     message="Resource version pulled by client for agent %s state" % agent)
-            yield ra.insert()
+            resource_ids.append(rv.resource_version_id)
+
+        now = datetime.datetime.now()
+        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action="pull",
+                                 action_id=uuid.uuid4(), started=started, finished=now,
+                                 messages=[{"msg": "Resource version pulled by client for agent %(agent)s state",
+                                            "kwargs": {"agent": agent},
+                                            "timestamp": now,
+                                            }])
+        yield ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
@@ -671,6 +676,7 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.VersionMethod.put_version, env="tid")
     @gen.coroutine
     def put_version(self, env, version, resources, unknowns, version_info):
+        started = datetime.datetime.now()
         try:
             cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
                                          total=len(resources), version_info=version_info)
@@ -685,7 +691,7 @@ class Server(protocol.ServerEndpoint):
         cross_agent_dep = []
 
         resource_objects = []
-        resource_action_objects = []
+        resource_version_ids = []
         for res_dict in resources:
             res_obj = data.Resource.new(env.id, res_dict["id"])
 
@@ -704,12 +710,9 @@ class Server(protocol.ServerEndpoint):
 
             res_obj.attributes = attributes
             resource_objects.append(res_obj)
+            resource_version_ids.append(res_obj.resource_version_id)
 
             rv_dict[res_obj.resource_id] = res_obj
-
-            ra = data.ResourceAction(resource_version_id=res_obj.resource_version_id, action="store", level="INFO",
-                                     timestamp=datetime.datetime.now())
-            resource_action_objects.append(ra)
 
             # find cross agent dependencies
             agent = res_obj.agent
@@ -727,7 +730,6 @@ class Server(protocol.ServerEndpoint):
             rv_dict[t.resource_str()].provides.append(f.resource_version_id)
 
         yield data.Resource.insert_many(resource_objects)
-        yield data.ResourceAction.insert_many(resource_action_objects)
 
         # search for deleted resources
         resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version)
@@ -744,10 +746,7 @@ class Server(protocol.ServerEndpoint):
                                         attributes=attributes)
             yield res_obj.insert()
 
-            ra = data.ResourceAction(resource_version_id=res_obj.resource_version_id, action="store", level="INFO",
-                                     timestamp=datetime.datetime.now())
-            yield ra.insert()
-
+            resource_version_ids.append(res_obj.resource_version_id)
             agents.add(res_obj.agent)
 
         yield cm.update_fields(total=cm.total + len(resources_to_purge))
@@ -767,6 +766,9 @@ class Server(protocol.ServerEndpoint):
         for agent in agents:
             yield self.agentmanager.ensure_agent_registered(env, agent)
 
+        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
+                                 action="store", started=started, finished=datetime.datetime.now())
+        yield ra.insert()
         LOGGER.debug("Successfully stored version %d" % version)
 
         return 200
@@ -877,43 +879,71 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": code.sources}
 
-    @protocol.handle(methods.ResourceMethod.resource_updated, resource_id="id", env="tid")
+    @protocol.handle(methods.ResourceMethod.resource_action_update, resource_id="id", env="tid")
     @gen.coroutine
-    def resource_updated(self, env, resource_id, level, action, message, status, extra_data):
-        resv = yield data.Resource.get(environment=env.id, resource_version_id=resource_id)
-        if resv is None:
-            return 404, {"message": "The resource with the given id does not exist in the given environment"}
+    def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes):
+        resources = yield data.Resource.get_resources(env.id, resource_ids)
+        if len(resources) == 0 or (len(resources) != len(resource_ids)):
+            return 404, {"message": "The resources with the given ids do not exist in the given environment. "
+                         "Only %s of %s resources found." % (len(resources), len(resource_ids))}
 
-        now = datetime.datetime.now()
-        yield resv.update_fields(last_deploy=now, status=status)
+        resource_action = yield data.ResourceAction.get(environment=env.id, action_id=action_id)
+        if resource_action is None:
+            if started is None:
+                return 500, {"message": "A resource action can only be created with a start datetime."}
 
-        ra = data.ResourceAction(resource_version_id=resource_id, action=action, message=message,
-                                 data=extra_data, level=level, timestamp=now, status=status)
-        yield ra.insert()
+            resource_action = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids,
+                                                  action_id=action_id, action=action, started=started)
+            resource_action.insert()
 
-        # TODO: hairy stuff
-        yield data.ConfigurationModel.set_ready(env.id, resv.model, resv.id, resv.resource_id, status)
-        model = yield data.ConfigurationModel.get_version(env.id, resv.model)
+        if resource_action.finished is not None:
+            return 500, {"message": "An resource action can only be updated when it has not been finished yet. This action "
+                                    "finished at %s" % resource_action.finished}
 
-        if model.done == model.total:
-            result = "success"
-            for status in model.status.values():
-                if status != "deployed":
-                    model.result = "failed"
+        if len(messages) > 0:
+            resource_action.add_logs(messages)
 
-            yield model.update_fields(deployed=True, result=result)
+        if len(changes) > 0:
+            resource_action.add_changes(changes)
 
-        waitingagents = set([Id.parse_id(prov).get_agent_name() for prov in resv.provides])
+        if status is not None:
+            resource_action.set_field("status", status)
 
-        for agent in waitingagents:
-            yield self.get_agent_client(env.id, agent).resource_event(env.id, agent, resource_id, status)
+        done = False
+        if finished is not None:
+            # this resource has finished
+            if status is None:
+                return 500, {"message": "Cannot finish an action without a status."}
+
+            resource_action.set_field("finished", finished)
+            done = True
+
+        yield resource_action.save()
+
+        if done:
+            model_version = None
+            for res in resources:
+                yield res.update_fields(last_deploy=finished, status=status)
+                yield data.ConfigurationModel.set_ready(env.id, res.model, res.id, res.resource_id, status)
+                model_version = res.model
+
+            model = yield data.ConfigurationModel.get_version(env.id, model_version)
+
+            if model.done == model.total:
+                result = "success"
+                for status in model.status.values():
+                    if status != "deployed":
+                        model.result = "failed"
+
+                yield model.update_fields(deployed=True, result=result)
+
+            waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
+                                  for res in resources for prov in res.provides])
+
+            for agent, resource_id in waiting_agents:
+                yield self.get_agent_client(env.id, agent).resource_event(env.id, agent, resource_id, status)
 
         return 200
-
-    @protocol.handle(methods.ResourceMethod.resource_log, env="tid", resource_version_id="id")
-    @gen.coroutine
-    def resource_log(self, env, resource_version_id):
-        pass
 
     # Project handlers
     @protocol.handle(methods.Project.create_project)

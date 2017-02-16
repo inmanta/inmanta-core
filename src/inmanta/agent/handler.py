@@ -330,13 +330,23 @@ class ResourceHandler(object):
 
 class HandlerContext(object):
 
-    def __init__(self, resource, dry_run):
+    def __init__(self, resource, dry_run, action_id=None):
         self._resource = resource
         self._dry_run = dry_run
         self._cache = {}
-        self.changed = False
+
+        self._purged = False
+        self._updated = False
+        self._created = False
+
+        self._changes = {}
+
+        self._action_id = action_id
 
     def is_dry_run(self):
+        """
+            Is this a dryrun?
+        """
         return self._dry_run
 
     def get(self, name):
@@ -349,32 +359,57 @@ class HandlerContext(object):
         self._cache[name] = value
 
     def set_created(self):
-        self.changed = True
+        self._created = True
 
     def set_purged(self):
-        self.changed = True
+        self._purged = True
 
     def set_updated(self):
-        self.changed = True
+        self._updated = True
+
+    @property
+    def changed(self):
+        return self._created or self._updated or self._purged
 
     def add_change(self, name, value, old_value=None):
-        pass
+        """
+            Report a change of a field. This field is added to the set of updated fields
+
+            :param name The name of the field that was updated
+            :param value The value to which the field was updated
+            :param old_value The previous value of the field before it was updated
+        """
+        self._changes[name] = {"old": old_value, "current": value}
 
     def add_changes(self, **kwargs):
-        pass
+        """
+            Report a list of changes at once as kwargs
+
+            :param key The name of the field that was updated. This field is also adde to the set of updated fields
+            :param value The new value of the field.
+
+            To report the previous value of the field, use the add_change method
+        """
+        for field, value in kwargs.items():
+            self._changes[field] = {"current": value}
 
     def fields_updated(self, fields):
-        pass
+        """
+            Report that fields have been updated
+        """
+        for field in fields:
+            if field not in self._changes:
+                self._changes[fields] = {}
 
     def log_msg(self, level, msg, args, kwargs):
         record = {
-            "msg": msg % args,
+            "msg": msg,
             "level": level,
-            "extra": kwargs,
-            "resource": str(self._resource.id),
-            "dryrun": self.is_dry_run(),
+            "args": args,
+            "kwargs": kwargs,
             "timestamp": datetime.datetime.now(),
         }
+        return record
 
     def debug(self, msg, *args, **kwargs):
         """

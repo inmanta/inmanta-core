@@ -30,6 +30,7 @@ from tornado import gen, locks
 from inmanta import env
 from inmanta import methods
 from inmanta import protocol
+from inmanta import data
 from inmanta.agent.handler import Commander
 from inmanta.loader import CodeLoader
 from inmanta.protocol import Scheduler, AgentEndPoint
@@ -88,13 +89,13 @@ class ResourceAction(object):
         else:
             level = "ERROR"
 
-        yield self.scheduler.get_client().resource_updated(tid=self.scheduler._env_id,
-                                                           id=str(self.resource.id),
-                                                           level=level,
-                                                           action=action,
-                                                           status=status,
-                                                           message="%s: %s" % (status, log_msg),
-                                                           extra_data=changes)
+        action_id = uuid.uuid4()
+        now = datetime.datetime.now()
+        yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
+                                                                 resource_ids=[str(self.resource.id)],
+                                                                 action_id=action_id, action=action, started=now, finished=now,
+                                                                 status=status, changes={str(self.resource.id): changes},
+                                                                 messages=[data.log(level, log_msg, timestamp=now)])
 
         self.future.set_result(ResourceActionResult(success, reload, False))
         LOGGER.info("end run %s" % self.resource)
@@ -126,6 +127,7 @@ class ResourceAction(object):
 
             if not result.success:
                 yield self.__complete(False, False, changes={}, status="skipped")
+
             else:
                 resource = self.resource
 
@@ -781,7 +783,7 @@ class Agent(AgentEndPoint):
                         env.id, id, resource, state)
         else:
             LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                         env.id, id, resource, state)
+                         id, env.id, id, resource, state)
             self._instances[id].notify_ready(resource)
 
         return 200

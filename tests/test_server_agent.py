@@ -197,7 +197,7 @@ class Wait(ResourceHandler):
         return self._diff(current, desired)
 
     def do_changes(self, resource):
-        logger.info("Haning waiter %s", self.traceid)
+        logger.info("Hanging waiter %s", self.traceid)
         waiter.acquire()
         waiter.wait()
         waiter.release()
