@@ -78,34 +78,42 @@ class DefineEntity(TypeDefinitionStatement):
             entity_type = self.type
             entity_type.comment = self.comment
 
-            add_attributes = set()
+            add_attributes = {}
             for attribute in self.attributes:
                 attr_type = self.namespace.get_type(attribute.type)
                 if not isinstance(attr_type, (Type, type)):
                     raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
-                add_attributes.add(attribute.name)
                 attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi)
                 attribute.copy_location(attr_obj)
 
+                add_attributes[attribute.name] = attr_obj
+
                 entity_type.add_default_value(attribute.name, attribute.default)
 
+            if len(set(self.parents)) != len(self.parents):
+                raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(str(parent))
                 if not isinstance(parent_type, Entity):
                     raise TypingException(self, "Parents of an entity need to be entities. "
                                           "Default constructors are not supported. %s is not an entity" % parent)
 
-                for attr_name in parent_type.attributes.keys():
+                for attr_name, other_attr in parent_type.attributes.items():
                     if attr_name not in add_attributes:
-                        add_attributes.add(attr_name)
-
+                        add_attributes[attr_name] = other_attr
                     else:
-                        raise TypingException(
-                            self, "Hiding attributes with inheritance is not allowed. %s is already defined" % attr_name)
+                        # allow compatible attributes
+                        my_attr = add_attributes[attr_name]
 
-                entity_type.parent_entities.add(parent_type)
-                parent_type.child_entities.add(entity_type)
+                        if my_attr.type == other_attr.type:
+                            add_attributes[attr_name] = other_attr
+                        else:
+                            raise DuplicateException(
+                                my_attr, other_attr, "Incompatible attributes")
+
+                entity_type.parent_entities.append(parent_type)
+                parent_type.child_entities.append(entity_type)
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
