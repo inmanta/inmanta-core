@@ -1183,3 +1183,84 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
         (types, _) = compiler.do_compile()
         assert (types['std::Host'].get_all_instances()[0].get_attribute("agent").get_value().
                 get_attribute("names").get_value() is not None)
+
+
+def test_275_default_override(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+        bool at = true
+    end
+    implement A using std::none
+
+    entity B extends A:
+        bool at = false
+    end
+    implement B using std::none
+
+    a = A()
+    b = B()
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    assert a.get_value().get_attribute("at").get_value() is True
+    b = root.lookup("b")
+    assert b.get_value().get_attribute("at").get_value() is False
+
+
+def test_275_default_diamond(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+        bool at = true
+    end
+    implement A using std::none
+
+    entity B:
+        bool at = false
+    end
+    implement B using std::none
+
+    entity C extends A,B:
+    end
+    implement C using std::none
+
+    entity D extends B,A:
+    end
+    implement D using std::none
+
+    a = A()
+    b = B()
+    c = C()
+    d = D()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    assert a.get_value().get_attribute("at").get_value() is True
+    b = root.lookup("b")
+    assert b.get_value().get_attribute("at").get_value() is False
+    c = root.lookup("c")
+    assert c.get_value().get_attribute("at").get_value() is True
+    d = root.lookup("d")
+    assert d.get_value().get_attribute("at").get_value() is False
+
+
+def test_275_duplicate_parent(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+        bool at = true
+    end
+    implement A using std::none
+
+    entity B extends A,A:
+        bool at = false
+    end
+    implement B using std::none
+    """)
+    with pytest.raises(TypingException):
+        (_, scopes) = compiler.do_compile()
