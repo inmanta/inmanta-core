@@ -28,7 +28,7 @@ import base64
 from inmanta import protocol
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
-from inmanta.resources import resource, Resource, to_id
+from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Config, Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException
@@ -123,6 +123,9 @@ class Exporter(object):
             Load all registered resources
         """
         entities = resource.get_entity_resources()
+        resource_mapping = {}
+        ignored_set = set()
+
         for entity in entities:
             if entity not in types:
                 continue
@@ -130,14 +133,22 @@ class Exporter(object):
             if len(instances) > 0:
                 for instance in instances:
                     try:
-                        self.add_resource(Resource.create_from_model(self, entity, DynamicProxy.return_value(instance)))
+                        res = Resource.create_from_model(self, entity, DynamicProxy.return_value(instance))
+                        resource_mapping[instance] = res
+                        self.add_resource(res)
                     except UnknownException:
+                        ignored_set.add(instance)
                         # We get this exception when the attribute that is used to create the object id contains an unknown.
                         # We can safely ignore this resource == prune it
                         LOGGER.debug("Skipped resource of type %s because its id contains an unknown (location: %s)",
                                      entity, instance.location)
 
-        Resource.convert_requires()
+                    except IgnoreResourceException:
+                        ignored_set.add(instance)
+                        LOGGER.info("Ignoring resource of type %s because it requested to ignore it. (location: %s)",
+                                    entity, instance.location)
+
+        Resource.convert_requires(resource_mapping, ignored_set)
 
     def _run_export_plugins(self):
         """
@@ -266,7 +277,6 @@ class Exporter(object):
         self.types = types
         self.scopes = scopes
         self._version = int(time.time())
-        Resource.clear_cache()
 
         # first run other export plugins
         self._run_export_plugins()

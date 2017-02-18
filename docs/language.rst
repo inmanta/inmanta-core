@@ -183,7 +183,10 @@ Entities can have a number of attributes and relations to other entities.
 Entity attributes have primitive types, with an optional default value.
 
 Entities can inherit from multiple other entities. Entities inherits attributes and relations from parent entities.
-It is not possible to override or rename attributes or relations. All entities inherit from ``std::Entity``.
+All entities inherit from ``std::Entity``.
+
+It is not possible to override or rename attributes or relations. However, it is possible to override defaults. 
+Default values for attributes defined in the class take precedence over those in the parent classes. When a class has multiple parents, the left parent takes precedence over the others.
 
 The syntax for defining entities is:
 

@@ -17,6 +17,7 @@
 """
 
 from inmanta import resources
+import pytest
 
 
 class Base(resources.Resource):
@@ -35,3 +36,18 @@ class Resource(Base):
 
 def test_field_merge():
     assert(len(Resource.fields) == 4)
+
+
+def test_fields_type():
+    with pytest.raises(Exception):
+        class Test(resources.Resource):
+            fields = ("z")
+
+
+def test_fields_parent_type():
+    with pytest.raises(Exception):
+        class Base(resources.Resource):
+            fields = ("y")
+
+        class Test(Base):
+            fields = ("z",)
