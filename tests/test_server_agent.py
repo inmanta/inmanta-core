@@ -1253,8 +1253,6 @@ def test_cross_agent_deps(io_loop, server, client):
 
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["result"] == const.VersionState.success.name
-    from pprint import pprint as print
-    print(result.result)
 
     assert Provider.isset("agent1", "key1")
     assert Provider.get("agent1", "key1") == "value1"
