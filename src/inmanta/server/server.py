@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ from tornado import process
 from inmanta import data
 from inmanta import methods
 from inmanta import protocol
+from inmanta import const
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server.agentmanager import AgentManager
@@ -598,7 +599,7 @@ class Server(protocol.ServerEndpoint):
             resource_ids.append(rv.resource_version_id)
 
         now = datetime.datetime.now()
-        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action="pull",
+        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now,
                                  messages=[{"msg": "Resource version pulled by client for agent %(agent)s state",
                                             "kwargs": {"agent": agent},
@@ -767,7 +768,7 @@ class Server(protocol.ServerEndpoint):
             yield self.agentmanager.ensure_agent_registered(env, agent)
 
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
-                                 action="store", started=started, finished=datetime.datetime.now())
+                                 action=const.ResourceAction.store, started=started, finished=datetime.datetime.now())
         yield ra.insert()
         LOGGER.debug("Successfully stored version %d" % version)
 
@@ -780,7 +781,7 @@ class Server(protocol.ServerEndpoint):
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        yield model.update_fields(released=True, result="deploying")
+        yield model.update_fields(released=True, result=const.VersionState.deploying)
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
@@ -930,10 +931,10 @@ class Server(protocol.ServerEndpoint):
             model = yield data.ConfigurationModel.get_version(env.id, model_version)
 
             if model.done == model.total:
-                result = "success"
-                for status in model.status.values():
-                    if status != "deployed":
-                        model.result = "failed"
+                result = const.VersionState.success
+                for state in model.status.values():
+                    if state["status"] != "deployed":
+                        result = const.VersionState.failed
 
                 yield model.update_fields(deployed=True, result=result)
 

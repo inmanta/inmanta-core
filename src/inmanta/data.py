@@ -19,11 +19,13 @@
 import logging
 import uuid
 import datetime
+import enum
 
 from inmanta.resources import Id
 from tornado import gen
 from motor import motor_tornado
 import pymongo
+from inmanta import const
 
 
 LOGGER = logging.getLogger(__name__)
@@ -78,6 +80,24 @@ class Field(object):
 
 ESCAPE_CHARS = {".": "\uff0E", "\\": "\\\\", "$": "\u0024"}
 ESCAPE_CHARS_R = {v: k for k, v in ESCAPE_CHARS.items()}
+
+
+class DataDocument(object):
+    """
+        A baseclass for objects that represent data in inmanta. The main purpose of this baseclass is to group dict creation
+        logic. These documents are not stored in the database
+        (use BaseDocument for this purpose). It provides a to_dict method that the inmanta rpc can serialize. You can store
+        DataDocument childeren in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
+        performed.
+    """
+    def __init__(self, **kwargs):
+        self._data = kwargs
+
+    def to_dict(self):
+        """
+            Return a dict representation of this object.
+        """
+        return self._data
 
 
 class BaseDocument(object):
@@ -139,6 +159,9 @@ class BaseDocument(object):
 
             if value is None and fields[name].required:
                 raise TypeError("%s field is required" % name)
+
+            if from_mongo and issubclass(fields[name].field_type, enum.Enum):
+                value = fields[name].field_type[value]
 
             if value is not None and not isinstance(value, fields[name].field_type):
                 raise TypeError("Field %s should have the correct type (%s instead of %s)" %
@@ -242,6 +265,12 @@ class BaseDocument(object):
     def to_mongo(self):
         return self._encode_keys(self._to_dict(True))
 
+    @classmethod
+    def _value_to_dict(cls, value):
+        if isinstance(value, enum.Enum):
+            return value.name
+        return value
+
     def _to_dict(self, mongo_pk=False):
         """
             Return a dict representing the document
@@ -262,10 +291,10 @@ class BaseDocument(object):
                 if mongo_pk and name == "id":
                     result["_id"] = value
                 else:
-                    result[name] = value
+                    result[name] = self._value_to_dict(value)
 
             elif typing.default:
-                result[name] = typing.default_value
+                result[name] = self._value_to_dict(typing.default_value)
 
         return result
 
@@ -312,10 +341,12 @@ class BaseDocument(object):
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the mongodb on this document.
         """
+        items = {}
         for name, value in kwargs.items():
             setattr(self, name, value)
+            items[name] = self._value_to_dict(value)
 
-        yield self._coll.update({"_id": self.id}, {"$set": kwargs})
+        yield self._coll.update({"_id": self.id}, {"$set": items})
 
     @classmethod
     @gen.coroutine
@@ -703,19 +734,14 @@ class FormRecord(BaseDocument):
     changed = Field(field_type=datetime.datetime)
 
 
-ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "snapshot", "restore", "other")
-STATUS = ("success", "failed", "skipped", "deployed")
+class LogLine(DataDocument):
+    @classmethod
+    def log(cls, level, msg, timestamp=None, **kwargs):
+        if timestamp is None:
+            timestamp = datetime.datetime.now()
 
-
-def log(level, msg, timestamp=None, **kwargs):
-    """
-        Create an new logrecord
-    """
-    if timestamp is None:
-        timestamp = datetime.datetime.now()
-
-    log_line = msg % kwargs
-    return {"level": level, "msg": msg, "log": log_line, "args": [], "kwargs": kwargs, "timestamp": timestamp}
+        log_line = msg % kwargs
+        return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
 class ResourceAction(BaseDocument):
@@ -738,14 +764,14 @@ class ResourceAction(BaseDocument):
     environment = Field(field_type=uuid.UUID, required=True)
 
     action_id = Field(field_type=uuid.UUID, required=True)
-    action = Field(field_type=str, required=True)
+    action = Field(field_type=const.ResourceAction, required=True)
 
     started = Field(field_type=datetime.datetime, required=True)
     finished = Field(field_type=datetime.datetime)
 
     messages = Field(field_type=list)
 
-    status = Field(field_type=str)
+    status = Field(field_type=const.ResourceState)
 
     changes = Field(field_type=dict)
 
@@ -788,7 +814,7 @@ class ResourceAction(BaseDocument):
         if "$set" not in self._updates:
             self._updates["$set"] = {}
 
-        self._updates["$set"][name] = value
+        self._updates["$set"][name] = self._value_to_dict(value)
 
     def add_logs(self, messages):
         if "$push" not in self._updates:
@@ -842,7 +868,7 @@ class Resource(BaseDocument):
 
     # State related
     attributes = Field(field_type=dict)
-    status = Field(field_type=str, default="")
+    status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -1043,7 +1069,7 @@ class ConfigurationModel(BaseDocument):
 
     released = Field(field_type=bool, default=False)
     deployed = Field(field_type=bool, default=False)
-    result = Field(field_type=str, default="pending")
+    result = Field(field_type=const.VersionState, default=const.VersionState.pending)
     status = Field(field_type=dict, default={})
     version_info = Field(field_type=dict)
 
@@ -1123,7 +1149,7 @@ class ConfigurationModel(BaseDocument):
         entry_uuid = uuid.uuid5(resource_uuid, resource_id)
         resource_key = "status.%s" % entry_uuid
         yield cls._coll.update({"environment": environment, "version": version},
-                               {"$set": {resource_key: {"status": status, "id": resource_id}}})
+                               {"$set": {resource_key: {"status": cls._value_to_dict(status), "id": resource_id}}})
 
     @gen.coroutine
     def delete_cascade(self):

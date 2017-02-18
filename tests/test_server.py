@@ -24,6 +24,7 @@ from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
 from inmanta import data
+from inmanta import const
 from datetime import datetime
 
 LOGGER = logging.getLogger(__name__)
@@ -330,7 +331,8 @@ def test_resource_update(io_loop, client, server, environment):
 
     # Send some logs
     result = yield aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
-                                                  messages=[data.log(logging.INFO, "Test log %(a)s %(b)s", a="a", b="b")])
+                                                  messages=[data.LogLine.log(const.LogLevel.INFO,
+                                                                             "Test log %(a)s %(b)s", a="a", b="b")])
     assert(result.code == 200)
 
     # Get the status from a resource
@@ -341,7 +343,7 @@ def test_resource_update(io_loop, client, server, environment):
     assert("deploy" in logs)
     assert("messages" in logs["deploy"])
     assert(len(logs["deploy"]["messages"]) == 1)
-    assert(logs["deploy"]["messages"][0]["log"] == "Test log a b")
+    assert(logs["deploy"]["messages"][0]["msg"] == "Test log a b")
     assert("finished" not in logs["deploy"])
     assert("changes" not in logs["deploy"])
 

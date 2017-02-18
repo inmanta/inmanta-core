@@ -28,10 +28,11 @@ import base64
 import os
 from datetime import datetime
 from collections import defaultdict
+import enum
 
 import tornado.web
 from tornado import gen, queues, locks
-from inmanta import methods, data
+from inmanta import methods
 from inmanta.config import Config, nodename
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
@@ -216,8 +217,11 @@ def custom_json_encoder(o):
     if isinstance(o, datetime):
         return o.isoformat()
 
-    if isinstance(o, data.BaseDocument):
+    if hasattr(o, "to_dict"):
         return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
 
     raise TypeError(repr(o) + " is not JSON serializable")
 
@@ -587,6 +591,10 @@ class RESTTransport(Transport):
                         try:
                             if arg_type == datetime:
                                 message[arg] = datetime.strptime(message[arg], "%Y-%m-%dT%H:%M:%S.%f")
+
+                            elif issubclass(arg_type, enum.Enum):
+                                message[arg] = arg_type[message[arg]]
+
                             else:
                                 message[arg] = arg_type(message[arg])
 

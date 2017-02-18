@@ -20,9 +20,9 @@ import datetime
 import time
 
 from inmanta import data
+from inmanta import const
 import pytest
 import pymongo
-from inmanta.data import ConfigurationModel
 
 
 class Doc(data.BaseDocument):
@@ -35,6 +35,10 @@ class Doc(data.BaseDocument):
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING)], unique=True)
     ]
+
+
+class EnumDoc(data.BaseDocument):
+    action = data.Field(field_type=const.ResourceAction, required=True)
 
 
 @pytest.mark.gen_test
@@ -182,6 +186,19 @@ def test_key_escape(motor):
 
 
 @pytest.mark.gen_test
+def test_enum_field(motor):
+    EnumDoc.set_connection(motor)
+
+    d = EnumDoc(action=const.ResourceAction.deploy)
+    yield d.insert()
+
+    new = yield EnumDoc.get_by_id(d.id)
+    assert(new.action is const.ResourceAction.deploy)
+
+    assert(new.to_dict()["action"] == "deploy")
+
+
+@pytest.mark.gen_test
 def test_project(data_module):
     project = data.Project(name="test")
     yield project.insert()
@@ -286,20 +303,20 @@ def test_model_list(data_module):
                                      version_info={})
         yield cm.insert()
 
-    versions = yield ConfigurationModel.get_versions(env_id, 0, 1)
+    versions = yield data.ConfigurationModel.get_versions(env_id, 0, 1)
     assert(len(versions) == 1)
     assert(versions[0].version == 19)
 
-    versions = yield ConfigurationModel.get_versions(env_id, 1, 1)
+    versions = yield data.ConfigurationModel.get_versions(env_id, 1, 1)
     assert(len(versions) == 1)
     assert(versions[0].version == 18)
 
-    versions = yield ConfigurationModel.get_versions(env_id)
+    versions = yield data.ConfigurationModel.get_versions(env_id)
     assert(len(versions) == 19)
     assert(versions[0].version == 19)
     assert(versions[-1].version == 1)
 
-    versions = yield ConfigurationModel.get_versions(env_id, 10)
+    versions = yield data.ConfigurationModel.get_versions(env_id, 10)
     assert(len(versions) == 9)
     assert(versions[0].version == 9)
     assert(versions[-1].version == 1)
@@ -314,11 +331,13 @@ def test_resource_purge_on_delete(data_module):
                                   released=True, deployed=True)
     yield cm1.insert()
 
-    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=1", status="deployed",
+    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=1",
+                              status=const.ResourceState.deployed,
                               attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
     yield res11.insert()
 
-    res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=1", status="deployed",
+    res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=1",
+                              status=const.ResourceState.deployed,
                               attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     yield res12.insert()
 
@@ -346,11 +365,11 @@ def test_resource_purge_on_delete(data_module):
 def test_get_latest_resource(data_module):
     env_id = uuid.uuid4()
     key = "std::File[agent1,path=/etc/motd]"
-    res11 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=1", status="deployed",
+    res11 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=1", status=const.ResourceState.deployed,
                               attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
     yield res11.insert()
 
-    res12 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=2", status="deployed",
+    res12 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=2", status=const.ResourceState.deployed,
                               attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     yield res12.insert()
 
@@ -386,8 +405,8 @@ def test_resource_action(data_module):
     env_id = uuid.uuid4()
     action_id = uuid.uuid4()
 
-    resource_action = data.ResourceAction(environment=env_id, resource_version_ids=[], action_id=action_id, action="test",
-                                          started=datetime.datetime.now())
+    resource_action = data.ResourceAction(environment=env_id, resource_version_ids=[], action_id=action_id,
+                                          action=const.ResourceAction.deploy, started=datetime.datetime.now())
     yield resource_action.insert()
 
     resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
@@ -419,7 +438,8 @@ def test_get_resources(data_module):
     resource_ids = []
     for i in range(1, 11):
         res = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/tmp/file%d],v=1" % i,
-                                status="deployed", attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+                                status=const.ResourceState.deployed,
+                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
         yield res.insert()
         resource_ids.append(res.resource_version_id)
 

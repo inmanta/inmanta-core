@@ -21,6 +21,7 @@ import uuid
 import datetime
 
 from inmanta import data
+from inmanta import const
 from tornado import gen
 
 
@@ -321,9 +322,9 @@ class ResourceMethod(Method):
         """
 
     @protocol(operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS)
-    def resource_action_update(self, tid: uuid.UUID, resource_ids: list, action_id: uuid.UUID, action: str,
-                               started: datetime.datetime=None, finished: datetime.datetime=None, status: str=None,
-                               messages: list=[], changes: dict={}):
+    def resource_action_update(self, tid: uuid.UUID, resource_ids: list, action_id: uuid.UUID, action: const.ResourceAction,
+                               started: datetime.datetime=None, finished: datetime.datetime=None,
+                               status: const.ResourceState=None, messages: list=[], changes: dict={}):
         """
             Send a resource update to the server
 
@@ -343,11 +344,6 @@ class ResourceMethod(Method):
             :param changes A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                            have been changed. The value contains the new value and/or the orignal value.
         """
-        if action not in data.ACTIONS:
-            raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(data.ACTIONS)))
-
-        if status is not None and status not in data.STATUS:
-            raise Exception("Invalid resource update status (%s) should be %s" % (status, ", ".join(data.STATUS)))
 
 
 class VersionMethod(Method):
@@ -940,7 +936,7 @@ class AgentResourceEvent(Method):
     __method_name__ = "event"
 
     @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
-    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
+    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: const.ResourceState):
         """
             Tell an agent a resource it waits for has been updated
 
