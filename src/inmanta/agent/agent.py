@@ -206,7 +206,7 @@ class RemoteResourceAction(ResourceAction):
             result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id,
                                                                     str(self.resource_id), status=True)
             status = result.result['status']
-            if status == '' or self.future.done():
+            if status == const.ResourceState.available.name or self.future.done():
                 # wait for event
                 pass
             elif status == const.ResourceState.deployed.name:
