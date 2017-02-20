@@ -27,7 +27,7 @@ import socket
 
 from mongobox import MongoBox
 import pytest
-from inmanta import config, data
+from inmanta import config, data, command
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
@@ -55,6 +55,7 @@ def mongo_db():
 def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
+    command.Commander.reset()
 
 
 @pytest.fixture(scope="function", autouse=True)

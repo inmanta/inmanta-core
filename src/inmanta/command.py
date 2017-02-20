@@ -41,6 +41,13 @@ class Commander(object):
     config = None
 
     @classmethod
+    def reset(cls):
+        """
+            Return a list of commands
+        """
+        cls.__command_functions = {}
+
+    @classmethod
     def commands(cls):
         """
             Return a list of commands

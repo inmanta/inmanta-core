@@ -36,9 +36,6 @@ def test_basic_install(tmpdir):
     import lorem  # NOQA
     lorem.sentence()
 
-
-def test_basic_install_syntax(tmpdir):
-    env_dir1 = tmpdir.mkdir("env1").strpath
     with pytest.raises(ImportError):
         import yummy  # NOQA
 
@@ -48,9 +45,6 @@ def test_basic_install_syntax(tmpdir):
     venv1.install_from_list(["dummy-yummy"])
     import yummy  # NOQA
 
-
-def test_full_install_syntax(tmpdir):
-    env_dir1 = tmpdir.mkdir("env1").strpath
     with pytest.raises(ImportError):
         import iplib  # NOQA
 
