@@ -426,6 +426,7 @@ class AgentInstance(object):
 
                 for res in resources:
                     ctx = handler.HandlerContext(res, True)
+                    started = datetime.datetime.now()
                     provider = None
                     try:
                         data = res["attributes"]
@@ -436,22 +437,26 @@ class AgentInstance(object):
                         try:
                             provider = handler.Commander.get_provider(self._cache, self, resource)
                             provider.set_cache(self._cache)
-                        except Exception:
-                            LOGGER.exception("Unable to find a handler for %s" % resource.id)
-                            self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"],
-                                                       changes={}, log_msg="No handler available")
-                            continue
-
-                        yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
-                        yield self.get_client().dryrun_update(tid=self._env_id, id=id, resource=res["id"],
-                                                              changes=ctx.changes, log_msg=ctx.logs)
+                        except Exception as e:
+                            ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
+                                          resource_id=str(resource.id), exception=str(e))
+                            self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"], changes={})
+                        else:
+                            yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
+                            yield self.get_client().dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                                                                  changes=ctx.changes)
 
                     except TypeError:
-                        LOGGER.exception("Unable to process resource for dryrun.")
-                        return 500
+                        ctx.exception("Unable to process resource for dryrun.")
+
                     finally:
                         if provider is not None:
                             provider.close()
+
+                        finished = datetime.datetime.now()
+                        self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
+                                                                 action_id=ctx.action_id, action=const.ResourceAction.dryrun,
+                                                                 started=started, finished=finished, messages=ctx.logs)
 
                 self._cache.close_version(version)
 

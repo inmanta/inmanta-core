@@ -922,10 +922,11 @@ class Resource(BaseDocument):
         for res in resources:
             latest = (yield cls._coll.find({"environment": environment,
                                             "resource_id": res}).sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
-            if latest["status"] != "":
-                deployed = (yield cls._coll.find({"environment": environment, "resource_id": res,
-                                                  "status": {"$ne": ""}}).sort("version",
-                                                                               pymongo.DESCENDING).limit(1).to_list(1))[0]
+            if latest["status"] != const.ResourceState.available.name:
+                cursor = cls._coll.find({"environment": environment, "resource_id": res,
+                                         "status": {"$ne": const.ResourceState.available.name}})
+                deployed = (yield cursor.sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
+
             else:
                 deployed = latest
 

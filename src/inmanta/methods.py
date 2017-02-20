@@ -440,7 +440,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
+    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
         """
             Store dryrun results at the server
 
@@ -448,7 +448,6 @@ class DryRunMethod(Method):
             :param id The version dryrun to report
             :param resource The id of the resource
             :param changes The required changes
-            :param log_msg An optional log message (for example to report an error)
         """
 
 

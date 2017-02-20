@@ -852,9 +852,9 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.DryRunMethod.dryrun_update, dryrun_id="id", env="tid")
     @gen.coroutine
-    def dryrun_update(self, env, dryrun_id, resource, changes, log_msg=None):
+    def dryrun_update(self, env, dryrun_id, resource, changes):
         with (yield self.dryrun_lock.acquire()):
-            payload = {"changes": changes, "log": log_msg, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
+            payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
             yield data.DryRun.update_resource(dryrun_id, resource, payload)
 
         return 200
