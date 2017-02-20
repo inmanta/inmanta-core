@@ -153,3 +153,27 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
                " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
     assert len(warning) == 0
     assert(assert_count == 2)
+
+
+@pytest.mark.gen_test
+def test_empty_server_export(snippetcompiler, server, client):
+    snippetcompiler.setup_for_snippet("""
+            h = std::Host(name="test", os=std::linux)
+        """)
+    snippetcompiler.do_export(deploy=True)
+
+
+@pytest.mark.gen_test
+def test_server_export(snippetcompiler, server, client, environment):
+    config.Config.set("config", "environment", environment)
+    snippetcompiler.setup_for_snippet("""
+            h = std::Host(name="test", os=std::linux)
+            f = std::ConfigFile(host=h, path="/etc/motd", content="test")
+        """)
+    snippetcompiler.do_export(deploy=True)
+
+    result = yield client.list_versions(tid=environment)
+    assert result.code == 200
+    assert len(result.result["versions"]) == 1
+    assert result.result["versions"][0]["total"] == 1
+
