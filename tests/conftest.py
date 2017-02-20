@@ -87,13 +87,19 @@ def get_free_tcp_port():
     return str(port)
 
 
+@pytest.fixture(scope="function", autouse=True)
+def inmanta_config():
+    config.Config.load_config()
+    yield config.Config._get_instance()
+    config.Config._reset()
+
+
 @pytest.fixture(scope="function")
-def server(io_loop, mongo_db, mongo_client, motor):
+def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -123,7 +129,7 @@ def server(io_loop, mongo_db, mongo_client, motor):
 @pytest.fixture(scope="function",
                 params=[(True, True), (True, False), (False, True), (False, False)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal"])
-def server_multi(io_loop, mongo_db, mongo_client, request):
+def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
@@ -149,7 +155,6 @@ def server_multi(io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "password", testpass)
 
     port = get_free_tcp_port()
-    config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
