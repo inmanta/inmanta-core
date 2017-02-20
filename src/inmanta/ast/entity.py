@@ -44,8 +44,8 @@ class Entity(Type):
 
         self.__namespace = namespace
 
-        self.parent_entities = set()  # : Entity<>
-        self.child_entities = set()
+        self.parent_entities = []  # : Entity<>
+        self.child_entities = []
         self._attributes = {}
 
         self.__cls_type = None
@@ -104,10 +104,13 @@ class Entity(Type):
             Return the dictionary with default values
         """
         values = []
-        values.extend(self.__default_value.items())
 
-        for parent in self.parent_entities:
+        # left most parent takes precedence
+        for parent in reversed(self.parent_entities):
             values.extend(parent.get_default_values().items())
+
+        # self takes precedence
+        values.extend(self.__default_value.items())
 
         return dict(values)
 

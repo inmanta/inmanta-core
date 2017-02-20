@@ -32,6 +32,7 @@ import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
 from inmanta.module import Project
+from inmanta import resources, export
 from inmanta.ast import CompilerException
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -49,6 +50,18 @@ def mongo_db():
 
     mongobox.stop()
     del os.environ[port_envvar]
+
+
+def reset_all():
+    resources.resource.reset()
+    export.Exporter.reset()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def clean_reset():
+    reset_all()
+    yield
+    reset_all()
 
 
 @pytest.fixture(scope="session")
@@ -217,6 +230,7 @@ class SnippetCompilationTest(object):
     def setUpClass(cls):
         cls.libs = tempfile.mkdtemp()
         cls.env = tempfile.mkdtemp()
+        config.Config.load_config()
 
     @classmethod
     def tearDownClass(cls):
@@ -245,10 +259,9 @@ class SnippetCompilationTest(object):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self):
+    def do_export(self, deploy=False):
         templfile = mktemp("json", "dump", self.project_dir)
 
-        config.Config.load_config()
         from inmanta.export import Exporter
 
         (types, scopes) = compiler.do_compile()
@@ -256,9 +269,9 @@ class SnippetCompilationTest(object):
         class Options(object):
             pass
         options = Options()
-        options.json = templfile
+        options.json = templfile if not deploy else None
         options.depgraph = False
-        options.deploy = False
+        options.deploy = deploy
         options.ssl = False
 
         export = Exporter(options=options)

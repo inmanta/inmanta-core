@@ -19,11 +19,11 @@
 from inmanta import resources
 
 @resources.resource("exp::Test", agent="agent", id_attribute="test")
-class Test(resources.Resource):
+class Test(resources.ManagedResource):
     """
         This class represents a service on a system.
     """
-    fields = ("name", "agent")
+    fields = ("name", "agent", "field1")
 
     @staticmethod
     def get_test(exp, obj):

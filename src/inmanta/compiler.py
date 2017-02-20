@@ -155,8 +155,8 @@ class Compiler(object):
             statements.append(statement)
 
         # add the entity type (hack?)
-        entity = DefineEntity(self.__root_ns.get_child_or_create(
-            "std"), "Entity", "The entity all other entities inherit from.", [], [])
+        entity = DefineEntity(self.__root_ns.get_child_or_create("std"),
+                              "Entity", "The entity all other entities inherit from.", [], [])
 
         requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
                                       ("std::Entity", "provides", [0, None], False))
