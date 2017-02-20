@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 from inmanta import config
+import pytest
 
 
 def test_id_mapping_export(snippetcompiler):

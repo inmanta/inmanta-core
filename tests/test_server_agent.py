@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import time
 import json
 import uuid
@@ -33,194 +33,196 @@ from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
+from _pytest.fixtures import fixture
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
 
-@resource("test::Resource", agent="agent", id_attribute="key")
-class Resource(Resource):
-    """
-        A file on a filesystem
-    """
-    fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter', 'wait_for_done_with_waiters'])
 
 
-@resource("test::Fail", agent="agent", id_attribute="key")
-class FailR(Resource):
-    """
-        A file on a filesystem
-    """
-    fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+@fixture(scope="function")
+def resource_container():
+    @resource("test::Resource", agent="agent", id_attribute="key")
+    class MyResource(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
+    @resource("test::Fail", agent="agent", id_attribute="key")
+    class FailR(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
-@resource("test::Wait", agent="agent", id_attribute="key")
-class WaitR(Resource):
-    """
-        A file on a filesystem
-    """
-    fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+    @resource("test::Wait", agent="agent", id_attribute="key")
+    class WaitR(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
+    @provider("test::Resource", name="test_resource")
+    class Provider(ResourceHandler):
 
-@provider("test::Resource", name="test_resource")
-class Provider(ResourceHandler):
+        def check_resource(self, resource):
+            current = resource.clone()
+            current.purged = not self.__class__.isset(resource.id.get_agent_name(), resource.key)
 
-    def check_resource(self, resource):
-        current = resource.clone()
-        current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
-
-        if not current.purged:
-            current.value = Provider.get(resource.id.get_agent_name(), resource.key)
-        else:
-            current.value = None
-
-        return current
-
-    def list_changes(self, desired):
-        current = self.check_resource(desired)
-        return self._diff(current, desired)
-
-    def do_changes(self, resource):
-        changes = self.list_changes(resource)
-        if "purged" in changes:
-            if changes["purged"][1]:
-                Provider.delete(resource.id.get_agent_name(), resource.key)
+            if not current.purged:
+                current.value = self.__class__.get(resource.id.get_agent_name(), resource.key)
             else:
-                Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+                current.value = None
 
-        if "value" in changes:
-            Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+            return current
 
-        return changes
+        def list_changes(self, desired):
+            current = self.check_resource(desired)
+            return self._diff(current, desired)
 
-    def snapshot(self, resource):
-        return json.dumps({"value": Provider.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
+        def do_changes(self, resource):
+            changes = self.list_changes(resource)
+            if "purged" in changes:
+                if changes["purged"][1]:
+                    self.__class__.delete(resource.id.get_agent_name(), resource.key)
+                else:
+                    self.__class__.set(resource.id.get_agent_name(), resource.key, resource.value)
 
-    def restore(self, resource, snapshot_id):
-        content = self.get_file(snapshot_id)
-        if content is None:
-            return
+            if "value" in changes:
+                self.__class__.set(resource.id.get_agent_name(), resource.key, resource.value)
 
-        data = json.loads(content.decode())
-        if "value" in data:
-            Provider.set(resource.id.get_agent_name(), resource.key, data["value"])
+            return changes
 
-    def facts(self, resource):
-        return {"length": len(Provider.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
+        def snapshot(self, resource):
+            return json.dumps({"value": self.__class__.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
 
-    _STATE = defaultdict(dict)
+        def restore(self, resource, snapshot_id):
+            content = self.get_file(snapshot_id)
+            if content is None:
+                return
 
-    @classmethod
-    def set(cls, agent, key, value):
-        cls._STATE[agent][key] = value
+            data = json.loads(content.decode())
+            if "value" in data:
+                self.__class__.set(resource.id.get_agent_name(), resource.key, data["value"])
 
-    @classmethod
-    def get(cls, agent, key):
-        if key in cls._STATE[agent]:
-            return cls._STATE[agent][key]
-        return None
+        def facts(self, resource):
+            return {"length": len(self.__class__.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
 
-    @classmethod
-    def isset(cls, agent, key):
-        return key in cls._STATE[agent]
+        _STATE = defaultdict(dict)
 
-    @classmethod
-    def delete(cls, agent, key):
-        if cls.isset(agent, key):
-            del cls._STATE[agent][key]
+        @classmethod
+        def set(cls, agent, key, value):
+            cls._STATE[agent][key] = value
 
-    @classmethod
-    def reset(cls):
-        cls._STATE = defaultdict(dict)
+        @classmethod
+        def get(cls, agent, key):
+            if key in cls._STATE[agent]:
+                return cls._STATE[agent][key]
+            return None
 
+        @classmethod
+        def isset(cls, agent, key):
+            return key in cls._STATE[agent]
 
-@provider("test::Fail", name="test_fail")
-class Fail(ResourceHandler):
+        @classmethod
+        def delete(cls, agent, key):
+            if cls.isset(agent, key):
+                del cls._STATE[agent][key]
 
-    def check_resource(self, resource):
-        current = resource.clone()
-        current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+        @classmethod
+        def reset(cls):
+            cls._STATE = defaultdict(dict)
 
-        if not current.purged:
-            current.value = Provider.get(resource.id.get_agent_name(), resource.key)
-        else:
-            current.value = None
+    @provider("test::Fail", name="test_fail")
+    class Fail(ResourceHandler):
 
-        return current
+        def check_resource(self, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
-    def list_changes(self, desired):
-        current = self.check_resource(desired)
-        return self._diff(current, desired)
+            if not current.purged:
+                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
 
-    def do_changes(self, resource):
-        raise Exception()
+            return current
 
-waiter = Condition()
+        def list_changes(self, desired):
+            current = self.check_resource(desired)
+            return self._diff(current, desired)
 
+        def do_changes(self, resource):
+            raise Exception()
 
-@gen.coroutine
-def wait_for_done_with_waiters(client, env_id, version):
-    # unhang waiters
-    result = yield client.get_version(env_id, version)
-    assert result.code == 200
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+    waiter = Condition()
+
+    @gen.coroutine
+    def wait_for_done_with_waiters(client, env_id, version):
+        # unhang waiters
         result = yield client.get_version(env_id, version)
-        logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
-        if result.result["model"]["done"] > 0:
-            waiter.acquire()
-            waiter.notifyAll()
-            waiter.release()
-        yield gen.sleep(0.1)
+        assert result.code == 200
+        while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            result = yield client.get_version(env_id, version)
+            logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+            if result.result["model"]["done"] > 0:
+                waiter.acquire()
+                waiter.notifyAll()
+                waiter.release()
+            yield gen.sleep(0.1)
 
-    return result
+        return result
 
+    @provider("test::Wait", name="test_wait")
+    class Wait(ResourceHandler):
 
-@provider("test::Wait", name="test_wait")
-class Wait(ResourceHandler):
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
 
-    def __init__(self, agent, io=None):
-        super().__init__(agent, io)
-        self.traceid = uuid.uuid4()
+        def check_resource(self, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
-    def check_resource(self, resource):
-        current = resource.clone()
-        current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
-
-        if not current.purged:
-            current.value = Provider.get(resource.id.get_agent_name(), resource.key)
-        else:
-            current.value = None
-
-        return current
-
-    def list_changes(self, desired):
-        current = self.check_resource(desired)
-        return self._diff(current, desired)
-
-    def do_changes(self, resource):
-        logger.info("Haning waiter %s", self.traceid)
-        waiter.acquire()
-        waiter.wait()
-        waiter.release()
-        logger.info("Releasing waiter %s", self.traceid)
-        changes = self.list_changes(resource)
-        if "purged" in changes:
-            if changes["purged"][1]:
-                Provider.delete(resource.id.get_agent_name(), resource.key)
+            if not current.purged:
+                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
             else:
+                current.value = None
+
+            return current
+
+        def list_changes(self, desired):
+            current = self.check_resource(desired)
+            return self._diff(current, desired)
+
+        def do_changes(self, resource):
+            logger.info("Haning waiter %s", self.traceid)
+            waiter.acquire()
+            waiter.wait()
+            waiter.release()
+            logger.info("Releasing waiter %s", self.traceid)
+            changes = self.list_changes(resource)
+            if "purged" in changes:
+                if changes["purged"][1]:
+                    Provider.delete(resource.id.get_agent_name(), resource.key)
+                else:
+                    Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+
+            if "value" in changes:
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
 
-        if "value" in changes:
-            Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+            return changes
 
-        return changes
+    return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters, waiter=waiter)
 
 
 @pytest.mark.gen_test
-def test_dryrun_and_deploy(io_loop, server, client):
+def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     """
         dryrun and deploy a configuration model
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -233,8 +235,8 @@ def test_dryrun_and_deploy(io_loop, server, client):
     agent.start()
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
 
-    Provider.set("agent1", "key2", "incorrect_value")
-    Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key3", "value")
 
     version = int(time.time())
 
@@ -318,20 +320,20 @@ def test_dryrun_and_deploy(io_loop, server, client):
 
     assert result.result["model"]["done"] == len(resources)
 
-    assert Provider.isset("agent1", "key1")
-    assert Provider.get("agent1", "key1") == "value1"
-    assert Provider.get("agent1", "key2") == "value2"
-    assert not Provider.isset("agent1", "key3")
+    assert resource_container.Provider.isset("agent1", "key1")
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_server_restart(io_loop, server, mongo_db, client):
+def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     """
         dryrun and deploy a configuration model
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -344,8 +346,8 @@ def test_server_restart(io_loop, server, mongo_db, client):
     agent.start()
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
 
-    Provider.set("agent1", "key2", "incorrect_value")
-    Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key3", "value")
 
     server.stop()
 
@@ -435,21 +437,21 @@ def test_server_restart(io_loop, server, mongo_db, client):
 
     assert result.result["model"]["done"] == len(resources)
 
-    assert Provider.isset("agent1", "key1")
-    assert Provider.get("agent1", "key1") == "value1"
-    assert Provider.get("agent1", "key2") == "value2"
-    assert not Provider.isset("agent1", "key3")
+    assert resource_container.Provider.isset("agent1", "key1")
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
     server.stop()
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_spontaneous_deploy(io_loop, server, client):
+def test_spontaneous_deploy(resource_container, io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -465,8 +467,8 @@ def test_spontaneous_deploy(io_loop, server, client):
     agent.start()
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
 
-    Provider.set("agent1", "key2", "incorrect_value")
-    Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key3", "value")
 
     version = int(time.time())
 
@@ -519,20 +521,20 @@ def test_spontaneous_deploy(io_loop, server, client):
 
     assert result.result["model"]["done"] == len(resources)
 
-    assert Provider.isset("agent1", "key1")
-    assert Provider.get("agent1", "key1") == "value1"
-    assert Provider.get("agent1", "key2") == "value2"
-    assert not Provider.isset("agent1", "key3")
+    assert resource_container.Provider.isset("agent1", "key1")
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
 
 
 @pytest.mark.gen_test
-def test_dual_agent(io_loop, server, client):
+def test_dual_agent(resource_container, io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -547,8 +549,8 @@ def test_dual_agent(io_loop, server, client):
     myagent.start()
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
-    Provider.set("agent1", "key1", "incorrect_value")
-    Provider.set("agent2", "key1", "incorrect_value")
+    resource_container.Provider.set("agent1", "key1", "incorrect_value")
+    resource_container.Provider.set("agent2", "key1", "incorrect_value")
 
     version = int(time.time())
 
@@ -607,28 +609,28 @@ def test_dual_agent(io_loop, server, client):
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
         result = yield client.get_version(env_id, version)
-        waiter.acquire()
-        waiter.notifyAll()
-        waiter.release()
+        resource_container.waiter.acquire()
+        resource_container.waiter.notifyAll()
+        resource_container.waiter.release()
         yield gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
-    assert Provider.isset("agent1", "key1")
-    assert Provider.get("agent1", "key1") == "value1"
-    assert Provider.get("agent2", "key1") == "value2"
-    assert Provider.get("agent1", "key2") == "value1"
-    assert Provider.get("agent2", "key2") == "value2"
+    assert resource_container.Provider.isset("agent1", "key1")
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent2", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key2") == "value1"
+    assert resource_container.Provider.get("agent2", "key2") == "value2"
 
     myagent.stop()
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_snapshot_restore(client, server, io_loop):
+def test_snapshot_restore(resource_container, client, server, io_loop):
     """
         create a snapshot and restore it again
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -641,7 +643,7 @@ def test_snapshot_restore(client, server, io_loop):
     agent.start()
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
-    Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent1", "key", "value")
 
     version = int(time.time())
 
@@ -695,7 +697,7 @@ def test_snapshot_restore(client, server, io_loop):
         yield gen.sleep(0.1)
 
     # Change the value of the resource
-    Provider.set("agent1", "key", "other")
+    resource_container.Provider.set("agent1", "key", "other")
 
     # try to do a restore
     result = yield client.restore_snapshot(env_id, snapshot_id)
@@ -713,7 +715,7 @@ def test_snapshot_restore(client, server, io_loop):
         assert result.code == 200
         yield gen.sleep(0.1)
 
-    assert Provider.get("agent1", "key") == "value"
+    assert resource_container.Provider.get("agent1", "key") == "value"
 
     # get a snapshot
     result = yield client.get_snapshot(env_id, snapshot_id)
@@ -730,7 +732,7 @@ def test_snapshot_restore(client, server, io_loop):
 
 
 @pytest.mark.gen_test
-def test_server_agent_api(client, server, io_loop):
+def test_server_agent_api(resource_container, client, server, io_loop):
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -819,11 +821,11 @@ def test_server_agent_api(client, server, io_loop):
 
 
 @pytest.mark.gen_test
-def test_get_facts(client, server, io_loop):
+def test_get_facts(resource_container, client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -836,7 +838,7 @@ def test_get_facts(client, server, io_loop):
     agent.start()
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
-    Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent1", "key", "value")
 
     version = int(time.time())
 
@@ -872,11 +874,11 @@ def test_get_facts(client, server, io_loop):
 
 
 @pytest.mark.gen_test
-def test_get_set_param(client, server, io_loop):
+def test_get_set_param(resource_container, client, server, io_loop):
     """
         Test getting and setting params
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -888,11 +890,11 @@ def test_get_set_param(client, server, io_loop):
 
 
 @pytest.mark.gen_test
-def test_unkown_parameters(client, server, io_loop):
+def test_unkown_parameters(resource_container, client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -905,7 +907,7 @@ def test_unkown_parameters(client, server, io_loop):
     agent.start()
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
-    Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent1", "key", "value")
 
     version = int(time.time())
 
@@ -943,11 +945,11 @@ def test_unkown_parameters(client, server, io_loop):
 
 
 @pytest.mark.gen_test()
-def test_fail(client, server, io_loop):
+def test_fail(resource_container, client, server, io_loop):
     """
         Test results when a step fails
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -960,7 +962,7 @@ def test_fail(client, server, io_loop):
     agent.start()
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
-    Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent1", "key", "value")
 
     version = int(time.time())
 
@@ -1036,7 +1038,7 @@ def test_fail(client, server, io_loop):
 
 
 @pytest.mark.gen_test(timeout=15)
-def test_wait(client, server, io_loop):
+def test_wait(resource_container, client, server, io_loop):
     """
         If this test fail due to timeout,
         this is probably due to the mechanism in the agent that prevents pulling resources in very rapp\id succession.
@@ -1046,7 +1048,7 @@ def test_wait(client, server, io_loop):
 
         this test deploys two models in rapid successions, if the server is slow, this may fail due to the back-off
     """
-    Provider.reset()
+    resource_container.Provider.reset()
 
     # setup project
     result = yield client.create_project("env-test")
@@ -1066,7 +1068,7 @@ def test_wait(client, server, io_loop):
     yield retry_limited(lambda: len(server._sessions) == 1, 10)
 
     # set the deploy environment
-    Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent1", "key", "value")
 
     def make_version(offset=0):
         version = int(time.time() + offset)
@@ -1163,7 +1165,7 @@ def test_wait(client, server, io_loop):
 
     logger.info("second version released")
 
-    yield wait_for_done_with_waiters(client, env_id, version2)
+    yield resource_container.wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
 
@@ -1184,11 +1186,11 @@ def test_wait(client, server, io_loop):
 
 
 @pytest.mark.gen_test
-def test_cross_agent_deps(io_loop, server, client):
+def test_cross_agent_deps(resource_container, io_loop, server, client):
     """
         deploy a configuration model with cross host dependency
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     # config for recovery mechanism
     Config.set("config", "agent-interval", "10")
     result = yield client.create_project("env-test")
@@ -1209,8 +1211,8 @@ def test_cross_agent_deps(io_loop, server, client):
     agent2.start()
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
 
-    Provider.set("agent1", "key2", "incorrect_value")
-    Provider.set("agent1", "key3", "value")
+    resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key3", "value")
 
     version = int(time.time())
 
@@ -1270,25 +1272,25 @@ def test_cross_agent_deps(io_loop, server, client):
         result = yield client.get_version(env_id, version)
         yield gen.sleep(0.1)
 
-    result = yield wait_for_done_with_waiters(client, env_id, version)
+    result = yield resource_container.wait_for_done_with_waiters(client, env_id, version)
 
     assert result.result["model"]["done"] == len(resources)
 
-    assert Provider.isset("agent1", "key1")
-    assert Provider.get("agent1", "key1") == "value1"
-    assert Provider.get("agent1", "key2") == "value2"
-    assert Provider.get("agent2", "key3") == "value3"
+    assert resource_container.Provider.isset("agent1", "key1")
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.get("agent2", "key3") == "value3"
 
     agent.stop()
     agent2.stop()
 
 
 @pytest.mark.gen_test
-def test_dryrun_scale(io_loop, server, client):
+def test_dryrun_scale(resource_container, io_loop, server, client):
     """
         test dryrun scaling
     """
-    Provider.reset()
+    resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
