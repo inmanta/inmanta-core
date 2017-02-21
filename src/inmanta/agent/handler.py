@@ -348,7 +348,7 @@ class ResourceHandler(object):
         """
             Check if this handler is available on the current system
         """
-        raise NotImplementedError()
+        return True
 
     def _diff(self, current: resources.Resource, desired: resources.Resource):
         changes = {}
@@ -410,7 +410,6 @@ class ResourceHandler(object):
                 ctx.set_status(const.ResourceState.deployed)
 
             else:
-                changes = self.list_changes(ctx, resource)
                 ctx.set_status(const.ResourceState.dry)
 
             self.post(ctx, resource)

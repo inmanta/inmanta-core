@@ -203,6 +203,7 @@ def test_check_chmod(io, testdir):
     assert mode != new_mode
     assert "0755" == new_mode
 
+
 @pytest.mark.parametrize("io", io_list)
 def test_hash_dir(io, testdir):
     dir_path = os.path.join(testdir, "dir")
