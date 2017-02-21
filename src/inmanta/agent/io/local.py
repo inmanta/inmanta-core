@@ -462,8 +462,8 @@ if __name__ == '__channelexec__':
                 channel.send(result)  # NOQA
             except Exception as e:
                 import traceback
-                channel.send(str(traceback.format_exc()))  # NOQA
-                pass
+                channel.send({"__type__": "RemoteException", "exception_type": str(e.__class__), "exception_string": str(e),
+                              "traceback": str(traceback.format_exc())})
 
         else:
             raise AttributeError("Method %s is not supported" % item[0])

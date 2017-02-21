@@ -735,6 +735,10 @@ class FormRecord(BaseDocument):
 
 
 class LogLine(DataDocument):
+    @property
+    def msg(self):
+        return self._data["msg"]
+
     @classmethod
     def log(cls, level, msg, timestamp=None, **kwargs):
         if timestamp is None:

@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -398,12 +398,12 @@ class AgentInstance(object):
                 self._nq.reload(resources)
 
     @gen.coroutine
-    def dryrun(self, id, version):
-        self.add_future(self.do_run_dryrun(version, id))
+    def dryrun(self, dry_run_id, version):
+        self.add_future(self.do_run_dryrun(version, dry_run_id))
         return 200
 
     @gen.coroutine
-    def do_run_dryrun(self, version, id):
+    def do_run_dryrun(self, version, dry_run_id):
         with (yield self.dryrunlock.acquire()):
             with (yield self.ratelimiter.acquire()):
                 result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
@@ -440,10 +440,10 @@ class AgentInstance(object):
                         except Exception as e:
                             ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
                                           resource_id=str(resource.id), exception=str(e))
-                            self._client.dryrun_update(tid=self._env_id, id=id, resource=res["id"], changes={})
+                            self._client.dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"], changes={})
                         else:
                             yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
-                            yield self.get_client().dryrun_update(tid=self._env_id, id=id, resource=res["id"],
+                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
                                                                   changes=ctx.changes)
 
                     except TypeError:
@@ -761,49 +761,49 @@ class Agent(AgentEndPoint):
         yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
         yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
-    @protocol.handle(methods.AgentState.trigger, env="tid")
+    @protocol.handle(methods.AgentState.trigger, env="tid", agent="id")
     @gen.coroutine
-    def trigger_update(self, env, id):
+    def trigger_update(self, env, agent):
         """
             Trigger an update
         """
-        if id not in self._instances:
+        if agent not in self._instances:
             return 200
 
-        if not self._instances[id].is_enabled():
+        if not self._instances[agent].is_enabled():
             return 500, "Agent is not _enabled"
 
-        LOGGER.info("Agent %s got a trigger to update in environment %s", id, env.id)
-        future = self._instances[id].get_latest_version_for_agent()
+        LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env.id)
+        future = self._instances[agent].get_latest_version_for_agent()
         self.add_future(future)
         return 200
 
-    @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid")
+    @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid", agent="id")
     @gen.coroutine
-    def resource_event(self, env, id: str, resource: str, state: str):
+    def resource_event(self, env, agent: str, resource: str, state: str):
         if env.id != self._env_id:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
-                        env.id, id, resource, state)
+                        env.id, agent, resource, state)
             return 200
 
-        if id not in self._instances:
+        if agent not in self._instances:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                        env.id, id, resource, state)
+                        env.id, agent, resource, state)
             return 200
 
         if state is not const.ResourceState.deployed:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                        env.id, id, resource, state)
+                        env.id, agent, resource, state)
         else:
             LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                         id, env.id, id, resource, state)
-            self._instances[id].notify_ready(resource)
+                         agent, env.id, agent, resource, state)
+            self._instances[agent].notify_ready(resource)
 
         return 200
 
-    @protocol.handle(methods.AgentDryRun.do_dryrun, env="tid")
+    @protocol.handle(methods.AgentDryRun.do_dryrun, env="tid", dry_run_id="id")
     @gen.coroutine
-    def run_dryrun(self, env, id, agent, version):
+    def run_dryrun(self, env, dry_run_id, agent, version):
         """
            Run a dryrun of the given version
         """
@@ -812,9 +812,10 @@ class Agent(AgentEndPoint):
         if agent not in self._instances:
             return 200
 
-        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s", agent, id, version, env.id)
+        LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s",
+                    agent, dry_run_id, version, env.id)
 
-        return (yield self._instances[agent].dryrun(id, version))
+        return (yield self._instances[agent].dryrun(dry_run_id, version))
 
     def check_storage(self):
         """
