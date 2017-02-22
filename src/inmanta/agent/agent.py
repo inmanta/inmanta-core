@@ -773,7 +773,7 @@ class Agent(AgentEndPoint):
         if not self._instances[agent].is_enabled():
             return 500, "Agent is not _enabled"
 
-        LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env.id)
+        LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
         future = self._instances[agent].get_latest_version_for_agent()
         self.add_future(future)
         return 200
@@ -781,22 +781,22 @@ class Agent(AgentEndPoint):
     @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid", agent="id")
     @gen.coroutine
     def resource_event(self, env, agent: str, resource: str, state: str):
-        if env.id != self._env_id:
+        if env != self._env_id:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
-                        env.id, agent, resource, state)
+                        env, agent, resource, state)
             return 200
 
         if agent not in self._instances:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                        env.id, agent, resource, state)
+                        env, agent, resource, state)
             return 200
 
         if state is not const.ResourceState.deployed:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                        env.id, agent, resource, state)
+                        env, agent, resource, state)
         else:
             LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                         agent, env.id, agent, resource, state)
+                         agent, env, agent, resource, state)
             self._instances[agent].notify_ready(resource)
 
         return 200
@@ -807,13 +807,13 @@ class Agent(AgentEndPoint):
         """
            Run a dryrun of the given version
         """
-        assert env.id == self._env_id
+        assert env == self._env_id
 
         if agent not in self._instances:
             return 200
 
         LOGGER.info("Agent %s got a trigger to run dryrun %s for version %s in environment %s",
-                    agent, dry_run_id, version, env.id)
+                    agent, dry_run_id, version, env)
 
         return (yield self._instances[agent].dryrun(dry_run_id, version))
 
