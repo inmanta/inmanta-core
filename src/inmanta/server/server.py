@@ -637,7 +637,7 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.VersionMethod.get_version, version_id="id", env="tid")
     @gen.coroutine
-    def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=None):
+    def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=0):
         version = yield data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
@@ -921,7 +921,7 @@ class Server(protocol.ServerEndpoint):
 
         yield resource_action.save()
 
-        if done:
+        if done and action in const.STATE_UPDATE:
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)

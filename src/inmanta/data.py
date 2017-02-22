@@ -791,13 +791,13 @@ class ResourceAction(BaseDocument):
     @gen.coroutine
     def get_log(cls, resource_version_id, action, limit=0):
         if action is not None:
-            cursor = yield cls._coll.filter(resource_version_id=resource_version_id,
-                                            action=action).sort("timestamp", direction=pymongo.DESCENDING)
+            cursor = cls._coll.find({"resource_version_id": resource_version_id,
+                                     "action": action}).sort("timestamp", direction=pymongo.DESCENDING)
         else:
-            cursor = yield cls._coll.filter(resource_version_id=resource_version_id,
-                                            action=action).sort("timestamp", direction=pymongo.DESCENDING)
+            cursor = cls._coll.find({"resource_version_id": resource_version_id,
+                                     "action": action}).sort("timestamp", direction=pymongo.DESCENDING)
 
-        if limit > 0:
+        if limit is not None and limit > 0:
             cursor = cursor.limit(limit)
 
         log = []
@@ -1210,7 +1210,7 @@ class DryRun(BaseDocument):
     resources = Field(field_type=dict, default={})
 
     __indexes__ = [
-        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.DESCENDING)], unique=True)
+        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.DESCENDING)])
     ]
 
     @classmethod

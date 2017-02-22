@@ -48,6 +48,9 @@ class ResourceAction(Enum):
     other = 8
 
 
+STATE_UPDATE = [ResourceAction.deploy]
+
+
 class LogLevel(Enum):
     CRITICAL = 50
     ERROR = 40

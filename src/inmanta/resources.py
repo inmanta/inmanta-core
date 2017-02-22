@@ -237,6 +237,8 @@ class Resource(metaclass=ResourceMeta):
                                 % (model_object, agent_attribute, el))
 
         attribute_value = cls.map_field(None, entity_name, attribute_name, model_object)
+        if isinstance(attribute_value, util.Unknown):
+            raise UnknownException(attribute_value)
 
         return Id(entity_name, agent_value, attribute_name, attribute_value)
 

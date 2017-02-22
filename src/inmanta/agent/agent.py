@@ -456,7 +456,8 @@ class AgentInstance(object):
                         finished = datetime.datetime.now()
                         self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
                                                                  action_id=ctx.action_id, action=const.ResourceAction.dryrun,
-                                                                 started=started, finished=finished, messages=ctx.logs)
+                                                                 started=started, finished=finished, messages=ctx.logs,
+                                                                 status=const.ResourceState.dry)
 
                 self._cache.close_version(version)
 
