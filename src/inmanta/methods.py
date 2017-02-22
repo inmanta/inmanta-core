@@ -111,6 +111,8 @@ def get_environment(env: uuid.UUID) -> data.Environment:
 
 ENV_ARG = {"header": "X-Inmanta-tid", "getter": get_environment, "reply_header": True}
 ENV_OPTS = {"tid": ENV_ARG}
+AGENT_ENV_ARG = {"header": "X-Inmanta-tid", "reply_header": True}
+AGENT_ENV_OPTS = {"tid": AGENT_ENV_ARG}
 
 
 class Project(Method):
@@ -452,7 +454,7 @@ class AgentDryRun(Method):
     """
     __method_name__ = "agent_dryrun"
 
-    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
         """
             Do a dryrun on an agent
@@ -559,7 +561,7 @@ class AgentParameterMethod(Method):
     """
     __method_name__ = "agent_parameter"
 
-    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
         """
             Get all parameters/facts known by the agents for the given resource
@@ -760,7 +762,7 @@ class AgentSnapshot(Method):
     """
     __method_name__ = "agent_snapshot"
 
-    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -823,7 +825,7 @@ class AgentRestore(Method):
     """
     __method_name__ = "agent_restore"
 
-    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -913,7 +915,7 @@ class AgentState(Method):
             Set the state of the agent.
         """
 
-    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def trigger(self, tid: uuid.UUID, id: str):
         """
             Request an agent to reload resources
@@ -929,7 +931,7 @@ class AgentResourceEvent(Method):
     """
     __method_name__ = "event"
 
-    @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
         """
             Tell an agent a resource it waits for has been updated
