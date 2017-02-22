@@ -100,14 +100,14 @@ class BashIO(object):
 
         return data[0]
 
-    def run(self, command, arguments=[], env=None, cwd=None):
+    def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         """
             Execute a command with the given argument and return the result
         """
         cmds = [command] + arguments
         result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
-        data = result.communicate()
+        data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
@@ -309,14 +309,14 @@ class LocalIO(object):
         with open(path, "rb") as fd:
             return fd.read()
 
-    def run(self, command, arguments=[], env=None, cwd=None):
+    def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         """
             Execute a command with the given argument and return the result
         """
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
-        data = result.communicate()
+        data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 

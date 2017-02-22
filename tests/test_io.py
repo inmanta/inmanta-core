@@ -25,6 +25,7 @@ import grp
 from inmanta.agent.io.local import LocalIO
 from inmanta.agent.io.local import BashIO
 import pytest
+import subprocess
 
 io_list = [LocalIO(), BashIO(), BashIO(run_as="root")]
 
@@ -211,3 +212,9 @@ def test_hash_dir(io, testdir):
 
     with pytest.raises(Exception):
         io.hash_file(dir_path)
+
+
+@pytest.mark.parametrize("io", io_list)
+def test_timeout(io):
+    with pytest.raises(subprocess.TimeoutExpired):
+        io.run("sleep", ["0.1"], timeout=0.05)
