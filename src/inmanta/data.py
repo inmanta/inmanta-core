@@ -139,7 +139,7 @@ class BaseDocument(object):
         self.__fields = {}
 
         if from_mongo:
-            kwargs = self._decode_keys(kwargs)
+            kwargs = BaseDocument._decode_keys(kwargs)
 
             if "id" in kwargs:
                 raise AttributeError("A mongo document should not contain a field 'id'")
@@ -232,23 +232,38 @@ class BaseDocument(object):
 
         raise AttributeError(name)
 
+    @classmethod
+    def _value_to_dict(cls, value):
+        if isinstance(value, enum.Enum):
+            return value.name
+
+        if isinstance(value, DataDocument):
+            return cls._encode_keys(value.to_dict())
+
+        if isinstance(value, list):
+            return [cls._value_to_dict(x) for x in value]
+
+        if isinstance(value, dict):
+            return cls._encode_keys(value)
+
+        return value
+
     # TODO: make this a generator
-    def _encode_keys(self, data):
+    @classmethod
+    def _encode_keys(cls, data):
         new_data = {}
         for key, value in data.items():
             new_key = key
             for p, s in ESCAPE_CHARS.items():
                 new_key = new_key.replace(p, s)
 
-            if isinstance(value, dict):
-                new_data[new_key] = self._encode_keys(value)
-            else:
-                new_data[new_key] = value
+            new_data[new_key] = cls._value_to_dict(value)
 
         return new_data
 
     # TODO: make this a generator
-    def _decode_keys(self, data):
+    @classmethod
+    def _decode_keys(cls, data):
         new_data = {}
         for key, value in data.items():
             new_key = key
@@ -256,20 +271,14 @@ class BaseDocument(object):
                 new_key = new_key.replace(p, s)
 
             if isinstance(value, dict):
-                new_data[new_key] = self._decode_keys(value)
+                new_data[new_key] = cls._decode_keys(value)
             else:
                 new_data[new_key] = value
 
         return new_data
 
     def to_mongo(self):
-        return self._encode_keys(self._to_dict(True))
-
-    @classmethod
-    def _value_to_dict(cls, value):
-        if isinstance(value, enum.Enum):
-            return value.name
-        return value
+        return self._to_dict(True)
 
     def _to_dict(self, mongo_pk=False):
         """
@@ -313,6 +322,7 @@ class BaseDocument(object):
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
+
         yield self._coll.insert_one(self.to_mongo())
 
     @classmethod

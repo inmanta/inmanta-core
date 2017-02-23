@@ -1263,7 +1263,7 @@ def test_cross_agent_deps(io_loop, server, client):
     agent2.stop()
 
 
-@pytest.mark.gen_test
+@pytest.mark.gen_test(timeout=30)
 def test_dryrun_scale(io_loop, server, client):
     """
         test dryrun scaling

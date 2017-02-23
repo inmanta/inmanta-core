@@ -601,7 +601,7 @@ class Server(protocol.ServerEndpoint):
         now = datetime.datetime.now()
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now,
-                                 messages=[data.LogLine.log("INFO",
+                                 messages=[data.LogLine.log(logging.INFO,
                                                             "Resource version pulled by client for agent %(agent)s state",
                                                             agent=agent)])
         yield ra.insert()
@@ -768,7 +768,7 @@ class Server(protocol.ServerEndpoint):
 
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
                                  action=const.ResourceAction.store, started=started, finished=datetime.datetime.now(),
-                                 messages=[data.LogLine.log("INFO", "Successfully stored version %(version)d",
+                                 messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                             version=version)])
         yield ra.insert()
         LOGGER.debug("Successfully stored version %d" % version)
