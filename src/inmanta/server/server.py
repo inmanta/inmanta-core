@@ -601,10 +601,9 @@ class Server(protocol.ServerEndpoint):
         now = datetime.datetime.now()
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now,
-                                 messages=[{"msg": "Resource version pulled by client for agent %(agent)s state",
-                                            "kwargs": {"agent": agent},
-                                            "timestamp": now,
-                                            }])
+                                 messages=[data.LogLine.log("INFO",
+                                                            "Resource version pulled by client for agent %(agent)s state",
+                                                            agent=agent)])
         yield ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
@@ -768,7 +767,9 @@ class Server(protocol.ServerEndpoint):
             yield self.agentmanager.ensure_agent_registered(env, agent)
 
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
-                                 action=const.ResourceAction.store, started=started, finished=datetime.datetime.now())
+                                 action=const.ResourceAction.store, started=started, finished=datetime.datetime.now(),
+                                 messages=[data.LogLine.log("INFO", "Successfully stored version %(version)d",
+                                                            version=version)])
         yield ra.insert()
         LOGGER.debug("Successfully stored version %d" % version)
 
