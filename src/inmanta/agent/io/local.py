@@ -22,6 +22,7 @@ import pwd
 import subprocess
 import grp  # @UnresolvedImport
 import shutil
+import sys
 
 
 try:
@@ -107,7 +108,11 @@ class BashIO(object):
         cmds = [command] + arguments
         result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
-        data = result.communicate(timeout=timeout)
+        if sys.version_info < (3, 0, 0):
+            # TODO timeout is not supported
+            data = result.communicate()
+        else:
+            data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
@@ -316,7 +321,11 @@ class LocalIO(object):
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
-        data = result.communicate(timeout=timeout)
+        if sys.version_info < (3, 0, 0):
+            # TODO timeout is not supported
+            data = result.communicate()
+        else:
+            data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
