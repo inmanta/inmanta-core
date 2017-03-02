@@ -20,6 +20,7 @@ import hashlib
 import inspect
 import logging
 import base64
+import traceback
 from concurrent.futures import Future
 from collections import defaultdict
 
@@ -420,7 +421,7 @@ class ResourceHandler(object):
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("An error occurred during deployment of %(resource_id)s (excp: %(exception)s",
-                          resource_id=resource.id, exception=repr(e))
+                          resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
@@ -567,14 +568,14 @@ class CRUDHandler(ResourceHandler):
 
                 except ResourcePurged:
                     if not resource.purged:
-                        ctx.add_change("purged", True, changes["purged"])
+                        changes["purged"] = dict(desired=resource.purged, current=True)
 
                 for field, values in changes.items():
-                    ctx.add_change(field, values[1], values[0])
+                    ctx.add_change(field, desired=values["desired"], current=values["current"])
 
                 if not dry_run:
                     if "purged" in changes:
-                        if changes["purged"][0]:
+                        if not changes["purged"]["desired"]:
                             self.create_resource(ctx, resource)
                         else:
                             self.delete_resource(ctx, resource)
@@ -594,7 +595,7 @@ class CRUDHandler(ResourceHandler):
         except Exception as e:
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
-                          resource_id=resource.id, exception=repr(e))
+                          resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
 
 
 class Commander(object):
