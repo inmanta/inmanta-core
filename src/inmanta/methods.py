@@ -210,14 +210,14 @@ class Decommision(Method):
     """
     __method_name__ = "decommission"
 
-    @protocol(operation="POST", id=True, arg_options={"id": ENV_ARG})
+    @protocol(operation="POST", id=True, arg_options={"id": {"getter": get_environment}})
     def decomission_environment(self, id: uuid.UUID):
         """
             Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
             removal.
         """
 
-    @protocol(operation="DELETE", id=True, arg_options={"id": ENV_ARG})
+    @protocol(operation="DELETE", id=True, arg_options={"id": {"getter": get_environment}})
     def clear_environment(self, id: uuid.UUID):
         """
             Clear all data from this environment

@@ -1438,34 +1438,26 @@ class Server(protocol.ServerEndpoint):
         yield restore.delete()
         return 200
 
-    @protocol.handle(methods.Decommision.decomission_environment, env_id="id")
+    @protocol.handle(methods.Decommision.decomission_environment, env="id")
     @gen.coroutine
-    def decomission_environment(self, env_id):
-        env = yield data.Environment.get_by_id(env_id)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
+    def decomission_environment(self, env):
         version = int(time.time())
-        result = yield self.put_version(env_id, version, [], [], {})
+        result = yield self.put_version(env, version, [], [], {})
         return result, {"version": version}
 
-    @protocol.handle(methods.Decommision.clear_environment, env_id="id")
+    @protocol.handle(methods.Decommision.clear_environment, env="id")
     @gen.coroutine
-    def clear_environment(self, env_id):
+    def clear_environment(self, env):
         """
             Clear the environment
         """
-        env = yield data.Environment.get_by_id(env_id)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
-        yield data.Agent.delete_all(environment=env_id)
+        yield data.Agent.delete_all(environment=env.id)
         models = yield data.ConfigurationModel.get_list()
         for model in models:
             yield model.delete_cascade()
 
-        yield data.Parameter.delete_all(environment=env_id)
-        yield data.Form.delete_all(environment=env_id)
-        yield data.FormRecord.delete_all(environment=env_id)
-        yield data.Compile.delete_all(environment=env_id)
+        yield data.Parameter.delete_all(environment=env.id)
+        yield data.Form.delete_all(environment=env.id)
+        yield data.FormRecord.delete_all(environment=env.id)
+        yield data.Compile.delete_all(environment=env.id)
         return 200

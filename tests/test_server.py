@@ -161,7 +161,7 @@ def test_get_resource_for_agent(io_loop, motor, server_multi, client, environmen
     """
         Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent(io_loop, "localhost", {"nvblah": "localhost"}, env_id=environment)
+    agent = Agent(io_loop, "localhost", {"nvblah": "localhost"}, environment=environment)
     agent.start()
     aclient = agent._client
 
@@ -285,7 +285,7 @@ def test_resource_update(io_loop, client, server, environment):
     """
         Test updating resources and logging
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, env_id=environment)
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
     agent.start()
     aclient = agent._client
 

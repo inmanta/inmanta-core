@@ -645,7 +645,8 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
 
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, env_id=None, poolsize=1, cricital_pool_size=5):
+    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1,
+                 cricital_pool_size=5):
         super().__init__("agent", io_loop, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
@@ -660,11 +661,11 @@ class Agent(AgentEndPoint):
         self.agent_map = agent_map
         self._storage = self.check_storage()
 
-        if env_id is None:
-            env_id = cfg.environment.get()
-            if env_id is None:
+        if environment is None:
+            environment = cfg.environment.get()
+            if environment is None:
                 raise Exception("The agent requires an environment to be set.")
-        self.set_environment(env_id)
+        self.set_environment(environment)
 
         self._instances = {}
 
