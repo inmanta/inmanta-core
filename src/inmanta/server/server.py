@@ -375,7 +375,7 @@ class Server(protocol.ServerEndpoint):
         records = yield data.FormRecord.get_list(form=form_type.id)
 
         if not include_record:
-            return 200, {"records": [{"record_id": r.id, "changed": r.changed} for r in records]}
+            return 200, {"records": [{"id": r.id, "changed": r.changed} for r in records]}
 
         else:
             return 200, {"records": records}

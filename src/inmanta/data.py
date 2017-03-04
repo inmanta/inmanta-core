@@ -139,7 +139,7 @@ class BaseDocument(object):
         self.__fields = {}
 
         if from_mongo:
-            kwargs = BaseDocument._decode_keys(kwargs)
+            kwargs = BaseDocument._dict_to_value(kwargs)
 
             if "id" in kwargs:
                 raise AttributeError("A mongo document should not contain a field 'id'")
@@ -270,12 +270,19 @@ class BaseDocument(object):
             for p, s in ESCAPE_CHARS_R.items():
                 new_key = new_key.replace(p, s)
 
-            if isinstance(value, dict):
-                new_data[new_key] = cls._decode_keys(value)
-            else:
-                new_data[new_key] = value
+            new_data[new_key] = cls._dict_to_value(value)
 
         return new_data
+
+    @classmethod
+    def _dict_to_value(cls, value):
+        if isinstance(value, list):
+            return [cls._dict_to_value(x) for x in value]
+
+        if isinstance(value, dict):
+            return cls._decode_keys(value)
+
+        return value
 
     def to_mongo(self):
         return self._to_dict(True)
@@ -300,10 +307,10 @@ class BaseDocument(object):
                 if mongo_pk and name == "id":
                     result["_id"] = value
                 else:
-                    result[name] = self._value_to_dict(value)
+                    result[name] = self._value_to_dict(value) if mongo_pk else value
 
             elif typing.default:
-                result[name] = self._value_to_dict(typing.default_value)
+                result[name] = self._value_to_dict(typing.default_value) if mongo_pk else value
 
         return result
 
@@ -1226,7 +1233,7 @@ class DryRun(BaseDocument):
         resource_key = "resources.%s" % entry_uuid
 
         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
-        update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: dryrun_data}}
+        update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: cls._value_to_dict(dryrun_data)}}
 
         yield cls._coll.update(query, update)
 

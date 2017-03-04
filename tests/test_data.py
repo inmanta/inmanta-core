@@ -183,6 +183,21 @@ def test_key_escape(motor):
 
 
 @pytest.mark.gen_test
+def test_nested_key_escape(motor):
+    Doc.set_connection(motor)
+
+    d = Doc(name="test")
+    d.field4["a0a7f22b-bc71-51f6-bc91-f2b0e368b786"] = {}
+    d.field4["a0a7f22b-bc71-51f6-bc91-f2b0e368b786"]["changes"] = {}
+    d.field4["a0a7f22b-bc71-51f6-bc91-f2b0e368b786"]["changes"]["routes"] = {}
+    d.field4["a0a7f22b-bc71-51f6-bc91-f2b0e368b786"]["changes"]["routes"]["current"] = {}
+    d.field4["a0a7f22b-bc71-51f6-bc91-f2b0e368b786"]["changes"]["routes"]["current"]["172.19.0.0/16"] = "1.1.1.1"
+    yield d.insert()
+
+    yield Doc.get_by_id(d.id)
+
+
+@pytest.mark.gen_test
 def test_enum_field(motor):
     EnumDoc.set_connection(motor)
 
@@ -192,7 +207,7 @@ def test_enum_field(motor):
     new = yield EnumDoc.get_by_id(d.id)
 
     assert new.action is const.ResourceAction.deploy
-    assert new.to_dict()["action"] == "deploy"
+    assert new.to_dict()["action"] == const.ResourceAction.deploy
 
 
 @pytest.mark.gen_test
@@ -446,6 +461,22 @@ def test_get_resources(data_module):
 
     resources = yield data.Resource.get_resources(env_id, [resource_ids[0], "abcd"])
     assert len(resources) == 1
+
+
+@pytest.mark.gen_test
+def test_escaped_resources(data_module):
+    env_id = uuid.uuid4()
+    routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
+    res = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,name=router],v=1",
+                            status=const.ResourceState.deployed,
+                            attributes={"name": "router", "purge_on_delete": True, "purged": False, "routes": routes})
+    yield res.insert()
+    resource_id = res.resource_version_id
+
+    resources = yield data.Resource.get_resources(env_id, [resource_id])
+    assert len(resources) == 1
+
+    assert resources[0].attributes["routes"] == routes
 
 
 @pytest.mark.gen_test
