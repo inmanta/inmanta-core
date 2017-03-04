@@ -28,6 +28,11 @@ class CannotLoginException(Exception):
     pass
 
 
+class RemoteException(Exception):
+    def __init__(self, exception_type, msg, traceback=None):
+        super().__init__(exception_type, msg, traceback)
+
+
 class RemoteIO(object):
     """
         This class provides handler IO methods
@@ -63,6 +68,11 @@ class RemoteIO(object):
             ch.send((function_name, args))
             result = ch.receive()
             ch.close()
+
+        # check if we got an exception
+        if isinstance(result, dict) and "__type__" in result and result["__type__"] == "RemoteException":
+            raise RemoteException(exception_type=result["exception_type"], msg=result["exception_string"],
+                                  traceback=result["traceback"])
 
         return result
 

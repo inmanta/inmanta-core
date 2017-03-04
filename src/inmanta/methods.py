@@ -21,6 +21,7 @@ import uuid
 import datetime
 
 from inmanta import data
+from inmanta import const
 from tornado import gen
 
 
@@ -209,14 +210,14 @@ class Decommision(Method):
     """
     __method_name__ = "decommission"
 
-    @protocol(operation="POST", id=True, arg_options={"id": ENV_ARG})
+    @protocol(operation="POST", id=True, arg_options={"id": {"getter": get_environment}})
     def decomission_environment(self, id: uuid.UUID):
         """
             Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
             removal.
         """
 
-    @protocol(operation="DELETE", id=True, arg_options={"id": ENV_ARG})
+    @protocol(operation="DELETE", id=True, arg_options={"id": {"getter": get_environment}})
     def clear_environment(self, id: uuid.UUID):
         """
             Clear all data from this environment
@@ -308,7 +309,7 @@ class ResourceMethod(Method):
             :param tid The id of the environment this resource belongs to
             :param id Get the resource with the given id
             :param logs Include the logs in the response
-            :param status return only resou
+            :param status return only resources of this status
         """
 
     @protocol(operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS)
@@ -322,24 +323,29 @@ class ResourceMethod(Method):
                            that version is returned, even if it has not been released yet.
         """
 
-    @protocol(operation="POST", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, status: str, extra_data: dict):
+    @protocol(operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS)
+    def resource_action_update(self, tid: uuid.UUID, resource_ids: list, action_id: uuid.UUID, action: const.ResourceAction,
+                               started: datetime.datetime=None, finished: datetime.datetime=None,
+                               status: const.ResourceState=None, messages: list=[], changes: dict={}):
         """
             Send a resource update to the server
 
             :param tid The id of the environment this resource belongs to
-            :param id Get the status of the resource with the given id from the agent
-            :param level The loglevel of the update
+            :param resource_ids The resource with the given id from the agent
+            :param action_id A unique id to indicate the resource action that has be updated
             :param action The action performed
-            :param message The log message
-            :param status The current status of the resource (if known)
-            :param extra_data A map with additional data
-        """
-        if level not in data.LOGLEVEL:
-            raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(data.LOGLEVEL)))
 
-        if action not in data.ACTIONS:
-            raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(data.ACTIONS)))
+            :param started The timestamp when this action was started. When this action (action_id) has not been saved yet,
+                           started has to be defined.
+
+            :param finished The timestamp when this action was finished. Afterwars, no changes with the same action_id
+                            can be stored. The status field also has to be set.
+            :param status The current status of the resource (if known)
+
+            :param messages A list of log entries to add to this entry.
+            :param changes A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+                           have been changed. The value contains the new value and/or the orignal value.
+        """
 
 
 class VersionMethod(Method):
@@ -436,7 +442,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
+    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
         """
             Store dryrun results at the server
 
@@ -444,7 +450,6 @@ class DryRunMethod(Method):
             :param id The version dryrun to report
             :param resource The id of the resource
             :param changes The required changes
-            :param log_msg An optional log message (for example to report an error)
         """
 
 
@@ -932,7 +937,7 @@ class AgentResourceEvent(Method):
     __method_name__ = "event"
 
     @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
-    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
+    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: const.ResourceState):
         """
             Tell an agent a resource it waits for has been updated
 

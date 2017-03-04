@@ -24,10 +24,7 @@ from inmanta.agent import reporting
 @pytest.mark.slowtest
 @pytest.mark.gen_test
 def test_agent_get_status(io_loop, server, environment):
-    myagent = agent.Agent(io_loop,
-                          hostname="node1",
-                          env_id=environment,
-                          agent_map={"agent1": "localhost"},
+    myagent = agent.Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                           code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()

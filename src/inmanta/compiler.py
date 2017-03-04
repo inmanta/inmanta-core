@@ -31,12 +31,12 @@ from inmanta.plugins import PluginMeta
 LOGGER = logging.getLogger(__name__)
 
 
-def do_compile():
+def do_compile(refs={}):
     """
         Run run run
     """
     project = Project.get()
-    compiler = Compiler(os.path.join(project.project_path, project.main_file))
+    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
 
     LOGGER.debug("Starting compile")
 
@@ -59,11 +59,12 @@ class Compiler(object):
         @param config: The parsed configuration file
     """
 
-    def __init__(self, cf_file="main.cf"):
+    def __init__(self, cf_file="main.cf", refs={}):
         self.__init_cf = "_init.cf"
 
         self.__cf_file = cf_file
         self.__root_ns = None
+        self.refs = refs
 
     def get_plugins(self):
         return self.plugins

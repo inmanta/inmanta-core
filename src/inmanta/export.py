@@ -392,7 +392,7 @@ class Exporter(object):
         sources = resource.sources()
         merge_dict(sources, Commander.sources())
 
-        LOGGER.info("Uploding source files")
+        LOGGER.info("Uploading source files")
 
         conn = protocol.Client("compiler")
 

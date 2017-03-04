@@ -22,6 +22,7 @@ import pwd
 import subprocess
 import grp  # @UnresolvedImport
 import shutil
+import sys
 
 
 try:
@@ -100,14 +101,18 @@ class BashIO(object):
 
         return data[0]
 
-    def run(self, command, arguments=[], env=None, cwd=None):
+    def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         """
             Execute a command with the given argument and return the result
         """
         cmds = [command] + arguments
         result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
-        data = result.communicate()
+        if sys.version_info < (3, 0, 0):
+            # TODO timeout is not supported
+            data = result.communicate()
+        else:
+            data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
@@ -309,14 +314,18 @@ class LocalIO(object):
         with open(path, "rb") as fd:
             return fd.read()
 
-    def run(self, command, arguments=[], env=None, cwd=None):
+    def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         """
             Execute a command with the given argument and return the result
         """
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
 
-        data = result.communicate()
+        if sys.version_info < (3, 0, 0):
+            # TODO timeout is not supported
+            data = result.communicate()
+        else:
+            data = result.communicate(timeout=timeout)
 
         return (data[0].strip().decode("utf-8"), data[1].strip().decode("utf-8"), result.returncode)
 
@@ -462,8 +471,8 @@ if __name__ == '__channelexec__':
                 channel.send(result)  # NOQA
             except Exception as e:
                 import traceback
-                channel.send(str(traceback.format_exc()))  # NOQA
-                pass
+                channel.send({"__type__": "RemoteException", "exception_type": str(e.__class__),  # noqa
+                              "exception_string": str(e), "traceback": str(traceback.format_exc())})
 
         else:
             raise AttributeError("Method %s is not supported" % item[0])
