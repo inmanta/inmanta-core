@@ -467,7 +467,7 @@ if __name__ == '__channelexec__':
         if hasattr(local_io, item[0]):
             try:
                 method = getattr(local_io, item[0])
-                result = method(*item[1])
+                result = method(*item[1], **item[2])
                 channel.send(result)  # NOQA
             except Exception as e:
                 import traceback

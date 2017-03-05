@@ -62,10 +62,10 @@ class RemoteIO(object):
         else:
             return "ssh=root@%s//python=%s" % (host, python_path)
 
-    def _execute(self, function_name, *args):
+    def _execute(self, function_name, *args, **kwargs):
         with self._lock:
             ch = self._gw.remote_exec(local)
-            ch.send((function_name, args))
+            ch.send((function_name, args, kwargs))
             result = ch.receive()
             ch.close()
 
@@ -87,8 +87,8 @@ class RemoteIO(object):
         """
             Proxy a function call to the local version on the other side of the channel.
         """
-        def call(*args):
-            result = self._execute(name, *args)
+        def call(*args, **kwargs):
+            result = self._execute(name, *args, **kwargs)
             return result
 
         return call
