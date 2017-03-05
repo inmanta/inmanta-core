@@ -22,7 +22,7 @@ import logging
 import re
 
 from inmanta.execute import util
-from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy
+from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
 from inmanta.module import Project
 
 
@@ -158,15 +158,14 @@ class ResourceMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-def serialize_dict_proxy(d):
-    data = {}
-    for key, value in d.items():
-        if isinstance(value, DictProxy):
-            data[key] = serialize_dict_proxy(value)
-        else:
-            data[key] = value
+def serialize_proxy(d):
+    if isinstance(d, DictProxy):
+        return {key: serialize_proxy(value) for key, value in d.items()}
 
-    return data
+    if isinstance(d, SequenceProxy):
+        return [serialize_proxy(value) for value in d]
+
+    return d
 
 
 class Resource(metaclass=ResourceMeta):
@@ -254,8 +253,9 @@ class Resource(metaclass=ResourceMeta):
                 else:
                     value = getattr(model_object, field_name)
 
-                if isinstance(value, DictProxy):
-                    value = serialize_dict_proxy(value)
+                # copy dict and sequence proxy before passing it to handler code
+                if isinstance(value, (DynamicProxy, SequenceProxy)):
+                    value = serialize_proxy(value)
 
                 return value
             except UnknownException as e:
