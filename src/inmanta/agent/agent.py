@@ -79,7 +79,6 @@ class ResourceAction(object):
         return self.future.done()
 
     def cancel(self):
-        print("cancel!!")
         if not self.is_running() and not self.is_done():
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
@@ -166,13 +165,15 @@ class ResourceAction(object):
             LOGGER.info("end run %s", self.resource)
 
             end = datetime.datetime.now()
-            yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
-                                                                     resource_ids=[str(self.resource.id)],
-                                                                     action_id=ctx.action_id,
-                                                                     action=const.ResourceAction.deploy,
-                                                                     started=start, finished=end, status=ctx.status,
-                                                                     changes={str(self.resource.id): ctx.changes},
-                                                                     messages=ctx.logs)
+            result = yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
+                                                                              resource_ids=[str(self.resource.id)],
+                                                                              action_id=ctx.action_id,
+                                                                              action=const.ResourceAction.deploy,
+                                                                              started=start, finished=end, status=ctx.status,
+                                                                              changes={str(self.resource.id): ctx.changes},
+                                                                              messages=ctx.logs)
+            if result.code != 200:
+                LOGGER.error("Resource status update failed %s", result.result)
 
             self.future.set_result(ResourceActionResult(success, reload, False))
             self.running = False
