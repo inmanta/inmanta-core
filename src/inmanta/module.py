@@ -948,8 +948,7 @@ class Module(ModuleLike):
                     imp.load_source(sub_mod, py_file)
 
         except ImportError as e:
-            raise CompilerException(
-                "Unable to load all plug-ins for module %s" % self._meta["name"]) from e
+            raise CompilerException("Unable to load all plug-ins for module %s" % self._meta["name"]) from e
 
     def versions(self):
         """

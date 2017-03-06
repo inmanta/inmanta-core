@@ -337,36 +337,39 @@ def test_model_list(data_module):
 @pytest.mark.gen_test
 def test_resource_purge_on_delete(data_module):
     env_id = uuid.uuid4()
-
+    version = 1
     # model 1
-    cm1 = data.ConfigurationModel(environment=env_id, version=1, date=datetime.datetime.now(), total=2, version_info={},
+    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=2, version_info={},
                                   released=True, deployed=True)
     yield cm1.insert()
 
-    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=1",
+    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
                               status=const.ResourceState.deployed,
                               attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
     yield res11.insert()
 
-    res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=1",
+    res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=%s" % version,
                               status=const.ResourceState.deployed,
                               attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     yield res12.insert()
 
-    # model 2
-    cm2 = data.ConfigurationModel(environment=env_id, version=2, date=datetime.datetime.now(), total=1, version_info={},
-                                  released=False, deployed=False)
-    yield cm2.insert()
+    # model 2 (multiple undeployed versions)
+    while version < 10:
+        version += 1
+        cm2 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=1,
+                                      version_info={}, released=False, deployed=False)
+        yield cm2.insert()
 
-    res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent5,path=/etc/motd],v=2",
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    yield res21.insert()
+        res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent5,path=/etc/motd],v=%s" % version,
+                                  attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        yield res21.insert()
 
     # model 3
-    cm3 = data.ConfigurationModel(environment=env_id, version=3, date=datetime.datetime.now(), total=0, version_info={})
+    version += 1
+    cm3 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0, version_info={})
     yield cm3.insert()
 
-    to_purge = yield data.Resource.get_deleted_resources(env_id, 3)
+    to_purge = yield data.Resource.get_deleted_resources(env_id, version)
 
     assert len(to_purge) == 1
     assert to_purge[0].model == 1

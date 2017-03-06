@@ -670,7 +670,7 @@ class Server(protocol.ServerEndpoint):
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        yield version.delete()
+        yield version.delete_cascade()
         return 200
 
     @protocol.handle(methods.VersionMethod.put_version, env="tid")
