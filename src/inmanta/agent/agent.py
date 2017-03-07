@@ -143,7 +143,6 @@ class ResourceAction(object):
                 LOGGER.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
                 self.running = False
                 ctx.set_status(const.ResourceState.cancelled)
-                ctx.close()
                 return
 
             result = sum(results, ResourceActionResult(True, False, False))
@@ -152,7 +151,6 @@ class ResourceAction(object):
                 # self.running will be set to false when self.cancel is called
                 # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
                 ctx.set_status(const.ResourceState.cancelled)
-                ctx.close()
                 return
 
             if not result.success:

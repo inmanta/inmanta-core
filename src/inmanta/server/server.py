@@ -621,10 +621,7 @@ class Server(protocol.ServerEndpoint):
         models = yield data.ConfigurationModel.get_versions(env.id, start, limit)
         count = len(models)
 
-        d = {"versions": []}
-        for m in models:
-            model_dict = m.to_dict()
-            d["versions"].append(model_dict)
+        d = {"versions": models}
 
         if start is not None:
             d["start"] = start
@@ -637,30 +634,28 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.VersionMethod.get_version, version_id="id", env="tid")
     @gen.coroutine
     def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=0):
+        n = time.time()
         version = yield data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
-
+        print(time.time() - n)
         resources = yield data.Resource.get_resources_for_version(env.id, version_id)
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
-
-        d = {"model": version.to_dict()}
+        print(time.time() - n)
+        d = {"model": version}
 
         d["resources"] = []
         for res in resources:
             res_dict = res.to_dict()
 
             if bool(include_logs):
-                actions = yield data.ResourceAction.get_log(res.resource_version_id, log_filter, limit)
-
-                res_dict["actions"] = [x.to_dict() for x in actions]
+                res_dict["actions"] = yield data.ResourceAction.get_log(res.resource_version_id, log_filter, limit)
 
             d["resources"].append(res_dict)
 
-        unp = yield data.UnknownParameter.get_list(environment=env.id, version=version_id)
-        d["unknowns"] = [x.to_dict() for x in unp]
-
+        d["unknowns"] = yield data.UnknownParameter.get_list(environment=env.id, version=version_id)
+        print(time.time() - n)
         return 200, d
 
     @protocol.handle(methods.VersionMethod.delete_version, version_id="id", env="tid")
@@ -896,7 +891,7 @@ class Server(protocol.ServerEndpoint):
 
             resource_action = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids,
                                                   action_id=action_id, action=action, started=started)
-            resource_action.insert()
+            yield resource_action.insert()
 
         if resource_action.finished is not None:
             return 500, {"message": "An resource action can only be updated when it has not been finished yet. This action "
@@ -1067,10 +1062,7 @@ class Server(protocol.ServerEndpoint):
         env_dict = env.to_dict()
 
         if versions > 0:
-            v = yield data.ConfigurationModel.get_versions(environment_id, limit=versions)
-            env_dict["versions"] = []
-            for model in v:
-                env_dict["versions"].append(model.to_dict())
+            env_dict["versions"] = yield data.ConfigurationModel.get_versions(environment_id, limit=versions)
 
         if resources > 0:
             env_dict["resources"] = yield data.Resource.get_resources_report(environment=environment_id)

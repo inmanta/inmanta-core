@@ -519,6 +519,10 @@ class UnknownParameter(BaseDocument):
     metadata = Field(field_type=dict)
     resolved = Field(field_type=bool, default=False)
 
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING)])
+    ]
+
 
 class AgentProcess(BaseDocument):
     """
@@ -798,6 +802,7 @@ class ResourceAction(BaseDocument):
 
     __indexes__ = [
         dict(keys=[("environment", pymongo.ASCENDING), ("action_id", pymongo.ASCENDING)], unique=True),
+        dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_ids", pymongo.ASCENDING)]),
     ]
 
     def __init__(self, from_mongo=False, **kwargs):
@@ -841,7 +846,7 @@ class ResourceAction(BaseDocument):
         if "$push" not in self._updates:
             self._updates["$push"] = {}
 
-        self._updates["$push"]["messages"] = {"$each": messages}
+        self._updates["$push"]["messages"] = {"$each": self._value_to_dict(messages)}
 
     def add_changes(self, changes):
         if "$set" not in self._updates:
@@ -849,7 +854,7 @@ class ResourceAction(BaseDocument):
 
         for resource, values in changes.items():
             for field, change in values.items():
-                self._updates["$set"]["changes.%s.%s" % (resource, field)] = change
+                self._updates["$set"]["changes.%s.%s" % (resource, field)] = self._value_to_dict(change)
 
     @gen.coroutine
     def save(self):
@@ -966,9 +971,14 @@ class Resource(BaseDocument):
     @gen.coroutine
     def get_resources_for_version(cls, environment, version, agent=None):
         if agent is not None:
-            resources = yield cls.get_list(environment=environment, model=version, agent=agent)
+            cursor = cls._coll.find({"environment": environment, "model": version, "agent": agent})
         else:
-            resources = yield cls.get_list(environment=environment, model=version)
+            cursor = cls._coll.find({"environment": environment, "model": version})
+
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
         return resources
 
     @classmethod
