@@ -728,3 +728,12 @@ def test_bad_2():
         parse_code("""
 a=|
 """)
+
+
+def test_error_on_relation():
+    with pytest.raises(ParserException) as e:
+        parse_code("""
+ Host.provider [1] -- Provider test""")
+    assert e.value.location.file == "test"
+    assert e.value.location.lnr == 2
+    assert e.value.column == 38
