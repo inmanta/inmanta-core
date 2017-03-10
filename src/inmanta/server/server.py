@@ -634,15 +634,14 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.VersionMethod.get_version, version_id="id", env="tid")
     @gen.coroutine
     def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=0):
-        n = time.time()
         version = yield data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
-        print(time.time() - n)
+
         resources = yield data.Resource.get_resources_for_version(env.id, version_id)
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
-        print(time.time() - n)
+
         d = {"model": version}
 
         d["resources"] = []
@@ -655,7 +654,7 @@ class Server(protocol.ServerEndpoint):
             d["resources"].append(res_dict)
 
         d["unknowns"] = yield data.UnknownParameter.get_list(environment=env.id, version=version_id)
-        print(time.time() - n)
+
         return 200, d
 
     @protocol.handle(methods.VersionMethod.delete_version, version_id="id", env="tid")
