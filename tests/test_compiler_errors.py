@@ -35,8 +35,6 @@ def test_bad_var(snippetcompiler):
 """,
         "variable b not found (reported in Assign(a, b) ({dir}/main.cf:2))"
     )
-    
-
 
 
 def test_bad_type(snippetcompiler):
