@@ -330,7 +330,6 @@ class EnvironmentList(InmantaCommand, Lister):
 
         data = []
         for env in environments:
-            print(env)
             prj = self.do_request("get_project", "project", dict(id=env["project"]))
             prj_name = prj['name']
             data.append((prj_name, env['project'], env['name'], env['id']))

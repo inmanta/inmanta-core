@@ -174,11 +174,11 @@ class VirtualEnv(object):
             cmd = [self.virtual_pip, "install", "-r", path]
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-            except Exception as e:
-                LOGGER.debug("%s: %s", cmd, e.output.decode())
+            except Exception:
+                LOGGER.debug("%s: %s", cmd, output.decode())
                 raise
             else:
-                LOGGER.debug("%s: %s", cmd, output)
+                LOGGER.debug("%s: %s", cmd, output.decode())
 
         finally:
             if os.path.exists(path):
