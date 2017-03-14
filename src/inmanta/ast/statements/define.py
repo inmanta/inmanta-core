@@ -33,11 +33,15 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None, multi=False):
+    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True):
+        """
+            if default_value is None, this is an explicit removal of a default value
+        """
         self.type = attr_type
         self.name = name
         self.default = default_value
         self.multi = multi
+        self.remove_default = remove_default
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -69,6 +73,13 @@ class DefineEntity(TypeDefinitionStatement):
             A textual representation of this entity
         """
         return "Entity(%s)" % self.name
+
+    def get_full_parent_names(self):
+        try:
+            return [self.namespace.get_type(str(parent)).get_full_name() for parent in self.parents]
+        except TypeNotFoundException as e:
+            e.set_statement(self)
+            raise e
 
     def evaluate(self):
         """
