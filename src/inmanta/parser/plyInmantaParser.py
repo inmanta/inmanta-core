@@ -666,7 +666,8 @@ def p_mls_collect(p):
 def p_error(p):
     if p is not None:
         raise ParserException(file, p.lineno, p.lexpos, p.value)
-    raise ParserException(file, -1, -1, "")
+    # at end of file
+    raise ParserException(file, lexer.lineno, lexer.lexpos, "")
 
 
 # Build the parser
