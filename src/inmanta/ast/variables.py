@@ -18,7 +18,7 @@
 
 import logging
 
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit, Instance
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast import RuntimeException
@@ -93,6 +93,9 @@ class AttributeReferenceHelper(object):
         if isinstance(obj, list):
             raise RuntimeException(self, "can not get a attribute %s, %s is a list" % (self.attribute, obj))
 
+        if not isinstance(obj, Instance):
+            raise RuntimeException(self, "can not get a attribute %s, %s not an entity" % (self.attribute, obj))
+
         # get the attribute result variable
         attr = obj.get_attribute(self.attribute)
         # Cache it
@@ -109,6 +112,9 @@ class AttributeReferenceHelper(object):
     def execute(self, requires, resolver, queue):
         # Attribute is ready, return it,
         return self.attr.get_value()
+
+    def __str__(self, *args, **kwargs):
+        return "%s.%s" % (self.instance, self.attribute)
 
 
 class IsDefinedReferenceHelper(object):

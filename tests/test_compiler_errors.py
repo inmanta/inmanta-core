@@ -86,3 +86,13 @@ t1 = Test1()
         "The object __config__::Test1 (instantiated at {dir}/main.cf:10) is not complete: "
         "attribute a ({dir}/main.cf:5) is not set"
     )
+
+
+def test_bad_deref(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+h = std::Host(name="test", os=std::linux)
+std::print(h.name.test)
+""",
+        "can not get a attribute test, test not an entity (reported in h.name.test ({dir}/main.cf:3))"
+    )
