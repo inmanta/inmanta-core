@@ -171,12 +171,3 @@ class Literal(ExpressionStatement):
 
     def execute_direct(self, requires):
         return self.value
-
-
-class NoLiteral(Literal):
-
-    def __init__(self):
-        """
-           Literal value for undefined defaults, does not set a value
-        """
-        super(NoLiteral, self).__init__(None)
