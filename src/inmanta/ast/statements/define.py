@@ -100,7 +100,10 @@ class DefineEntity(TypeDefinitionStatement):
 
                 add_attributes[attribute.name] = attr_obj
 
-                entity_type.add_default_value(attribute.name, attribute.default)
+                if attribute.default is not None:
+                    entity_type.add_default_value(attribute.name, attribute.default)
+                elif attribute.remove_default:
+                    entity_type.add_default_value(attribute.name, None)
 
             if len(set(self.parents)) != len(self.parents):
                 raise TypingException(self, "same parent defined twice")
