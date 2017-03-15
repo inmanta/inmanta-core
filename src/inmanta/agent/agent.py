@@ -781,7 +781,7 @@ class Agent(AgentEndPoint):
 
     @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid", agent="id")
     @gen.coroutine
-    def resource_event(self, env, agent: str, resource: str, state: str):
+    def resource_event(self, env, agent: str, resource: str, state: const.ResourceState):
         if env != self._env_id:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
                         env, agent, resource, state)
