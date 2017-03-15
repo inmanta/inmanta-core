@@ -22,7 +22,7 @@ import sys
 
 from mongobox import mongobox
 from tornado import gen, process
-from inmanta import module, config, server, agent, protocol
+from inmanta import module, config, server, agent, protocol, const
 
 
 LOGGER = logging.getLogger(__name__)
@@ -322,7 +322,7 @@ class Deploy(object):
 
         for res in version_result.result["resources"]:
             total += 1
-            if res["status"] != "":
+            if res["status"] != const.ResourceState.available.name:
                 deployed += 1
                 ready[res["id"]] = res["status"]
 
