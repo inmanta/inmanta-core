@@ -33,6 +33,11 @@ import pymongo
 from motor import motor_tornado
 from inmanta.module import Project
 from inmanta.ast import CompilerException
+from click import testing
+import inmanta.main
+from concurrent.futures.thread import ThreadPoolExecutor
+from tornado import gen
+
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -277,3 +282,24 @@ def snippetcompiler():
     ast.setUpClass()
     yield ast
     ast.tearDownClass()
+
+
+class CLI(object):
+    def __init__(self, io_loop):
+        self.io_loop = io_loop
+        self._thread_pool = ThreadPoolExecutor(1)
+
+    @gen.coroutine
+    def run(self, *args):
+        runner = testing.CliRunner()
+        cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
+        cmd_args.extend(args)
+        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
+                                                catch_exceptions=False)
+        return result
+
+
+@pytest.fixture
+def cli(io_loop):
+    o = CLI(io_loop)
+    yield o

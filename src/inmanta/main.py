@@ -16,67 +16,724 @@
     Contact: code@inmanta.com
 """
 
+import os
 import logging
-import sys
+import uuid
+import datetime
+import json
+from collections import defaultdict
+from concurrent.futures import Future
 
-from cliff.app import App
-from cliff.commandmanager import CommandManager
+
+from inmanta import protocol
+from inmanta.config import Config, cmdline_rest_transport
+from blessings import Terminal
+from tornado.ioloop import IOLoop
+import click
+import texttable
+from inmanta.export import cfg_env
 
 
-class Inmanta(App):
-
+class Client(object):
     log = logging.getLogger(__name__)
 
-    def __init__(self):
-        super(Inmanta, self).__init__(
-            description='inmanta cli app',
-            version='0.7',
-            command_manager=CommandManager('inmanta'),
-        )
+    def __init__(self, host, port, io_loop):
+        self._client = None
+        if io_loop is not None:
+            self._io_loop = io_loop
+            self._own_loop = False
+        else:
+            self._io_loop = IOLoop.current()
+            self._own_loop = True
 
-    def initialize_app(self, argv):
-        self.log.debug('initialize_app')
+        if host is None:
+            self.host = cmdline_rest_transport.host.get()
+        else:
+            self.host = host
+            Config.set("cmdline_rest_transport", "host", host)
 
-    def prepare_to_run_command(self, cmd):
-        self.log.debug('prepare_to_run_command %s', cmd.__class__.__name__)
+        if port is None:
+            self.port = cmdline_rest_transport.port.get()
+        else:
+            self.port = port
+            Config.set("cmdline_rest_transport", "port", str(port))
 
-    def clean_up(self, cmd, result, err):
-        self.log.debug('clean_up %s', cmd.__class__.__name__)
-        if err:
-            self.log.debug('got an error: %s', err)
+        self._client = protocol.Client("cmdline")
 
+    def run_sync(self, func):
+        if self._own_loop:
+            return self._io_loop.run_sync(func)
 
-def main(argv=sys.argv[1:]):
-    myapp = Inmanta()
-    return myapp.run(argv)
+        else:
+            f = Future()
 
+            def future_to_future(future):
+                exc = future.exception()
+                if exc is not None:
+                    f.set_exception(exc)
+                else:
+                    f.set_result(future.result())
 
-def get_parser():
-    from inmanta.client import InmantaCommand
+            def run():
+                try:
+                    result = func()
+                    if result is not None:
+                        from tornado.gen import convert_yielded
+                        result = convert_yielded(result)
+                        result.add_done_callback(future_to_future)
+                except Exception as e:
+                    f.set_exception(e)
+            self._io_loop.add_callback(run)
 
-    myapp = Inmanta()
-    rp = myapp.parser
-    subparsers = rp.add_subparsers()
+            return f.result()
 
-    command_manager = myapp.command_manager
-    for name, ep in sorted(command_manager):
+    def do_request(self, method_name, key_name=None, arguments={}, allow_none=False):
+        """
+            Do a request and return the response
+        """
+        Client.log.debug("Calling method %s on server %s:%s with arguments %s" %
+                         (method_name, cmdline_rest_transport.host.get(), cmdline_rest_transport.port.get(), arguments))
+
+        if not hasattr(self._client, method_name):
+            raise Exception("API call %s is not available." % method_name)
+
+        method = getattr(self._client, method_name)
+
+        def call():
+            return method(**arguments)
+
+        result = self.run_sync(call)
+
+        if result is None:
+            raise Exception("Failed to call server.")
+
+        type(self).log.debug("Got response code %s and data: %s" % (result.code, result.result))
+
+        if result.code == 200:
+            if key_name is None:
+                return result.result
+
+            if key_name in result.result:
+                return result.result[key_name]
+
+            raise Exception("Expected %s in the response of %s." % (key_name, method_name))
+        elif result.code == 404:
+            if not allow_none:
+                raise Exception("Requested %s not found on server" % key_name)
+            return None
+
+        else:
+            msg = ": "
+            if result.result is not None and "message" in result.result:
+                msg += result.result["message"]
+
+            raise Exception(("An error occurred while requesting %s" % key_name) + msg)
+
+    def to_project_id(self, ref):
+        """
+            Convert ref to a uuid
+        """
         try:
-            factory = ep.load()
-        except Exception as err:
-            myapp.stdout.write('Could not load %r\n' % ep)
-            continue
-        try:
-            cmd = factory(myapp, None)
-            if cmd.deprecated:
-                continue
-        except Exception as err:
-            myapp.stdout.write('Could not instantiate %r: %s\n' % (ep, err))
-            continue
-        if isinstance(cmd, InmantaCommand):
-            cmd.get_parser(name, parser_override=subparsers)
+            project_id = uuid.UUID(ref)
+        except ValueError:
+            # try to resolve the id as project name
+            projects = self.do_request("list_projects", "projects")
 
-    return rp
+            id_list = []
+            for project in projects:
+                if ref == project["name"]:
+                    id_list.append(project["id"])
+
+            if len(id_list) == 0:
+                raise Exception("Unable to find a project with the given id or name")
+
+            elif len(id_list) > 1:
+                raise Exception("Found multiple projects with %s name, please use the ID." % ref)
+
+            else:
+                project_id = id_list[0]
+
+        return project_id
+
+    def to_environment_id(self, ref, project_id=None):
+        """
+            Convert ref to an env uuid, optionally scoped to a project
+        """
+        try:
+            env_id = uuid.UUID(ref)
+        except ValueError:
+            # try to resolve the id as project name
+            envs = self.do_request("list_environments", "environments")
+
+            id_list = []
+            for env in envs:
+                if ref == env["name"]:
+                    if project_id is None or project_id == env["project_id"]:
+                        id_list.append(env["id"])
+
+            if len(id_list) == 0:
+                raise Exception("Unable to find an environment with the given id or name")
+
+            elif len(id_list) > 1:
+                raise Exception("Found multiple environment with %s name, please use the ID." % ref)
+
+            else:
+                env_id = id_list[0]
+
+        return env_id
+
+    def to_form_id(self, ref, environment):
+        """
+            Convert ref to a form uuid
+        """
+        try:
+            env_id = uuid.UUID(ref)
+        except ValueError:
+            # try to resolve the id as project name
+            forms = self.do_request("list_forms", "forms", arguments=dict(tid=environment))
+
+            id_list = []
+            for form in forms:
+                if ref == form["form_type"]:
+                    id_list.append(form["form_id"])
+
+            if len(id_list) == 0:
+                raise Exception("Unable to find a form with the given id or name")
+
+            elif len(id_list) > 1:
+                raise Exception("Found multiple forms with %s name, please use the ID." % ref)
+
+            else:
+                env_id = id_list[0]
+
+        return env_id
+
+
+def print_table(header, rows):
+    table = texttable.Texttable()
+    table.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
+    table.header(header)
+    for row in rows:
+        table.add_row(row)
+    click.echo(table.draw())
+
+
+@click.group()
+@click.option("--host", help="The server hostname to connect to")
+@click.option("--port", help="The server port to connect to")
+@click.pass_context
+def cmd(ctx, host, port):
+    ctx.obj = Client(host, port, io_loop=ctx.obj)
+
+
+@cmd.group("project")
+@click.pass_context
+def project(ctx):
+    pass
+
+
+@project.command(name="list")
+@click.pass_obj
+def project_list(client):
+    projects = client.do_request("list_projects", "projects")
+
+    if len(projects) > 0:
+        print_table(['ID', 'Name'], [[n['id'], n['name']] for n in projects])
+
+    else:
+        click.echo("No projects defined.", err=True)
+
+
+@project.command(name="show")
+@click.argument("project")  # , help="The the id or name of the project to show")
+@click.pass_obj
+def project_show(client, project):
+    project_id = client.to_project_id(project)
+    project = client.do_request("get_project", "project", dict(id=project_id))
+
+    print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
+
+
+@project.command(name="create")
+@click.option("--name", "-n", help="The name of the new project", required=True)
+@click.pass_obj
+def project_create(client, name):
+    project = client.do_request("create_project", "project", {"name": name})
+    print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
+
+
+@project.command(name="modify")
+@click.option("--name", "-n", help="The new name of the project", required=True)
+@click.argument("project")  # , help="The id of the project to modify")
+@click.pass_obj
+def project_modify(client, name, project):
+    project_id = client.to_project_id(project)
+    project = client.do_request("modify_project", "project", dict(id=project_id, name=name))
+    print_table(["Name", "Value"], [["ID", project["id"]], ["Name", project["name"]]])
+
+
+@project.command(name="delete")
+@click.argument("project")  # , help="The id of the project to modify")
+@click.pass_obj
+def project_delete(client, project):
+    project_id = client.to_project_id(project)
+    client.do_request("delete_project", arguments={"id": project_id})
+    click.echo("Project successfully deleted")
+
+
+@cmd.group("environment")
+@click.pass_context
+def environment(ctx):
+    pass
+
+
+@environment.command(name="create")
+@click.option("--name", "-n", help="The name of the new environment", required=True)
+@click.option("--project", "-p", help="The id of the project this environment belongs to", required=True)
+@click.option("--repo-url", "-r", required=False, default="",
+              help="The url of the repository that contains the configuration model")
+@click.option("--branch", "-b", required=False, default="master",
+              help="The branch in the repository that contains the configuration model")
+@click.option("--save", "-s", default=False, is_flag=True,
+              help="Save the ID of the environment and the server to the .inmanta config file")
+@click.pass_obj
+def environment_create(client, name, project, repo_url, branch, save):
+    project_id = client.to_project_id(project)
+    env = client.do_request("create_environment", "environment", dict(project_id=project_id, name=name,
+                                                                      repository=repo_url, branch=branch))
+    project = client.do_request("get_project", "project", {"id": project_id})
+
+    if save:
+        cfg = """
+[config]
+heartbeat-interval = 60
+fact-expire = 1800
+environment=%s
+
+
+[compiler_rest_transport]
+host = %s
+port = %s
+
+[cmdline_rest_transport]
+host=%s
+port=%s""" % (env["id"], client.host, client.port, client.host, client.port)
+        if os.path.exists(".inmanta"):
+            print(".inmanta exits, not writing config")
+        else:
+            with open(".inmanta", 'w') as f:
+                f.write(cfg)
+
+    print_table(('Environment ID', 'Environment name', 'Project ID', 'Project name'),
+                ((env["id"], env["name"], project["id"], project["name"]),))
+
+
+@environment.command(name="list")
+@click.pass_obj
+def environment_list(client):
+    environments = client.do_request("list_environments", "environments")
+
+    data = []
+    for env in environments:
+        prj = client.do_request("get_project", "project", dict(id=env["project"]))
+        prj_name = prj['name']
+        data.append((prj_name, env['project'], env['name'], env['id']))
+
+    if len(data) > 0:
+        print_table(('Project name', 'Project ID', 'Environment', 'Environment ID'), data)
+    else:
+        click.echo("No environment defined.")
+
+
+@environment.command(name="show")
+@click.argument("environment")
+@click.pass_obj
+def environment_show(client, environment):
+    env = client.do_request("get_environment", "environment", dict(id=client.to_environment_id(environment)))
+    print_table(('ID', 'Name', 'Repository URL', 'Branch Name'),
+                ((env["id"], env["name"], env["repo_url"], env["repo_branch"]),))
+
+
+@environment.command(name="modify")
+@click.option("--name", "-n", help="The name of the new environment", required=True)
+@click.option("--repo-url", "-r", required=False, default="",
+              help="The url of the repository that contains the configuration model")
+@click.option("--branch", "-b", required=False, default="master",
+              help="The branch in the repository that contains the configuration model")
+@click.argument("environment")
+@click.pass_obj
+def environment_modify(client, environment, name, repo_url, branch):
+    env = client.do_request("modify_environment", "environment", dict(id=client.to_environment_id(environment),
+                                                                      name=name, repository=repo_url, branch=branch))
+
+    print_table(('ID', 'Name', 'Repository URL', 'Branch Name'),
+                ((env["id"], env["name"], env["repo_url"], env["repo_branch"]),))
+
+
+@environment.command(name="delete")
+@click.argument("environment")
+@click.pass_obj
+def environment_delete(client, environment):
+    env_id = client.to_environment_id(environment)
+    client.do_request("delete_environment", arguments=dict(id=env_id))
+    click.echo("Environment successfully deleted")
+
+
+@cmd.group("agent")
+@click.pass_context
+def agent(ctx):
+    pass
+
+
+@agent.command(name="list")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def agent_list(client, environment):
+    env_id = client.to_environment_id(environment)
+    agents = client.do_request("list_agents", key_name="agents", arguments=dict(tid=env_id))
+    data = []
+    for agent in agents:
+        data.append((agent["name"], agent["environment"], agent["last_failover"]))
+
+    print_table(('Agent', 'Environment', 'Last fail over'), data)
+
+
+@cmd.group("version")
+@click.pass_context
+def version(ctx):
+    pass
+
+
+@version.command(name="list")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def version_list(client, environment):
+    env_id = client.to_environment_id(environment)
+    versions = client.do_request("list_versions", "versions", arguments=dict(tid=env_id))
+
+    print_table(('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
+                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']) for x in versions))
+
+
+@version.command(name="release")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--push", "-p", help="Push the version to the deployment agents", is_flag=True)
+@click.argument("version")
+@click.pass_obj
+def version_release(client, environment, push, version):
+    env_id = client.to_environment_id(environment)
+    x = client.do_request("release_version", "model", dict(tid=env_id, id=version, push=push))
+
+    print_table(('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
+                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']),))
+
+
+ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
+
+
+@cmd.group("param")
+@click.pass_context
+def param(ctx):
+    pass
+
+
+@param.command(name="list")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def param_list(client, environment):
+    result = client.do_request("list_params", arguments=dict(tid=client.to_environment_id(environment)))
+    expire = result["expire"]
+    now = datetime.datetime.strptime(result["now"], ISOFMT)
+    when = now - datetime.timedelta(0, expire)
+
+    data = []
+    for p in result["parameters"]:
+        data.append((p["resource_id"], p['name'], p['source'], p['updated'],
+                     datetime.datetime.strptime(p["updated"], ISOFMT) < when))
+
+    print_table(('Resource', 'Name', 'Source', 'Updated', 'Expired'), data)
+
+
+@param.command(name="set")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--name", help="The name of the parameter", required=True)
+@click.option("--value", help="The value of the parameter", required=True)
+@click.pass_obj
+def param_set(client, environment, name, value):
+    tid = client.to_environment_id(environment)
+    # first fetch the parameter
+    param = client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=""), allow_none=True)
+
+    # check the source
+    if param is not None and param["source"] != "user":
+        raise Exception("Only parameters set by users can be modified!")
+
+    param = client.do_request("set_param", "parameter", dict(tid=tid, id=name, value=value, source="user", resource_id=""))
+
+    print_table(('Name', 'Value', 'Source', 'Updated'),
+                (param['name'], param['value'], param['source'], param['updated']))
+
+
+@param.command(name="get")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--name", help="The name of the parameter", required=True)
+@click.option("--resource", help="The resource id of the parameter")
+@click.pass_obj
+def param_get(client, environment, name, resource):
+    tid = client.to_environment_id(environment)
+
+    if resource is None:
+        resource = ""
+
+    # first fetch the parameter
+    param = client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=resource))
+
+    print_table(('Name', 'Value', 'Source', 'Updated'),
+                (param['name'], param['value'], param['source'], param['updated']))
+
+
+@version.command(name="report")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--version", "-i", help="The version to create a report from", required=True)
+@click.option("-l", is_flag=True, help="Show a detailed version of the report")
+@click.pass_obj
+def version_report(client, environment, version, l):
+    tid = client.to_environment_id(environment)
+    result = client.do_request("get_version", arguments=dict(tid=tid, id=version, include_logs=True))
+
+    term = Terminal()
+    agents = defaultdict(lambda: defaultdict(lambda: []))
+    for res in result["resources"]:
+        if len(res["actions"]) > 0 or l:
+            agents[res["agent"]][res["resource_type"]].append(res)
+
+    for agent in sorted(agents.keys()):
+        print(term.bold("Agent: %s" % agent))
+        print("=" * 72)
+
+        for type in sorted(agents[agent].keys()):
+            print("{t.bold}Resource type:{t.normal} {type} ({attr})".
+                  format(type=type, attr=agents[agent][type][0]["id_attribute_name"], t=term))
+            print("-" * 72)
+
+            for res in agents[agent][type]:
+                print((term.bold + "%s" + term.normal + " (#actions=%d)") % (res["id_attribute_value"], len(res["actions"])))
+                # for dryrun show only the latest, for deploy all
+                if not result["model"]["released"]:
+                    if len(res["actions"]) > 0:
+                        action = res["actions"][0]
+                        print("* last check: %s" % action["timestamp"])
+                        print("* result: %s" % ("error" if action["level"] != "INFO" else "success"))
+                        if len(action["data"]) == 0:
+                            print("* no changes")
+                        else:
+                            print("* changes:")
+                            for field in sorted(action["data"].keys()):
+                                values = action["data"][field]
+                                if field == "hash":
+                                    print("  - content:")
+                                    diff_value = client.do_request("diff", arguments=dict(a=values[0], b=values[1]))
+                                    print("    " + "    ".join(diff_value["diff"]))
+                                else:
+                                    print("  - %s:" % field)
+                                    print("    " + term.bold + "from:" + term.normal + " %s" % values[0])
+                                    print("    " + term.bold + "to:" + term.normal + " %s" % values[1])
+
+                                print("")
+
+                        print("")
+                else:
+                    pass
+
+            print("")
+
+
+@cmd.group("form")
+@click.pass_context
+def form(ctx):
+    pass
+
+
+@form.command(name="list")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def form_list(client, environment):
+    result = client.do_request("list_forms", "forms", arguments=dict(tid=client.to_environment_id(environment)))
+
+    data = []
+    for p in result:
+        data.append((p["form_type"], p['form_id'])),
+
+    print_table(('Form Type', 'Form ID'), data)
+
+
+@form.command(name="show")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--form-type", "-t", help="Show details of this form", required=True)
+@click.pass_obj
+def form_show(client, environment, form_type):
+    result = client.do_request("get_form", "form", arguments=dict(tid=client.to_environment_id(environment), id=form_type))
+    headers = []
+    values = []
+    for k, v in result["fields"].items():
+        headers.append(k)
+        if k in result["defaults"]:
+            values.append("type: %s, default: %s" % (v, result["defaults"]))
+        else:
+            values.append("type: %s" % v)
+
+    print_table(headers, values)
+
+
+@form.command(name="export")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--form-type", "-t", help="Show details of this form", required=True)
+@click.pass_obj
+def form_export(client, environment, form_type):
+    tid = client.to_environment_id(environment)
+    form_def = client.do_request("get_form", "form", arguments=dict(tid=tid, id=form_type))
+    form_records = client.do_request("list_records", "records", arguments=dict(tid=tid, form_type=form_type,
+                                                                               include_record=True))
+
+    click.echo(json.dumps({"form_type": form_def, "records": form_records}))
+
+
+@form.command(name="import")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--form-type", "-t", help="Show details of this form", required=True)
+@click.option("--file", help="The json file with the record data", required=True)
+@click.pass_obj
+def form_import(client, environment, form_type, file):
+    tid = client.to_environment_id(environment)
+    if not os.path.exists(file):
+        raise Exception("%s file does not exist." % file)
+
+    data = {}
+    with open(file, "r") as fd:
+        try:
+            data = json.load(fd)
+        except Exception as e:
+            raise Exception("Unable to load records, invalid json") from e
+
+    if "records" not in data:
+        raise Exception("No records found in input file")
+
+    for record in data["records"]:
+        if record["form_type"] == form_type:
+            client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))
+
+
+@cmd.group("record")
+@click.pass_context
+def record(ctx):
+    pass
+
+
+@record.command(name="list")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--form-type", "-t", help="Show details of this form", required=True)
+@click.option("--show_all", "-a", help="Show all fields", is_flag=True, default=False)
+@click.pass_obj
+def record_list(client, environment, form_type, show_all):
+    tid = client.to_environment_id(environment)
+
+    if not show_all:
+        result = client.do_request("list_records", "records", arguments=dict(tid=tid, form_type=form_type))
+        data = []
+        for p in result:
+            data.append((p["record_id"], p['changed'])),
+
+        return (('Record ID', 'Changed'), data)
+    else:
+        result = client.do_request("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
+        fields = []
+        data = []
+        for p in result:
+            fields = p["fields"].keys()
+            values = [p["record_id"], p['changed']]
+            values.extend(p["fields"].values())
+            data.append(values),
+
+        allfields = ['Record ID', 'Changed']
+        allfields.extend(fields)
+        print_table(allfields, data)
+
+
+@record.command(name="create")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--form-type", "-t", help="Show details of this form", required=True)
+@click.option("--field", "-p", help="Field values", multiple=True, default=[])
+@click.pass_obj
+def record_create(client, environment, form_type, field):
+    tid = client.to_environment_id(environment)
+
+    fields = {}
+    for f in field:
+        parts = f.split("=")
+        if len(parts) != 2:
+            raise Exception("Argument %s should be in the key=value form." % f)
+
+        fields[parts[0].strip()] = parts[1].strip()
+
+    try:
+        uuid.UUID(form_type)
+        raise Exception("Form type should be the type string, not the uuid.")
+    except ValueError:
+        pass
+
+    result = client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=fields))
+
+    headers = []
+    values = []
+    for k in sorted(result["fields"].keys()):
+        headers.append(k)
+        values.append(result["fields"][k])
+
+    print_table(headers, values)
+
+
+@record.command(name="update")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--record", "-r", help="The id of the record to edit", required=True)
+@click.option("--field", "-p", help="Field values", multiple=True, default=[])
+@click.pass_obj
+def record_update(client, environment, record, field):
+    tid = client.to_environment_id(environment)
+
+    fields = {}
+    for f in field:
+        parts = f.split("=")
+        if len(parts) != 2:
+            raise Exception("Argument %s should be in the key=value form." % f)
+
+        fields[parts[0].strip()] = parts[1].strip()
+
+    result = client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
+
+    headers = []
+    values = []
+    for k in sorted(result["fields"].keys()):
+        headers.append(k)
+        values.append(result["fields"][k])
+
+    print_table(headers, values)
+
+
+@record.command(name="delete")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.argument("record")
+@click.pass_obj
+def record_delete(client, environment, record):
+    tid = client.to_environment_id(environment)
+    try:
+        record_id = uuid.UUID(record)
+    except ValueError:
+        raise Exception("The record id should be a valid UUID")
+
+    client.do_request("delete_record", arguments=dict(tid=tid, id=record_id))
+    return ((), ())
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    Config.load_config()
+    cmd()
