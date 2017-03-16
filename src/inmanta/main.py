@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ from blessings import Terminal
 from tornado.ioloop import IOLoop
 import click
 import texttable
-from inmanta.export import cfg_env
 
 
 class Client(object):
@@ -471,7 +470,7 @@ def param_set(client, environment, name, value):
     param = client.do_request("set_param", "parameter", dict(tid=tid, id=name, value=value, source="user", resource_id=""))
 
     print_table(('Name', 'Value', 'Source', 'Updated'),
-                (param['name'], param['value'], param['source'], param['updated']))
+                ((param['name'], param['value'], param['source'], param['updated']),))
 
 
 @param.command(name="get")
@@ -489,7 +488,7 @@ def param_get(client, environment, name, resource):
     param = client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=resource))
 
     print_table(('Name', 'Value', 'Source', 'Updated'),
-                (param['name'], param['value'], param['source'], param['updated']))
+                ((param['name'], param['value'], param['source'], param['updated']),))
 
 
 @version.command(name="report")
@@ -511,12 +510,12 @@ def version_report(client, environment, version, l):
         print(term.bold("Agent: %s" % agent))
         print("=" * 72)
 
-        for type in sorted(agents[agent].keys()):
+        for t in sorted(agents[agent].keys()):
             print("{t.bold}Resource type:{t.normal} {type} ({attr})".
-                  format(type=type, attr=agents[agent][type][0]["id_attribute_name"], t=term))
+                  format(type=t, attr=agents[agent][t][0]["id_attribute_name"], t=term))
             print("-" * 72)
 
-            for res in agents[agent][type]:
+            for res in agents[agent][t]:
                 print((term.bold + "%s" + term.normal + " (#actions=%d)") % (res["id_attribute_value"], len(res["actions"])))
                 # for dryrun show only the latest, for deploy all
                 if not result["model"]["released"]:
@@ -573,16 +572,14 @@ def form_list(client, environment):
 @click.pass_obj
 def form_show(client, environment, form_type):
     result = client.do_request("get_form", "form", arguments=dict(tid=client.to_environment_id(environment), id=form_type))
-    headers = []
     values = []
     for k, v in result["fields"].items():
-        headers.append(k)
-        if k in result["defaults"]:
-            values.append("type: %s, default: %s" % (v, result["defaults"]))
+        if k in result["defaults"] and result["defaults"][k] != "":
+            values.append([k, "type: %s, default: %s" % (v, result["defaults"][k])])
         else:
-            values.append("type: %s" % v)
+            values.append([k, "type: %s" % v])
 
-    print_table(headers, values)
+    print_table(["Field", "Spec"], values)
 
 
 @form.command(name="export")
