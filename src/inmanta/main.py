@@ -629,7 +629,7 @@ def record(ctx):
 @record.command(name="list")
 @click.option("--environment", "-e", help="The environment to use", required=True)
 @click.option("--form-type", "-t", help="Show details of this form", required=True)
-@click.option("--show_all", "-a", help="Show all fields", is_flag=True, default=False)
+@click.option("--show-all", "-a", help="Show all fields", is_flag=True, default=False)
 @click.pass_obj
 def record_list(client, environment, form_type, show_all):
     tid = client.to_environment_id(environment)
@@ -638,16 +638,16 @@ def record_list(client, environment, form_type, show_all):
         result = client.do_request("list_records", "records", arguments=dict(tid=tid, form_type=form_type))
         data = []
         for p in result:
-            data.append((p["record_id"], p['changed'])),
+            data.append((p["id"], p['changed'])),
 
-        return (('Record ID', 'Changed'), data)
+        print_table(('Record ID', 'Changed'), data)
     else:
         result = client.do_request("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
         fields = []
         data = []
         for p in result:
             fields = p["fields"].keys()
-            values = [p["record_id"], p['changed']]
+            values = [p["id"], p['changed']]
             values.extend(p["fields"].values())
             data.append(values),
 
@@ -658,7 +658,7 @@ def record_list(client, environment, form_type, show_all):
 
 @record.command(name="create")
 @click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--form-type", "-t", help="Show details of this form", required=True)
+@click.option("--form-type", "-t", help="Create a record of this type.", required=True)
 @click.option("--field", "-p", help="Field values", multiple=True, default=[])
 @click.pass_obj
 def record_create(client, environment, form_type, field):
@@ -680,13 +680,11 @@ def record_create(client, environment, form_type, field):
 
     result = client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=fields))
 
-    headers = []
     values = []
     for k in sorted(result["fields"].keys()):
-        headers.append(k)
-        values.append(result["fields"][k])
+        values.append([k, result["fields"][k]])
 
-    print_table(headers, values)
+    print_table(["Field", "Value"], values)
 
 
 @record.command(name="update")
@@ -707,13 +705,11 @@ def record_update(client, environment, record, field):
 
     result = client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
 
-    headers = []
     values = []
     for k in sorted(result["fields"].keys()):
-        headers.append(k)
-        values.append(result["fields"][k])
+        values.append([k, result["fields"][k]])
 
-    print_table(headers, values)
+    print_table(["Field", "Value"], values)
 
 
 @record.command(name="delete")

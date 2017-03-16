@@ -198,4 +198,30 @@ def test_form_and_records(server, client, environment, cli):
     assert "field1" in result.output
     assert "field2" in result.output
 
+    result = yield cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
+    assert result.exit_code == 0
+    assert "1234" in result.output
+    assert "test456" in result.output
 
+    records = yield client.list_records(tid=environment, form_type=form_type)
+    assert records.code == 200
+    record = records.result["records"][0]
+    record_id = record["id"]
+
+    result = yield cli.run("record", "list", "-e", environment, "-t", form_type)
+    assert result.exit_code == 0
+    assert record_id in result.output
+
+    result = yield cli.run("record", "list", "-e", environment, "-t", form_type, "--show-all")
+    assert result.exit_code == 0
+
+    result = yield cli.run("record", "update", "-e", environment, "-r", record_id, "-p", "field1=98765")
+    assert result.exit_code == 0
+    assert "98765" in result.output
+
+    result = yield cli.run("record", "delete", "-e", environment, record_id)
+    assert result.exit_code == 0
+
+    records = yield client.list_records(tid=environment, form_type=form_type)
+    assert records.code == 200
+    assert len(records.result["records"]) == 0
