@@ -397,7 +397,7 @@ class Server(protocol.ServerEndpoint):
         record.changed = datetime.datetime.now()
 
         for k, _v in form_def.fields.items():
-            if k in form_def.fields:
+            if k in form_def.fields and k in form:
                 value = form[k]
                 field_type = form_def.fields[k]
                 if field_type in type.TYPES:
