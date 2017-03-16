@@ -3,19 +3,19 @@
 Quickstart
 ***************
 
-This tutorial gets you started with the Inmanta orchestration tool. 
+This tutorial gets you started with the Inmanta orchestration tool.
 
-Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments. 
-In this guide, we go for a less complex setup: install the Drupal CMS on two VMs. 
+Inmanta is intended to manage complex infrastructures, often in the cloud or other virtualized environments.
+In this guide, we go for a less complex setup: install the Drupal CMS on two VMs.
 First, we use vagrant to setup a basic environment with two empty VMs and an Inmanta server.
 Then, we use Inmanta to install Drupal on these VMs.
- 
+
 Setting up the tutorial
 _________________________
 
-To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_. 
+To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_.
 
- 
+
 Next, grab the Vagrant box from our Git repo and let Vagrant do the setup of the Inmanta server.
 
 .. code-block:: sh
@@ -24,19 +24,19 @@ Next, grab the Vagrant box from our Git repo and let Vagrant do the setup of the
     cd quickstart-vagrant
     ./make_keys.sh
     vagrant up
-    
-Vagrant will set up the Inmanta server and two VMs to experiment on. 
+
+Vagrant will set up the Inmanta server and two VMs to experiment on.
 When Vagrant is ready, you should be able to open the dashboard at http://127.0.0.1:8888.
 
 .. warning::
-    
-    When using Vagrant in combination with VirtualBox, there is a known issue with SSH keys. 
+
+    When using Vagrant in combination with VirtualBox, there is a known issue with SSH keys.
     If this problem occurs to you, add the following lines to the Vagrantfile:
-    
+
     .. code-block:: sh
-    
+
         config.ssh.insert_key = false
-        
+
     Notice that you are using a default key, this is insecure.
 
 To get a shell on the Inmanta server:
@@ -44,11 +44,11 @@ To get a shell on the Inmanta server:
 .. code-block:: sh
 
     vagrant ssh server
-    
+
 
 Automatically deploying Drupal
 _______________________________
-    
+
 At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
 For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
 
@@ -61,7 +61,7 @@ Single machine deployment using the CLI
 
 An Inmanta project bundles modules that contain configuration information. A project is nothing more
 than a directory with a project.yml file, which contains parameters such as the location to search for
-modules and where to find the server. 
+modules and where to find the server.
 
 Here we will get a project from github.
 
@@ -70,8 +70,8 @@ Here we will get a project from github.
     git clone -b seed https://github.com/inmanta/quickstart.git
     cd quickstart
 
-    
-The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``. 
+
+The configuration file ``project.yml`` defines that reusable modules are stored in ``libs``.
 
 In the next section we will use existing modules to deploy our LAMP stack.
 
@@ -80,7 +80,7 @@ Reuse existing modules
 
 At GitHub, we host modules to setup and manage many systems. Our modules are available in the https://github.com/inmanta/ repositories.
 
-When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically. 
+When you use an import statement in your model, Inmanta downloads these modules and their dependencies automatically.
 
 .. _qsconfigmodel:
 
@@ -117,10 +117,10 @@ First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
                         admin_password="test", admin_email="admin@example.com", site_name="localhost")
 
 
-* Lines 1-6 import all required packages.  
-* Line 9 defines on which machine we want to deploy Drupal. 
+* Lines 1-6 import all required packages.
+* Line 9 defines on which machine we want to deploy Drupal.
 
- * The *name* attribute is the host name of the machine, which is later used to determine what configuration needs to be deployed on which machine. 
+ * The *name* attribute is the host name of the machine, which is later used to determine what configuration needs to be deployed on which machine.
  * The *os* attribute defines which operating system this server runs. This is used to select the right tools (yum or dnf or apt).
  * The *ip* attribute is the IP address of this host. At this moment we define this attribute manually, later in the tutorial we let Inmanta discover this automatically.
 
@@ -134,33 +134,33 @@ First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 Deploy the configuration model
 -------------------------------
 
-To deploy the project, we must first register it with the management server, by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...) 
+To deploy the project, we must first register it with the management server, by creating a project and an environment. A project is a collection of related environments. (e.g. development, testing, production, qa,...)
 An environment is associated with a branch in a git repository. This allows the server to recompile the model when the environment changes.
 
 .. code-block:: sh
 
-    inmanta-cli project-create -n test
-    inmanta-cli environment-create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
-    
+    inmanta-cli project create -n test
+    inmanta-cli environment create -n quickstart-env -p test -r https://github.com/inmanta/quickstart.git -b master --save
+
 .. note::
 
-	The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
-	
+    The ``--save`` option tells ``inmanta-cli`` to store the environment config in the ``.inmanta`` file. The compiler uses this file to find the server and to export to the right environment.
+
 Then compile the project and send it to the server:
 
-.. code-block:: sh 
+.. code-block:: sh
 
     inmanta -vvv  export -d
-    
-The first time you run this command may take a while, as all dependencies are downloaded.  
 
-When the model is sent to the server, it will start deploying the configuration. 
+The first time you run this command may take a while, as all dependencies are downloaded.
+
+When the model is sent to the server, it will start deploying the configuration.
 To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 
-.. note:: 
+.. note::
 
     The ``-vvv``option sets the output of the compiler to very verbose.
-    The ``-d`` option instructs the server to immediately start the deploy. 
+    The ``-d`` option instructs the server to immediately start the deploy.
 
 Accessing your new Drupal server
 ----------------------------------
@@ -208,15 +208,15 @@ Deploy the configuration model
 
 To deploy the configuration model, compile the project and send it to the server:
 
-.. code-block:: sh 
+.. code-block:: sh
 
     inmanta -vvv export -d
 
 
-If you browse to the Drupal site again, the database should be empty once more. 
+If you browse to the Drupal site again, the database should be empty once more.
 
 .. note::
-    
+
     When moving the database, a new database is created, thus the content of the old database is not migrated automatically.
 
 
@@ -233,17 +233,17 @@ Using the dashboard
     * Give the environment a name, e.g. ``env-quickstart``.
     * Specify the repo: ``https://github.com/inmanta/quickstart``.
     * Specify the branch: ``master``.
-    
+
 #. Go into your new environment.
-#. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded). 
+#. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded).
 
     * Now the Inmanta server downloads the configuration model from GitHub. It also downloads all required modules (i.e. dependencies). These modules contain the instructions to install specific parts of the setup such as for example `mysql` or `drupal` itself. To see the source go `here <https://github.com/inmanta/quickstart>`_, for a more in-depth explanation :ref:`see above <qsconfigmodel>`.
-    * When this is done, it compiles all modules and integrates them into a new deployment plan. 
+    * When this is done, it compiles all modules and integrates them into a new deployment plan.
 
-#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it. This shows a list of all configuration items in this configuration. 
+#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it. This shows a list of all configuration items in this configuration.
 #. Press *Deploy* to start rolling out this version.
 
-    * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server. 
+    * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server.
     * It will automatically install the required software and configure it properly.
 
 #. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/install.php <http://localhost:8080/install.php>`_.
@@ -328,7 +328,7 @@ configuration module.
     import mysql
     import web
     import drupal
-    
+
     entity DrupalStack:
         string hostname
         string admin_user
@@ -366,7 +366,7 @@ configuration module.
     * Each ip::Host has zero or one DrupalStack instances that use the host as a
       webserver. The DrupalStack instance is available in the drupal_stack_webhost attribute.
 
-* On lines 20 to 31 an implementation is defined that provides a refinement of the DrupalStack entity. It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining DrupalStack in function of other entities, which on their turn do the same. Inside the implementation the attributes and relations of the entity are available as variables. 
+* On lines 20 to 31 an implementation is defined that provides a refinement of the DrupalStack entity. It encapsulates the configuration of a LAMP stack behind the interface of the entity by defining DrupalStack in function of other entities, which on their turn do the same. Inside the implementation the attributes and relations of the entity are available as variables.
 * On line 33, the *implement* statement links the implementation to the entity.
 
 The composition
@@ -378,11 +378,11 @@ required.
 
 .. code-block:: ruby
     :linenos:
-    
+
     import ip
     import redhat
     import lamp
-    
+
     # define the machine we want to deploy Drupal on
     vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
     vm2=ip::Host(name="vm2", os=redhat::fedora23, ip="192.168.33.102")
