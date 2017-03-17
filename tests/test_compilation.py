@@ -741,13 +741,12 @@ Test2.xx [1] -- Test1.tests [0:]
 
     def test_issue_164_fqn_in_when(self):
         self.setup_for_snippet("""
-import ubuntu
 implementation linux for std::HostConfig:
 end
 
-implement std::HostConfig using linux when host.os == ubuntu::ubuntu1404
+implement std::HostConfig using linux when host.os == std::linux
 
-std::Host(name="vm1", os=ubuntu::ubuntu1404)
+std::Host(name="vm1", os=std::linux)
 """)
         compiler.do_compile()
 

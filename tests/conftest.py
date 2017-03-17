@@ -33,6 +33,7 @@ import pymongo
 from motor import motor_tornado
 from inmanta.module import Project
 from inmanta import resources, export
+from inmanta.agent import handler
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
@@ -63,6 +64,7 @@ def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
     command.Commander.reset()
+    handler.Commander.reset()
 
 
 @pytest.fixture(scope="function", autouse=True)

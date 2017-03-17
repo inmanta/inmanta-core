@@ -631,6 +631,12 @@ class Commander(object):
     __handler_cache = {}
 
     @classmethod
+    def reset(cls):
+        __command_functions = defaultdict(dict)
+        __handlers = []
+        __handler_cache = {}
+
+    @classmethod
     def close(cls):
         pass
 
