@@ -44,7 +44,8 @@ DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
 @pytest.fixture(scope="session", autouse=True)
 def mongo_db():
-    mongobox = MongoBox()
+    db_path = tempfile.mkdtemp(dir="/dev/shm")
+    mongobox = MongoBox(db_path=db_path)
     port_envvar = DEFAULT_PORT_ENVVAR
 
     mongobox.start()
@@ -54,6 +55,7 @@ def mongo_db():
 
     mongobox.stop()
     del os.environ[port_envvar]
+    shutil.rmtree(db_path)
 
 
 @pytest.fixture(scope="session")
@@ -281,6 +283,7 @@ def snippetcompiler():
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
+    shutil.rmtree(ast.project_dir)
     ast.tearDownClass()
 
 
