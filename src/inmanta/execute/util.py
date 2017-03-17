@@ -30,6 +30,9 @@ class Unknown(object):
     def __init__(self, source):
         self.source = source
 
+    def __iter__(self):
+        return iter([])
+
 
 def ensure_module(name):
     """

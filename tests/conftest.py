@@ -34,13 +34,19 @@ from motor import motor_tornado
 from inmanta.module import Project
 from inmanta import resources, export
 from inmanta.ast import CompilerException
+from click import testing
+import inmanta.main
+from concurrent.futures.thread import ThreadPoolExecutor
+from tornado import gen
+
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
 
 @pytest.fixture(scope="session", autouse=True)
 def mongo_db():
-    mongobox = MongoBox()
+    db_path = tempfile.mkdtemp(dir="/dev/shm")
+    mongobox = MongoBox(db_path=db_path)
     port_envvar = DEFAULT_PORT_ENVVAR
 
     mongobox.start()
@@ -50,6 +56,7 @@ def mongo_db():
 
     mongobox.stop()
     del os.environ[port_envvar]
+    shutil.rmtree(db_path)
 
 
 def reset_all():
@@ -295,4 +302,26 @@ def snippetcompiler():
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
+    shutil.rmtree(ast.project_dir)
     ast.tearDownClass()
+
+
+class CLI(object):
+    def __init__(self, io_loop):
+        self.io_loop = io_loop
+        self._thread_pool = ThreadPoolExecutor(1)
+
+    @gen.coroutine
+    def run(self, *args):
+        runner = testing.CliRunner()
+        cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
+        cmd_args.extend(args)
+        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
+                                                catch_exceptions=False)
+        return result
+
+
+@pytest.fixture
+def cli(io_loop):
+    o = CLI(io_loop)
+    yield o

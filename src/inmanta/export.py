@@ -25,7 +25,7 @@ import time
 import glob
 import base64
 
-from inmanta import protocol
+from inmanta import protocol, config
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
@@ -225,6 +225,7 @@ class Exporter(object):
             Determine the unknown handling policy for the given agent
         """
         default_policy = cfg_unknown_handler.get()
+        agent_name = config._normalize_name(agent_name)
 
         if "unknown_handler" not in Config._get_instance():
             return default_policy
@@ -392,7 +393,7 @@ class Exporter(object):
         sources = resource.sources()
         merge_dict(sources, Commander.sources())
 
-        LOGGER.info("Uploding source files")
+        LOGGER.info("Uploading source files")
 
         conn = protocol.Client("compiler")
 

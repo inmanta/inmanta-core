@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import logging
 
 from tornado import gen
 
-from inmanta import agent, data
+from inmanta import agent, data, const
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
@@ -66,37 +66,34 @@ def resource_container():
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
-
-        def check_resource(self, resource):
+        def check_resource(self, ctx, resource):
             current = resource.clone()
-            current.purged = not self.__class__.isset(resource.id.get_agent_name(), resource.key)
+            current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
 
             if not current.purged:
-                current.value = self.__class__.get(resource.id.get_agent_name(), resource.key)
+                current.value = self.get(resource.id.get_agent_name(), resource.key)
             else:
                 current.value = None
 
             return current
 
-        def list_changes(self, desired):
-            current = self.check_resource(desired)
-            return self._diff(current, desired)
-
-        def do_changes(self, resource):
-            changes = self.list_changes(resource)
+        def do_changes(self, ctx, resource, changes):
             if "purged" in changes:
-                if changes["purged"][1]:
-                    self.__class__.delete(resource.id.get_agent_name(), resource.key)
+                if changes["purged"]["desired"]:
+                    self.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
                 else:
-                    self.__class__.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    self.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    ctx.set_created()
 
-            if "value" in changes:
-                self.__class__.set(resource.id.get_agent_name(), resource.key, resource.value)
+            elif "value" in changes:
+                self.set(resource.id.get_agent_name(), resource.key, resource.value)
+                ctx.set_updated()
 
             return changes
 
         def snapshot(self, resource):
-            return json.dumps({"value": self.__class__.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
+            return json.dumps({"value": self.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
 
         def restore(self, resource, snapshot_id):
             content = self.get_file(snapshot_id)
@@ -105,12 +102,19 @@ def resource_container():
 
             data = json.loads(content.decode())
             if "value" in data:
-                self.__class__.set(resource.id.get_agent_name(), resource.key, data["value"])
+                self.set(resource.id.get_agent_name(), resource.key, data["value"])
 
-        def facts(self, resource):
-            return {"length": len(self.__class__.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
+        def facts(self, ctx, resource):
+            return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
+
+        def can_process_events(self) -> bool:
+            return True
+
+        def process_events(self, ctx, resource, events):
+            self.__class__._EVENTS[str(resource.id)] = events
 
         _STATE = defaultdict(dict)
+        _EVENTS = {}
 
         @classmethod
         def set(cls, agent, key, value):
@@ -134,11 +138,12 @@ def resource_container():
         @classmethod
         def reset(cls):
             cls._STATE = defaultdict(dict)
+            cls._EVENTS = {}
 
     @provider("test::Fail", name="test_fail")
     class Fail(ResourceHandler):
 
-        def check_resource(self, resource):
+        def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
@@ -149,11 +154,7 @@ def resource_container():
 
             return current
 
-        def list_changes(self, desired):
-            current = self.check_resource(desired)
-            return self._diff(current, desired)
-
-        def do_changes(self, resource):
+        def do_changes(self, ctx, resource, changes):
             raise Exception()
 
     waiter = Condition()
@@ -181,7 +182,7 @@ def resource_container():
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
 
-        def check_resource(self, resource):
+        def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
 
@@ -192,27 +193,24 @@ def resource_container():
 
             return current
 
-        def list_changes(self, desired):
-            current = self.check_resource(desired)
-            return self._diff(current, desired)
-
-        def do_changes(self, resource):
+        def do_changes(self, ctx, resource, changes):
             logger.info("Haning waiter %s", self.traceid)
             waiter.acquire()
             waiter.wait()
             waiter.release()
             logger.info("Releasing waiter %s", self.traceid)
-            changes = self.list_changes(resource)
             if "purged" in changes:
-                if changes["purged"][1]:
+                if changes["purged"]["desired"]:
                     Provider.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
                 else:
                     Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    ctx.set_created()
+
 
             if "value" in changes:
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
-
-            return changes
+                ctx.set_updated()
 
     return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters, waiter=waiter)
 
@@ -229,7 +227,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -243,6 +241,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     resources = [{'key': 'key1',
                   'value': 'value1',
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
                   'purged': False,
                   'state_id': '',
                   'allow_restore': True,
@@ -252,6 +251,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                  {'key': 'key2',
                   'value': 'value2',
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'send_event': False,
                   'requires': [],
                   'purged': False,
                   'state_id': '',
@@ -261,6 +261,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                  {'key': 'key3',
                   'value': None,
                   'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                  'send_event': False,
                   'requires': [],
                   'purged': True,
                   'state_id': '',
@@ -292,16 +293,16 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
-    assert changes[resources[0]["id"]]["changes"]["purged"][0]
-    assert not changes[resources[0]["id"]]["changes"]["purged"][1]
-    assert changes[resources[0]["id"]]["changes"]["value"][0] is None
-    assert changes[resources[0]["id"]]["changes"]["value"][1] == resources[0]["value"]
+    assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
+    assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
+    assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
+    assert changes[resources[0]["id"]]["changes"]["value"]["desired"] == resources[0]["value"]
 
-    assert changes[resources[1]["id"]]["changes"]["value"][0] == "incorrect_value"
-    assert changes[resources[1]["id"]]["changes"]["value"][1] == resources[1]["value"]
+    assert changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
+    assert changes[resources[1]["id"]]["changes"]["value"]["desired"] == resources[1]["value"]
 
-    assert not changes[resources[2]["id"]]["changes"]["purged"][0]
-    assert changes[resources[2]["id"]]["changes"]["purged"][1]
+    assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
+    assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
     result = yield client.release_version(env_id, version, True)
@@ -340,7 +341,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -361,6 +362,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   'value': 'value1',
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -371,6 +373,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -380,6 +383,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   'id': 'test::Resource[agent1,key=key3],v=%d' % version,
                   'requires': [],
                   'purged': True,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -409,16 +413,16 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
-    assert changes[resources[0]["id"]]["changes"]["purged"][0]
-    assert not changes[resources[0]["id"]]["changes"]["purged"][1]
-    assert changes[resources[0]["id"]]["changes"]["value"][0] is None
-    assert changes[resources[0]["id"]]["changes"]["value"][1] == resources[0]["value"]
+    assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
+    assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
+    assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
+    assert changes[resources[0]["id"]]["changes"]["value"]["desired"] == resources[0]["value"]
 
-    assert changes[resources[1]["id"]]["changes"]["value"][0] == "incorrect_value"
-    assert changes[resources[1]["id"]]["changes"]["value"][1] == resources[1]["value"]
+    assert changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
+    assert changes[resources[1]["id"]]["changes"]["value"]["desired"] == resources[1]["value"]
 
-    assert not changes[resources[2]["id"]]["changes"]["purged"][0]
-    assert changes[resources[2]["id"]]["changes"]["purged"][1]
+    assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
+    assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
     result = yield client.release_version(env_id, version, True)
@@ -461,7 +465,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
     Config.set("config", "agent-interval", "2")
     Config.set("config", "agent-splay", "2")
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -476,6 +480,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   'value': 'value1',
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -486,6 +491,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -495,6 +501,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   'id': 'test::Resource[agent1,key=key3],v=%d' % version,
                   'requires': [],
                   'purged': True,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -530,18 +537,12 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
 
 
 @pytest.mark.gen_test
-def test_dual_agent(resource_container, io_loop, server, client):
+def test_dual_agent(resource_container, io_loop, server, client, environment):
     """
         dryrun and deploy a configuration model
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    myagent = agent.Agent(io_loop, hostname="node1", env_id=env_id,
+    myagent = agent.Agent(io_loop, hostname="node1", environment=environment,
                           agent_map={"agent1": "localhost", "agent2": "localhost"},
                           code_loader=False)
     myagent.add_end_point_name("agent1")
@@ -558,6 +559,7 @@ def test_dual_agent(resource_container, io_loop, server, client):
                   'value': 'value1',
                   'id': 'test::Wait[agent1,key=key1],v=%d' % version,
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -567,6 +569,7 @@ def test_dual_agent(resource_container, io_loop, server, client):
                   'value': 'value1',
                   'id': 'test::Wait[agent1,key=key2],v=%d' % version,
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -576,6 +579,7 @@ def test_dual_agent(resource_container, io_loop, server, client):
                   'value': 'value2',
                   'id': 'test::Wait[agent2,key=key1],v=%d' % version,
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -585,36 +589,38 @@ def test_dual_agent(resource_container, io_loop, server, client):
                   'value': 'value2',
                   'id': 'test::Wait[agent2,key=key2],v=%d' % version,
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
                   'requires': ['test::Wait[agent2,key=key1],v=%d' % version]
                   }]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # expire rate limiting
     yield gen.sleep(0.5)
     # do a deploy
-    result = yield client.release_version(env_id, version, True)
+    result = yield client.release_version(environment, version, True)
     assert result.code == 200
 
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 4
 
-    result = yield client.get_version(env_id, version)
+    result = yield client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
+        result = yield client.get_version(environment, version)
         resource_container.waiter.acquire()
         resource_container.waiter.notifyAll()
         resource_container.waiter.release()
         yield gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["result"] == const.VersionState.success.name
 
     assert resource_container.Provider.isset("agent1", "key1")
     assert resource_container.Provider.get("agent1", "key1") == "value1"
@@ -637,7 +643,7 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -652,6 +658,7 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -661,6 +668,7 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -719,16 +727,16 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
 
     # get a snapshot
     result = yield client.get_snapshot(env_id, snapshot_id)
-    assert(result.code == 200)
-    assert(result.result["snapshot"]["id"] == snapshot_id)
+    assert result.code == 200
+    assert result.result["snapshot"]["id"] == snapshot_id
 
     # delete the restore
     result = yield client.delete_restore(env_id, restore_id)
-    assert(result.code == 200)
+    assert result.code == 200
 
     # delete the snapshot
     result = yield client.delete_snapshot(env_id, snapshot_id)
-    assert(result.code == 200)
+    assert result.code == 200
 
 
 @pytest.mark.gen_test
@@ -738,11 +746,11 @@ def test_server_agent_api(resource_container, client, server, io_loop):
 
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
-    agent = Agent(io_loop, env_id=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.start()
 
-    agent = Agent(io_loop, env_id=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
+    agent = Agent(io_loop, environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
                   code_loader=False)
     agent.start()
 
@@ -757,12 +765,12 @@ def test_server_agent_api(resource_container, client, server, io_loop):
         assert result.code == 200
         yield gen.sleep(0.1)
 
-    assert(len(result.result["processes"]) == 2)
+    assert len(result.result["processes"]) == 2
     agents = ["agent1", "agent2"]
     for proc in result.result["processes"]:
-        assert(proc["environment"] == env_id)
-        assert(len(proc["endpoints"]) == 1)
-        assert(proc["endpoints"][0]["name"] in agents)
+        assert proc["environment"] == env_id
+        assert len(proc["endpoints"]) == 1
+        assert proc["endpoints"][0]["name"] in agents
         agents.remove(proc["endpoints"][0]["name"])
 
     assert_equal_ish({'processes': [{'expired': None, 'environment': env_id,
@@ -790,6 +798,7 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -799,6 +808,7 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -832,7 +842,7 @@ def test_get_facts(resource_container, client, server, io_loop):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -850,6 +860,7 @@ def test_get_facts(resource_container, client, server, io_loop):
                   'id': resource_id,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -901,7 +912,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -919,6 +930,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
                   'id': resource_id,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -956,7 +968,7 @@ def test_fail(resource_container, client, server, io_loop):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -971,6 +983,7 @@ def test_fail(resource_container, client, server, io_loop):
                   'id': 'test::Fail[agent1,key=key],v=%d' % version,
                   'requires': [],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -980,6 +993,7 @@ def test_fail(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                   'requires': ['test::Fail[agent1,key=key],v=%d' % version],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -989,6 +1003,7 @@ def test_fail(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key3],v=%d' % version,
                   'requires': ['test::Fail[agent1,key=key],v=%d' % version],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -998,6 +1013,7 @@ def test_fail(resource_container, client, server, io_loop):
                   'id': 'test::Resource[agent1,key=key4],v=%d' % version,
                   'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -1008,6 +1024,7 @@ def test_fail(resource_container, client, server, io_loop):
                   'requires': ['test::Resource[agent1,key=key4],v=%d' % version,
                                'test::Fail[agent1,key=key],v=%d' % version],
                   'purged': False,
+                  'send_event': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -1059,7 +1076,7 @@ def test_wait(resource_container, client, server, io_loop):
     env_id = result.result["environment"]["id"]
 
     # setup agent
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -1078,6 +1095,7 @@ def test_wait(resource_container, client, server, io_loop):
                       'id': 'test::Wait[agent1,key=key],v=%d' % version,
                       'requires': [],
                       'purged': False,
+                      'send_event': False,
                       'state_id': '',
                       'allow_restore': True,
                       'allow_snapshot': True,
@@ -1087,6 +1105,7 @@ def test_wait(resource_container, client, server, io_loop):
                       'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                       'requires': ['test::Wait[agent1,key=key],v=%d' % version],
                       'purged': False,
+                      'send_event': False,
                       'state_id': '',
                       'allow_restore': True,
                       'allow_snapshot': True,
@@ -1096,6 +1115,7 @@ def test_wait(resource_container, client, server, io_loop):
                       'id': 'test::Resource[agent1,key=key3],v=%d' % version,
                       'requires': [],
                       'purged': False,
+                      'send_event': False,
                       'state_id': '',
                       'allow_restore': True,
                       'allow_snapshot': True,
@@ -1105,6 +1125,7 @@ def test_wait(resource_container, client, server, io_loop):
                       'id': 'test::Resource[agent1,key=key4],v=%d' % version,
                       'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
                       'purged': False,
+                      'send_event': False,
                       'state_id': '',
                       'allow_restore': True,
                       'allow_snapshot': True,
@@ -1115,6 +1136,7 @@ def test_wait(resource_container, client, server, io_loop):
                       'requires': ['test::Resource[agent1,key=key4],v=%d' % version,
                                    'test::Wait[agent1,key=key],v=%d' % version],
                       'purged': False,
+                      'send_event': False,
                       'state_id': '',
                       'allow_restore': True,
                       'allow_snapshot': True,
@@ -1172,17 +1194,17 @@ def test_wait(resource_container, client, server, io_loop):
     result = yield client.get_version(env_id, version2)
     assert result.code == 200
     for x in result.result["resources"]:
-        assert x["status"] == "deployed"
+        assert x["status"] == const.ResourceState.deployed.name
 
     result = yield client.get_version(env_id, version1)
     assert result.code == 200
     states = {x["id"]: x["status"] for x in result.result["resources"]}
 
-    assert states['test::Wait[agent1,key=key],v=%d' % version1] == "deployed"
-    assert states['test::Resource[agent1,key=key2],v=%d' % version1] == ""
-    assert states['test::Resource[agent1,key=key3],v=%d' % version1] == "deployed"
-    assert states['test::Resource[agent1,key=key4],v=%d' % version1] == "deployed"
-    assert states['test::Resource[agent1,key=key5],v=%d' % version1] == ""
+    assert states['test::Wait[agent1,key=key],v=%d' % version1] == const.ResourceState.deployed.name
+    assert states['test::Resource[agent1,key=key2],v=%d' % version1] == const.ResourceState.available.name
+    assert states['test::Resource[agent1,key=key3],v=%d' % version1] == const.ResourceState.deployed.name
+    assert states['test::Resource[agent1,key=key4],v=%d' % version1] == const.ResourceState.deployed.name
+    assert states['test::Resource[agent1,key=key5],v=%d' % version1] == const.ResourceState.available.name
 
 
 @pytest.mark.gen_test
@@ -1199,13 +1221,13 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
 
-    agent2 = Agent(io_loop, hostname="node2", env_id=env_id, agent_map={"agent2": "localhost"},
+    agent2 = Agent(io_loop, hostname="node2", environment=env_id, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
@@ -1221,6 +1243,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'purged': False,
                   'state_id': '',
+                  'send_event': False,
                   'allow_restore': True,
                   'allow_snapshot': True,
                   'requires': ['test::Wait[agent1,key=key2],v=%d' % version, 'test::Resource[agent2,key=key3],v=%d' % version],
@@ -1231,6 +1254,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   'requires': [],
                   'purged': False,
                   'state_id': '',
+                  'send_event': False,
                   'allow_restore': True,
                   'allow_snapshot': True,
                   },
@@ -1240,6 +1264,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   'requires': [],
                   'purged': False,
                   'state_id': '',
+                  'send_event': False,
                   'allow_restore': True,
                   'allow_snapshot': True,
                   },
@@ -1249,6 +1274,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   'requires': [],
                   'purged': False,
                   'state_id': '',
+                  'send_event': False,
                   'allow_restore': True,
                   'allow_snapshot': True,
                   }
@@ -1263,7 +1289,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 4
-    assert result.result["model"]["result"] == "deploying"
+    assert result.result["model"]["result"] == const.VersionState.deploying.name
 
     result = yield client.get_version(env_id, version)
     assert result.code == 200
@@ -1275,6 +1301,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     result = yield resource_container.wait_for_done_with_waiters(client, env_id, version)
 
     assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["result"] == const.VersionState.success.name
 
     assert resource_container.Provider.isset("agent1", "key1")
     assert resource_container.Provider.get("agent1", "key1") == "value1"
@@ -1285,7 +1312,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     agent2.stop()
 
 
-@pytest.mark.gen_test
+@pytest.mark.gen_test(timeout=30)
 def test_dryrun_scale(resource_container, io_loop, server, client):
     """
         test dryrun scaling
@@ -1297,7 +1324,7 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
     result = yield client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", env_id=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -1312,6 +1339,7 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
                           'id': 'test::Resource[agent1,key=key%d],v=%d' % (i, version),
                           'purged': False,
                           'state_id': '',
+                          'send_event': False,
                           'allow_restore': True,
                           'allow_snapshot': True,
                           'requires': [],
@@ -1340,3 +1368,220 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
     assert result.code == 200
 
     agent.stop()
+
+
+@pytest.mark.gen_test
+def test_send_events(resource_container, io_loop, environment, server, client):
+    """
+        Send and receive events within one agent
+    """
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    res_id_1 = 'test::Resource[agent1,key=key1],v=%d' % version
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': res_id_1,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert res_id_1 in resource_container.Provider._EVENTS
+    event = resource_container.Provider._EVENTS[res_id_1]
+    assert len(event) == 1
+    for res_id, res in event.items():
+        assert res_id.agent_name == "agent1"
+        assert res_id.attribute_value == "key2"
+        assert res["status"] == const.ResourceState.deployed
+        assert res["change"] == const.Change.created
+
+    agent.stop()
+
+
+@pytest.mark.gen_test
+def test_send_events_cross_agent(resource_container, io_loop, environment, server, client):
+    """
+        Send and receive events over agents
+    """
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    agent2 = Agent(io_loop, hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
+                   code_loader=False)
+    agent2.add_end_point_name("agent2")
+    agent2.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+
+    version = int(time.time())
+
+    res_id_1 = 'test::Resource[agent1,key=key1],v=%d' % version
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': res_id_1,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent2,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent2,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent2", "key2") == "value2"
+
+    assert res_id_1 in resource_container.Provider._EVENTS
+    event = resource_container.Provider._EVENTS[res_id_1]
+    assert len(event) == 1
+    for res_id, res in event.items():
+        assert res_id.agent_name == "agent2"
+        assert res_id.attribute_value == "key2"
+        assert res["status"] == const.ResourceState.deployed
+        assert res["change"] == const.Change.created
+
+    agent.stop()
+    agent2.stop()
+
+
+@pytest.mark.gen_test(timeout=15)
+def test_send_events_cross_agent_restart(resource_container, io_loop, environment, server, client):
+    """
+        Send and receive events over agents with agents starting after deploy
+    """
+    resource_container.Provider.reset()
+    agent2 = Agent(io_loop, hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
+                   code_loader=False)
+    agent2.add_end_point_name("agent2")
+    agent2.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    res_id_1 = 'test::Resource[agent1,key=key1],v=%d' % version
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': res_id_1,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent2,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent2,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+
+    # wait for agent 2 to finish
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 1:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(1)
+
+    assert resource_container.Provider.get("agent2", "key2") == "value2"
+
+    # start agent 1 and wait for it to finish
+    Config.set("config", "agent-splay", "0")
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(1)
+
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+
+    assert res_id_1 in resource_container.Provider._EVENTS
+    event = resource_container.Provider._EVENTS[res_id_1]
+    assert len(event) == 1
+    for res_id, res in event.items():
+        assert res_id.agent_name == "agent2"
+        assert res_id.attribute_value == "key2"
+        assert res["status"] == const.ResourceState.deployed
+        assert res["change"] == const.Change.created
+
+    agent.stop()
+    agent2.stop()

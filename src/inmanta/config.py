@@ -264,10 +264,6 @@ def get_executable():
     except:
         return None
 
-executable = \
-    Option("config", "executable", get_executable,
-           "The main python file for the server")
-
 
 def get_default_nodename():
     """ socket.gethostname() """

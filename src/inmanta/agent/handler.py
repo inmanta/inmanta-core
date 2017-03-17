@@ -16,19 +16,21 @@
     Contact: code@inmanta.com
 """
 
-from collections import defaultdict
 import hashlib
 import inspect
 import logging
 import base64
+import traceback
 from concurrent.futures import Future
+from collections import defaultdict
 
 
 from inmanta.agent.io import get_io, remote
-from inmanta import protocol, resources
+from inmanta import protocol, resources, const, data
 from tornado import ioloop
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
+import uuid
 
 LOGGER = logging.getLogger(__name__)
 
@@ -99,12 +101,201 @@ def cache(f=None, ignore=[], timeout=5000, for_version=True, cacheNone=True):  #
         return actual(f)
 
 
+class HandlerContext(object):
+    """
+        Context passed to handler methods for state related "things"
+    """
+    def __init__(self, resource, dry_run=False, action_id=None):
+        self._resource = resource
+        self._dry_run = dry_run
+        self._cache = {}
+
+        self._purged = False
+        self._updated = False
+        self._created = False
+        self._change = None
+
+        self._changes = {}
+
+        if action_id is None:
+            action_id = uuid.uuid4()
+        self._action_id = action_id
+        self._status = None
+        self._logs = []
+
+    @property
+    def action_id(self) -> uuid.UUID:
+        return self._action_id
+
+    @property
+    def status(self) -> const.ResourceState:
+        return self._status
+
+    @property
+    def logs(self) -> list:
+        return self._logs
+
+    def set_status(self, status: const.ResourceState) -> None:
+        """
+            Set the status of the handler operation.
+        """
+        self._status = status
+
+    def is_dry_run(self):
+        """
+            Is this a dryrun?
+        """
+        return self._dry_run
+
+    def get(self, name):
+        return self._cache[name]
+
+    def contains(self, key):
+        return key in self._cache
+
+    def set(self, name, value):
+        self._cache[name] = value
+
+    def set_created(self):
+        self._created = True
+        if self._change is None or self._change.value < const.Change.created.value:
+            self._change = const.Change.created
+
+    def set_purged(self):
+        self._purged = True
+        if self._change is None or self._change.value < const.Change.purged.value:
+            self._change = const.Change.purged
+
+    def set_updated(self):
+        self._updated = True
+        if self._change is None or self._change.value < const.Change.updated.value:
+            self._change = const.Change.updated
+
+    @property
+    def changed(self):
+        return self._created or self._updated or self._purged
+
+    @property
+    def change(self):
+        return self._change
+
+    def add_change(self, name, desired, current=None):
+        """
+            Report a change of a field. This field is added to the set of updated fields
+
+            :param name The name of the field that was updated
+            :param desired The desired value to which the field was updated (or should be updated)
+            :param current The value of the field before it was updated
+        """
+        self._changes[name] = {"current": current, "desired": desired}
+
+    def add_changes(self, **kwargs):
+        """
+            Report a list of changes at once as kwargs
+
+            :param key The name of the field that was updated. This field is also adde to the set of updated fields
+            :param value The desired value of the field.
+
+            To report the previous value of the field, use the add_change method
+        """
+        for field, value in kwargs.items():
+            self._changes[field] = {"desired": value}
+
+    def fields_updated(self, fields):
+        """
+            Report that fields have been updated
+        """
+        for field in fields:
+            if field not in self._changes:
+                self._changes[fields] = {}
+
+    def update_changes(self, changes: dict):
+        """
+            Update the changes list with changes
+
+            :param changes This should be a dict with a value a dict containing "current" and "desired" keys
+        """
+        self._changes.update(changes)
+
+    @property
+    def changes(self):
+        return self._changes
+
+    def log_msg(self, level: int, msg: str, args: list, kwargs: dict) -> dict:
+        if len(args) > 0:
+            raise Exception("Args not supported")
+        log = data.LogLine.log(level, msg, **kwargs)
+        LOGGER.log(level, log._data["msg"])
+        self._logs.append(log)
+
+    def debug(self, msg: str, *args, **kwargs) -> None:
+        """
+        Log 'msg % args' with severity 'DEBUG'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
+        """
+        self.log_msg(logging.DEBUG, msg, args, kwargs)
+
+    def info(self, msg: str, *args, **kwargs) -> None:
+        """
+        Log 'msg % args' with severity 'INFO'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.info("Houston, we have a %s", "interesting problem", exc_info=1)
+        """
+        self.log_msg(logging.INFO, msg, args, kwargs)
+
+    def warning(self, msg: str, *args, **kwargs) -> None:
+        """
+        Log 'msg % args' with severity 'WARNING'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)
+        """
+        self.log_msg(logging.WARNING, msg, args, kwargs)
+
+    def error(self, msg: str, *args, **kwargs) -> None:
+        """
+        Log 'msg % args' with severity 'ERROR'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.error("Houston, we have a %s", "major problem", exc_info=1)
+        """
+        self.log_msg(logging.ERROR, msg, args, kwargs)
+
+    def exception(self, msg: str, *args, exc_info=True, **kwargs) -> None:
+        """
+        Convenience method for logging an ERROR with exception information.
+        """
+        self.error(msg, *args, exc_info=exc_info, **kwargs)
+
+    def critical(self, msg: str, *args, **kwargs) -> None:
+        """
+        Log 'msg % args' with severity 'CRITICAL'.
+
+        To pass exception information, use the keyword argument exc_info with
+        a true value, e.g.
+
+        logger.critical("Houston, we have a %s", "major disaster", exc_info=1)
+        """
+        self.log_msg(logging.CRITICAL, msg, args, kwargs)
+
+
 class ResourceHandler(object):
     """
         A baseclass for classes that handle resource on a platform
     """
 
-    def __init__(self, agent, io=None):
+    def __init__(self, agent, io=None) -> None:
         self._agent = agent
 
         if io is None:
@@ -138,7 +329,7 @@ class ResourceHandler(object):
 
         return f.result()
 
-    def set_cache(self, cache: AgentCache):
+    def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
 
     def get_client(self):
@@ -146,27 +337,51 @@ class ResourceHandler(object):
             self._client = protocol.AgentClient("agent", self._agent.sessionid, self._ioloop)
         return self._client
 
-    def pre(self, resource):
+    def process_events(self, ctx: HandlerContext, resource: resources.Resource, events: dict):
+        """
+            Process events generated by changes to required resources
+        """
+        if self.can_reload():
+            self.do_reload(ctx, resource)
+
+    def can_process_events(self) -> bool:
+        """
+            Can this handler process events? This is a more generic version of the reload mechanism
+        """
+        return self.can_reload()
+
+    def can_reload(self) -> bool:
+        """
+            Can this handler reload?
+        """
+        return False
+
+    def do_reload(self, ctx: HandlerContext, resource: resources.Resource) -> None:
+        """
+            Perform a reload of this resource
+        """
+
+    def pre(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
             Method executed before a transaction (Facts, dryrun, real deployment, ...) is executed
         """
 
-    def post(self, resource):
+    def post(self, ctx: HandlerContext, resource: resources.Resource) -> None:
         """
             Method executed after a transaction
         """
 
-    def close(self):
+    def close(self) -> None:
         pass
 
     @classmethod
-    def is_available(cls, io):
+    def is_available(cls, io) -> bool:
         """
             Check if this handler is available on the current system
         """
-        raise NotImplementedError()
+        return True
 
-    def _diff(self, current, desired):
+    def _diff(self, current: resources.Resource, desired: resources.Resource):
         changes = {}
 
         # check attributes
@@ -175,96 +390,76 @@ class ResourceHandler(object):
             desired_value = getattr(desired, field)
 
             if current_value != desired_value and desired_value is not None:
-                changes[field] = (current_value, desired_value)
+                changes[field] = {"current": current_value, "desired": desired_value}
 
         return changes
 
-    def can_reload(self):
-        """
-            Can this handler reload?
-        """
-        return False
-
-    def check_resource(self, resource):
+    def check_resource(self, ctx: HandlerContext, resource: resources.Resource):
         """
             Check the status of a resource
         """
         raise NotImplementedError()
 
-    def list_changes(self, resource):
+    def list_changes(self, ctx: HandlerContext, resource: resources.Resource):
         """
             Returns the changes required to bring the resource on this system
             in the state describted in the resource entry.
         """
-        raise NotImplementedError()
+        current = self.check_resource(ctx, resource)
+        return self._diff(current, resource)
 
-    def do_changes(self, resource):
+    def do_changes(self, ctx: HandlerContext, resource: resources.Resource, changes: dict) -> None:
         """
             Do the changes required to bring the resource on this system in the
             state of the given resource.
-
-            :return This method returns true if changes were made
         """
         raise NotImplementedError()
 
-    def execute(self, resource, dry_run=False):
+    def execute(self, ctx: HandlerContext, resource: resources.Resource, dry_run=False) -> None:
         """
             Update the given resource
         """
-        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
-
         try:
-            self.pre(resource)
+            self.pre(ctx, resource)
 
             if resource.require_failed:
-                LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
-                results["status"] = "skipped"
+                ctx.info(msg="Skipping %(resource_id)s because of failed dependencies", resource_id=resource.id)
+                ctx.set_status(const.ResourceState.skipped)
+                return
 
-            elif not dry_run:
-                changed = self.do_changes(resource)
-                changes = {}
-                if hasattr(changed, "__len__"):
-                    changes = changed
-                    changed = len(changes) > 0
+            changes = self.list_changes(ctx, resource)
+            ctx.update_changes(changes)
 
-                if changed:
-                    LOGGER.info("%s was changed" % resource.id)
-
-                results["changed"] = changed
-                results["changes"] = changes
-                results["status"] = "deployed"
+            if not dry_run:
+                self.do_changes(ctx, resource, changes)
+                ctx.set_status(const.ResourceState.deployed)
 
             else:
-                changes = self.list_changes(resource)
-                results["changes"] = changes
-                results["status"] = "dry"
+                ctx.set_status(const.ResourceState.dry)
 
-            self.post(resource)
+            self.post(ctx, resource)
         except SkipResource as e:
-            results["log_msg"] = e.args
-            results["status"] = "skipped"
-            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
 
         except Exception as e:
-            LOGGER.exception("An error occurred during deployment of %s" % resource.id)
-            results["log_msg"] = repr(e)
-            results["status"] = "failed"
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception("An error occurred during deployment of %(resource_id)s (excp: %(exception)s",
+                          resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
 
-        return results
-
-    def facts(self, resource):
+    def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
             Returns facts about this resource
         """
         return {}
 
-    def check_facts(self, resource):
+    def check_facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
             Query for facts
         """
-        self.pre(resource)
-        facts = self.facts(resource)
-        self.post(resource)
+        self.pre(ctx, resource)
+        facts = self.facts(ctx, resource)
+        self.post(ctx, resource)
 
         return facts
 
@@ -327,108 +522,13 @@ class ResourceHandler(object):
             raise Exception("Unable to upload file to the server.")
 
 
-class HandlerContext(object):
-
-    def __init__(self, resource, dry_run):
-        self._resource = resource
-        self._dry_run = dry_run
-        self._cache = {}
-        self.changed = False
-
-    def is_dry_run(self):
-        return self._dry_run
-
-    def get(self, name):
-        return self._cache[name]
-
-    def contains(self, key):
-        return key in self._cache
-
-    def set(self, name, value):
-        self._cache[name] = value
-
-    def set_created(self):
-        self.changed = True
-
-    def set_purged(self):
-        self.changed = True
-
-    def set_updated(self):
-        self.changed = True
-
-    def add_change(self, name, value, old_value=None):
-        pass
-
-    def add_changes(self, **kwargs):
-        pass
-
-    def fields_updated(self, fields):
-        pass
-
-    def debug(self, msg, *args, **kwargs):
-        """
-        Log 'msg % args' with severity 'DEBUG'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
-        """
-
-    def info(self, msg, *args, **kwargs):
-        """
-        Log 'msg % args' with severity 'INFO'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        logger.info("Houston, we have a %s", "interesting problem", exc_info=1)
-        """
-
-    def warning(self, msg, *args, **kwargs):
-        """
-        Log 'msg % args' with severity 'WARNING'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)
-        """
-
-    def error(self, msg, *args, **kwargs):
-        """
-        Log 'msg % args' with severity 'ERROR'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        logger.error("Houston, we have a %s", "major problem", exc_info=1)
-        """
-
-    def exception(self, msg, *args, exc_info=True, **kwargs):
-        """
-        Convenience method for logging an ERROR with exception information.
-        """
-        self.error(msg, *args, exc_info=exc_info, **kwargs)
-
-    def critical(self, msg, *args, **kwargs):
-        """
-        Log 'msg % args' with severity 'CRITICAL'.
-
-        To pass exception information, use the keyword argument exc_info with
-        a true value, e.g.
-
-        logger.critical("Houston, we have a %s", "major disaster", exc_info=1)
-        """
-
-
 class CRUDHandler(ResourceHandler):
     """
         This handler base class requires CRUD methods to be implemented: create, read, update and delete. Such a handler
         only works on purgeable resources.
     """
 
-    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+    def read_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
             This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
             the method implementation should modify the attributes of this resource to the current state.
@@ -439,9 +539,8 @@ class CRUDHandler(ResourceHandler):
             :raise SkipResource: Raise this exception when the handler should skip this resource
             :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
-        raise NotImplemented()
 
-    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+    def create_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
             This method is called by the handler when the resource should be created.
 
@@ -450,9 +549,8 @@ class CRUDHandler(ResourceHandler):
                            resource.
             :param resource The desired resource state.
         """
-        raise NotImplemented()
 
-    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource):
+    def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
             This method is called by the handler when the resource should be deleted.
 
@@ -461,9 +559,8 @@ class CRUDHandler(ResourceHandler):
                        resource.
             :param resource The desired resource state.
         """
-        raise NotImplemented()
 
-    def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource):
+    def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
         """
             This method is called by the handler when the resource should be updated.
 
@@ -474,22 +571,17 @@ class CRUDHandler(ResourceHandler):
                            desired value.
             :param resource The desired resource state.
         """
-        raise NotImplemented()
 
-    def execute(self, resource, dry_run=False):
+    def execute(self, ctx: HandlerContext, resource, dry_run=None) -> None:
         """
             Update the given resource
         """
-        results = {"changed": False, "changes": {}, "status": "nop", "log_msg": ""}
-
-        ctx = HandlerContext(resource, dry_run)
-
         try:
-            self.pre(resource)
+            self.pre(ctx, resource)
 
             if resource.require_failed:
-                LOGGER.info("Skipping %s because of failed dependencies" % resource.id)
-                results["status"] = "skipped"
+                ctx.info("Skipping %(resource_id)s because of failed dependencies", resource_id=resource.id)
+                ctx.set_status(const.ResourceState.skipped)
 
             else:
                 current = resource.clone()
@@ -497,15 +589,17 @@ class CRUDHandler(ResourceHandler):
                 try:
                     self.read_resource(ctx, current)
                     changes = self._diff(current, resource)
+
                 except ResourcePurged:
                     if not resource.purged:
-                        changes["purged"] = (True, resource.purged)
+                        changes["purged"] = dict(desired=resource.purged, current=True)
 
-                results["changes"] = changes
+                for field, values in changes.items():
+                    ctx.add_change(field, desired=values["desired"], current=values["current"])
 
                 if not dry_run:
                     if "purged" in changes:
-                        if changes["purged"][0]:
+                        if not changes["purged"]["desired"]:
                             self.create_resource(ctx, resource)
                         else:
                             self.delete_resource(ctx, resource)
@@ -513,28 +607,19 @@ class CRUDHandler(ResourceHandler):
                     elif len(changes) > 0:
                         self.update_resource(ctx, changes, resource)
 
-                    if ctx.changed:
-                        LOGGER.info("%s was changed" % resource.id)
-                        results["changed"] = True
-
-                    results["status"] = "deployed"
-
+                    ctx.set_status(const.ResourceState.deployed)
                 else:
-                    results["status"] = "dry"
+                    ctx.set_status(const.ResourceState.dry)
 
-            self.post(resource)
+            self.post(ctx, resource)
         except SkipResource as e:
-            results["log_msg"] = e.args
-            results["status"] = "skipped"
-            LOGGER.warning("Resource %s was skipped: %s" % (resource.id, e.args))
+            ctx.set_status(const.ResourceState.skipped)
+            ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
 
         except Exception as e:
-            LOGGER.exception(
-                "An error occurred during deployment of %s" % resource.id)
-            results["log_msg"] = repr(e)
-            results["status"] = "failed"
-
-        return results
+            ctx.set_status(const.ResourceState.failed)
+            ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
+                          resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
 
 
 class Commander(object):

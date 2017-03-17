@@ -69,6 +69,31 @@ end
     assert stmt.comment is None
 
 
+def test_undefine_default():
+    statements = parse_code("""
+entity Test extends Foo:
+ string hello = undef
+ string[] dinges = undef
+end""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert isinstance(stmt, define.DefineEntity)
+    assert stmt.name == "Test"
+    assert stmt.parents == ["Foo"]
+    assert len(stmt.attributes) == 2
+    assert stmt.comment is None
+
+    for ad in stmt.attributes:
+        assert isinstance(ad.type, str)
+        assert isinstance(ad.name, str)
+        assert ad.default is None
+        assert ad.remove_default
+
+    assert stmt.attributes[0].name == "hello"
+    assert stmt.attributes[1].name == "dinges"
+
+
 def test_extend_entity():
     """Test extending entities
     """
@@ -728,3 +753,12 @@ def test_bad_2():
         parse_code("""
 a=|
 """)
+
+
+def test_error_on_relation():
+    with pytest.raises(ParserException) as e:
+        parse_code("""
+ Host.provider [1] -- Provider test""")
+    assert e.value.location.file == "test"
+    assert e.value.location.lnr == 2
+    assert e.value.column == 38

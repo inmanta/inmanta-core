@@ -39,6 +39,7 @@ from inmanta.execute.util import Unknown
 from inmanta.export import DependencyCycleException
 from utils import assert_graph
 from conftest import SnippetCompilationTest
+from inmanta.execute.proxy import UnsetException
 
 
 class CompilerBaseTest(object):
@@ -1027,7 +1028,7 @@ D()
         files = types["__config__::C"].get_all_instances()
         assert len(files) == 1
 
-    def test_abstract_requres(self):
+    def test_abstract_requires(self):
         self.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
@@ -1052,7 +1053,7 @@ inter = A(name = "inter")
         v, resources = self.do_export()
         assert_graph(resources, """inter2: inter1""")
 
-    def test_abstract_requres_3(self):
+    def test_abstract_requires_3(self):
         self.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
@@ -1263,4 +1264,23 @@ def test_275_duplicate_parent(snippetcompiler):
     implement B using std::none
     """)
     with pytest.raises(TypingException):
-        (_, scopes) = compiler.do_compile()
+        compiler.do_compile()
+
+
+def test_default_remove(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+        bool at = true
+    end
+    implement A using std::none
+
+    entity B extends A:
+        bool at = undef
+    end
+    implement B using std::none
+
+    a = A()
+    b = B()
+    """)
+    with pytest.raises(UnsetException):
+        compiler.do_compile()

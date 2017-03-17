@@ -19,11 +19,13 @@
 import logging
 import uuid
 import datetime
+import enum
 
 from inmanta.resources import Id
 from tornado import gen
 from motor import motor_tornado
 import pymongo
+from inmanta import const
 
 
 LOGGER = logging.getLogger(__name__)
@@ -80,6 +82,24 @@ ESCAPE_CHARS = {".": "\uff0E", "\\": "\\\\", "$": "\u0024"}
 ESCAPE_CHARS_R = {v: k for k, v in ESCAPE_CHARS.items()}
 
 
+class DataDocument(object):
+    """
+        A baseclass for objects that represent data in inmanta. The main purpose of this baseclass is to group dict creation
+        logic. These documents are not stored in the database
+        (use BaseDocument for this purpose). It provides a to_dict method that the inmanta rpc can serialize. You can store
+        DataDocument childeren in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
+        performed.
+    """
+    def __init__(self, **kwargs):
+        self._data = kwargs
+
+    def to_dict(self):
+        """
+            Return a dict representation of this object.
+        """
+        return self._data
+
+
 class BaseDocument(object):
     """
         A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
@@ -119,7 +139,7 @@ class BaseDocument(object):
         self.__fields = {}
 
         if from_mongo:
-            kwargs = self._decode_keys(kwargs)
+            kwargs = BaseDocument._dict_to_value(kwargs)
 
             if "id" in kwargs:
                 raise AttributeError("A mongo document should not contain a field 'id'")
@@ -139,6 +159,9 @@ class BaseDocument(object):
 
             if value is None and fields[name].required:
                 raise TypeError("%s field is required" % name)
+
+            if from_mongo and issubclass(fields[name].field_type, enum.Enum):
+                value = fields[name].field_type[value]
 
             if value is not None and not isinstance(value, fields[name].field_type):
                 raise TypeError("Field %s should have the correct type (%s instead of %s)" %
@@ -209,38 +232,60 @@ class BaseDocument(object):
 
         raise AttributeError(name)
 
+    @classmethod
+    def _value_to_dict(cls, value):
+        if isinstance(value, enum.Enum):
+            return value.name
+
+        if isinstance(value, DataDocument):
+            return cls._encode_keys(value.to_dict())
+
+        if isinstance(value, list):
+            return [cls._value_to_dict(x) for x in value]
+
+        if isinstance(value, dict):
+            return cls._encode_keys(value)
+
+        return value
+
     # TODO: make this a generator
-    def _encode_keys(self, data):
+    @classmethod
+    def _encode_keys(cls, data):
         new_data = {}
         for key, value in data.items():
             new_key = key
             for p, s in ESCAPE_CHARS.items():
                 new_key = new_key.replace(p, s)
 
-            if isinstance(value, dict):
-                new_data[new_key] = self._encode_keys(value)
-            else:
-                new_data[new_key] = value
+            new_data[new_key] = cls._value_to_dict(value)
 
         return new_data
 
     # TODO: make this a generator
-    def _decode_keys(self, data):
+    @classmethod
+    def _decode_keys(cls, data):
         new_data = {}
         for key, value in data.items():
             new_key = key
             for p, s in ESCAPE_CHARS_R.items():
                 new_key = new_key.replace(p, s)
 
-            if isinstance(value, dict):
-                new_data[new_key] = self._decode_keys(value)
-            else:
-                new_data[new_key] = value
+            new_data[new_key] = cls._dict_to_value(value)
 
         return new_data
 
+    @classmethod
+    def _dict_to_value(cls, value):
+        if isinstance(value, list):
+            return [cls._dict_to_value(x) for x in value]
+
+        if isinstance(value, dict):
+            return cls._decode_keys(value)
+
+        return value
+
     def to_mongo(self):
-        return self._encode_keys(self._to_dict(True))
+        return self._to_dict(True)
 
     def _to_dict(self, mongo_pk=False):
         """
@@ -262,10 +307,10 @@ class BaseDocument(object):
                 if mongo_pk and name == "id":
                     result["_id"] = value
                 else:
-                    result[name] = value
+                    result[name] = self._value_to_dict(value) if mongo_pk else value
 
             elif typing.default:
-                result[name] = typing.default_value
+                result[name] = self._value_to_dict(typing.default_value) if mongo_pk else value
 
         return result
 
@@ -284,6 +329,7 @@ class BaseDocument(object):
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
+
         yield self._coll.insert_one(self.to_mongo())
 
     @classmethod
@@ -312,10 +358,12 @@ class BaseDocument(object):
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the mongodb on this document.
         """
+        items = {}
         for name, value in kwargs.items():
             setattr(self, name, value)
+            items[name] = self._value_to_dict(value)
 
-        yield self._coll.update({"_id": self.id}, {"$set": kwargs})
+        yield self._coll.update({"_id": self.id}, {"$set": items})
 
     @classmethod
     @gen.coroutine
@@ -470,6 +518,10 @@ class UnknownParameter(BaseDocument):
     version = Field(field_type=int, required=True)
     metadata = Field(field_type=dict)
     resolved = Field(field_type=bool, default=False)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING)])
+    ]
 
 
 class AgentProcess(BaseDocument):
@@ -703,48 +755,117 @@ class FormRecord(BaseDocument):
     changed = Field(field_type=datetime.datetime)
 
 
-ACTIONS = ("store", "push", "pull", "deploy", "dryrun", "other")
-LOGLEVEL = ("INFO", "ERROR", "WARNING", "DEBUG", "TRACE")
+class LogLine(DataDocument):
+    @property
+    def msg(self):
+        return self._data["msg"]
+
+    @classmethod
+    def log(cls, level, msg, timestamp=None, **kwargs):
+        if timestamp is None:
+            timestamp = datetime.datetime.now()
+
+        log_line = msg % kwargs
+        return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
 class ResourceAction(BaseDocument):
-    # TODO: add environment here!
     """
         Log related to actions performed on a specific resource version by Inmanta.
 
         :param resource_version The resource on which the actions are performed
+        :param environment The environment this action belongs to.
+        :param action_id This is id distinguishes action from each other. Action ids have to be unique per environment.
         :param action The action performed on the resource
-        :param timestamp When did the action occur
-        :param message The log message associated with this action
-        :param level The "urgency" of this action
-        :param data A python dictionary that can be serialized to json with additional data
+        :param started When did the action start
+        :param finished When did the action finish
+        :param messages The log messages associated with this action
+        :param status The status of the resource when this action was finished
+        :param changes A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
+                       contain old and current keys and the associated values. An empty dict indicates that the field
+                       was changed but not data was provided by the agent.
+        :param change The change result of an action
     """
-    resource_version_id = Field(field_type=str, required=True)
-    action = Field(field_type=str, required=True)
-    timestamp = Field(field_type=datetime.datetime, required=True)
-    message = Field(field_type=str)
-    level = Field(field_type=str, default="INFO")
-    data = Field(field_type=dict)
-    status = Field(field_type=str)
+    resource_version_ids = Field(field_type=list, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+
+    action_id = Field(field_type=uuid.UUID, required=True)
+    action = Field(field_type=const.ResourceAction, required=True)
+
+    started = Field(field_type=datetime.datetime, required=True)
+    finished = Field(field_type=datetime.datetime)
+
+    messages = Field(field_type=list)
+    status = Field(field_type=const.ResourceState)
+    changes = Field(field_type=dict)
+    change = Field(field_type=const.Change)
+    send_event = Field(field_type=bool)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("action_id", pymongo.ASCENDING)], unique=True),
+        dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_ids", pymongo.ASCENDING)]),
+    ]
+
+    def __init__(self, from_mongo=False, **kwargs):
+        super().__init__(from_mongo, **kwargs)
+        self._updates = {}
 
     @classmethod
     @gen.coroutine
-    def get_log(cls, resource_version_id, action, limit=0):
+    def get_log(cls, environment, resource_version_id, action=None, limit=0):
         if action is not None:
-            cursor = yield cls._coll.filter(resource_version_id=resource_version_id,
-                                            action=action).sort("timestamp", direction=pymongo.DESCENDING)
+            cursor = cls._coll.find({"environment": environment, "resource_version_ids": resource_version_id,
+                                     "action": action.name}).sort("started", direction=pymongo.DESCENDING)
         else:
-            cursor = yield cls._coll.filter(resource_version_id=resource_version_id,
-                                            action=action).sort("timestamp", direction=pymongo.DESCENDING)
+            cursor = cls._coll.find({"environment": environment, "resource_version_ids": resource_version_id
+                                     }).sort("started", direction=pymongo.DESCENDING)
 
-        if limit > 0:
+        if limit is not None and limit > 0:
             cursor = cursor.limit(limit)
 
         log = []
         while (yield cursor.fetch_next):
-            log.append(from_mongo=True, **cursor.next_object())
+            log.append(cls(from_mongo=True, **cursor.next_object()))
 
         return log
+
+    @classmethod
+    @gen.coroutine
+    def get(cls, environment, action_id):
+        resources = yield ResourceAction.get_list(environment=environment, action_id=action_id)
+        if len(resources) == 0:
+            return None
+        return resources[0]
+
+    def set_field(self, name, value):
+        if "$set" not in self._updates:
+            self._updates["$set"] = {}
+
+        self._updates["$set"][name] = self._value_to_dict(value)
+
+    def add_logs(self, messages):
+        if "$push" not in self._updates:
+            self._updates["$push"] = {}
+
+        self._updates["$push"]["messages"] = {"$each": self._value_to_dict(messages)}
+
+    def add_changes(self, changes):
+        if "$set" not in self._updates:
+            self._updates["$set"] = {}
+
+        for resource, values in changes.items():
+            for field, change in values.items():
+                self._updates["$set"]["changes.%s.%s" % (resource, field)] = self._value_to_dict(change)
+
+    @gen.coroutine
+    def save(self):
+        """
+            Save the accumulated changes
+        """
+        query = {"environment": self.environment, "action_id": self.action_id}
+        if len(self._updates) > 0:
+            yield ResourceAction._coll.update(query, self._updates)
+            self._updates = {}
 
 
 class Resource(BaseDocument):
@@ -774,7 +895,7 @@ class Resource(BaseDocument):
 
     # State related
     attributes = Field(field_type=dict)
-    status = Field(field_type=str, default="")
+    status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
@@ -786,6 +907,19 @@ class Resource(BaseDocument):
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_id", pymongo.ASCENDING)]),
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_id", pymongo.ASCENDING)], unique=True),
     ]
+
+    @classmethod
+    @gen.coroutine
+    def get_resources(cls, environment, resource_version_ids):
+        """
+            Get all resources listed in resource_version_ids
+        """
+        cursor = cls._coll.find({"environment": environment, "resource_version_id": {"$in": resource_version_ids}})
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
 
     @gen.coroutine
     def delete_cascade(self):
@@ -815,10 +949,11 @@ class Resource(BaseDocument):
         for res in resources:
             latest = (yield cls._coll.find({"environment": environment,
                                             "resource_id": res}).sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
-            if latest["status"] != "":
-                deployed = (yield cls._coll.find({"environment": environment, "resource_id": res,
-                                                  "status": {"$ne": ""}}).sort("version",
-                                                                               pymongo.DESCENDING).limit(1).to_list(1))[0]
+            if latest["status"] != const.ResourceState.available.name:
+                cursor = cls._coll.find({"environment": environment, "resource_id": res,
+                                         "status": {"$ne": const.ResourceState.available.name}})
+                deployed = (yield cursor.sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
+
             else:
                 deployed = latest
 
@@ -837,9 +972,14 @@ class Resource(BaseDocument):
     @gen.coroutine
     def get_resources_for_version(cls, environment, version, agent=None):
         if agent is not None:
-            resources = yield cls.get_list(environment=environment, model=version, agent=agent)
+            cursor = cls._coll.find({"environment": environment, "model": version, "agent": agent})
         else:
-            resources = yield cls.get_list(environment=environment, model=version)
+            cursor = cls._coll.find({"environment": environment, "model": version})
+
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
         return resources
 
     @classmethod
@@ -921,21 +1061,13 @@ class Resource(BaseDocument):
         for deleted_resource in deleted:
             # get the full resource history, and determine the purge status of this resource
             cursor = cls._coll.find({"environment": environment, "model": {"$lt": current_version},
-                                     "resource_id": deleted_resource}).sort("version", pymongo.DESCENDING)
-            while (yield cursor.fetch_next):
-                obj = cursor.next_object()
+                                     "resource_id": deleted_resource}).sort("model", pymongo.DESCENDING).limit(1)
+            yield cursor.fetch_next
+            obj = cursor.next_object()
 
-                # check filter cases
-                if obj["model"] not in versions:
-                    # ignore because not in a deployed version
-                    break
-
-                if obj["attributes"]["purged"]:
-                    # it has already been deleted
-                    break
-
+            # check filter cases
+            if obj["model"] in versions and not obj["attributes"]["purged"]:
                 should_purge.append(cls(from_mongo=True, **obj))
-                break
 
         return should_purge
 
@@ -962,7 +1094,7 @@ class ConfigurationModel(BaseDocument):
 
     released = Field(field_type=bool, default=False)
     deployed = Field(field_type=bool, default=False)
-    result = Field(field_type=str, default="pending")
+    result = Field(field_type=const.VersionState, default=const.VersionState.pending)
     status = Field(field_type=dict, default={})
     version_info = Field(field_type=dict)
 
@@ -1042,7 +1174,7 @@ class ConfigurationModel(BaseDocument):
         entry_uuid = uuid.uuid5(resource_uuid, resource_id)
         resource_key = "status.%s" % entry_uuid
         yield cls._coll.update({"environment": environment, "version": version},
-                               {"$set": {resource_key: {"status": status, "id": resource_id}}})
+                               {"$set": {resource_key: {"status": cls._value_to_dict(status), "id": resource_id}}})
 
     @gen.coroutine
     def delete_cascade(self):
@@ -1098,7 +1230,7 @@ class DryRun(BaseDocument):
     resources = Field(field_type=dict, default={})
 
     __indexes__ = [
-        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.DESCENDING)], unique=True)
+        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.DESCENDING)])
     ]
 
     @classmethod
@@ -1112,7 +1244,7 @@ class DryRun(BaseDocument):
         resource_key = "resources.%s" % entry_uuid
 
         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
-        update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: dryrun_data}}
+        update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: cls._value_to_dict(dryrun_data)}}
 
         yield cls._coll.update(query, update)
 

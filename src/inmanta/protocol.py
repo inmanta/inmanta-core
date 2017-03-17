@@ -28,10 +28,11 @@ import base64
 import os
 from datetime import datetime
 from collections import defaultdict
+import enum
 
 import tornado.web
 from tornado import gen, queues, locks
-from inmanta import methods, data
+from inmanta import methods
 from inmanta.config import Config, nodename
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
@@ -216,8 +217,11 @@ def custom_json_encoder(o):
     if isinstance(o, datetime):
         return o.isoformat()
 
-    if isinstance(o, data.BaseDocument):
+    if hasattr(o, "to_dict"):
         return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
 
     raise TypeError(repr(o) + " is not JSON serializable")
 
@@ -587,12 +591,18 @@ class RESTTransport(Transport):
                         try:
                             if arg_type == datetime:
                                 message[arg] = datetime.strptime(message[arg], "%Y-%m-%dT%H:%M:%S.%f")
+
+                            elif issubclass(arg_type, enum.Enum):
+                                message[arg] = arg_type[message[arg]]
+
                             else:
                                 message[arg] = arg_type(message[arg])
 
                         except (ValueError, TypeError):
-                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
-                                                         (arg, arg_type, message[arg].__class__), headers)
+                            error_msg = ("Invalid type for argument %s. Expected %s but received %s" %
+                                         (arg, arg_type, message[arg].__class__))
+                            LOGGER.exception(error_msg)
+                            return self.return_error_msg(500, error_msg, headers)
 
                 # execute any getters that are defined
                 if "getter" in opts:
@@ -600,6 +610,7 @@ class RESTTransport(Transport):
                         result = yield opts["getter"](message[arg])
                         message[arg] = result
                     except methods.HTTPException as e:
+                        LOGGER.exception("Failed to use getter for arg %s", arg)
                         return self.return_error_msg(e.code, e.message, headers)
 
             if config[0]["agent_server"]:
@@ -647,7 +658,7 @@ class RESTTransport(Transport):
             return None, headers, code
 
         except Exception as e:
-            LOGGER.exception("An exception occured")
+            LOGGER.exception("An exception occured during the request.")
             return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
 
     def add_static_handler(self, location, path, default_filename=None, start=False):
@@ -750,6 +761,9 @@ class RESTTransport(Transport):
         headers = {}
 
         for arg_name in list(msg.keys()):
+            if isinstance(msg[arg_name], enum.Enum):  # Handle enum values "special"
+                msg[arg_name] = msg[arg_name].name
+
             if arg_name in properties["arg_options"]:
                 opts = properties["arg_options"][arg_name]
                 if "header" in opts:

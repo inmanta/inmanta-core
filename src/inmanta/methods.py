@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import uuid
 import datetime
 
 from inmanta import data
+from inmanta import const
 from tornado import gen
 
 
@@ -111,6 +112,8 @@ def get_environment(env: uuid.UUID) -> data.Environment:
 
 ENV_ARG = {"header": "X-Inmanta-tid", "getter": get_environment, "reply_header": True}
 ENV_OPTS = {"tid": ENV_ARG}
+AGENT_ENV_ARG = {"header": "X-Inmanta-tid", "reply_header": True}
+AGENT_ENV_OPTS = {"tid": AGENT_ENV_ARG}
 
 
 class Project(Method):
@@ -207,14 +210,14 @@ class Decommision(Method):
     """
     __method_name__ = "decommission"
 
-    @protocol(operation="POST", id=True, arg_options={"id": ENV_ARG})
+    @protocol(operation="POST", id=True, arg_options={"id": {"getter": get_environment}})
     def decomission_environment(self, id: uuid.UUID):
         """
             Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
             removal.
         """
 
-    @protocol(operation="DELETE", id=True, arg_options={"id": ENV_ARG})
+    @protocol(operation="DELETE", id=True, arg_options={"id": {"getter": get_environment}})
     def clear_environment(self, id: uuid.UUID):
         """
             Clear all data from this environment
@@ -299,14 +302,18 @@ class ResourceMethod(Method):
     __method_name__ = "resource"
 
     @protocol(operation="GET", id=True, agent_server=True, api=True, validate_sid=False, arg_options=ENV_OPTS)
-    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None):
+    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None,
+                     log_action: const.ResourceAction=None, log_limit: int=0):
         """
             Return a resource with the given id.
 
             :param tid The id of the environment this resource belongs to
             :param id Get the resource with the given id
             :param logs Include the logs in the response
-            :param status return only resou
+            :param status return only resources of this status
+            :param log_action The log action to include, leave empty/none for all actions. Valid actions are one of
+                              the action strings in const.ResourceAction
+            :param log_limit Limit the number of logs included in the response
         """
 
     @protocol(operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS)
@@ -320,24 +327,32 @@ class ResourceMethod(Method):
                            that version is returned, even if it has not been released yet.
         """
 
-    @protocol(operation="POST", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def resource_updated(self, tid: uuid.UUID, id: str, level: str, action: str, message: str, status: str, extra_data: dict):
+    @protocol(operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS)
+    def resource_action_update(self, tid: uuid.UUID, resource_ids: list, action_id: uuid.UUID, action: const.ResourceAction,
+                               started: datetime.datetime=None, finished: datetime.datetime=None,
+                               status: const.ResourceState=None, messages: list=[], changes: dict={},
+                               change: const.Change=None, send_events: bool=False):
         """
             Send a resource update to the server
 
             :param tid The id of the environment this resource belongs to
-            :param id Get the status of the resource with the given id from the agent
-            :param level The loglevel of the update
+            :param resource_ids The resource with the given id from the agent
+            :param action_id A unique id to indicate the resource action that has be updated
             :param action The action performed
-            :param message The log message
-            :param status The current status of the resource (if known)
-            :param extra_data A map with additional data
-        """
-        if level not in data.LOGLEVEL:
-            raise Exception("Invalid resource update level (%s) should be %s" % (level, ", ".join(data.LOGLEVEL)))
 
-        if action not in data.ACTIONS:
-            raise Exception("Invalid resource update action (%s) should be %s" % (action, ", ".join(data.ACTIONS)))
+            :param started The timestamp when this action was started. When this action (action_id) has not been saved yet,
+                           started has to be defined.
+
+            :param finished The timestamp when this action was finished. Afterwars, no changes with the same action_id
+                            can be stored. The status field also has to be set.
+            :param status The current status of the resource (if known)
+
+            :param messages A list of log entries to add to this entry.
+            :param changes A dict of changes to this resource. The key of this dict indicates the attributes/fields that
+                           have been changed. The value contains the new value and/or the orignal value.
+            :param change The result of the changes
+            :param send_events Send events to the dependents of this resource
+        """
 
 
 class VersionMethod(Method):
@@ -434,7 +449,7 @@ class DryRunMethod(Method):
         """
 
     @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS)
-    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict, log_msg: str=None):
+    def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
         """
             Store dryrun results at the server
 
@@ -442,7 +457,6 @@ class DryRunMethod(Method):
             :param id The version dryrun to report
             :param resource The id of the resource
             :param changes The required changes
-            :param log_msg An optional log message (for example to report an error)
         """
 
 
@@ -452,7 +466,7 @@ class AgentDryRun(Method):
     """
     __method_name__ = "agent_dryrun"
 
-    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def do_dryrun(self, tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
         """
             Do a dryrun on an agent
@@ -559,7 +573,7 @@ class AgentParameterMethod(Method):
     """
     __method_name__ = "agent_parameter"
 
-    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def get_parameter(self, tid: uuid.UUID, agent: str, resource: dict):
         """
             Get all parameters/facts known by the agents for the given resource
@@ -760,7 +774,7 @@ class AgentSnapshot(Method):
     """
     __method_name__ = "agent_snapshot"
 
-    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def do_snapshot(self, tid: uuid.UUID, agent: str, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -823,7 +837,7 @@ class AgentRestore(Method):
     """
     __method_name__ = "agent_restore"
 
-    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def do_restore(self, tid: uuid.UUID, agent: str, restore_id: uuid.UUID, snapshot_id: uuid.UUID, resources: list):
         """
             Create a snapshot of the requested resource
@@ -885,7 +899,6 @@ class ServerAgentApiMethod(Method):
 
             :param tid The environment the agents are defined in
         """
-        print(tid)
 
 
 class AgentReporting(Method):
@@ -913,7 +926,7 @@ class AgentState(Method):
             Set the state of the agent.
         """
 
-    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
+    @protocol(operation="POST", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
     def trigger(self, tid: uuid.UUID, id: str):
         """
             Request an agent to reload resources
@@ -929,15 +942,19 @@ class AgentResourceEvent(Method):
     """
     __method_name__ = "event"
 
-    @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=ENV_OPTS)
-    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: str):
+    @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
+    def resource_event(self, tid: uuid.UUID, id: str, resource: str, send_events: bool,
+                       state: const.ResourceState, change: const.Change, changes={}):
         """
             Tell an agent a resource it waits for has been updated
 
             :param tid The environment this agent is defined in
             :param id The name of the agent
             :param resource The resource ID of the resource being updated
+            :param send_events Does the resource have send_events enabled?
             :param state State the resource acquired (deployed, skipped, canceled)
+            :param change The change that was made to the resource
+            :param changes The changes made to the resource
         """
 
 

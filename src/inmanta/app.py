@@ -160,7 +160,7 @@ def deploy(options):
 
     try:
         io_loop.start()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, deploy.FinishedException):
         IOLoop.current().stop()
         run.stop()
 

@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -61,14 +61,6 @@ class TestModuleName(unittest.TestCase):
 
         self.handler.flush()
         assert("The name in the module file (mod1) does not match the directory name (mod3)" in self.stream.getvalue().strip())
-
-#     def test_git(self):
-#         # TODO
-#         path = "/home/bart/workspace/test/test"
-#         mod = module.Module(path)
-#
-#         self.handler.flush()
-#         print(self.stream.getValue())
 
     def tearDown(self):
         self.log.removeHandler(self.handler)

@@ -28,6 +28,11 @@ class CannotLoginException(Exception):
     pass
 
 
+class RemoteException(Exception):
+    def __init__(self, exception_type, msg, traceback=None):
+        super().__init__(exception_type, msg, traceback)
+
+
 class RemoteIO(object):
     """
         This class provides handler IO methods
@@ -57,12 +62,17 @@ class RemoteIO(object):
         else:
             return "ssh=root@%s//python=%s" % (host, python_path)
 
-    def _execute(self, function_name, *args):
+    def _execute(self, function_name, *args, **kwargs):
         with self._lock:
             ch = self._gw.remote_exec(local)
-            ch.send((function_name, args))
+            ch.send((function_name, args, kwargs))
             result = ch.receive()
             ch.close()
+
+        # check if we got an exception
+        if isinstance(result, dict) and "__type__" in result and result["__type__"] == "RemoteException":
+            raise RemoteException(exception_type=result["exception_type"], msg=result["exception_string"],
+                                  traceback=result["traceback"])
 
         return result
 
@@ -77,8 +87,8 @@ class RemoteIO(object):
         """
             Proxy a function call to the local version on the other side of the channel.
         """
-        def call(*args):
-            result = self._execute(name, *args)
+        def call(*args, **kwargs):
+            result = self._execute(name, *args, **kwargs)
             return result
 
         return call

@@ -6,7 +6,6 @@ urllib3
 six
 sphinx-argparse
 sphinx
-cliff <= 2.0.0
 blessings
 python-dateutil
 ply
@@ -19,3 +18,5 @@ pytest
 pytest-tornado
 pytest-catchlog
 sphinx_rtd_theme
+click
+texttable

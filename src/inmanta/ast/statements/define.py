@@ -33,11 +33,15 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None, multi=False):
+    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True):
+        """
+            if default_value is None, this is an explicit removal of a default value
+        """
         self.type = attr_type
         self.name = name
         self.default = default_value
         self.multi = multi
+        self.remove_default = remove_default
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -70,6 +74,13 @@ class DefineEntity(TypeDefinitionStatement):
         """
         return "Entity(%s)" % self.name
 
+    def get_full_parent_names(self):
+        try:
+            return [self.namespace.get_type(str(parent)).get_full_name() for parent in self.parents]
+        except TypeNotFoundException as e:
+            e.set_statement(self)
+            raise e
+
     def evaluate(self):
         """
             Evaluate this statement.
@@ -89,7 +100,10 @@ class DefineEntity(TypeDefinitionStatement):
 
                 add_attributes[attribute.name] = attr_obj
 
-                entity_type.add_default_value(attribute.name, attribute.default)
+                if attribute.default is not None:
+                    entity_type.add_default_value(attribute.name, attribute.default)
+                elif attribute.remove_default:
+                    entity_type.add_default_value(attribute.name, None)
 
             if len(set(self.parents)) != len(self.parents):
                 raise TypingException(self, "same parent defined twice")
