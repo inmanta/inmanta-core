@@ -397,7 +397,7 @@ class Server(protocol.ServerEndpoint):
         record.changed = datetime.datetime.now()
 
         for k, _v in form_def.fields.items():
-            if k in form_def.fields:
+            if k in form_def.fields and k in form:
                 value = form[k]
                 field_type = form_def.fields[k]
                 if field_type in type.TYPES:
@@ -1043,7 +1043,7 @@ class Server(protocol.ServerEndpoint):
 
         # check if an environment with this name is already defined in this project
         envs = yield data.Environment.get_list(project=env.project, name=name)
-        if len(envs) > 0:
+        if len(envs) > 0 and envs[0].id != environment_id:
             return 500, {"message": "Project with id=%s already has an environment with name %s" % (env.project_id, name)}
 
         fields = {"name": name}
