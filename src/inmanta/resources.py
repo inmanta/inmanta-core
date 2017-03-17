@@ -177,6 +177,15 @@ class Resource(metaclass=ResourceMeta):
         superclasses. If a field it not available directly in the model object the serializer will look for static methods in
         the class with the name "get_$fieldname".
     """
+    fields = ("send_event",)
+
+    @staticmethod
+    def get_send_event(_, obj):
+        try:
+            return obj.send_event
+        except Exception:
+            return False
+
     @classmethod
     def convert_requires(cls, resources: dict, ignored_resources: set):
         """

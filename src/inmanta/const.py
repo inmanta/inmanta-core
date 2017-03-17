@@ -30,6 +30,12 @@ class ResourceState(Enum):
     cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
 
 
+class Change(Enum):
+    created = 1
+    purged = 2
+    updated = 3
+
+
 class VersionState(Enum):
     success = 1
     failed = 2

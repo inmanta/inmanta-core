@@ -559,7 +559,7 @@ class Server(protocol.ServerEndpoint):
 
     @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id", env="tid")
     @gen.coroutine
-    def get_resource(self, env, resource_id, logs, status):
+    def get_resource(self, env, resource_id, logs, status, log_action, log_limit):
         resv = yield data.Resource.get(env.id, resource_id)
         if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
@@ -569,7 +569,8 @@ class Server(protocol.ServerEndpoint):
 
         actions = []
         if bool(logs):
-            actions = yield data.ResourceAction.get_list(environment=env.id, resource_version_ids=resource_id)
+            actions = yield data.ResourceAction.get_log(environment=env.id, resource_version_id=resource_id,
+                                                        action=log_action, limit=log_limit)
 
         return 200, {"resource": resv, "logs": actions}
 
@@ -649,7 +650,7 @@ class Server(protocol.ServerEndpoint):
             res_dict = res.to_dict()
 
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(res.resource_version_id, log_filter, limit)
+                res_dict["actions"] = yield data.ResourceAction.get_log(env.id, res.resource_version_id, log_filter, limit)
 
             d["resources"].append(res_dict)
 
@@ -875,9 +876,10 @@ class Server(protocol.ServerEndpoint):
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": code.sources}
 
-    @protocol.handle(methods.ResourceMethod.resource_action_update, resource_id="id", env="tid")
+    @protocol.handle(methods.ResourceMethod.resource_action_update, env="tid")
     @gen.coroutine
-    def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes):
+    def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
+                               change, send_events):
         resources = yield data.Resource.get_resources(env.id, resource_ids)
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
@@ -904,6 +906,11 @@ class Server(protocol.ServerEndpoint):
 
         if status is not None:
             resource_action.set_field("status", status)
+
+        if change is not None:
+            resource_action.set_field("change", change)
+
+        resource_action.set_field("send_event", send_events)
 
         done = False
         if finished is not None:
@@ -937,7 +944,9 @@ class Server(protocol.ServerEndpoint):
                                   for res in resources for prov in res.provides])
 
             for agent, resource_id in waiting_agents:
-                yield self.get_agent_client(env.id, agent).resource_event(env.id, agent, resource_id, status)
+                aclient = self.get_agent_client(env.id, agent)
+                if aclient is not None:
+                    yield aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
 
