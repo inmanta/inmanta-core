@@ -208,7 +208,8 @@ def test_check_chmod(io, testdir):
 @pytest.mark.parametrize("io", io_list)
 def test_hash_dir(io, testdir):
     dir_path = os.path.join(testdir, "dir")
-    io.mkdir(dir_path)
+    if not os.path.exists(dir_path):
+        io.mkdir(dir_path)
 
     with pytest.raises(Exception):
         io.hash_file(dir_path)

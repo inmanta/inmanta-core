@@ -177,4 +177,3 @@ def test_server_export(snippetcompiler, server, client, environment):
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
-

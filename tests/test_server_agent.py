@@ -207,7 +207,6 @@ def resource_container():
                     Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                     ctx.set_created()
 
-
             if "value" in changes:
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()

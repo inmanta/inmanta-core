@@ -632,9 +632,9 @@ class Commander(object):
 
     @classmethod
     def reset(cls):
-        __command_functions = defaultdict(dict)
-        __handlers = []
-        __handler_cache = {}
+        cls.__command_functions = defaultdict(dict)
+        cls.__handlers = []
+        cls.__handler_cache = {}
 
     @classmethod
     def close(cls):
