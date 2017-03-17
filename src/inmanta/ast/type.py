@@ -17,7 +17,7 @@
 """
 
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, AnyType
 
 
 class BasicResolver(object):
@@ -115,6 +115,9 @@ class Number(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
+
         try:
             float(value)
         except TypeError:
@@ -167,6 +170,8 @@ class Bool(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
         if isinstance(value, bool):
             return True
         else:
@@ -215,7 +220,7 @@ class String(Type, str):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
             raise RuntimeException(None, "Invalid value '%s', expected String" % value)
@@ -244,7 +249,7 @@ class TypedList(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
 
         if value is None:
@@ -380,7 +385,7 @@ class ConstraintType(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
 
         self.basetype.validate(value)

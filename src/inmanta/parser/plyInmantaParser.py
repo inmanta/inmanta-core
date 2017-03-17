@@ -35,6 +35,7 @@ from inmanta.parser import plyInmantaLex, ParserException
 from inmanta.ast.blocks import BasicBlock
 import re
 import logging
+from inmanta.execute.util import NoneValue
 
 
 LOGGER = logging.getLogger()
@@ -476,6 +477,13 @@ def p_constant(p):
     | mls
     """
     p[0] = Literal(p[1])
+    attach_lnr(p)
+
+
+def p_constant_none(p):
+    """ constant : NULL
+    """
+    p[0] = Literal(NoneValue())
     attach_lnr(p)
 
 

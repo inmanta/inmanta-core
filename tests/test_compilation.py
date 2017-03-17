@@ -35,7 +35,7 @@ from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
 import pytest
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, NoneValue
 from inmanta.export import DependencyCycleException
 from utils import assert_graph
 from conftest import SnippetCompilationTest
@@ -1263,4 +1263,16 @@ def test_275_duplicate_parent(snippetcompiler):
     implement B using std::none
     """)
     with pytest.raises(TypingException):
-        (_, scopes) = compiler.do_compile()
+        compiler.do_compile()
+
+
+def test_null(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        a = null
+        
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    assert isinstance(a.get_value(), NoneValue)

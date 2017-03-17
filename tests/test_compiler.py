@@ -29,6 +29,7 @@ from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
+from inmanta.execute.util import NoneValue
 
 
 def parse_code(model_code: str):
@@ -516,6 +517,17 @@ a=true b=false
     assert isinstance(stmt, Assign)
     assert stmt.value.value
     assert not statements[1].value.value
+
+
+def test_None():
+    statements = parse_code("""
+a=null
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, NoneValue)
 
 
 def test_numbers():

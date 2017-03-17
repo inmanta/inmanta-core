@@ -20,7 +20,11 @@ import imp
 import sys
 
 
-class Unknown(object):
+class AnyType(object):
+    pass
+
+
+class Unknown(AnyType):
     """
         An instance of this class is used to indicate that this value can not be determined yet.
 
@@ -32,6 +36,10 @@ class Unknown(object):
 
     def __iter__(self):
         return iter([])
+
+
+class NoneValue(AnyType):
+    pass
 
 
 def ensure_module(name):
