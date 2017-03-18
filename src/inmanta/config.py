@@ -67,6 +67,10 @@ class Config(object):
 
         return cls.__instance
 
+    @classmethod
+    def _reset(cls):
+        cls.__instance = None
+
     # noinspection PyNoneFunctionAssignment
     @classmethod
     def get(cls, section=None, name=None, default_value=None):
@@ -259,10 +263,6 @@ def get_executable():
         return os.path.abspath(sys.argv[0])
     except:
         return None
-
-executable = \
-    Option("config", "executable", get_executable,
-           "The main python file for the server")
 
 
 def get_default_nodename():

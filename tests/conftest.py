@@ -27,11 +27,13 @@ import socket
 
 from mongobox import MongoBox
 import pytest
-from inmanta import config, data
+from inmanta import config, data, command
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
 from inmanta.module import Project
+from inmanta import resources, export
+from inmanta.agent import handler
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
@@ -44,7 +46,8 @@ DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
 @pytest.fixture(scope="session", autouse=True)
 def mongo_db():
-    mongobox = MongoBox()
+    db_path = tempfile.mkdtemp(dir="/dev/shm")
+    mongobox = MongoBox(db_path=db_path)
     port_envvar = DEFAULT_PORT_ENVVAR
 
     mongobox.start()
@@ -54,6 +57,21 @@ def mongo_db():
 
     mongobox.stop()
     del os.environ[port_envvar]
+    shutil.rmtree(db_path)
+
+
+def reset_all():
+    resources.resource.reset()
+    export.Exporter.reset()
+    command.Commander.reset()
+    handler.Commander.reset()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def clean_reset():
+    reset_all()
+    yield
+    reset_all()
 
 
 @pytest.fixture(scope="session")
@@ -92,13 +110,19 @@ def get_free_tcp_port():
     return str(port)
 
 
+@pytest.fixture(scope="function", autouse=True)
+def inmanta_config():
+    config.Config.load_config()
+    yield config.Config._get_instance()
+    config.Config._reset()
+
+
 @pytest.fixture(scope="function")
-def server(io_loop, mongo_db, mongo_client, motor):
+def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -128,7 +152,7 @@ def server(io_loop, mongo_db, mongo_client, motor):
 @pytest.fixture(scope="function",
                 params=[(True, True), (True, False), (False, True), (False, False)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal"])
-def server_multi(io_loop, mongo_db, mongo_client, request):
+def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
@@ -154,7 +178,6 @@ def server_multi(io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "password", testpass)
 
     port = get_free_tcp_port()
-    config.Config.load_config()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
@@ -246,7 +269,7 @@ class SnippetCompilationTest(object):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self):
+    def do_export(self, deploy=False):
         templfile = mktemp("json", "dump", self.project_dir)
 
         from inmanta.export import Exporter
@@ -256,9 +279,9 @@ class SnippetCompilationTest(object):
         class Options(object):
             pass
         options = Options()
-        options.json = templfile
+        options.json = templfile if not deploy else None
         options.depgraph = False
-        options.deploy = False
+        options.deploy = deploy
         options.ssl = False
 
         export = Exporter(options=options)
@@ -281,6 +304,7 @@ def snippetcompiler():
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
+    shutil.rmtree(ast.project_dir)
     ast.tearDownClass()
 
 

@@ -34,11 +34,17 @@ cfg_prj = config.Option("deploy", "project", "deploy", "The project name to use 
 cfg_env = config.Option("deploy", "environment", "deploy", "The environment name to use in the deploy", config.is_str_opt)
 
 
+class FinishedException(Exception):
+    """
+        This exception is raised when the deploy is ready
+    """
+
+
 class Deploy(object):
 
-    def __init__(self, io_loop):
+    def __init__(self, io_loop, mongoport=0):
         self._mongobox = None
-        self._mongoport = 0
+        self._mongoport = mongoport
         self._server_port = 0
         self._data_path = None
         self._server = None
@@ -96,13 +102,14 @@ class Deploy(object):
 
     def _setup_mongodb(self):
         # start a local mongodb on a random port
-        self._mongoport = PORT_START + random.randint(0, 2000)
-        mongo_dir = os.path.join(self._data_path, "mongo")
-        self._mongobox = mongobox.MongoBox(db_path=mongo_dir, port=self._mongoport)
-        LOGGER.debug("Starting mongodb on port %d", self._mongoport)
-        if not self._mongobox.start():
-            LOGGER.error("Unable to start mongodb instance on port %d and data directory %s", self._mongoport, mongo_dir)
-            return False
+        if self._mongoport == 0:
+            self._mongoport = PORT_START + random.randint(0, 2000)
+            mongo_dir = os.path.join(self._data_path, "mongo")
+            self._mongobox = mongobox.MongoBox(db_path=mongo_dir, port=self._mongoport)
+            LOGGER.debug("Starting mongodb on port %d", self._mongoport)
+            if not self._mongobox.start():
+                LOGGER.error("Unable to start mongodb instance on port %d and data directory %s", self._mongoport, mongo_dir)
+                return False
 
         return True
 
@@ -231,6 +238,7 @@ class Deploy(object):
         project = module.Project.get()
         self._data_path = os.path.join(project.project_path, "data", "deploy")
         LOGGER.debug("Storing state data in %s", self._data_path)
+        self._ensure_dir(os.path.join(project.project_path, "data"))
         self._ensure_dir(self._data_path)
 
         if not self._setup_mongodb():
@@ -246,17 +254,18 @@ class Deploy(object):
         """
             Export a version to the embedded server
         """
-        inmanta_path = [sys.executable, os.path.abspath(sys.argv[0])]
+        inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
         cmd = inmanta_path + ["-vvv", "export", "-e", str(self._environment_id), "--server_address", "localhost",
                               "--server_port", str(self._server_port)]
 
         sub_process = process.Subprocess(cmd, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM)
 
-        log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
-                                              gen.Task(sub_process.stderr.read_until_close),
+        log_out, log_err, returncode = yield [sub_process.stdout.read_until_close(),
+                                              sub_process.stderr.read_until_close(),
                                               sub_process.wait_for_exit(raise_error=False)]
 
+        sub_process.uninitialize()
         if returncode > 0:
             print("An error occurred while compiling the model:")
             if len(log_out) > 0:
@@ -352,7 +361,7 @@ class Deploy(object):
             yield gen.sleep(1)
 
         print("Deploy ready")
-        raise KeyboardInterrupt()
+        raise FinishedException()
 
     @gen.coroutine
     def _get_dryrun_status(self, dryrun_id):
@@ -405,15 +414,18 @@ class Deploy(object):
             print("[%d / %d]" % (total - todo, total))
             yield gen.sleep(1)
 
-        raise KeyboardInterrupt()
+        raise FinishedException()
 
     @gen.coroutine
     def do_deploy(self, dry_run):
         yield self.setup_project()
         yield self.export(dry_run=dry_run)
 
-    def run(self, options):
+    def run(self, options, only_setup=False):
         self.setup_server(options.no_agent_log)
+
+        if only_setup:
+            return
 
         def handle_result(x):
             if not x.result() or x.exception() is not None:

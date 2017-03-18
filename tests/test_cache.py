@@ -22,14 +22,17 @@ from inmanta.agent.handler import cache
 from inmanta.agent.cache import AgentCache
 from inmanta.resources import resource, Resource, Id
 import pytest
+from _pytest.fixtures import fixture
 
 
-@resource("test::Resource", agent="agent", id_attribute="key")
-class Resource(Resource):
-    """
-        A file on a filesystem
-    """
-    fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+@fixture(autouse=True)
+def my_resource():
+    @resource("test::Resource", agent="agent", id_attribute="key")
+    class MyResource(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
 
 class CacheTests(unittest.TestCase):

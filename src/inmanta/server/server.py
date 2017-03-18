@@ -1146,9 +1146,12 @@ class Server(protocol.ServerEndpoint):
         sub_process = process.Subprocess(cmd, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM,
                                          cwd=cwd, **kwargs)
 
-        log_out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
-                                              gen.Task(sub_process.stderr.read_until_close),
-                                              sub_process.wait_for_exit(raise_error=False)]
+        returncode = yield sub_process.wait_for_exit(raise_error=False)
+        log_out = yield gen.Task(sub_process.stdout.read_until_close)
+        log_err = yield gen.Task(sub_process.stderr.read_until_close)
+
+        sub_process.uninitialize()
+
         stop = datetime.datetime.now()
         return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
                            errstream=log_err.decode(), outstream=log_out.decode(), returncode=returncode)
@@ -1170,7 +1173,7 @@ class Server(protocol.ServerEndpoint):
         stages = []
 
         try:
-            inmanta_path = [sys.executable, os.path.abspath(sys.argv[0])]
+            inmanta_path = [sys.executable, "-m", "inmanta.app"]
             project_dir = os.path.join(self._server_storage["environments"], str(environment_id))
 
             if not os.path.exists(project_dir):
@@ -1191,6 +1194,7 @@ class Server(protocol.ServerEndpoint):
                 stages.append(result)
 
             # verify if branch is correct
+            LOGGER.debug("Verifying correct branch")
             proc = subprocess.Popen(["git", "branch"], cwd=project_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out, _ = proc.communicate()
 
@@ -1219,6 +1223,8 @@ class Server(protocol.ServerEndpoint):
                                                                    opt.transport_port.get()],
                                                    project_dir, env=os.environ.copy())
             stages.append(result)
+        except Exception:
+            LOGGER.exception("An error occured while recompiling")
         finally:
             end = datetime.datetime.now()
             self._recompiles[environment_id] = end

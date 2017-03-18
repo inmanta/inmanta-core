@@ -16,14 +16,11 @@
     Contact: code@inmanta.com
 """
 
-import logging
-
 import pytest
+from tornado import gen
 
-LOGGER = logging.getLogger(__name__)
 
-
-@pytest.mark.gen_test(timeout=60)
+@pytest.mark.gen_test(timeout=10)
 @pytest.mark.slowtest
 def test_compile_report(server):
     from inmanta import protocol
@@ -44,6 +41,8 @@ def test_compile_report(server):
         assert(result.code == 200)
         if len(result.result["reports"]) > 0:
             break
+
+        yield gen.sleep(0.5)
 
     report = result.result["reports"][0]
     assert(len(report["reports"]) == 1)
