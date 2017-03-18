@@ -23,7 +23,7 @@ from tornado import process
 import pytest
 
 
-@pytest.mark.gen_test(timeout=10)
+@pytest.mark.gen_test(timeout=60)
 def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db):
     file_name = tmpdir.join("test_file")
     snippetcompiler.setup_for_snippet("""
@@ -31,7 +31,6 @@ def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db):
     file = std::Symlink(host=host, source="/dev/null", target="%s")
     """ % file_name)
 
-    curdir = os.curdir
     os.chdir(snippetcompiler.project_dir)
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun"])
     options = Options(no_agent_log=False, dryrun=False)
@@ -47,7 +46,6 @@ def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db):
 
     finally:
         run.stop()
-        os.chdir(curdir)
 
 
 @pytest.mark.gen_test(timeout=10)

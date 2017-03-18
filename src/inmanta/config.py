@@ -67,6 +67,10 @@ class Config(object):
 
         return cls.__instance
 
+    @classmethod
+    def _reset(cls):
+        cls.__instance = None
+
     # noinspection PyNoneFunctionAssignment
     @classmethod
     def get(cls, section=None, name=None, default_value=None):

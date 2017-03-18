@@ -899,7 +899,6 @@ class ServerAgentApiMethod(Method):
 
             :param tid The environment the agents are defined in
         """
-        print(tid)
 
 
 class AgentReporting(Method):
