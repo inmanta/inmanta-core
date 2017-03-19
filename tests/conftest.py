@@ -110,6 +110,12 @@ def get_free_tcp_port():
     return str(port)
 
 
+@pytest.fixture()
+def free_port():
+    port = get_free_tcp_port()
+    yield port
+
+
 @pytest.fixture(scope="function", autouse=True)
 def inmanta_config():
     config.Config.load_config()

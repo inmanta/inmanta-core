@@ -19,7 +19,6 @@
 import logging
 import sys
 import uuid
-import random
 
 import colorlog
 from inmanta import methods
@@ -80,7 +79,7 @@ class Agent(protocol.AgentEndPoint):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
 
-def test_2way_protocol(logs=False):
+def test_2way_protocol(free_port, logs=False):
 
     from inmanta.config import Config
 
@@ -112,13 +111,12 @@ def test_2way_protocol(logs=False):
         logging.root.addHandler(stream)
         logging.root.setLevel(logging.DEBUG)
 
-    port = str(random.randint(30000, 60000))
     Config.load_config()
-    Config.set("server_rest_transport", "port", port)
-    Config.set("agent_rest_transport", "port", port)
-    Config.set("compiler_rest_transport", "port", port)
-    Config.set("client_rest_transport", "port", port)
-    Config.set("cmdline_rest_transport", "port", port)
+    Config.set("server_rest_transport", "port", free_port)
+    Config.set("agent_rest_transport", "port", free_port)
+    Config.set("compiler_rest_transport", "port", free_port)
+    Config.set("client_rest_transport", "port", free_port)
+    Config.set("cmdline_rest_transport", "port", free_port)
 
     io_loop = IOLoop.current()
     server = Server("server", io_loop)
@@ -158,7 +156,7 @@ def check_sessions(sessions):
 
 
 @pytest.mark.slowtest
-def test_timeout():
+def test_timeout(free_port):
 
     from inmanta.config import Config
     import inmanta.agent.config  # nopep8
@@ -167,13 +165,12 @@ def test_timeout():
     io_loop = IOLoop.current()
 
     # start server
-    port = str(random.randint(30000, 60000))
     Config.load_config()
-    Config.set("server_rest_transport", "port", port)
-    Config.set("agent_rest_transport", "port", port)
-    Config.set("compiler_rest_transport", "port", port)
-    Config.set("client_rest_transport", "port", port)
-    Config.set("cmdline_rest_transport", "port", port)
+    Config.set("server_rest_transport", "port", free_port)
+    Config.set("agent_rest_transport", "port", free_port)
+    Config.set("compiler_rest_transport", "port", free_port)
+    Config.set("client_rest_transport", "port", free_port)
+    Config.set("cmdline_rest_transport", "port", free_port)
     server = Server("server", io_loop, interval=2)
     server.start()
 
