@@ -68,10 +68,13 @@ def reset_all():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def clean_reset():
+def clean_reset(mongo_client):
     reset_all()
     yield
     reset_all()
+
+    for db_name in mongo_client.database_names():
+        mongo_client.drop_database(db_name)
 
 
 @pytest.fixture(scope="session")
@@ -88,9 +91,6 @@ def motor(mongo_db, mongo_client, io_loop):
     client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
     db = client["inmanta"]
     yield db
-
-    for db_name in mongo_client.database_names():
-        mongo_client.drop_database(db_name)
 
 
 @pytest.fixture(scope="function")
@@ -142,10 +142,6 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     yield server
 
     server.stop()
-    # does not work with current pymongo
-    for db_name in mongo_client.database_names():
-        mongo_client.drop_database(db_name)
-    # end fix
     shutil.rmtree(state_dir)
 
 
@@ -195,10 +191,6 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     yield server
 
     server.stop()
-    # does not work with current pymongo
-    for db_name in mongo_client.database_names():
-        mongo_client.drop_database(db_name)
-    # end fix
     shutil.rmtree(state_dir)
 
 
