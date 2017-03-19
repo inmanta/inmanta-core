@@ -24,7 +24,7 @@ import pytest
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db):
+def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
     file_name = tmpdir.join("test_file")
     snippetcompiler.setup_for_snippet("""
     host = std::Host(name="test", os=std::linux)
