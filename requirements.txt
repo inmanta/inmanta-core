@@ -1,4 +1,3 @@
-blessings
 click
 colorlog
 execnet

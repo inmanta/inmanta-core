@@ -27,7 +27,6 @@ from concurrent.futures import Future
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from blessings import Terminal
 from tornado.ioloop import IOLoop
 import click
 import texttable
@@ -209,7 +208,9 @@ class Client(object):
 
 
 def print_table(header, rows):
-    table = texttable.Texttable()
+    width, _ = click.get_terminal_size()
+
+    table = texttable.Texttable(max_width=width)
     table.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
     table.header(header)
     for row in rows:
@@ -318,7 +319,7 @@ port = %s
 host=%s
 port=%s""" % (env["id"], client.host, client.port, client.host, client.port)
         if os.path.exists(".inmanta"):
-            print(".inmanta exits, not writing config")
+            click.echo(".inmanta exits, not writing config", err=True)
         else:
             with open(".inmanta", 'w') as f:
                 f.write(cfg)
@@ -500,51 +501,50 @@ def version_report(client, environment, version, l):
     tid = client.to_environment_id(environment)
     result = client.do_request("get_version", arguments=dict(tid=tid, id=version, include_logs=True))
 
-    term = Terminal()
     agents = defaultdict(lambda: defaultdict(lambda: []))
     for res in result["resources"]:
         if len(res["actions"]) > 0 or l:
             agents[res["agent"]][res["resource_type"]].append(res)
 
     for agent in sorted(agents.keys()):
-        print(term.bold("Agent: %s" % agent))
-        print("=" * 72)
+        click.echo(click.style("Agent: %s" % agent, bold=True))
+        click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            print("{t.bold}Resource type:{t.normal} {type} ({attr})".
-                  format(type=t, attr=agents[agent][t][0]["id_attribute_name"], t=term))
-            print("-" * 72)
+            click.echo(click.style("Resource type:", bold=True) +
+                       "{type} ({attr})".format(type=t, attr=agents[agent][t][0]["id_attribute_name"]))
+            click.echo("-" * 72)
 
             for res in agents[agent][t]:
-                print((term.bold + "%s" + term.normal + " (#actions=%d)") % (res["id_attribute_value"], len(res["actions"])))
+                click.echo((click.style(res["id_attribute_value"], bold=True) + " (#actions=%d)") % len(res["actions"]))
                 # for dryrun show only the latest, for deploy all
                 if not result["model"]["released"]:
                     if len(res["actions"]) > 0:
                         action = res["actions"][0]
-                        print("* last check: %s" % action["timestamp"])
-                        print("* result: %s" % ("error" if action["level"] != "INFO" else "success"))
+                        click.echo("* last check: %s" % action["timestamp"])
+                        click.echo("* result: %s" % ("error" if action["level"] != "INFO" else "success"))
                         if len(action["data"]) == 0:
-                            print("* no changes")
+                            click.echo("* no changes")
                         else:
-                            print("* changes:")
+                            click.echo("* changes:")
                             for field in sorted(action["data"].keys()):
                                 values = action["data"][field]
                                 if field == "hash":
-                                    print("  - content:")
+                                    click.echo("  - content:")
                                     diff_value = client.do_request("diff", arguments=dict(a=values[0], b=values[1]))
-                                    print("    " + "    ".join(diff_value["diff"]))
+                                    click.echo("    " + "    ".join(diff_value["diff"]))
                                 else:
-                                    print("  - %s:" % field)
-                                    print("    " + term.bold + "from:" + term.normal + " %s" % values[0])
-                                    print("    " + term.bold + "to:" + term.normal + " %s" % values[1])
+                                    click.echo("  - %s:" % field)
+                                    click.echo("    " + click.style("from:", bold=True) + " %s" % values[0])
+                                    click.echo("    " + click.style("to:", bold=True) + " %s" % values[1])
 
-                                print("")
+                                click.echo("")
 
-                        print("")
+                        click.echo("")
                 else:
                     pass
 
-            print("")
+            click.echo("")
 
 
 @cmd.group("form")
@@ -727,6 +727,10 @@ def record_delete(client, environment, record):
     return ((), ())
 
 
-if __name__ == '__main__':
+def main():
     Config.load_config()
     cmd()
+
+
+if __name__ == '__main__':
+    main()

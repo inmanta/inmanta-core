@@ -14,8 +14,7 @@ requires = [
         'virtualenv',
         'motor >= 1.1',
         'pymongo',
-        'mongobox',
-        'blessings']
+        'mongobox']
 
 setup(
     name="inmanta",
@@ -36,7 +35,7 @@ setup(
 
     entry_points={
     'console_scripts': [
-        'inmanta-cli = inmanta.main:cmd'
+        'inmanta-cli = inmanta.main:main'
     ],
 },
 )
