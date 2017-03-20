@@ -10,7 +10,6 @@ requires = [
         'python-dateutil',
         'ply',
         'pyyaml',
-        'ruamel.yaml',
         'virtualenv',
         'motor >= 1.1',
         'pymongo',

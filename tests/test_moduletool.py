@@ -32,7 +32,7 @@ from inmanta.config import Config
 from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
-import ruamel.yaml
+import yaml
 from pkg_resources import parse_version
 
 
@@ -50,7 +50,7 @@ def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mod
     with open(os.path.join(path, mainfile), "w") as projectfile:
         projectfile.write("name: " + name)
         projectfile.write("\nlicense: Apache 2.0")
-        projectfile.write("\nversion: 0.0.1")
+        projectfile.write("\nversion: '0.0.1'")
 
         if project:
             projectfile.write("""
@@ -106,12 +106,12 @@ def add_file(modpath, file, content, msg, version=None):
 def add_file_and_compiler_constraint(modpath, file, content, msg, version, compiler_version):
     cfgfile = os.path.join(modpath, "module.yml")
     with open(cfgfile, "r") as fd:
-        cfg = ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
+        cfg = yaml.safe_load(fd)
 
     cfg["compiler_version"] = compiler_version
 
     with open(cfgfile, "w") as fd:
-        fd.write(ruamel.yaml.dump(cfg, Dumper=ruamel.yaml.RoundTripDumper))
+        yaml.dump(cfg, fd)
     add_file(modpath, file, content, msg, version)
 
 
@@ -174,7 +174,7 @@ class TestModuleTool(unittest.TestCase):
 
         mod2 = makemodule(reporoot, "mod2", [])
         commitmodule(mod2, "first commit")
-        add_file(mod2, "signal", "present", "second commit", version="2106.1")
+        add_file(mod2, "signal", "present", "second commit", version="2016.1")
 
         mod3 = makemodule(reporoot, "mod3", [])
         commitmodule(mod3, "first commit")
@@ -261,7 +261,8 @@ class TestModuleTool(unittest.TestCase):
 license: Apache 2.0
 version: '3.2'
 """
-        assert result == gitprovider.get_file_for_version(os.path.join(TestModuleTool.reporoot, "mod6"), "3.2", "module.yml")
+        module_yaml = gitprovider.get_file_for_version(os.path.join(TestModuleTool.reporoot, "mod6"), "3.2", "module.yml")
+        assert result == module_yaml
 
     def test_local_repo_good(self):
         repo = LocalFileRepo(TestModuleTool.reporoot)
