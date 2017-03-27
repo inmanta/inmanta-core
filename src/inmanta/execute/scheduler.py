@@ -79,6 +79,21 @@ class Scheduler(object):
         for i in self.verify_done():
             i.dump()
 
+    def sort_entities(self, entity_map):
+        out = []
+        while len(entity_map) > 0:
+            workon = next(iter(entity_map.keys()))
+            self.do_sort_entities(entity_map, workon, out)
+        return out
+
+    def do_sort_entities(self, entity_map, name, acc):
+        nexte = entity_map[name]
+        del entity_map[name]
+        for p in nexte.get_full_parent_names():
+            if p in entity_map:
+                self.do_sort_entities(entity_map, p, acc)
+        acc.append(nexte)
+
     def define_types(self, compiler, statements, blocks):
         """
             This is the first compiler stage that defines all types_and_impl
@@ -106,13 +121,18 @@ class Scheduler(object):
         # now that we have objects for all types, populate them
         implements = [t for t in definitions if isinstance(t, DefineImplement)]
         others = [t for t in definitions if not isinstance(t, DefineImplement)]
-        entities = [t for t in others if isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault)]
+        entities = {t.fullName: t for t in others if isinstance(t, DefineEntity)}
+        typedefaults = [t for t in others if isinstance(t, DefineTypeDefault)]
         others = [t for t in others if not (isinstance(t, DefineEntity) or isinstance(t, DefineTypeDefault))]
         indices = [t for t in others if isinstance(t, DefineIndex)]
         others = [t for t in others if not isinstance(t, DefineIndex)]
 
         # first entities, so we have inheritance
-        for d in entities:
+        # parents first
+        for d in self.sort_entities(entities):
+            d.evaluate()
+
+        for d in typedefaults:
             d.evaluate()
 
         for d in others:

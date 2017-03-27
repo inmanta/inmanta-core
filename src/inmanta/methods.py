@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -302,7 +302,8 @@ class ResourceMethod(Method):
     __method_name__ = "resource"
 
     @protocol(operation="GET", id=True, agent_server=True, api=True, validate_sid=False, arg_options=ENV_OPTS)
-    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None):
+    def get_resource(self, tid: uuid.UUID, id: str, logs: bool=None, status: bool=None,
+                     log_action: const.ResourceAction=None, log_limit: int=0):
         """
             Return a resource with the given id.
 
@@ -310,6 +311,9 @@ class ResourceMethod(Method):
             :param id Get the resource with the given id
             :param logs Include the logs in the response
             :param status return only resources of this status
+            :param log_action The log action to include, leave empty/none for all actions. Valid actions are one of
+                              the action strings in const.ResourceAction
+            :param log_limit Limit the number of logs included in the response
         """
 
     @protocol(operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS)
@@ -326,7 +330,8 @@ class ResourceMethod(Method):
     @protocol(operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS)
     def resource_action_update(self, tid: uuid.UUID, resource_ids: list, action_id: uuid.UUID, action: const.ResourceAction,
                                started: datetime.datetime=None, finished: datetime.datetime=None,
-                               status: const.ResourceState=None, messages: list=[], changes: dict={}):
+                               status: const.ResourceState=None, messages: list=[], changes: dict={},
+                               change: const.Change=None, send_events: bool=False):
         """
             Send a resource update to the server
 
@@ -345,6 +350,8 @@ class ResourceMethod(Method):
             :param messages A list of log entries to add to this entry.
             :param changes A dict of changes to this resource. The key of this dict indicates the attributes/fields that
                            have been changed. The value contains the new value and/or the orignal value.
+            :param change The result of the changes
+            :param send_events Send events to the dependents of this resource
         """
 
 
@@ -892,7 +899,6 @@ class ServerAgentApiMethod(Method):
 
             :param tid The environment the agents are defined in
         """
-        print(tid)
 
 
 class AgentReporting(Method):
@@ -937,14 +943,18 @@ class AgentResourceEvent(Method):
     __method_name__ = "event"
 
     @protocol(operation="PUT", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS)
-    def resource_event(self, tid: uuid.UUID, id: str, resource: str, state: const.ResourceState):
+    def resource_event(self, tid: uuid.UUID, id: str, resource: str, send_events: bool,
+                       state: const.ResourceState, change: const.Change, changes={}):
         """
             Tell an agent a resource it waits for has been updated
 
             :param tid The environment this agent is defined in
             :param id The name of the agent
             :param resource The resource ID of the resource being updated
+            :param send_events Does the resource have send_events enabled?
             :param state State the resource acquired (deployed, skipped, canceled)
+            :param change The change that was made to the resource
+            :param changes The changes made to the resource
         """
 
 

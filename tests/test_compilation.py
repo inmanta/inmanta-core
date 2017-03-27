@@ -39,6 +39,7 @@ from inmanta.execute.util import Unknown, NoneValue
 from inmanta.export import DependencyCycleException
 from utils import assert_graph
 from conftest import SnippetCompilationTest
+from inmanta.execute.proxy import UnsetException
 
 
 class CompilerBaseTest(object):
@@ -740,13 +741,12 @@ Test2.xx [1] -- Test1.tests [0:]
 
     def test_issue_164_fqn_in_when(self):
         self.setup_for_snippet("""
-import ubuntu
 implementation linux for std::HostConfig:
 end
 
-implement std::HostConfig using linux when host.os == ubuntu::ubuntu1404
+implement std::HostConfig using linux when host.os == std::linux
 
-std::Host(name="vm1", os=ubuntu::ubuntu1404)
+std::Host(name="vm1", os=std::linux)
 """)
         compiler.do_compile()
 
@@ -1027,7 +1027,7 @@ D()
         files = types["__config__::C"].get_all_instances()
         assert len(files) == 1
 
-    def test_abstract_requres(self):
+    def test_abstract_requires(self):
         self.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
@@ -1052,7 +1052,7 @@ inter = A(name = "inter")
         v, resources = self.do_export()
         assert_graph(resources, """inter2: inter1""")
 
-    def test_abstract_requres_3(self):
+    def test_abstract_requires_3(self):
         self.setup_for_snippet("""
 host = std::Host(name="host", os=std::unix)
 
@@ -1276,3 +1276,36 @@ def test_null(snippetcompiler):
     root = scopes.get_child("__config__")
     a = root.lookup("a")
     assert isinstance(a.get_value(), NoneValue)
+
+
+def test_default_remove(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+        bool at = true
+    end
+    implement A using std::none
+
+    entity B extends A:
+        bool at = undef
+    end
+    implement B using std::none
+
+    a = A()
+    b = B()
+    """)
+    with pytest.raises(UnsetException):
+        compiler.do_compile()
+
+
+def test_emptylists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    implement std::Entity using std::none
+
+    a=std::Entity()
+    b=std::Entity()
+    c=std::Entity()
+
+    a.provides = b.provides
+    b.provides = c.provides
+    """)
+    compiler.do_compile()

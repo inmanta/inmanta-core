@@ -784,6 +784,7 @@ class ResourceAction(BaseDocument):
         :param changes A dict with key the resource id and value a dict of fields -> value. Value is a dict that can
                        contain old and current keys and the associated values. An empty dict indicates that the field
                        was changed but not data was provided by the agent.
+        :param change The change result of an action
     """
     resource_version_ids = Field(field_type=list, required=True)
     environment = Field(field_type=uuid.UUID, required=True)
@@ -795,10 +796,10 @@ class ResourceAction(BaseDocument):
     finished = Field(field_type=datetime.datetime)
 
     messages = Field(field_type=list)
-
     status = Field(field_type=const.ResourceState)
-
     changes = Field(field_type=dict)
+    change = Field(field_type=const.Change)
+    send_event = Field(field_type=bool)
 
     __indexes__ = [
         dict(keys=[("environment", pymongo.ASCENDING), ("action_id", pymongo.ASCENDING)], unique=True),
@@ -811,20 +812,20 @@ class ResourceAction(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_log(cls, resource_version_id, action, limit=0):
+    def get_log(cls, environment, resource_version_id, action=None, limit=0):
         if action is not None:
-            cursor = cls._coll.find({"resource_version_id": resource_version_id,
-                                     "action": action}).sort("timestamp", direction=pymongo.DESCENDING)
+            cursor = cls._coll.find({"environment": environment, "resource_version_ids": resource_version_id,
+                                     "action": action.name}).sort("started", direction=pymongo.DESCENDING)
         else:
-            cursor = cls._coll.find({"resource_version_id": resource_version_id,
-                                     "action": action}).sort("timestamp", direction=pymongo.DESCENDING)
+            cursor = cls._coll.find({"environment": environment, "resource_version_ids": resource_version_id
+                                     }).sort("started", direction=pymongo.DESCENDING)
 
         if limit is not None and limit > 0:
             cursor = cursor.limit(limit)
 
         log = []
         while (yield cursor.fetch_next):
-            log.append(from_mongo=True, **cursor.next_object())
+            log.append(cls(from_mongo=True, **cursor.next_object()))
 
         return log
 

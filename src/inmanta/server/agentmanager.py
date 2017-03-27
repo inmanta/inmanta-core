@@ -20,7 +20,7 @@
 from tornado import gen
 from tornado import locks
 
-from inmanta.config import Config, executable
+from inmanta.config import Config
 from inmanta.agent.io.remote import RemoteIO
 from inmanta.resources import HostNotFoundException
 from inmanta import data
@@ -288,8 +288,7 @@ class AgentManager(object):
         """
             For an inmanta process from the same code base as the current code
         """
-        main = executable.get()
-        inmanta_path = [sys.executable, main]
+        inmanta_path = [sys.executable, "-m", "inmanta.app"]
         # handles can be closed, owned by child process,...
         try:
             outhandle = None

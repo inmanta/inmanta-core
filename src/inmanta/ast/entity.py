@@ -93,8 +93,6 @@ class Entity(Type):
         """
             Add a default value for an attribute
         """
-        if value is None:
-            return
         self.__default_value[name] = value
 
     def get_defaults(self):
@@ -112,8 +110,10 @@ class Entity(Type):
 
         # self takes precedence
         values.extend(self.__default_value.items())
-
-        return dict(values)
+        # make dict, remove doubles
+        values = dict(values)
+        # remove erased defaults
+        return {k: v for k, v in values.items() if v is not None}
 
     def get_namespace(self):
         """

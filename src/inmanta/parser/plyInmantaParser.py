@@ -197,6 +197,12 @@ def p_attr_cte(p):
     attach_lnr(p, 2)
 
 
+def p_attr_undef(p):
+    "attr : ns_ref ID '=' UNDEF"
+    p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
+    attach_lnr(p, 2)
+
+
 def p_attr_list(p):
     "attr : ns_ref '[' ']' ID"
     p[0] = DefineAttribute(p[1], p[4], None, True)
@@ -206,6 +212,12 @@ def p_attr_list(p):
 def p_attr_list_cte(p):
     "attr : ns_ref '[' ']' ID '=' constant_list"
     p[0] = DefineAttribute(p[1], p[4], p[6], True)
+    attach_lnr(p, 2)
+
+
+def p_attr_list_undef(p):
+    "attr : ns_ref '[' ']' ID '=' UNDEF"
+    p[0] = DefineAttribute(p[1], p[4], None, True, remove_default=True)
     attach_lnr(p, 2)
 
 

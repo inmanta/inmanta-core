@@ -599,8 +599,10 @@ class RESTTransport(Transport):
                                 message[arg] = arg_type(message[arg])
 
                         except (ValueError, TypeError):
-                            return self.return_error_msg(500, "Invalid type for argument %s. Expected %s but received %s" %
-                                                         (arg, arg_type, message[arg].__class__), headers)
+                            error_msg = ("Invalid type for argument %s. Expected %s but received %s" %
+                                         (arg, arg_type, message[arg].__class__))
+                            LOGGER.exception(error_msg)
+                            return self.return_error_msg(500, error_msg, headers)
 
                 # execute any getters that are defined
                 if "getter" in opts:
@@ -608,6 +610,7 @@ class RESTTransport(Transport):
                         result = yield opts["getter"](message[arg])
                         message[arg] = result
                     except methods.HTTPException as e:
+                        LOGGER.exception("Failed to use getter for arg %s", arg)
                         return self.return_error_msg(e.code, e.message, headers)
 
             if config[0]["agent_server"]:
@@ -655,7 +658,7 @@ class RESTTransport(Transport):
             return None, headers, code
 
         except Exception as e:
-            LOGGER.exception("An exception occured")
+            LOGGER.exception("An exception occured during the request.")
             return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
 
     def add_static_handler(self, location, path, default_filename=None, start=False):
@@ -758,6 +761,9 @@ class RESTTransport(Transport):
         headers = {}
 
         for arg_name in list(msg.keys()):
+            if isinstance(msg[arg_name], enum.Enum):  # Handle enum values "special"
+                msg[arg_name] = msg[arg_name].name
+
             if arg_name in properties["arg_options"]:
                 opts = properties["arg_options"][arg_name]
                 if "header" in opts:

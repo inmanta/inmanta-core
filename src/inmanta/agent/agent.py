@@ -46,18 +46,18 @@ GET_RESOURCE_BACKOFF = 5
 
 class ResourceActionResult(object):
 
-    def __init__(self, success, reload, cancel):
+    def __init__(self, success, receive_events, cancel):
         self.success = success
-        self.reload = reload
+        self.receive_events = receive_events
         self.cancel = cancel
 
     def __add__(self, other):
         return ResourceActionResult(self.success and other.success,
-                                    self.reload or other.reload,
+                                    self.receive_events or other.receive_events,
                                     self.cancel or other.cancel)
 
     def __str__(self, *args, **kwargs):
-        return "%r %r %r" % (self.success, self.reload, self.cancel)
+        return "%r %r %r" % (self.success, self.receive_events, self.cancel)
 
 
 class ResourceAction(object):
@@ -68,9 +68,14 @@ class ResourceAction(object):
         """
         self.scheduler = scheduler
         self.resource = resource
+        if self.resource is not None:
+            self.resource_id = resource.id
         self.future = Future()
         self.running = False
         self.gid = gid
+        self.status = None
+        self.change = None
+        self.changes = None
 
     def is_running(self):
         return self.running
@@ -84,12 +89,16 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def _execute(self, ctx: handler.HandlerContext, reload: bool, cache: AgentCache) -> (bool, bool):
+    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache) -> (bool, bool):
         """
-            :return (success, reload) Return whether the execution was successful and whether a reload is required
+            :param ctx The context to use during execution of this deploy
+            :param events Possible events that are available for this resource
+            :param cache The cache instance to use
+            :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
+                                          to provides of this resource.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s",
-                  deploy_id=self.gid, resource_id=self.resource.id)
+                  deploy_id=self.gid, resource_id=self.resource_id)
         provider = None
 
         try:
@@ -111,15 +120,15 @@ class ResourceAction(object):
             cache.close_version(self.resource.id.version)
             return False, False
 
-        if reload and provider.can_reload():
-            ctx.info("Reloading %(resource_id)s because of updated dependencies", resource_id=str(self.resource.id))
-            yield self.scheduler.agent.thread_pool.submit(provider.do_reload, ctx, self.resource)
+        if len(events) > 0 and provider.can_process_events():
+            ctx.info("Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id))
+            yield self.scheduler.agent.thread_pool.submit(provider.process_events, ctx, self.resource, events)
 
         provider.close()
-        cache.close_version(self.resource.id.version)
+        cache.close_version(self.resource_id.version)
 
-        reload = (ctx.changed and hasattr(self.resource, "reload") and self.resource.reload)
-        return True, reload
+        send_event = (ctx.changed and hasattr(self.resource, "send_event") and self.resource.send_event)
+        return True, send_event
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
@@ -156,9 +165,14 @@ class ResourceAction(object):
             if not result.success:
                 ctx.set_status(const.ResourceState.skipped)
                 success = False
-                reload = False
+                send_event = False
             else:
-                success, reload = yield self._execute(ctx=ctx, reload=result.reload, cache=cache)
+                if result.receive_events:
+                    received_events = {x.resource_id: dict(status=x.status, change=x.change, changes=x.changes)
+                                       for x in self.dependencies}
+                else:
+                    received_events = {}
+                success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache)
 
             LOGGER.info("end run %s", self.resource)
 
@@ -169,11 +183,15 @@ class ResourceAction(object):
                                                                               action=const.ResourceAction.deploy,
                                                                               started=start, finished=end, status=ctx.status,
                                                                               changes={str(self.resource.id): ctx.changes},
-                                                                              messages=ctx.logs)
+                                                                              messages=ctx.logs, change=ctx.change,
+                                                                              send_events=send_event)
             if result.code != 200:
                 LOGGER.error("Resource status update failed %s", result.result)
 
-            self.future.set_result(ResourceActionResult(success, reload, False))
+            self.status = ctx.status
+            self.change = ctx.change
+            self.changes = ctx.changes
+            self.future.set_result(ResourceActionResult(success, send_event, False))
             self.running = False
 
     def __str__(self):
@@ -202,24 +220,42 @@ class RemoteResourceAction(ResourceAction):
     def execute(self, dummy, generation, cache):
         yield dummy.future
         try:
-            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id,
-                                                                    str(self.resource_id), status=True)
-            status = result.result['status']
-            if status == const.ResourceState.available.name or self.future.done():
+            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
+                                                                    logs=True, log_action=const.ResourceAction.deploy,
+                                                                    log_limit=1)
+            status = const.ResourceState[result.result["resource"]["status"]]
+            if status == const.ResourceState.available or self.future.done():
                 # wait for event
                 pass
-            elif status == const.ResourceState.deployed.name:
-                # TODO: remote reload propagation
-                self.future.set_result(ResourceActionResult(True, False, False))
             else:
-                self.future.set_result(ResourceActionResult(False, False, False))
+                if status == const.ResourceState.deployed:
+                    success = True
+                else:
+                    success = False
+
+                send_event = False
+                if "logs" in result.result and len(result.result["logs"]) > 0:
+                    log = result.result["logs"][0]
+                    self.change = const.Change[log["change"]]
+                    if str(self.resource_id) in log["changes"]:
+                        self.changes = log["changes"]
+                    else:
+                        self.changes = {}
+                    self.status = status
+                    send_event = log["send_event"]
+
+                self.future.set_result(ResourceActionResult(success, send_event, False))
+
             self.running = False
         except Exception:
             LOGGER.exception("could not get status for remote resource")
 
-    def notify(self):
+    def notify(self, send_events, status, change, changes):
         if not self.future.done():
-            self.future.set_result(ResourceActionResult(True, False, False))
+            self.status = status
+            self.change = change
+            self.changes = changes
+            self.future.set_result(ResourceActionResult(True, send_events, False))
 
 
 class ResourceScheduler(object):
@@ -256,11 +292,11 @@ class ResourceScheduler(object):
             r.execute(dummy, self.generation, self.cache)
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
-    def notify_ready(self, resourceid):
+    def notify_ready(self, resourceid, send_events, state, change, changes):
         if resourceid not in self.cad:
             LOGGER.warning("received CAD notification that was not required, %s", resourceid)
             return
-        self.cad[resourceid].notify()
+        self.cad[resourceid].notify(send_events, state, change, changes)
 
     def dump(self):
         print("Waiting:")
@@ -342,8 +378,8 @@ class AgentInstance(object):
         self._enabled = None
         return 200, "paused"
 
-    def notify_ready(self, resourceid):
-        self._nq.notify_ready(resourceid)
+    def notify_ready(self, resourceid, send_events, state, change, changes):
+        self._nq.notify_ready(resourceid, send_events, state, change, changes)
 
     def _can_get_resources(self):
         if self._getting_resources:
@@ -781,7 +817,8 @@ class Agent(AgentEndPoint):
 
     @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid", agent="id")
     @gen.coroutine
-    def resource_event(self, env, agent: str, resource: str, state: str):
+    def resource_event(self, env, agent: str, resource: str, send_events: bool,
+                       state: const.ResourceState, change: const.Change, changes: dict):
         if env != self._env_id:
             LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
                         env, agent, resource, state)
@@ -798,7 +835,7 @@ class Agent(AgentEndPoint):
         else:
             LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
                          agent, env, agent, resource, state)
-            self._instances[agent].notify_ready(resource)
+            self._instances[agent].notify_ready(resource, send_events, state, change, changes)
 
         return 200
 

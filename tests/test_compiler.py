@@ -70,6 +70,31 @@ end
     assert stmt.comment is None
 
 
+def test_undefine_default():
+    statements = parse_code("""
+entity Test extends Foo:
+ string hello = undef
+ string[] dinges = undef
+end""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert isinstance(stmt, define.DefineEntity)
+    assert stmt.name == "Test"
+    assert stmt.parents == ["Foo"]
+    assert len(stmt.attributes) == 2
+    assert stmt.comment is None
+
+    for ad in stmt.attributes:
+        assert isinstance(ad.type, str)
+        assert isinstance(ad.name, str)
+        assert ad.default is None
+        assert ad.remove_default
+
+    assert stmt.attributes[0].name == "hello"
+    assert stmt.attributes[1].name == "dinges"
+
+
 def test_extend_entity():
     """Test extending entities
     """
