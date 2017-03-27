@@ -527,7 +527,7 @@ a=null
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Assign)
-    assert isinstance(stmt.value, NoneValue)
+    assert isinstance(stmt.value.value, NoneValue)
 
 
 def test_numbers():
