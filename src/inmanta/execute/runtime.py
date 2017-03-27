@@ -203,8 +203,14 @@ class ListVariable(DelayedResultVariable):
             raise RuntimeException(None, "List modified after freeze")
 
         if isinstance(value, list):
-            for v in value:
-                self.set_value(v, recur, location)
+            if len(value) == 0:
+                # the values of empty lists need no processing,
+                # but a set_value from an empty list may fulfill a promise, allowing this object to be queued
+                if self.can_get():
+                    self.queue()
+            else:
+                for v in value:
+                    self.set_value(v, recur, location)
             return
 
         if self.type is not None:
