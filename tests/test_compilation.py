@@ -1283,3 +1283,17 @@ def test_default_remove(snippetcompiler):
     """)
     with pytest.raises(UnsetException):
         compiler.do_compile()
+
+
+def test_emptylists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    implement std::Entity using std::none
+
+    a=std::Entity()
+    b=std::Entity()
+    c=std::Entity()
+
+    a.provides = b.provides
+    b.provides = c.provides
+    """)
+    compiler.do_compile()
