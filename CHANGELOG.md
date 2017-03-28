@@ -1,3 +1,11 @@
+v 2017.1 (2017-03-29)
+New release with many improvements and bug fixes. Most noteable features include:
+- Port CLI tool to click and improve it. This removes cliff and other openstack deps from core
+- Complete rewrite of the database layer removing the dependency on motorengine and improve
+  scalability.
+- Cleanup of many API calls and made them more consistent
+- Improved handler protocol and logging to the server.
+
 v 2016.6 (2017-01-08)
 Mainly a bugfix and stabilisation release. No new features.
 
