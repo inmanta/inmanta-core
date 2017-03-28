@@ -639,18 +639,17 @@ class Server(protocol.ServerEndpoint):
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.Resource.get_resources_for_version(env.id, version_id)
+        resources = yield data.Resource.get_resources_for_version(env.id, version_id, include_attributes=True, no_obj=True)
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
         d = {"model": version}
 
         d["resources"] = []
-        for res in resources:
-            res_dict = res.to_dict()
-
+        for res_dict in resources:
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(env.id, res.resource_version_id, log_filter, limit)
+                res_dict["actions"] = yield data.ResourceAction.get_log(env.id, res_dict["resource_version_id"],
+                                                                        log_filter, limit)
 
             d["resources"].append(res_dict)
 
