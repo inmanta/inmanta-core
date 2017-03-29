@@ -119,6 +119,7 @@ def compile_project(options):
     except CompilerException as e:
         if not options.errors:
             print(e, file=sys.stderr)
+            sys.exit(1)
         else:
             raise e
 
@@ -226,6 +227,7 @@ def export(options):
     if exp is not None:
         if not options.errors:
             print(exp, file=sys.stderr)
+            sys.exit(1)
         else:
             raise exp
 
