@@ -1097,6 +1097,12 @@ class Resource(BaseDocument):
 
         return should_purge
 
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        dct = super(Resource, cls).mongo_to_dict(**kwargs)
+        dct["id"] = dct["resource_version_id"]
+        return dct
+
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
         dct["id"] = dct["resource_version_id"]
@@ -1133,6 +1139,12 @@ class ConfigurationModel(BaseDocument):
     @property
     def done(self):
         return len(self.status)
+
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        dct = super(DryRun, cls).mongo_to_dict(**kwargs)
+        dct["done"] = len(dct["status"])
+        return dct
 
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
@@ -1280,6 +1292,13 @@ class DryRun(BaseDocument):
         obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
         obj.insert()
         return obj
+
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        dct = super(DryRun, cls).mongo_to_dict(**kwargs)
+        resources = {r["id"]: r for r in dct["resources"].values()}
+        dct["resources"] = resources
+        return dct
 
     def to_dict(self):
         dict_result = BaseDocument.to_dict(self)
