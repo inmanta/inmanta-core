@@ -246,7 +246,7 @@ Using the dashboard
     * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server.
     * It will automatically install the required software and configure it properly.
 
-#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/install.php <http://localhost:8080/install.php>`_.
+#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/ <http://localhost:8080/>`_.
 
 
 Create your own modules

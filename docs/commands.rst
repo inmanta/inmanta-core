@@ -17,7 +17,4 @@ inmanta
 inmanta-cli
 ###########
 
-.. argparse::
-   :module: inmanta.main
-   :func: get_parser
-   :prog: inmanta-cli
+Use ``inmanta-cli --help``
