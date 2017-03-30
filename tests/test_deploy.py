@@ -32,8 +32,8 @@ def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
     """ % file_name)
 
     os.chdir(snippetcompiler.project_dir)
-    Options = collections.namedtuple("Options", ["no_agent_log", "dryrun"])
-    options = Options(no_agent_log=False, dryrun=False)
+    Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
+    options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
     run = deploy.Deploy(io_loop, mongoport=mongo_db.port)
     try:
