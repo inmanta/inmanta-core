@@ -1062,8 +1062,8 @@ class Resource(BaseDocument):
         """
         # find all resources in previous version that have "purge_on_delete" set
         resources = yield cls._coll.find({"model": {"$lt": current_version}, "environment": environment,
-                                          "$or": [{"attributes.purge_on_delete": {"$exists": True}},
-                                                  {"attributes.purge_on_delete": True}]},
+                                          "$and": [{"attributes.purge_on_delete": {"$exists": True}},
+                                                   {"attributes.purge_on_delete": True}]},
                                          ["resource_id"]).distinct("resource_id")
 
         # get all models that have been released
