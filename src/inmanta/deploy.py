@@ -428,7 +428,7 @@ class Deploy(object):
             return
 
         def handle_result(x):
-            if not x.result() or x.exception() is not None:
+            if x.exception() is not None or not x.result():
                 self._io_loop.stop()
                 self.stop()
                 sys.exit(1)
