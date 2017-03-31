@@ -1,6 +1,6 @@
 click==6.7
 colorlog==2.10.0
-execnet
+execnet==1.4.1
 mongobox
 motor
 ply
