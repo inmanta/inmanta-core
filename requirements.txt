@@ -18,5 +18,5 @@ sphinx-argparse==0.2.0
 sphinx-rtd-theme==0.2.4
 texttable==0.8.8
 tornado==4.4.3
-urllib3
+urllib3==1.20
 virtualenv
