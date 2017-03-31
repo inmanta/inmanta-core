@@ -9,7 +9,7 @@ pytest
 pytest-catchlog
 pytest-tornado
 pytest-randomly
-python-dateutil
+python-dateutil==2.6.0
 pyyaml
 ruamel.yaml
 six
