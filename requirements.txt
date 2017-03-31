@@ -6,7 +6,7 @@ motor
 ply
 pymongo
 pytest
-pytest-catchlog
+pytest-catchlog==1.2.2
 pytest-tornado
 pytest-randomly
 python-dateutil
