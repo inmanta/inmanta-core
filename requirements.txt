@@ -2,7 +2,7 @@ click==6.7
 colorlog==2.10.0
 execnet==1.4.1
 mongobox==0.1.6
-motor
+motor==1.1
 ply
 pymongo
 pytest
