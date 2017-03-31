@@ -3,7 +3,7 @@ colorlog==2.10.0
 execnet==1.4.1
 mongobox==0.1.6
 motor==1.1
-ply
+ply==3.10
 pymongo
 pytest
 pytest-catchlog
