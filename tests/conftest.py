@@ -313,6 +313,7 @@ class CLI(object):
 
     @gen.coroutine
     def run(self, *args):
+        os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
