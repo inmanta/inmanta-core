@@ -5,7 +5,7 @@ mongobox
 motor
 ply
 pymongo
-pytest
+pytest==3.0.7
 pytest-catchlog
 pytest-tornado
 pytest-randomly
