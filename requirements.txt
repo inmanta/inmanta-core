@@ -11,7 +11,7 @@ pytest-tornado
 pytest-randomly
 python-dateutil
 pyyaml
-ruamel.yaml
+ruamel.yaml==0.14.4
 six
 sphinx
 sphinx-argparse
