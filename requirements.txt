@@ -4,7 +4,7 @@ execnet
 mongobox
 motor
 ply
-pymongo
+pymongo==3.4.0
 pytest
 pytest-catchlog
 pytest-tornado
