@@ -8,7 +8,7 @@ pymongo
 pytest
 pytest-catchlog
 pytest-tornado
-pytest-randomly
+pytest-randomly==1.1.2
 python-dateutil
 pyyaml
 ruamel.yaml
