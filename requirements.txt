@@ -16,7 +16,7 @@ six
 sphinx
 sphinx-argparse
 sphinx_rtd_theme
-texttable
+texttable==0.8.8
 tornado
 urllib3
 virtualenv
