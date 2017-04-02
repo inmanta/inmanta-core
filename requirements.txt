@@ -13,7 +13,7 @@ python-dateutil
 pyyaml
 ruamel.yaml
 six
-sphinx
+sphinx==1.5.4
 sphinx-argparse
 sphinx_rtd_theme
 texttable
