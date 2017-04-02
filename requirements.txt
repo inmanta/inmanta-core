@@ -1,5 +1,5 @@
 click
-colorlog
+colorlog==2.10.0
 execnet
 mongobox
 motor
