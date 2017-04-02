@@ -19,4 +19,4 @@ sphinx_rtd_theme
 texttable
 tornado
 urllib3
-virtualenv
+virtualenv==15.1.0
