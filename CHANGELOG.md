@@ -1,3 +1,6 @@
+v 2017.1.1 (2017-04-03)
+Numerous bugfixes
+
 v 2017.1 (2017-03-29)
 New release with many improvements and bug fixes. Most noteable features include:
 - Port CLI tool to click and improve it. This removes cliff and other openstack deps from core
