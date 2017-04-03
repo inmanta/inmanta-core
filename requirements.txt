@@ -10,7 +10,7 @@ pytest-catchlog
 pytest-tornado
 pytest-randomly
 python-dateutil
-pyyaml
+pyyaml==3.12
 ruamel.yaml
 six
 sphinx
