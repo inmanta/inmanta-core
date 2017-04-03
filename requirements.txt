@@ -7,8 +7,10 @@ ply
 pymongo
 pytest
 pytest-catchlog
-pytest-tornado
+pytest-catchlog
+pytest-cover
 pytest-randomly
+pytest-tornado
 python-dateutil
 pyyaml
 ruamel.yaml
