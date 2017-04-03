@@ -2,7 +2,7 @@ click
 colorlog
 execnet
 mongobox
-motor
+motor==1.1
 ply
 pymongo
 pytest
