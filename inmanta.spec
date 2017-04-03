@@ -40,9 +40,11 @@ Requires:       python3
 
 %package server
 Summary:        The configuration and service files to start the Inmanta server
+Requires:       python3-inmanta
 
 %package agent
 Summary:        The configuration and service files to start the Inmanta agent
+Requires:       python3-inmanta
 
 %description
 
