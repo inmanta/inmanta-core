@@ -1457,7 +1457,7 @@ class Server(protocol.ServerEndpoint):
             Clear the environment
         """
         yield data.Agent.delete_all(environment=env.id)
-        models = yield data.ConfigurationModel.get_list()
+        models = yield data.ConfigurationModel.get_list(environment=env.id)
         for model in models:
             yield model.delete_cascade()
 
