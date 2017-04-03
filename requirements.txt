@@ -3,7 +3,7 @@ colorlog
 execnet
 mongobox
 motor
-ply
+ply==3.10
 pymongo
 pytest
 pytest-catchlog
