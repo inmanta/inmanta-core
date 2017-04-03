@@ -13,6 +13,3 @@ Here we explain all the features and options of Inmanta. If you're just looking 
     commands
     config
     admin
-    mod_dev
-    dev
-

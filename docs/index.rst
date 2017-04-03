@@ -31,6 +31,7 @@ Contents
     quickstart
     install
     guides
+    developers
     modules
     docs
 
