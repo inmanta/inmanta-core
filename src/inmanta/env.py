@@ -172,6 +172,7 @@ class VirtualEnv(object):
             fd.close()
 
             cmd = [self.virtual_pip, "install", "-r", path]
+            output = b""
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except Exception:
