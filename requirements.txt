@@ -1,7 +1,7 @@
 click
 colorlog
 execnet
-mongobox
+mongobox==0.1.6
 motor
 ply
 pymongo
