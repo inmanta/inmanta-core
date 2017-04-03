@@ -14,7 +14,7 @@ pyyaml
 ruamel.yaml
 six
 sphinx
-sphinx-argparse
+sphinx-argparse==0.2.0
 sphinx_rtd_theme
 texttable
 tornado
