@@ -122,7 +122,7 @@ rm -rf %{buildroot}
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
 %config %attr(-, root, root) /etc/inmanta.cfg
 %attr(-, inmanta, inmanta) /var/log/inmanta
-%attr(-, root, root)/etc/inmanta
+%config %attr(-, root, root)/etc/inmanta
 
 %files server
 /opt/inmanta/dashboard
