@@ -12,4 +12,3 @@ Here we explain all the features and options of Inmanta. If you're just looking 
     language
     commands
     config
-    admin

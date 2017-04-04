@@ -30,10 +30,12 @@ Contents
 
     quickstart
     install
+    architecture
     guides
     developers
     modules
-    docs
+    glossary
+    reference
 
 Additional resources
 --------------------

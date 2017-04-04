@@ -1,27 +1,22 @@
 Administration Guide
 ========================
 
-
-Deployment models
--------------------
-
-IMS consists of several components: 
+The Inmanta orchestrator consists of several components: 
 
 .. image:: _static/component.svg
    :width: 90%
    :alt: Overview of the Inmanta platform
 
-* The inmanta server. This server manages the deployment process, it keeps track of all agents and the current state of all projects.
-* A mongodb database. The inmanta server stores it state in a mongo database.
+* The Inmanta server. This server manages the deployment process, it keeps track of all agents and the current state of all projects.
+* A mongodb database. The Inmanta server stores it state in a mongo database.
 * The git server. The source code of the configuration models is stored in (one or more) git repositories.  
 * The compiler. The compiler converts the source code into deployable artifacts and exports it to the server.
 * CLI and Dashboard. To control the server, you can use either the web dashboard or the command line tools. 
 * The Inmanta agents. Agents deploy configuration to the target machines. Agent can run on the server, or on the machines they manage. 
 
+Inmanta can be deployed/used in three variants:
 
-There are three main deployment models:
-
-* embedded: all components are started with the deploy command, the server is terminated after the deploy is finished. Suitable only for development.
+* **embedded**: all components are started with the deploy command, the server is terminated after the deploy is finished. Suitable only for development.
 * push to server: the server is deployed independently. Models are compiled on the developer machine and pushed to the server directly. Suitable only for small setups.
 * autonomous server: the server is deployed independently. Models are stored in git repos and compiled by the server.
 
