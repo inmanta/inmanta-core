@@ -2,7 +2,7 @@ Create a configuration model
 ============================
 
 This guide explains how to create a basic configuration model to manage an infrastructure: the Inmanta *hello world*.
-Each configuation model is completely defined in source code: :term:`infrastructure-as-code`.
+Each configuration model is completely defined in source code: :term:`infrastructure-as-code`.
 
 Create a new source project
 ---------------------------
@@ -79,11 +79,27 @@ imported explicitly.
     std::print("hello world")
 
 
-This example can be executed with:
-
-.. code-block:: sh
-
-    inmanta compile
+This example can be executed with ``inmanta compile``
 
 This prints out "hello world" on stdout. The first execution takes longer because Inmanta needs to fetch (clone) the std
-module from github. Subsequeny compiles will use the std module downloaded to the libs directory.
+module from github. Subsequently compiles will use the std module downloaded to the libs directory.
+
+
+Deploy a file
+-------------
+With the deploy command, Inmanta can deploy a file to a machine with an embedded server and agent.
+
+The main.cf below creates a file:
+
+.. code-block:: none
+    :linenos:
+
+    host = std::Host(name="localhost", os=std::linux)
+    std::File(host=host, path="/tmp/test", owner="user", group="group", mode=600, content="abcde")
+
+.. note::
+
+    Replace *user* and *group* in the main.cf above. The user and group should exist. If this command is not executed as
+    root, make sure that user and group have the value of the current user.
+
+Deploy the configuration model above with ``inmanta deploy``
