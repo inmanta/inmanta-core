@@ -52,8 +52,6 @@ _______________________________
 At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
 For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
 
-
-
 .. _cli:
 
 Single machine deployment using the CLI

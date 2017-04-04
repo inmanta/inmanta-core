@@ -6,7 +6,7 @@ Glossary
 
 
     configuration model
-        The :term:`desired state` of the an :term:`environment` is expressed in the configuration model. This model is define the desired state of all resources that need to be managed by Inmanta.
+        The :term:`desired state` of the an :term:`environment` is expressed in the configuration model. This model defines the desired state of all resources that need to be managed by Inmanta.
 
     project
         The management server of the Inmanta orchestrator can manage distinctive infrastructures. Each distinct infrastructure is defined in the server as a project. Each project consists of one or more :term:`environment` such as development, integration and production.
@@ -45,15 +45,34 @@ Glossary
         Imperative solutions require scripts that execute low level commands and handle all possible failure conditions. This is similar to how a 3D printer functions: a designer send the desired object (desired state) to the 3D printer software and this printer converts this to layers that need to be printed. An imperative 3D model, would require the designer to define all layers and printer head movements.
 
     orchestration
+        Orchestration is the process of provisioning resources in the correct order and when they are available configuring them. Inmanta support both provisioning and configuring resources but can also delegate tasks to other (existing) tools.
 
     plugin
+        A plugin is a python function that can be used in the :term:`DSL`. This function recieves arguments from the configuration model and navigate relations and read attributes in the runtime model. Each function can also return a value to the model. Plugins are used for complex transformation based on data in the configuration model or to query external systems such as CMDBs or IPAM tools.
+
+    DSL
+        Domain specific language. An Inmanta configuration model is written in a the Inmanta modelling DSL.
 
     unknown
+        A user always provides a complete configuration model to the orchestrator. Depending on what is already deployed, Inmanta will determine the correct order of provisioning and configuration. Many configuration parameters, such a the IP address of a virtual machine at a cloud provider will not be known upfront. Inmanta marks this parameters as **unknown** to prune all resources that cannot be configured yet and to determine when the orchestrater can proceed the orchestration process.
 
-    entity 
+    entity
+        Concepts in the infrastructure are modelled in the configuration with entities. See :ref:`lang-entity`.
 
     instance
+        An *instance* of an :term:`entity`. See also :ref:`lang-instance`.
 
     relation
+        An attribute of an entity that references an other entity. Plugins, such as templates, can navigate relations. See also :ref:`lang-relation`.
 
     main.cf
+        The file that defines the starting point of a configuration model. This file often only instantiates some high level entities and imports specific module.
+
+    facts
+        A resource in an infrastructure may have multiple properties that are not managed by Inmanta but their value is required as input in the configuration or for reporting purposes. :term:`handlers<handler>` take care of extracting these facts and reporting them back to the server.
+
+    infrastructure
+        That what Inmanta manages. This could be virtual machines with resources in these virtual machines. Physical servers and their os. Containers or resources at a cloud provider without any servers (e.g. "serverless")
+
+    infrastructure-as-code
+        
