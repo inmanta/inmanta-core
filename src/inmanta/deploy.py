@@ -420,8 +420,10 @@ class Deploy(object):
         yield self.export(dry_run=dry_run)
 
     def run(self, options, only_setup=False):
-        config.Config.set("config", "agent-map", options.map)
-        config.Config.set("config", "agent", options.agent)
+        if options.map is not None:
+            config.Config.set("config", "agent-map", options.map)
+        if options.agent is not None:
+            config.Config.set("config", "agent", options.agent)
         self.setup_server(options.no_agent_log)
 
         if only_setup:
