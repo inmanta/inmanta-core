@@ -465,7 +465,7 @@ class Project(ModuleLike):
 
         parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
         if parent_dir == cur_dir:
-            raise ProjectNotFoundExcpetion("Unable to find an inmanta project")
+            raise ProjectNotFoundExcpetion("Unable to find an inmanta project (project.yml expected)")
 
         return cls.get_project_dir(parent_dir)
 
