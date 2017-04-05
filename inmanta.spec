@@ -1,6 +1,6 @@
 # Use release 0 for prerelease version.
-%define release 1
-%define version 2017.1.1
+%define release 0
+%define version 2017.1.2
 %define venv %{buildroot}/opt/inmanta
 %define _p3 %{venv}/bin/python3
 
