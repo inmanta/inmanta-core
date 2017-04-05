@@ -40,7 +40,7 @@ help:
 
 
 
-dev: 
+dev:
 	$(SPHINXBUILD) -b html -D todo_include_todos=1 $(ALLSPHINXOPTS) $(BUILDDIR)/html
 
 clean:
