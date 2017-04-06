@@ -16,6 +16,7 @@ ruamel.yaml==0.14.4
 six==1.10.0
 sphinx==1.5.5
 sphinx-argparse==0.2.0
+sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.2.4
 texttable==0.8.8
 tornado==4.4.3
