@@ -26,7 +26,8 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig',
+extensions = ['sphinx.ext.autodoc', 'sphinx_autodoc_annotation',
+              'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig',
               'sphinx.ext.viewcode', 'sphinxarg.ext', 'inmanta.sphinxext']
 
 # Add any paths that contain templates here, relative to this directory.
@@ -199,7 +200,7 @@ latex_elements = {
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
   ('index', 'inmanta.tex', 'Inmanta Documentation',
-   'Bart Vanbrabant', 'manual'),
+   'Inmanta NV', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
@@ -229,7 +230,7 @@ latex_documents = [
 # (source start file, name, description, authors, manual section).
 man_pages = [
     ('index', 'inmanta', 'Inmanta Documentation',
-     ['Bart Vanbrabant'], 1)
+     ['Inmanta NV'], 1)
 ]
 
 # If true, show URL addresses after external links.
@@ -243,7 +244,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
   ('index', 'Inmanta', 'Inmanta Documentation',
-   'Bart Vanbrabant', 'Inmanta', 'One line description of project.',
+   'Inmanta NV', 'Inmanta', 'One line description of project.',
    'Miscellaneous'),
 ]
 

@@ -440,6 +440,8 @@ The template used in the previous listing::
     This machine is maintainted by {{ admin }}
 
 
+.. _lang-plugins:
+
 Plug-ins
 ===========
 

@@ -6,6 +6,13 @@ SPHINXOPTS    =
 SPHINXBUILD   = sphinx-build
 PAPER         = a4
 BUILDDIR      = build
+SOURCEDIR	  = .
+#IMAGEDIRS can be a list of directories that contain SVG files and are relative to the SOURCEDIR
+IMAGEDIRS     = _static
+
+# SVG to PDF conversion
+SVG2PDF       = inkscape
+SVG2PDF_FLAGS =
 
 # Internal variables.
 ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(SPHINXOPTS) .
@@ -39,12 +46,12 @@ help:
 	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
 
 
-
 dev:
 	$(SPHINXBUILD) -b html -D todo_include_todos=1 $(ALLSPHINXOPTS) $(BUILDDIR)/html
 
 clean:
 	-rm -rf $(BUILDDIR)/*
+	-rm $(PDFs)
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
@@ -100,14 +107,14 @@ epub:
 	@echo
 	@echo "Build finished. The epub file is in $(BUILDDIR)/epub."
 
-latex:
+latex: images
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo
 	@echo "Build finished; the LaTeX files are in $(BUILDDIR)/latex."
 	@echo "Run \`make' in that directory to run these through (pdf)latex" \
           "(use \`make latexpdf' here to do that automatically)."
 
-latexpdf:
+latexpdf: images
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo "Running LaTeX files through pdflatex..."
 	$(MAKE) -C $(BUILDDIR)/latex all-pdf
@@ -156,3 +163,13 @@ doctest:
 	$(SPHINXBUILD) -b doctest $(ALLSPHINXOPTS) $(BUILDDIR)/doctest
 	@echo "Testing of doctests in the sources finished, look at the " \
 		  "results in $(BUILDDIR)/doctest/output.txt."
+
+# Pattern rule for converting SVG to PDF
+%.pdf: %.svg
+	$(SVG2PDF) -f $< -A $@
+
+# Build a list of SVG files to convert to PDFs
+PDFs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.pdf,$(wildcard $(SOURCEDIR)/$(dir)/*.svg)))
+
+# Make a rule to build the PDFs
+images: $(PDFs)

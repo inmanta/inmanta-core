@@ -31,6 +31,7 @@ from tornado import ioloop
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
 import uuid
+import typing
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,14 +54,18 @@ class provider(object):  # noqa: H801
 
 
 class SkipResource(Exception):
-    pass
+    """
+        A handler should raise this exception when a resource should be skipped. The resource will be marked as skipped
+        instead of failed.
+    """
 
 
 class ResourcePurged(Exception):
     pass
 
 
-def cache(f=None, ignore=[], timeout=5000, for_version=True, cacheNone=True):  # noqa: H801
+def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,  # noqa: H801
+          cacheNone: bool=True):
     """
         decorator for methods in resource handlers to provide caching
 
@@ -75,9 +80,10 @@ def cache(f=None, ignore=[], timeout=5000, for_version=True, cacheNone=True):  #
         If an argument named resource is present,
         it is assumed to be a resource and its ID is used, without the version information
 
-        :param timeout the number of second this cache entry should live
-        :param for_version if true, this value is evicted from the cache when this deploy is ready
-        :param ignore a list of argument names that should not be part of the cache key
+        :param timeout: the number of second this cache entry should live
+        :param for_version: if true, this value is evicted from the cache when this deploy is ready
+        :param ignore: a list of argument names that should not be part of the cache key
+        :param cache_none: cache returned none values
     """
 
     def actual(f):
@@ -91,7 +97,8 @@ def cache(f=None, ignore=[], timeout=5000, for_version=True, cacheNone=True):  #
             def bound(**kwds):
                 return f(self, **kwds)
 
-            return self.cache.get_or_else(f.__name__, bound, for_version, timeout, myignore, cacheNone, **kwds)
+            cache_none = cacheNone
+            return self.cache.get_or_else(f.__name__, bound, for_version, timeout, myignore, cache_none, **kwds)
 
         return wrapper
 
@@ -179,13 +186,13 @@ class HandlerContext(object):
     def change(self):
         return self._change
 
-    def add_change(self, name, desired, current=None):
+    def add_change(self, name: str, desired: typing.Any, current: typing.Any=None) -> None:
         """
             Report a change of a field. This field is added to the set of updated fields
 
-            :param name The name of the field that was updated
-            :param desired The desired value to which the field was updated (or should be updated)
-            :param current The value of the field before it was updated
+            :param name: The name of the field that was updated
+            :param desired: The desired value to which the field was updated (or should be updated)
+            :param current: The value of the field before it was updated
         """
         self._changes[name] = {"current": current, "desired": desired}
 
@@ -193,8 +200,8 @@ class HandlerContext(object):
         """
             Report a list of changes at once as kwargs
 
-            :param key The name of the field that was updated. This field is also adde to the set of updated fields
-            :param value The desired value of the field.
+            :param key: The name of the field that was updated. This field is also added to the set of updated fields
+            :param value: The desired value of the field.
 
             To report the previous value of the field, use the add_change method
         """
@@ -213,7 +220,7 @@ class HandlerContext(object):
         """
             Update the changes list with changes
 
-            :param changes This should be a dict with a value a dict containing "current" and "desired" keys
+            :param changes: This should be a dict with a value a dict containing "current" and "desired" keys
         """
         self._changes.update(changes)
 
@@ -235,7 +242,7 @@ class HandlerContext(object):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
-        logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)
+        ``logger.debug("Houston, we have a %s", "thorny problem", exc_info=1)``
         """
         self.log_msg(logging.DEBUG, msg, args, kwargs)
 
@@ -246,7 +253,7 @@ class HandlerContext(object):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
-        logger.info("Houston, we have a %s", "interesting problem", exc_info=1)
+        ``logger.info("Houston, we have a %s", "interesting problem", exc_info=1)``
         """
         self.log_msg(logging.INFO, msg, args, kwargs)
 
@@ -257,7 +264,7 @@ class HandlerContext(object):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
-        logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)
+        ``logger.warning("Houston, we have a %s", "bit of a problem", exc_info=1)``
         """
         self.log_msg(logging.WARNING, msg, args, kwargs)
 
@@ -268,7 +275,7 @@ class HandlerContext(object):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
-        logger.error("Houston, we have a %s", "major problem", exc_info=1)
+        ``logger.error("Houston, we have a %s", "major problem", exc_info=1)``
         """
         self.log_msg(logging.ERROR, msg, args, kwargs)
 
@@ -285,7 +292,7 @@ class HandlerContext(object):
         To pass exception information, use the keyword argument exc_info with
         a true value, e.g.
 
-        logger.critical("Houston, we have a %s", "major disaster", exc_info=1)
+        ``logger.critical("Houston, we have a %s", "major disaster", exc_info=1)``
         """
         self.log_msg(logging.CRITICAL, msg, args, kwargs)
 
@@ -473,8 +480,8 @@ class ResourceHandler(object):
         """
             Create a new snapshot and upload it to the server
 
-            :param resource The state of the resource for which a snapshot is created
-            :return The data that needs to be uploaded to the server
+            :param resource: The state of the resource for which a snapshot is created
+            :return: The data that needs to be uploaded to the server
         """
         raise NotImplementedError()
 
@@ -533,9 +540,9 @@ class CRUDHandler(ResourceHandler):
             This method reads the current state of the resource. It provides a copy of the resource that should be deployed,
             the method implementation should modify the attributes of this resource to the current state.
 
-            :param ctx Context can be used to pass value discovered in the read method to the CUD methods. For example, the
+            :param ctx: Context can be used to pass value discovered in the read method to the CUD methods. For example, the
                        id used in API calls
-            :param resource A clone of the desired resource state. The read method need to set values on this object.
+            :param resource: A clone of the desired resource state. The read method need to set values on this object.
             :raise SkipResource: Raise this exception when the handler should skip this resource
             :raise ResourcePurged: Raise this exception when the resource does not exist yet.
         """
@@ -544,37 +551,37 @@ class CRUDHandler(ResourceHandler):
         """
             This method is called by the handler when the resource should be created.
 
-            :param context Context can be used to get values discovered in the read method. For example, the id used in API
-                           calls. This context should also be used to let the handler know what changes were made to the
-                           resource.
-            :param resource The desired resource state.
+            :param context: Context can be used to get values discovered in the read method. For example, the id used in API
+                            calls. This context should also be used to let the handler know what changes were made to the
+                            resource.
+            :param resource: The desired resource state.
         """
 
     def delete_resource(self, ctx: HandlerContext, resource: resources.PurgeableResource) -> None:
         """
             This method is called by the handler when the resource should be deleted.
 
-            :param ctx Context can be used to get values discovered in the read method. For example, the id used in API
-                       calls. This context should also be used to let the handler know what changes were made to the
-                       resource.
-            :param resource The desired resource state.
+            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                        calls. This context should also be used to let the handler know what changes were made to the
+                        resource.
+            :param resource: The desired resource state.
         """
 
     def update_resource(self, ctx: HandlerContext, changes: dict, resource: resources.PurgeableResource) -> None:
         """
             This method is called by the handler when the resource should be updated.
 
-            :param ctx Context can be used to get values discovered in the read method. For example, the id used in API
-                       calls. This context should also be used to let the handler know what changes were made to the
-                       resource.
-            :param changes A map of resource attributes that should be changed. Each value is a tuple with the current and the
-                           desired value.
-            :param resource The desired resource state.
+            :param ctx: Context can be used to get values discovered in the read method. For example, the id used in API
+                        calls. This context should also be used to let the handler know what changes were made to the
+                        resource.
+            :param changes: A map of resource attributes that should be changed. Each value is a tuple with the current and the
+                            desired value.
+            :param resource: The desired resource state.
         """
 
     def execute(self, ctx: HandlerContext, resource, dry_run=None) -> None:
         """
-            Update the given resource
+            Update the given resource. This method is called by the agent.
         """
         try:
             self.pre(ctx, resource)

@@ -19,6 +19,7 @@
 import inspect
 import subprocess
 import os
+import typing
 
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import Unknown
@@ -58,7 +59,10 @@ class Context(object):
     def get_resolver(self):
         return self.resolver
 
-    def get_type(self, name):
+    def get_type(self, name: str):
+        """
+            Get a type from the configuration model.
+        """
         try:
             return self.queue.get_types()[name]
         except KeyError:
@@ -84,10 +88,19 @@ class Context(object):
     def get_client(self):
         return self.__class__.__get_client()
 
-    def run_sync(self, function):
+    def run_sync(self, function: typing.Callable, timeout: int=5):
+        """
+            Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
+            main use for this function is to use the inmanta internal rpc to communicate with the server.
+
+            :param function: The async function to execute. This function should return a yieldable object.
+            :param timeout: A timeout for the async function.
+            :return: The result of the async call.
+            :raises ConnectionRefusedError: When the function timeouts this exception is raised.
+        """
         from tornado.ioloop import IOLoop, TimeoutError
         try:
-            return IOLoop.current().run_sync(function, 5)
+            return IOLoop.current().run_sync(function, timeout)
         except TimeoutError:
             raise ConnectionRefusedError()
 
@@ -289,13 +302,11 @@ class Plugin(object, metaclass=PluginMeta):
         """
         if "bin" in self.opts and self.opts["bin"] is not None:
             for _bin in self.opts["bin"]:
-                p = subprocess.Popen(
-                    ["bash", "-c", "type -p %s" % _bin], stdout=subprocess.PIPE)
+                p = subprocess.Popen(["bash", "-c", "type -p %s" % _bin], stdout=subprocess.PIPE)
                 result = p.communicate()
 
                 if len(result[0]) == 0:
-                    print("%s requires %s to be available in $PATH" %
-                          (self.__function_name__, _bin))
+                    raise Exception("%s requires %s to be available in $PATH" % (self.__function_name__, _bin))
 
     def __call__(self, *args):
         """
@@ -337,9 +348,15 @@ class Plugin(object, metaclass=PluginMeta):
         return value
 
 
-def plugin(function=None, commands=None, emits_statements=False):  # noqa: H801
+def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emits_statements: bool=False):  # noqa: H801
     """
-        Python 3 decorator to register functions with inmanta
+        Python decorator to register functions with inmanta as plugin
+
+        :param function: The function to register with inmanta. This is the first argument when it is used as decorator.
+        :param commands: A list of command paths that need to be available. Inmanta raises an exception when the command is
+                         not available.
+        :param emits_statements: Set to true if this plugin emits new statements that the compiler should execute. This is only
+                                 required for complex plugins such as integrating a template engine.
     """
     def curry_name(name=None, commands=None, emits_statements=False):
         """
@@ -364,8 +381,7 @@ def plugin(function=None, commands=None, emits_statements=False):  # noqa: H801
             dictionary = {}
             dictionary["__module__"] = fnc.__module__
             dictionary["__function_name__"] = name
-            dictionary["opts"] = {
-                "bin": commands, "emits_statements": emits_statements}
+            dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
 
