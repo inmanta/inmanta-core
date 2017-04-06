@@ -385,7 +385,12 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self):
         return str(self)
 
-    def clone(self, **kwargs):
+    def clone(self, **kwargs) -> "Resource":
+        """
+            Create a clone of this resource. The given kwargs can be used to override attributes.
+
+            :return: The cloned resource
+        """
         res = Resource.deserialize(Resource.serialize(self))
         for k, v in kwargs.items():
             setattr(res, k, v)

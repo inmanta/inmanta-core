@@ -291,9 +291,22 @@ class LocalIO(object):
         This class provides handler IO methods
     """
     def is_remote(self):
+        """
+            Are operation executed remote
+
+            :return: Returns true if the io operations are remote.
+            :rtype: bool
+        """
         return False
 
     def hash_file(self, path):
+        """
+            Return the sha1sum of the file at path
+
+            :param str path: The path of the file to hash the content of
+            :return: The sha1sum in a hex string
+            :rtype: str
+        """
         sha1sum = hashlib.sha1()
         with open(path, 'rb') as f:
             sha1sum.update(f.read())
@@ -303,13 +316,21 @@ class LocalIO(object):
     def read(self, path):
         """
             Read in the file in path and return its content as string
+
+            :param str path: The path of the file to read.
+            :return: The string content of the file
+            :rtype: string
         """
         with open(path, "rb") as fd:
             return fd.read().decode()
 
     def read_binary(self, path):
         """
-            Return the content of the file
+            Read in the file in path and return its content as a bytestring
+
+            :param str path: The path of the file to read.
+            :return: The byte content of the file
+            :rtype: bytes
         """
         with open(path, "rb") as fd:
             return fd.read()
@@ -317,6 +338,15 @@ class LocalIO(object):
     def run(self, command, arguments=[], env=None, cwd=None, timeout=None):
         """
             Execute a command with the given argument and return the result
+
+            :param str command: The command to execute.
+            :param list arguments: The arguments of the command
+            :param dict env: A dictionary with environment variables.
+            :param str cwd: The working dir to execute the command in.
+            :param int timeout: The timeout for this command. This parameter is ignored if the command is executed remotely with
+                                a python 2 interpreter.
+            :return: A tuple with (stdout, stderr, returncode)
+            :rtype: tuple
         """
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
@@ -332,30 +362,49 @@ class LocalIO(object):
     def file_exists(self, path):
         """
             Check if a given file exists
+
+            :param str path: The path to check if it exists.
+            :return: Returns true if the file exists
+            :rtype: bool
         """
         return os.path.exists(path)
 
     def readlink(self, path):
         """
             Return the target of the path
+
+            :param str path: The symlink to get the target for.
+            :return: The target of the symlink
+            :rtype: str
         """
         return os.readlink(path)
 
     def symlink(self, source, target):
         """
             Symlink source to target
+
+            :param str source: Create a symlink of this path to target
+            :param str target: The path of the symlink to create
         """
         return os.symlink(source, target)
 
     def is_symlink(self, path):
         """
             Is the given path a symlink
+
+            :param str path: The path of the symlink
+            :return: Returns true if the given path points to a symlink
+            :rtype: str
         """
         return os.path.islink(path)
 
     def file_stat(self, path):
         """
-            Do a statcall on a file
+            Do a stat call on a file
+
+            :param str path: The file or direct to stat
+            :return: A dict with the owner, group and permissions of the given path
+            :rtype: dict[str, str]
         """
         stat_result = os.stat(path)
         status = {}
@@ -368,12 +417,17 @@ class LocalIO(object):
     def remove(self, path):
         """
             Remove a file
+
+            :param str path: The path of the file to remove.
         """
         return os.remove(path)
 
     def put(self, path, content):
         """
             Put the given content at the given path
+
+            :param str path: The location where to write the file
+            :param bytes content: The binarystring content to write to the file.
         """
         with open(path, "wb+") as fd:
             fd.write(content)
@@ -406,7 +460,11 @@ class LocalIO(object):
 
     def chown(self, path, user=None, group=None):
         """
-            Change the ownership information
+            Change the ownership of a file.
+
+            :param str path: The path of the file or directory to change the ownership of.
+            :param str user: The user to change to
+            :param str group: The group to change to
         """
         # Stolen from the python3 shutil lib
         if user is None and group is None:
@@ -436,18 +494,25 @@ class LocalIO(object):
     def chmod(self, path, permissions):
         """
             Change the permissions
+
+            :param str path: The path of the file or directory to change the permission of.
+            :param str permissions: An octal string with the permission to set.
         """
         os.chmod(path, int(permissions, 8))
 
     def mkdir(self, path):
         """
             Create a directory
+
+            :param str path: Create this directory. The parent needs to exist.
         """
         os.mkdir(path)
 
     def rmdir(self, path):
         """
             Remove a directory
+
+            :param str path: The directory to remove
         """
         shutil.rmtree(path)
 

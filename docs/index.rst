@@ -22,9 +22,6 @@ The key characteristics of Inmanta are:
 
 Currently, the Inmanta project is mainly developed and maintained by `Inmanta NV <https://www.inmanta.com>`_.
 
-Contents
---------
-
 .. toctree::
     :maxdepth: 3
 

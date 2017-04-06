@@ -15,6 +15,7 @@ Resources
 
 .. autofunction:: inmanta.resources.resource
 .. autoclass:: inmanta.resources.Resource
+    :members: clone
 
 .. autoclass:: inmanta.resources.PurgeableResource
 .. autoclass:: inmanta.resources.ManagedResource
@@ -24,6 +25,7 @@ Handlers
 --------
 
 .. autofunction:: inmanta.agent.handler.cache
+.. autofunction:: inmanta.agent.handler.provider
 .. autoclass:: inmanta.agent.handler.SkipResource
     :members:
 .. autoclass:: inmanta.agent.handler.ResourcePurged
@@ -32,6 +34,14 @@ Handlers
     :members:
 .. autoclass:: inmanta.agent.handler.ResourceHandler
     :members:
+    :undoc-members:
+    :private-members:
+
 .. autoclass:: inmanta.agent.handler.CRUDHandler
     :members:
-
+    :inherited-members:
+    :undoc-members:
+.. autoclass:: inmanta.agent.io.local.LocalIO
+    :members:
+    :inherited-members:
+    :undoc-members:
