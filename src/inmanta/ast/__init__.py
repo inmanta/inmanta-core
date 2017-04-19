@@ -64,11 +64,10 @@ class Namespace(object):
 
         self.visible_namespaces["std"] = MockImport(self.get_ns_from_string("std"))
 
-    def define_type(self, name, type):
+    def define_type(self, name, newtype: "Namespaced"):
         if name in self.defines_types:
-            raise DuplicateException(
-                type, self.defines_types[name], "Entity %s is already defined" % (self.defines_types[name].get_full_name()))
-        self.defines_types[name] = type
+            raise newtype.get_double_defined_exception(self.defines_types[name])
+        self.defines_types[name] = newtype
 
     def import_ns(self, name, ns):
         if name in self.visible_namespaces and not isinstance(self.visible_namespaces[name], MockImport):

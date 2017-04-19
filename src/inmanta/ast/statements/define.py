@@ -145,7 +145,7 @@ class DefineImplementation(TypeDefinitionStatement):
         self.name = name
         self.block = statements
         self.entity = target_type
-        self.type = Implementation(self.name, self.block)
+        self.type = Implementation(self.name, self.block, self.namespace, target_type)
 
     def __repr__(self):
         """
