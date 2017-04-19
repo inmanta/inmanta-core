@@ -12,7 +12,7 @@ pytest-tornado==0.4.5
 pytest-randomly==1.1.2
 python-dateutil==2.6.0
 pyyaml==3.12
-ruamel.yaml==0.14.4
+ruamel.yaml==0.14.5
 six==1.10.0
 sphinx==1.5.5
 sphinx-argparse==0.2.0
