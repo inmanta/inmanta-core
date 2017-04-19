@@ -30,7 +30,8 @@ Glossary
         hypervisor, a managed database as a PaaS provider, a switch port on a switch, ...
 
         A resource has attributes that express the desired value of a property of the resource it
-        represents in the infrastructure. For example the *mode* attribute of the the *std::File*
+        represents in the infrastructure. For example the
+        :inmanta:attribute:`mode<std::File.mode>` attribute of the the :inmanta:entity:`std::File`
         resource. This attribute indicates the desired permissions of a UNIX file.
 
         A resource needs to have a unique identifier in an environment. This identifier needs to be

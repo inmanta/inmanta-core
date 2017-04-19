@@ -27,6 +27,7 @@ Handlers
 .. autofunction:: inmanta.agent.handler.cache
 .. autofunction:: inmanta.agent.handler.provider
 .. autoclass:: inmanta.agent.handler.SkipResource
+    :show-inheritance:
     :members:
 .. autoclass:: inmanta.agent.handler.ResourcePurged
     :members:

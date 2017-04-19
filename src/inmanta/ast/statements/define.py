@@ -231,7 +231,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.basetype = basetype
         self.__expression = None
         self.set_expression(expression)
-        self.type = ConstraintType(name)
+        self.type = ConstraintType(self.namespace, name)
 
     def get_expression(self):
         """

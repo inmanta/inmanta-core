@@ -259,3 +259,4 @@ texinfo_documents = [
 
 linkcheck_ignore = [r'http://localhost:\d+/', r'http://127.0.0.1:\d+']
 
+inmanta_modules_dir="/home/bart/workspace/modules"

@@ -344,13 +344,13 @@ class ConstraintType(Type):
         The constraint on this type is defined by a regular expression.
     """
 
-    def __init__(self, name):
+    def __init__(self, namespace, name):
         Type.__init__(self)
 
         self.basetype = None  # : ConstrainableType
         self._constraint = None
         self.name = name
-        self.namespace = None
+        self.namespace = namespace
 
     def set_constraint(self, expression):
         """

@@ -167,8 +167,6 @@ class Plugin(object, metaclass=PluginMeta):
         self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
 
-        # pass
-
     def _load_signature(self, function):
         """
             Load the signature from the given python function
@@ -184,8 +182,7 @@ class Plugin(object, metaclass=PluginMeta):
             arg = arg_spec.args[i]
 
             if arg not in arg_spec.annotations:
-                raise Exception(
-                    "All arguments of plugin '%s' should be annotated" % function.__name__)
+                raise Exception("All arguments of plugin '%s' should be annotated" % function.__name__)
 
             spec_type = arg_spec.annotations[arg]
             if spec_type == Context:
@@ -226,7 +223,9 @@ class Plugin(object, metaclass=PluginMeta):
 
         args = ", ".join(arg_list)
 
-        return "%s(%s)" % (self.__class__.__function_name__, args)
+        if self._return is None:
+            return "%s(%s)" % (self.__class__.__function_name__, args)
+        return "%s(%s) -> %s" % (self.__class__.__function_name__, args, self._return)
 
     def to_type(self, arg_type, resolver):
         """
@@ -312,7 +311,6 @@ class Plugin(object, metaclass=PluginMeta):
         """
             The function call itself
         """
-
         self.check_requirements()
         new_args = []
         for arg in args:
@@ -331,8 +329,7 @@ class Plugin(object, metaclass=PluginMeta):
             exception = None
 
             try:
-                valid = (
-                    value is None or self._is_instance(value, self.returntype))
+                valid = (value is None or self._is_instance(value, self.returntype))
             except Exception as exp:
                 exception = exp
 
@@ -344,7 +341,6 @@ class Plugin(object, metaclass=PluginMeta):
                 raise Exception("Plugin %s should return value of type %s ('%s' was returned) %s" %
                                 (self.__class__.__function_name__, self.returntype, value, msg))
 
-        # print(value)
         return value
 
 

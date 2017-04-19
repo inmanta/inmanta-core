@@ -400,8 +400,7 @@ class Project(ModuleLike):
         project_file = os.path.join(path, Project.PROJECT_FILE)
 
         if not os.path.exists(project_file):
-            raise Exception(
-                "Project directory does not contain a project file")
+            raise Exception("Project directory does not contain a project file")
 
         with open(project_file, "r") as fd:
             self._meta = yaml.load(fd)
@@ -693,6 +692,7 @@ class Module(ModuleLike):
     """
         This class models an inmanta configuration module
     """
+    MODEL_DIR = "model"
     requires_fields = ["name", "license", "version"]
 
     def __init__(self, project: Project, path: str, **kwmeta: dict):
@@ -903,14 +903,14 @@ class Module(ModuleLike):
 
     def get_ast(self, name):
         if name == self.name:
-            file = os.path.join(self._path, "model/_init.cf")
+            file = os.path.join(self._path, Module.MODEL_DIR, "_init.cf")
         else:
             parts = name.split("::")
             parts = parts[1:]
-            if os.path.isdir(os.path.join(self._path, "model/" + "/".join(parts))):
-                file = os.path.join(self._path, "model/" + "/".join(parts) + "/_init.cf")
+            if os.path.isdir(os.path.join(self._path, Module.MODEL_DIR, *parts)):
+                file = os.path.join(self._path, Module.MODEL_DIR, *parts, "_init.cf")
             else:
-                file = os.path.join(self._path, "model/" + "/".join(parts) + ".cf")
+                file = os.path.join(self._path, Module.MODEL_DIR, *parts[:-1], parts[-1] + ".cf")
 
         ns = self._project.get_root_namespace().get_ns_or_create(name)
 
@@ -918,6 +918,43 @@ class Module(ModuleLike):
             return self._load_file(ns, file)
         except FileNotFoundError:
             raise InvalidModuleException("could not locate module with name: %s", name)
+
+    def _get_model_files(self, curdir):
+        files = []
+        init_cf = os.path.join(curdir, "_init.cf")
+        if not os.path.exists(init_cf):
+            return files
+
+        for entry in os.listdir(curdir):
+            entry = os.path.join(curdir, entry)
+            if os.path.isdir(entry):
+                files.extend(self._get_model_files(entry))
+
+            elif entry[-3:] == ".cf":
+                files.append(entry)
+
+        return files
+
+    def get_all_submodules(self):
+        """
+            Get all submodules of this module
+        """
+        modules = []
+        cur_dir = os.path.join(self._path, Module.MODEL_DIR)
+        files = self._get_model_files(cur_dir)
+
+        for f in files:
+            name = f[len(cur_dir) + 1:-3]
+            parts = name.split("/")
+            if parts[-1] == "_init":
+                parts = parts[:-1]
+
+            parts.insert(0, self.get_name())
+            name = "::".join(parts)
+
+            modules.append(name)
+
+        return modules
 
     def load_plugins(self):
         """
