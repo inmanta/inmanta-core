@@ -96,3 +96,33 @@ std::print(h.name.test)
 """,
         "can not get a attribute test, test not an entity (reported in h.name.test ({dir}/main.cf:3))"
     )
+
+
+def test_doubledefine(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity File:
+end
+
+entity File:
+end
+""",
+        "Entity __config__::File is already defined (reported at ({dir}/main.cf:5)) (duplicate at ({dir}/main.cf:2))"
+    )
+
+
+def test_double_define_implementation(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity File:
+end
+
+implementation file for File:
+end
+
+implementation file for File:
+end
+""",
+        "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8))" +
+        " (duplicate at ({dir}/main.cf:5))"
+    )

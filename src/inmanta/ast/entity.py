@@ -26,7 +26,20 @@ from inmanta.ast import RuntimeException, DuplicateException, NotFoundException
 from inmanta.util import memoize
 
 
-class Entity(Type):
+class Namespaced(object):
+
+    def get_double_defined_exception(self, other):
+        """produce a customized error message for this type"""
+        raise NotImplementedError()
+
+    def get_full_name(self):
+        raise NotImplementedError()
+
+    def get_namespace(self):
+        raise NotImplementedError()
+
+
+class Entity(Type, Namespaced):
     """
         This class models a defined entity in the domain model of the configuration model.
 
@@ -436,17 +449,22 @@ class Entity(Type):
                 excns.append(NotFoundException(stmt, key,
                                                "No match in index on type %s with key %s" % (self.get_full_name(), key)))
 
+    def get_double_defined_exception(self, other):
+        raise DuplicateException(
+            self, other, "Entity %s is already defined" % (self.get_full_name()))
 
-class Implementation(object):
+
+class Implementation(Namespaced):
     """
         A module functions as a grouping of objects. This can be used to create
         high level roles that do not have any arguments, or they can be used
         to create mixin like aspects.
     """
-
-    def __init__(self, name, stmts: BasicBlock, comment: str=None):
+    def __init__(self, name, stmts: BasicBlock, namespace, target_type, comment: str=None):
         self.name = name
         self.statements = stmts
+        self.namespace = namespace
+        self.target_type = target_type
         self.comment = comment
 
     def set_type(self, entity):
@@ -458,6 +476,17 @@ class Implementation(object):
 
     def normalize(self):
         self.statements.normalize()
+
+    def get_full_name(self):
+        return self.namespace.get_full_name() + "::" + self.name
+
+    def get_namespace(self):
+        return self.namespace
+
+    def get_double_defined_exception(self, other):
+        raise DuplicateException(
+            self, other, "Implementation %s for type %s is already defined" %
+            (self.get_full_name(), self.target_type))
 
 
 class Implement(object):
