@@ -118,7 +118,7 @@ def compile_project(options):
         return result
     except CompilerException as e:
         if not options.errors:
-            print(e, file=sys.stderr)
+            print(str(e), file=sys.stderr)
             sys.exit(1)
         else:
             raise e
