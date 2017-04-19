@@ -908,9 +908,10 @@ class Module(ModuleLike):
             parts = name.split("::")
             parts = parts[1:]
             if os.path.isdir(os.path.join(self._path, Module.MODEL_DIR, *parts)):
-                file = os.path.join(self._path, Module.MODEL_DIR, *parts, "_init.cf")
+                path_elements = [self._path, Module.MODEL_DIR] + parts + ["_init.cf"]
             else:
-                file = os.path.join(self._path, Module.MODEL_DIR, *parts[:-1], parts[-1] + ".cf")
+                path_elements = [self._path, Module.MODEL_DIR] + parts[:-1] + [parts[-1] + ".cf"]
+            file = os.path.join(*path_elements)
 
         ns = self._project.get_root_namespace().get_ns_or_create(name)
 

@@ -35,7 +35,7 @@ from sphinx.util import docstrings
 from sphinx.util.nodes import make_refnode
 from sphinx.util.nodes import nested_parse_with_titles
 
-from inmanta import module, compiler
+from inmanta import module, compiler, ast
 from inmanta.ast.attribute import RelationAttribute
 from inmanta.config import Config
 from inmanta.module import Project
@@ -374,7 +374,7 @@ modulepath: %s
             lines = []
             modules = defaultdict(dict)
             for type_name, type_obj in values[0].items():
-                if hasattr(type_obj, "comment"):
+                if isinstance(type_obj, ast.entity.Entity):
                     module = type_name.split("::")[:-1]
                     modules["::".join(module)][type_name] = type_obj
 

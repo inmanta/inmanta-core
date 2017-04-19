@@ -41,11 +41,14 @@ def test_client_files(client):
     assert result.result["content"] == body
 
     file_names = []
-    for _n in range(1, 10):
+    i = 0
+    while i < 10:
         file_name = "test%d" % random.randint(0, 10000)
-        file_names.append(file_name)
-        result = yield client.upload_file(id=file_name, content="")
-        assert result.code == 200
+        if file_name not in file_names:
+            file_names.append(file_name)
+            result = yield client.upload_file(id=file_name, content="")
+            assert result.code == 200
+            i += 1
 
     result = yield client.stat_files(files=file_names)
     assert len(result.result["files"]) == 0
