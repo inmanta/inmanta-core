@@ -124,5 +124,5 @@ implementation file for File:
 end
 """,
         "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8))" +
-        "(duplicate at ({dir}/main.cf:5))"
+        " (duplicate at ({dir}/main.cf:5))"
     )
