@@ -140,12 +140,13 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
-    def __init__(self, namespace, name, target_type, statements):
+    def __init__(self, namespace, name, target_type, statements, comment):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
         self.block = statements
         self.entity = target_type
-        self.type = Implementation(self.name, self.block, self.namespace, target_type)
+        self.type = Implementation(self.name, self.block, self.namespace, target_type, comment)
+        self.comment = comment
 
     def __repr__(self):
         """
@@ -170,11 +171,12 @@ class DefineImplement(DefinitionStatement):
         @param whem: A clause that determines when this implementation is "active"
     """
 
-    def __init__(self, entity_name, implementations, select=None):
+    def __init__(self, entity_name, implementations, select=None, comment=None):
         DefinitionStatement.__init__(self)
         self.entity = entity_name
         self.implementations = implementations
         self.select = select
+        self.comment = comment
 
     def __repr__(self):
         """
@@ -192,6 +194,7 @@ class DefineImplement(DefinitionStatement):
             entity_type = entity_type.get_entity()
 
             implement = Implement()
+            implement.comment = self.comment
             implement.constraint = self.select
             implement.location = self.location
 
@@ -232,6 +235,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.__expression = None
         self.set_expression(expression)
         self.type = ConstraintType(name)
+        self.comment = None
 
     def get_expression(self):
         """
@@ -273,7 +277,10 @@ class DefineTypeConstraint(TypeDefinitionStatement):
             Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
+
         constraint_type = self.type
+
+        constraint_type.comment = self.comment
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
 
@@ -290,6 +297,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.type = Default(self.name)
         self.ctor = class_ctor
+        self.comment = None
 
     def __repr__(self):
         """
@@ -303,6 +311,8 @@ class DefineTypeDefault(TypeDefinitionStatement):
         """
         # the base class
         type_class = self.namespace.get_type(self.ctor.class_type)
+
+        self.type.comment = self.comment
 
         default = self.type
         default.set_entity(type_class)
@@ -324,6 +334,7 @@ class DefineRelation(DefinitionStatement):
         self.right = right
 
         self.requires = None
+        self.comment = None
 
     def __repr__(self):
         """
@@ -364,6 +375,7 @@ class DefineRelation(DefinitionStatement):
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, self.left[1])
             left_end.set_multiplicity(self.left[2])
+            left_end.comment = self.comment
             self.copy_location(left_end)
         else:
             left_end = None
@@ -371,6 +383,7 @@ class DefineRelation(DefinitionStatement):
         if self.right[1] is not None:
             right_end = RelationAttribute(left, right, self.right[1])
             right_end.set_multiplicity(self.right[2])
+            right_end.comment = self.comment
             self.copy_location(right_end)
         else:
             right_end = None

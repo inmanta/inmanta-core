@@ -35,6 +35,7 @@ class Attribute(object):
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
+        self.comment = None
 
     def get_type(self):
         """
