@@ -444,9 +444,10 @@ class Implementation(object):
         to create mixin like aspects.
     """
 
-    def __init__(self, name, stmts: BasicBlock):
+    def __init__(self, name, stmts: BasicBlock, comment: str = None):
         self.name = name
         self.statements = stmts
+        self.comment = comment
 
     def set_type(self, entity):
         self.entity = entity
@@ -467,6 +468,7 @@ class Implement(object):
     def __init__(self):
         self.constraint = None
         self.implementations = []
+        self.comment = None
 
     def normalize(self):
         self.constraint.normalize()
@@ -481,6 +483,7 @@ class Default(Type):
         self.name = name
         self.entity = None
         self._defaults = {}
+        self.comment = None
 
     def get_defaults(self):
         return self._defaults
