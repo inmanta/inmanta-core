@@ -444,7 +444,7 @@ class Implementation(object):
         to create mixin like aspects.
     """
 
-    def __init__(self, name, stmts: BasicBlock, comment: str = None):
+    def __init__(self, name, stmts: BasicBlock, comment: str=None):
         self.name = name
         self.statements = stmts
         self.comment = comment
