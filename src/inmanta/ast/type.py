@@ -351,6 +351,7 @@ class ConstraintType(Type):
         self._constraint = None
         self.name = name
         self.namespace = None
+        self.comment = None
 
     def set_constraint(self, expression):
         """

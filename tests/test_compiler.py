@@ -762,3 +762,82 @@ def test_error_on_relation():
     assert e.value.location.file == "test"
     assert e.value.location.lnr == 2
     assert e.value.column == 38
+
+
+def test_doc_string_on_new_relation():
+    statements = parse_code("""
+File.host [1] -- Host
+\"""
+Each file needs to be associated with a host
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_relation():
+    statements = parse_code("""
+File file [1] -- [0:] Host host
+\"""
+Each file needs to be associated with a host
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_typedef():
+    statements = parse_code("""
+typedef foo as string matching /^a+$/
+\"""
+    Foo is a stringtype that only allows "a"
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+
+
+def test_doc_string_on_typedefault():
+    statements = parse_code("""
+typedef Foo as File(x=5)
+\"""
+    Foo is a stringtype that only allows "a"
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+
+
+def test_doc_string_on_impl():
+    statements = parse_code("""
+implementation test for Host:
+    \"""
+        Bla bla
+    \"""
+end
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Bla bla"
+
+
+def test_doc_string_on_implements():
+    statements = parse_code("""
+implement Host using test
+\"""
+    Always use test!
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Always use test!"
