@@ -18,5 +18,5 @@ sphinx==1.5.5
 sphinx-argparse==0.2.0
 sphinx-rtd-theme==0.2.4
 texttable==0.8.8
-tornado==4.4.3
+tornado==4.5
 virtualenv==15.1.0
