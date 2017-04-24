@@ -114,7 +114,7 @@ class Namespace(object):
 
     def get_full_name(self):
         """
-            Get the name of this namespace
+            Get the fully qualified name of this namespace
         """
         if(self.__parent is None):
             raise Exception("Should not occur, compiler corrupt")
@@ -163,11 +163,18 @@ class Namespace(object):
 
         return self.name
 
-    def children(self):
+    def children(self, recursive=False):
         """
             Get the children of this namespace
         """
-        return self.__children.values()
+        children = list(self.__children.values())
+        if not recursive:
+            return children
+
+        for child in self.__children.values():
+            children.extend(child.children(recursive=True))
+
+        return children
 
     def to_list(self):
         """

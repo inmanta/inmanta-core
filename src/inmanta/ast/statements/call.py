@@ -92,6 +92,9 @@ class FunctionCall(ReferenceStatement):
     def __repr__(self):
         return "%s(%s)" % (self.name, ','.join([repr(a) for a in self.arguments]))
 
+    def pretty_print(self):
+        return "%s(%s)" % (self.name, ','.join([a.pretty_print() for a in self.arguments]))
+
 
 class FunctionUnit(Waiter):
 

@@ -36,6 +36,9 @@ class Statement(object):
     def get_containing_namespace(self,):
         return self.namespace
 
+    def pretty_print(self):
+        return str(self)
+
 
 class DynamicStatement(Statement):
     """

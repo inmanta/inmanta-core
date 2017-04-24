@@ -82,6 +82,13 @@ class IsDefined(ReferenceStatement):
         # helper returned: return result
         return requires[self]
 
+    def pretty_print(self):
+        name = "%s.%s is defined" % (self.attr, self.name)
+        if name[:len("self.")] == "self.":
+            name = name[len("self."):]
+
+        return "%s is defined" % name
+
 
 class Operator(ReferenceStatement, metaclass=OpMetaClass):
     """
@@ -113,6 +120,9 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         ReferenceStatement.__init__(self, self._arguments)
         self.__name = name
 
+    def get_name(self):
+        return self.__name
+
     def execute(self, requires, resolver, queue):
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
@@ -140,6 +150,9 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         """
         return create_function(self)
 
+    def pretty_print(self):
+        return repr(self)
+
 
 class BinaryOperator(Operator):
     """
@@ -161,6 +174,9 @@ class BinaryOperator(Operator):
         """
             The implementation of the binary op
         """
+
+    def pretty_print(self):
+        return "(%s) %s (%s)" % (self._arguments[0].pretty_print(), self.get_name(), self._arguments[1].pretty_print())
 
 
 class LazyBinaryOperator(BinaryOperator):
@@ -232,6 +248,9 @@ class UnaryOperator(Operator):
         """
             The implementation of the operator
         """
+
+    def pretty_print(self):
+        return "%s (%s)" % (self.get_name(), self._arguments[0].pretty_print())
 
 
 class Not(UnaryOperator):

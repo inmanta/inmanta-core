@@ -40,6 +40,10 @@ from inmanta.ast.attribute import RelationAttribute
 from inmanta.config import Config
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
+from _collections import OrderedDict
+from pip.utils.logging import indent_log
+from inmanta.resources import resource
+from inmanta.agent import handler
 
 
 def _indent(text, n=2):
@@ -369,26 +373,67 @@ modulepath: %s
             Project.set(project)
             project.verify()
             project.load()
-            values = compiler.do_compile()
+            _, root_ns = compiler.do_compile()
+
+            doc_ns = [ns for ns in root_ns.children(recursive=True) if ns.get_full_name()[:len(name)] == name]
+
+            modules = {}
+            for ns in doc_ns:
+                modules[ns.get_full_name()] = ns.defines_types
 
             lines = []
-            modules = defaultdict(dict)
-            for type_name, type_obj in values[0].items():
-                if isinstance(type_obj, ast.entity.Entity):
-                    module = type_name.split("::")[:-1]
-                    modules["::".join(module)][type_name] = type_obj
 
-            lines.extend(self.emit_heading("Entities", "-"))
+            types = defaultdict(OrderedDict)
             for module in sorted(modules.keys()):
-                if module[:len(name)] == name:
-                    for type_name in sorted(modules[module].keys()):
-                        lines.extend(self.emit_entity(modules[module][type_name]))
+                for type_name in sorted(modules[module].keys()):
+                    type_obj = modules[module][type_name]
+                    if isinstance(type_obj, ast.entity.Entity):
+                        full_name = type_obj.get_full_name()
+                        types["entity"][full_name] = type_obj
 
-            plugins = {plugin: obj for plugin, obj in PluginMeta.get_functions().items() if plugin[:len(name)] == name}
-            lines.extend(self.emit_heading("Plugins", "-"))
-            for plugin in sorted(plugins.keys()):
-                cls = plugins[plugin]
-                lines.extend(self.emit_plugin(plugin, cls))
+                    elif isinstance(type_obj, ast.entity.Implementation):
+                        full_name = type_obj.get_full_name()
+                        types["implementation"][full_name] = type_obj
+
+                    elif isinstance(type_obj, (ast.entity.Default, ast.type.ConstraintType)):
+                        types["typedef"][type_name] = type_obj
+
+                    elif isinstance(type(type_obj), PluginMeta):
+                        types["plugin"][type_name] = type_obj
+
+                    else:
+                        print(type(type_obj))
+
+            if len(types["entity"]) > 0:
+                lines.extend(self.emit_heading("Entities", "-"))
+                for obj in types["entity"].values():
+                    lines.extend(self.emit_entity(obj))
+
+            if len(types["implementation"]) > 0:
+                lines.extend(self.emit_heading("Implementations", "-"))
+                for obj in types["implementation"].values():
+                    lines.extend(self.emit_implementation(obj))
+
+            if len(types["plugin"]) > 0:
+                lines.extend(self.emit_heading("Plugins", "-"))
+                for plugin in types["plugin"].values():
+                    lines.extend(self.emit_plugin(plugin))
+
+            res_list = sorted([res for res in resource._resources.items() if res[0][:len(name)] == name], key=lambda x: x[0])
+            if len(res_list) > 0:
+                lines.extend(self.emit_heading("Resources", "-"))
+                for res, (cls, opt) in res_list:
+                    lines.extend(self.emit_resource(res, cls, opt))
+
+            h = []
+            for entity, handlers in handler.Commander.get_handlers().items():
+                for handler_name, cls in handlers.items():
+                    if cls.__module__.startswith("inmanta_plugins." + name):
+                        h.extend(self.emit_handler(entity, handler_name, cls))
+
+            if len(h) > 0:
+                lines.extend(self.emit_heading("Handlers", "-"))
+                lines.extend(h)
 
             return lines
         finally:
@@ -397,11 +442,41 @@ modulepath: %s
 
         return []
 
-    def emit_plugin(self, name, cls):
-        instance = cls(None)
+    def emit_handler(self, entity, name, cls):
+        mod = cls.__module__[len("inmanta_plugins."):]
+        lines = [".. py:class:: %s.%s" % (mod, cls.__name__), ""]
+        if cls.__doc__ is not None:
+            lines.extend(self.prep_docstring(cls.__doc__, 1))
+            lines.append("")
+
+        lines.append(" * Handler name ``%s``" % name)
+        lines.append(" * Handler for entity :inmanta:Entity:`%s`" % entity)
+        lines.append("")
+        return lines
+
+    def emit_resource(self, name, cls, opt):
+        mod = cls.__module__[len("inmanta_plugins."):]
+        lines = [".. py:class:: %s.%s" % (mod, cls.__name__), ""]
+        if cls.__doc__ is not None:
+            lines.extend(self.prep_docstring(cls.__doc__, 1))
+            lines.append("")
+
+        lines.append(" * Resource for entity :inmanta:Entity:`%s`" % name)
+        lines.append(" * Id attribute ``%s``" % opt["name"])
+        lines.append(" * Agent name ``%s``" % opt["agent"])
+
+        handlers = []
+        for cls in handler.Commander.get_handlers()[name].values():
+            mod = cls.__module__[len("inmanta_plugins."):]
+            handlers.append(":py:class:`%s.%s`" % (mod, cls.__name__))
+        lines.append(" * Handlers " + ", ".join(handlers))
+        lines.append("")
+        return lines
+
+    def emit_plugin(self, instance):
         lines = [".. py:function:: " + instance.get_signature(), ""]
-        if cls.__function__.__doc__ is not None:
-            docstring = ["   " + x for x in docstrings.prepare_docstring(cls.__function__.__doc__)]
+        if instance.__class__.__function__.__doc__ is not None:
+            docstring = ["   " + x for x in docstrings.prepare_docstring(instance.__class__.__function__.__doc__)]
             lines.extend(docstring)
             lines.append("")
         return lines
@@ -409,6 +484,9 @@ modulepath: %s
     def emit_heading(self, heading, char):
         """emit a sphinx heading/section  underlined by char """
         return [heading, char * len(heading), ""]
+
+    def prep_docstring(self, docstr, indent_level=0):
+        return [("   " * indent_level) + x for x in docstrings.prepare_docstring(docstr)]
 
     def emit_attributes(self, entity, attributes):
         all_attributes = [entity.get_attribute(name) for name in list(entity._attributes.keys())]
@@ -435,6 +513,10 @@ modulepath: %s
         for attr in relations:
             lines.append("   .. inmanta:relation:: {} {}.{} [{}]".format(attr.get_type(), entity.get_full_name(),
                                                                          attr.get_name(), format_multiplicity(attr)))
+            if attr.comment is not None:
+                lines.append("")
+                lines.extend(self.prep_docstring(attr.comment, 2))
+
             lines.append("")
             if attr.end is not None:
                 otherend = attr.end.get_entity().get_full_name() + "." + attr.end.get_name()
@@ -442,19 +524,36 @@ modulepath: %s
                                                                                           format_multiplicity(attr.end)))
                 lines.append("")
 
+        if len(entity.implementations) > 0:
+            lines.append("   The following implementations are defined for this entity:")
+            lines.append("")
+            for impl in entity.implementations:
+                lines.append("      * :inmanta:implementation:`%s`" % impl.get_full_name())
+
+            lines.append("")
+
+        if len(entity.implements) > 0:
+            lines.append("   The following implements statements select implementations for this entity:")
+            lines.append("")
+            for impl in entity.implements:
+                lines.append("      * " + ", ".join([":inmanta:implementation:`%s`" % x.get_full_name()
+                                                     for x in impl.implementations]))
+
+                constraint_str = impl.constraint.pretty_print()
+                if constraint_str != "True":
+                    lines.append("        constraint ``%s``" % constraint_str)
+
+            lines.append("")
+
         return lines
 
-    def emit_implementations(self, entity):
+    def emit_implementation(self, impl):
         lines = []
-        for impl in entity.implementations:
-            lines.append("   .. inmanta:implementation:: {0}.{1}".format(entity.get_full_name(), impl.name))
+        lines.append(".. inmanta:implementation:: {0}::{1}".format(impl.namespace.get_full_name(), impl.name))
+        if impl.comment is not None:
             lines.append("")
-#             for impll in impl.implementations:
-#                 first = get_first_statement(impll.statements)
-#                 if first:
-#                     lines.append("      name: {0}  ({1}:{2}) \n\n".format(impll.name, first.filename, first.line))
-#                 else:
-#                     lines.append("      name: {0}  \n\n".format(impll.name))
+            lines.extend(self.prep_docstring(impl.comment, 2))
+        lines.append("")
 
         return lines
 
@@ -476,9 +575,9 @@ modulepath: %s
             attributes = result["attributes"]
 
         lines.extend(self.emit_attributes(entity, attributes))
-        lines.extend(self.emit_implementations(entity))
         lines.append("")
 
+        # print("\n".join(lines))
         return lines
 
     def _get_modules(self, module_path):
@@ -511,6 +610,7 @@ modulepath: %s
 
         result = ViewList()
         source_name = '<' + __name__ + '>'
+        # print("\n".join(lines))
         for line in lines:
             result.append(line, source_name)
 

@@ -69,7 +69,7 @@ class resource(object):  # noqa: H801
     @classmethod
     def get_class(cls, name):
         """
-        Get the class definition for the given imp entity.
+        Get the class definition for the given entity.
         """
         if name in cls._resources:
             return cls._resources[name]

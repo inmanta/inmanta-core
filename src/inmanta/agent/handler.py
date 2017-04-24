@@ -739,6 +739,10 @@ class Commander(object):
     __handler_cache = {}
 
     @classmethod
+    def get_handlers(cls):
+        return cls.__command_functions
+
+    @classmethod
     def reset(cls):
         cls.__command_functions = defaultdict(dict)
         cls.__handlers = []
