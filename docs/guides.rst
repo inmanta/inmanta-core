@@ -7,9 +7,6 @@ Guides
 
 .. toctree::
     :maxdepth: 2
+    :glob:
 
-    guides/configurationmodel
-    guides/openstack
-    guides/forms
-    guides/aws
-
+    guides/*

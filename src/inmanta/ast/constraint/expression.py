@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -129,6 +129,12 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
     def execute_direct(self, requires):
         return self._op([x.execute_direct(requires) for x in self._arguments])
 
+    def get_op(self):
+        attribute = "_%s__op" % type(self).__name__
+        if hasattr(self, attribute):
+            return getattr(self, attribute)
+        return self.get_name()
+
     @abstractmethod
     def _op(self, args):
         """
@@ -176,7 +182,7 @@ class BinaryOperator(Operator):
         """
 
     def pretty_print(self):
-        return "(%s) %s (%s)" % (self._arguments[0].pretty_print(), self.get_name(), self._arguments[1].pretty_print())
+        return "(%s %s %s)" % (self._arguments[0].pretty_print(), self.get_op(), self._arguments[1].pretty_print())
 
 
 class LazyBinaryOperator(BinaryOperator):
@@ -250,7 +256,7 @@ class UnaryOperator(Operator):
         """
 
     def pretty_print(self):
-        return "%s (%s)" % (self.get_name(), self._arguments[0].pretty_print())
+        return "(%s %s)" % (self.get_op(), self._arguments[0].pretty_print())
 
 
 class Not(UnaryOperator):

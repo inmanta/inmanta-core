@@ -29,10 +29,10 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta NV
     install
     architecture
     guides
+    moduleguides
     developers
-    modules
     glossary
-    reference
+    reference/index
 
 Additional resources
 --------------------

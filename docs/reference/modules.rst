@@ -1,5 +1,5 @@
-Modules
-=======
+Inmanta modules
+===============
 
 .. toctree::
     :maxdepth: 2
