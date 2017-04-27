@@ -51,7 +51,7 @@ dev:
 
 clean:
 	-rm -rf $(BUILDDIR)/*
-	-rm $(PNGs)
+	-rm -rf $(PNGs)
 
 html:
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html

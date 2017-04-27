@@ -20,9 +20,7 @@ The Inmanta orchestrator consists of several components:
   of  cloud service. An agent can manage local and remote resources. This provides the flexibility to work in an agent based or
   agent-less architecture, depening on the requirements. Agent communicate with the server over an bidirectional REST API.
 
-
 Inmanta can be deployed/used in three variants:
-
 
 * **embedded**: all components are started with the deploy command, the server is terminated after the deploy is finished. Suitable only for development.
 * **push to server**: the server runs on a external machine. Models are compiled on the developer machine and pushed to the server directly. Suitable only for small setups or for developement/debug purposes.
