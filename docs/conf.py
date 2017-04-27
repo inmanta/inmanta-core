@@ -259,5 +259,3 @@ texinfo_documents = [
 
 linkcheck_ignore = [r'http://localhost:\d+/', r'http://127.0.0.1:\d+']
 
-import os
-inmanta_modules_dir = os.environ.get("INMANTA_MODULE_REPO", "https://github.com/inmanta/")
