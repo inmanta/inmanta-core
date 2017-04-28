@@ -133,9 +133,17 @@ def t_REGEX(t):  # noqa: N802
 # Define a rule so we can track line numbers
 
 
-def t_ANY_newline(t):  # noqa: N802
+def t_newline(t):  # noqa: N802
     r'\n+'
     t.lexer.lineno += len(t.value)
+
+
+def t_mls_newline(t):  # noqa: N802
+    r'\n+'
+    t.lexer.lineno += len(t.value)
+    t.type = "MLS"
+    return t
+
 
 # A string containing ignored characters (spaces and tabs)
 t_ignore = ' \t'

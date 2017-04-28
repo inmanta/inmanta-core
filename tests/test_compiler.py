@@ -731,13 +731,29 @@ b=""
 
 
 def test_mls():
-    parse_code("""
+    statements = parse_code("""
 entity MANO:
     \"""
-        This entity provides mangement, orchestration and monitoring
+        This entity provides management, orchestration and monitoring
+
+        More test
     \"""
 end
 """)
+    assert len(statements) == 1
+    stmt = statements[0]
+
+    assert isinstance(stmt, DefineEntity)
+
+    mls = stmt.comment
+
+    print(mls)
+
+    assert mls == """
+        This entity provides management, orchestration and monitoring
+
+        More test
+    """
 
 
 def test_bad():
