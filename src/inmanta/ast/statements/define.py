@@ -33,7 +33,7 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True):
+    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True, nullable=False):
         """
             if default_value is None, this is an explicit removal of a default value
         """
@@ -42,6 +42,7 @@ class DefineAttribute(Statement):
         self.default = default_value
         self.multi = multi
         self.remove_default = remove_default
+        self.nullable = nullable
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -95,7 +96,7 @@ class DefineEntity(TypeDefinitionStatement):
                 if not isinstance(attr_type, (Type, type)):
                     raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
-                attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi)
+                attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi, attribute.nullable)
                 attribute.copy_location(attr_obj)
 
                 add_attributes[attribute.name] = attr_obj

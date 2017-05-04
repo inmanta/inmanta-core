@@ -119,7 +119,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\"
     string hello
     bool bar = true
-    number ten=5
+    number? ten=5
 end
 """ % documentation)
 
@@ -655,6 +655,27 @@ implement Test1 using tt when a.other is defined
     assert stmt.select.name == 'other'
 
 
+def assert_is_non_value(x):
+    assert isinstance(x, Literal)
+    assert isinstance(x.value, NoneValue)
+
+
+def compare_attr(attr, name, mytype, defs, multi=False, opt=False):
+    assert attr.name == name
+    defs(attr.default)
+    assert attr.multi == multi
+    assert attr.type == mytype
+    assert attr.nullable == opt
+
+
+def assert_is_none(x):
+    assert x is None
+
+
+def assert_equals(x, y):
+    assert x == y
+
+
 def test_define_list_attribute():
     statements = parse_code("""
 entity Jos:
@@ -662,27 +683,16 @@ entity Jos:
   ip::ip[] ips = ["a"]
   string[] floom = []
   string[] floomx = ["a", "b"]
+  string[]? floomopt = null
 end""")
 
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineEntity)
-    assert len(stmt.attributes) == 4
+    assert len(stmt.attributes) == 5
 
-    def compare_attr(attr, name, type, defs):
-        assert attr.name == name
-        defs(attr.default)
-        assert attr.multi
-        assert attr.type == type
-
-    def assert_is_none(x):
-        assert x is None
-
-    def assert_equals(x, y):
-        assert x == y
-
-    compare_attr(stmt.attributes[0], "bar", "bool", assert_is_none)
-    compare_attr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items))
+    compare_attr(stmt.attributes[0], "bar", "bool", assert_is_none, multi=True)
+    compare_attr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items), multi=True)
 
     def compare_default(list):
         def comp(x):
@@ -691,8 +701,9 @@ end""")
                 assert isinstance(it, Literal)
                 assert it.value == one
         return comp
-    compare_attr(stmt.attributes[1], "ips", "ip::ip", compare_default(['a']))
-    compare_attr(stmt.attributes[3], "floomx", "string", compare_default(['a', 'b']))
+    compare_attr(stmt.attributes[1], "ips", "ip::ip", compare_default(['a']), multi=True)
+    compare_attr(stmt.attributes[3], "floomx", "string", compare_default(['a', 'b']), multi=True)
+    compare_attr(stmt.attributes[4], "floomopt", "string", assert_is_non_value, opt=True, multi=True)
 
 
 def test_define_dict_attribute():
@@ -701,24 +712,14 @@ entity Jos:
   dict bar
   dict foo = {}
   dict blah = {"a":"a"}
+  dict? xxx = {"a":"a"}
+  dict? xxxx = null
 end""")
 
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineEntity)
-    assert len(stmt.attributes) == 3
-
-    def compare_attr(attr, name, type, defs):
-        assert attr.name == name
-        defs(attr.default)
-        assert not attr.multi
-        assert attr.type == "dict"
-
-    def assert_is_none(x):
-        assert x is None
-
-    def assert_equals(x, y):
-        assert x == y
+    assert len(stmt.attributes) == 5
 
     compare_attr(stmt.attributes[0], "bar", "dict", assert_is_none)
     compare_attr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
@@ -731,6 +732,8 @@ end""")
                 assert ov == v.value
         return comp
     compare_attr(stmt.attributes[2], "blah", "dict", compare_default([('a', 'a')]))
+    compare_attr(stmt.attributes[3], "xxx", "dict", compare_default([('a', 'a')]), opt=True)
+    compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value,  opt=True)
 
 
 def test_lexer():

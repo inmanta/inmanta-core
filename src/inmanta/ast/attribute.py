@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
-from inmanta.ast.type import TypedList
+from inmanta.ast.type import TypedList, NullableType
 
 
 class Attribute(object):
@@ -28,13 +28,14 @@ class Attribute(object):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity, value_type, name, multi=False):
+    def __init__(self, entity, value_type, name, multi=False, nullable=False):
         self.__name = name  # : String
 
         entity.add_attribute(self)
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
+        self.__nullallble = nullable
         self.comment = None
 
     def get_type(self):
@@ -79,11 +80,22 @@ class Attribute(object):
             self.type.validate(value)
 
     def get_new_result_variable(self, instance, queue):
-        out = ResultVariable()
         if self.__multi:
-            out.set_type(TypedList(self.__type))
+            mytype = (TypedList(self.__type))
         else:
-            out.set_type(self.__type)
+            mytype = (self.__type)
+
+        if(self.__nullallble):
+            # be a 0-1 relation
+            self.end = None
+            self.low = 0
+            self.high = 1
+            out = OptionVariable(self, instance, queue)
+            mytype = NullableType(mytype)
+        else:
+            out = ResultVariable()
+
+        out.set_type(mytype)
         out.set_provider(instance)
         return out
 

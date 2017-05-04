@@ -185,46 +185,74 @@ def p_entity_body(p):
     p[0] = [p[1]]
 
 
+def p_attribute_type(p):
+    '''attr_type : ns_ref'''
+    p[0] = (p[1], False)
+
+
+def p_attribute_type_opt(p):
+    "attr_type : ns_ref '?'"
+    p[0] = (p[1], True)
+
+
 def p_attr(p):
-    "attr : ns_ref ID"
-    p[0] = DefineAttribute(p[1], p[2], None)
+    "attr : attr_type ID"
+    (attr, nullable) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, nullable=nullable)
     attach_lnr(p, 2)
 
 
 def p_attr_cte(p):
-    "attr : ns_ref ID '=' constant"
-    p[0] = DefineAttribute(p[1], p[2], p[4])
+    "attr : attr_type ID '=' constant"
+    (attr, nullable) = p[1]
+    p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
     attach_lnr(p, 2)
 
 
 def p_attr_undef(p):
-    "attr : ns_ref ID '=' UNDEF"
-    p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
+    "attr : attr_type ID '=' UNDEF"
+    (attr, nullable) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, remove_default=True, nullable=nullable)
     attach_lnr(p, 2)
+
+
+def p_attribute_type_multi(p):
+    "attr_type_multi : ns_ref '[' ']'"
+    p[0] = (p[1], False, Location(file, p.lineno(1)))
+
+
+def p_attribute_type_multi_opt(p):
+    "attr_type_multi : ns_ref '[' ']' '?'"
+    p[0] = (p[1], True, Location(file, p.lineno(1)))
 
 
 def p_attr_list(p):
-    "attr : ns_ref '[' ']' ID"
-    p[0] = DefineAttribute(p[1], p[4], None, True)
-    attach_lnr(p, 4)
+    "attr : attr_type_multi ID"
+    (attr, nullable, location) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, True, nullable=nullable)
+    p[0].location = location
+    p[0].namespace = namespace
 
 
 def p_attr_list_cte(p):
-    "attr : ns_ref '[' ']' ID '=' constant_list"
-    p[0] = DefineAttribute(p[1], p[4], p[6], True)
-    attach_lnr(p, 2)
+    "attr : attr_type_multi ID '=' constant_list"
+    (attr, nullable, _) = p[1]
+    p[0] = DefineAttribute(attr, p[2], p[4], True, nullable=nullable)
+    attach_lnr(p, 3)
 
 
 def p_attr_list_undef(p):
-    "attr : ns_ref '[' ']' ID '=' UNDEF"
-    p[0] = DefineAttribute(p[1], p[4], None, True, remove_default=True)
-    attach_lnr(p, 2)
+    "attr : attr_type_multi ID '=' UNDEF"
+    (attr, nullable, _) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, True, remove_default=True, nullable=nullable)
+    attach_lnr(p, 3)
 
 
 def p_attr_list_null(p):
-    "attr : ns_ref '[' ']' ID '=' NULL"
-    p[0] = DefineAttribute(p[1], p[4], Literal(NoneValue()), True)
-    attach_lnr(p, 2)
+    "attr : attr_type_multi ID '=' NULL"
+    (attr, nullable, _) = p[1]
+    p[0] = DefineAttribute(attr, p[2], Literal(NoneValue()), True, nullable=nullable)
+    attach_lnr(p, 3)
 
 
 def p_attr_dict(p):
@@ -236,6 +264,18 @@ def p_attr_dict(p):
 def p_attr_list_dict(p):
     "attr : DICT ID '=' map_def"
     p[0] = DefineAttribute("dict", p[2], p[4])
+    attach_lnr(p, 1)
+
+
+def p_attr_dict_nullable(p):
+    "attr : DICT '?' ID"
+    p[0] = DefineAttribute("dict", p[3], None, nullable=True)
+    attach_lnr(p, 1)
+
+
+def p_attr_list_dict_nullable(p):
+    "attr : DICT '?'  ID '=' map_def"
+    p[0] = DefineAttribute("dict", p[3], p[5], nullable=True)
     attach_lnr(p, 1)
 
 # IMPLEMENT

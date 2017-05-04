@@ -126,3 +126,41 @@ end
         "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8))" +
         " (duplicate at ({dir}/main.cf:5))"
     )
+
+
+def test_null(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string a = null
+        end
+        implement A using std::none
+        a = A()
+
+    """,
+        "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        " caused by Invalid value 'null', expected String (reported in Construct(A) ({dir}/main.cf:6))")
+
+
+def test_null_on_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string[] a = null
+        end
+        implement A using std::none
+        a = A()
+    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        " caused by Invalid value 'null', expected list (reported in Construct(A) ({dir}/main.cf:6))")
+
+
+def test_null_on_dict(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            dict a = null
+        end
+        implement A using std::none
+        a = A()
+    """,  "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        " caused by Invalid value 'null', expected dict (reported in Construct(A) ({dir}/main.cf:6))")

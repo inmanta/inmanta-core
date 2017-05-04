@@ -41,8 +41,10 @@ class Unknown(AnyType):
         return iter([])
 
 
-class NoneValue(AnyType):
-    pass
+class NoneValue(object):
+
+    def __str__(self):
+        return "null"
 
 
 def ensure_module(name):

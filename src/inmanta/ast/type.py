@@ -17,7 +17,7 @@
 """
 
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
-from inmanta.execute.util import AnyType
+from inmanta.execute.util import AnyType, NoneValue
 
 
 class BasicResolver(object):
@@ -96,6 +96,32 @@ class Type(object):
 
     def normalize(self):
         pass
+
+
+class NullableType(Type):
+
+    def __init__(self, basetype):
+        Type.__init__(self)
+        self.basetype = basetype
+
+    def cast(self, value):
+        """
+            Cast the value to the basetype of this constraint
+        """
+        return self.basetype.cast(value)
+
+    def validate(self, value):
+        """
+            Validate the given value to check if it satisfies the constraint and
+            the basetype.
+        """
+        if isinstance(value, NoneValue):
+            return True
+
+        return self.basetype.validate(value)
+
+    def __str__(self):
+        return "%s?" % (self.basetype)
 
 
 class Number(Type):
@@ -256,7 +282,7 @@ class TypedList(Type):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
 
         for x in value:
             self.basetype.validate(x)
@@ -298,7 +324,7 @@ class List(Type, list):
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
 
         return True
 
@@ -338,7 +364,7 @@ class Dict(Type, dict):
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s' expected dict" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
 
         return True
 
