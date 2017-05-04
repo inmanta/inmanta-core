@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ class Attribute(object):
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
+        self.comment = None
 
     def get_type(self):
         """

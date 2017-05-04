@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -64,10 +64,10 @@ class Namespace(object):
 
         self.visible_namespaces["std"] = MockImport(self.get_ns_from_string("std"))
 
-    def define_type(self, name, type):
+    def define_type(self, name, newtype: "Namespaced"):
         if name in self.defines_types:
-            raise DuplicateException(type, self.defines_types[name], "Entity type already defined")
-        self.defines_types[name] = type
+            raise newtype.get_double_defined_exception(self.defines_types[name])
+        self.defines_types[name] = newtype
 
     def import_ns(self, name, ns):
         if name in self.visible_namespaces and not isinstance(self.visible_namespaces[name], MockImport):
@@ -114,7 +114,7 @@ class Namespace(object):
 
     def get_full_name(self):
         """
-            Get the name of this namespace
+            Get the fully qualified name of this namespace
         """
         if(self.__parent is None):
             raise Exception("Should not occur, compiler corrupt")
@@ -163,11 +163,18 @@ class Namespace(object):
 
         return self.name
 
-    def children(self):
+    def children(self, recursive=False):
         """
             Get the children of this namespace
         """
-        return self.__children.values()
+        children = list(self.__children.values())
+        if not recursive:
+            return children
+
+        for child in self.__children.values():
+            children.extend(child.children(recursive=True))
+
+        return children
 
     def to_list(self):
         """

@@ -1,0 +1,35 @@
+{% extends "!layout.html" %}
+  
+{%- block extrahead %}
+<style>
+.version a:visited {
+  color: rgba(255,255,255,0.3);
+}
+</style>
+{% endblock %}
+
+
+{% block sidebartitle %}
+
+{% if logo and theme_logo_only %}
+    <a href="{{ pathto(master_doc) }}">
+{% else %}
+    <a href="{{ pathto(master_doc) }}" class="icon icon-home"> {{ project }}
+{% endif %}
+
+{% if logo %}
+  {# Not strictly valid HTML, but it's the only way to display/scale it properly, without weird scripting or heaps of work #}
+    <img src="{{ pathto('_static/' + logo, 1) }}" class="logo" />
+{% endif %}
+    </a>
+    <div class="version">
+      <a href="/" class="icon icon-home"> Documentation home</a>
+    </div>
+    <div class="version">
+      {{ release }}
+    </div>
+
+    
+  {% include "searchbox.html" %}
+
+{% endblock %}
