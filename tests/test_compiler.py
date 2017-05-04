@@ -733,7 +733,7 @@ end""")
         return comp
     compare_attr(stmt.attributes[2], "blah", "dict", compare_default([('a', 'a')]))
     compare_attr(stmt.attributes[3], "xxx", "dict", compare_default([('a', 'a')]), opt=True)
-    compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value,  opt=True)
+    compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value, opt=True)
 
 
 def test_lexer():
