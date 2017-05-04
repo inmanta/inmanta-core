@@ -21,6 +21,9 @@ import sys
 
 
 class AnyType(object):
+    """
+        Supertype for objects that are an instance of all types
+    """
     pass
 
 

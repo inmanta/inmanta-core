@@ -19,7 +19,7 @@
 from copy import copy
 from collections import Mapping
 
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, NoneValue
 from inmanta.ast import RuntimeException
 
 
@@ -66,6 +66,9 @@ class DynamicProxy(object):
     @classmethod
     def return_value(cls, value):
         if value is None:
+            return None
+
+        if isinstance(value, NoneValue):
             return None
 
         if isinstance(value, Unknown):
