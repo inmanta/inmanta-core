@@ -126,3 +126,29 @@ end
         "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8))" +
         " (duplicate at ({dir}/main.cf:5))"
     )
+
+
+def test_400_typeloops(snippetcompiler):
+    snippetcompiler.setup_for_error("""
+    entity Test extends Test:
+
+    end
+    """, "Entity can not be its own parent __config__::Test (reported in Entity(Test) ({dir}/main.cf:2))")
+
+
+def test_400_typeloops_2(snippetcompiler):
+    snippetcompiler.setup_for_error_re(
+        """
+    entity Test3 extends Test2:
+    end
+
+    entity Test1 extends Test2:
+
+    end
+
+    entity Test2 extends Test1:
+
+    end
+    """,
+        "Entity can not be its own parent __config__::Test[1-2],__config__::Test[1-2] " +
+        "\(reported in Entity\(Test[1-2]\) \({dir}/main.cf:[59]\)\)")
