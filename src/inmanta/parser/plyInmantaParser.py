@@ -221,6 +221,12 @@ def p_attr_list_undef(p):
     attach_lnr(p, 2)
 
 
+def p_attr_list_null(p):
+    "attr : ns_ref '[' ']' ID '=' NULL"
+    p[0] = DefineAttribute(p[1], p[4], Literal(NoneValue()), True)
+    attach_lnr(p, 2)
+
+
 def p_attr_dict(p):
     "attr : DICT ID"
     p[0] = DefineAttribute("dict", p[2], None)
@@ -525,6 +531,12 @@ def p_map_def(p):
 def p_map_def_empty(p):
     " map_def : '{' '}'"
     p[0] = CreateDict([])
+    attach_lnr(p, 1)
+
+
+def p_map_def_null(p):
+    " map_def : NULL"
+    p[0] = Literal(NoneValue())
     attach_lnr(p, 1)
 
 

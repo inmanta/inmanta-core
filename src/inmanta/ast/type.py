@@ -294,6 +294,9 @@ class List(Type, list):
         if value is None:
             return True
 
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, list):
             raise RuntimeException(None, "Invalid value '%s' expected list" % value)
 
@@ -328,6 +331,9 @@ class Dict(Type, dict):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
+
         if value is None:
             return True
 

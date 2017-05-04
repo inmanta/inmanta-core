@@ -1278,6 +1278,36 @@ def test_null(snippetcompiler):
     assert isinstance(a.get_value(), NoneValue)
 
 
+def test_null_on_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string[] a = null
+        end
+        implement A using std::none
+        a = A()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
+def test_null_on_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            dict a = null
+        end
+        implement A using std::none
+        a = A()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
 def test_default_remove(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
     entity A:
