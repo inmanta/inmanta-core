@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -484,9 +484,8 @@ class Implementation(Namespaced):
         return self.namespace
 
     def get_double_defined_exception(self, other):
-        raise DuplicateException(
-            self, other, "Implementation %s for type %s is already defined" %
-            (self.get_full_name(), self.target_type))
+        raise DuplicateException(self, other, "Implementation %s for type %s is already defined" %
+                                 (self.get_full_name(), self.target_type))
 
 
 class Implement(object):

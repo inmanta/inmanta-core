@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -234,7 +234,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.basetype = basetype
         self.__expression = None
         self.set_expression(expression)
-        self.type = ConstraintType(name)
+        self.type = ConstraintType(self.namespace, name)
         self.comment = None
 
     def get_expression(self):

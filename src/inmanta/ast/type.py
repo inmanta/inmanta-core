@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -344,13 +344,13 @@ class ConstraintType(Type):
         The constraint on this type is defined by a regular expression.
     """
 
-    def __init__(self, name):
+    def __init__(self, namespace, name):
         Type.__init__(self)
 
         self.basetype = None  # : ConstrainableType
         self._constraint = None
         self.name = name
-        self.namespace = None
+        self.namespace = namespace
         self.comment = None
 
     def set_constraint(self, expression):

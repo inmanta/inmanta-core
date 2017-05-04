@@ -156,8 +156,8 @@ Conditions can have the following forms
         ;
 
 
-Function calls
-==========================
+Function calls / Plugins
+========================
 
 Each module can define plugins. Plugins can contribute functions to the module's namespace. The function call syntax is
 
@@ -171,6 +171,8 @@ For example::
 
     std::familyof(host.os, "rhel")
     a = param::one("region", "demo::forms::AWSForm")
+
+.. _lang-entity:
 
 Entities
 ========
@@ -216,6 +218,8 @@ Default values can also be set using a type alias::
     typedef PublicFile as File(mode = 0644)
 
 A constructor call using a type alias will result in an instance of the base type.
+
+.. _lang-relation:
 
 Relations
 =========
@@ -271,10 +275,10 @@ For example)::
     Service.file [1:] -- File
 
 
+.. _lang-instance:
 
 Instantiation
-=============================================================
-
+=============
 
 Instances of an entity are created with a constructor statement::
 
@@ -435,6 +439,8 @@ The template used in the previous listing::
     Welcome to {{ hostname }}
     This machine is maintainted by {{ admin }}
 
+
+.. _lang-plugins:
 
 Plug-ins
 ===========

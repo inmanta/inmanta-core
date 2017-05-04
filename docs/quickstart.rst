@@ -13,7 +13,8 @@ Then, we use Inmanta to install Drupal on these VMs.
 Setting up the tutorial
 _________________________
 
-To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_.
+To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be
+managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_.
 
 
 Next, grab the Vagrant box from our Git repo and let Vagrant do the setup of the Inmanta server.
@@ -51,8 +52,6 @@ _______________________________
 
 At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
 For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
-
-
 
 .. _cli:
 
