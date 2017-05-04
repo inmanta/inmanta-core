@@ -177,7 +177,10 @@ class Exporter(object):
             Call all dep managers and let them add dependencies
         """
         for fnc in self.__class__.__dep_manager:
-            fnc(types, self._resources)
+            try:
+                fnc(types, self._resources)
+            except UnknownException:
+                LOGGER.debug("Dependency manager %s caused an unknown exception", fnc)
 
         # TODO: check for cycles
 

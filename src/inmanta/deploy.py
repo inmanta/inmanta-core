@@ -70,8 +70,6 @@ class Deploy(object):
 
     def _setup_server(self, no_agent_log):
         # set the custom config before starting the server
-        config.Config.load_config()
-
         config.Config.get("database", "name", "inmanta")
 
         state_dir = os.path.join(self._data_path, "state")
@@ -422,13 +420,17 @@ class Deploy(object):
         yield self.export(dry_run=dry_run)
 
     def run(self, options, only_setup=False):
+        if options.map is not None:
+            config.Config.set("config", "agent-map", options.map)
+        if options.agent is not None:
+            config.Config.set("config", "agent", options.agent)
         self.setup_server(options.no_agent_log)
 
         if only_setup:
             return
 
         def handle_result(x):
-            if not x.result() or x.exception() is not None:
+            if x.exception() is not None or not x.result():
                 self._io_loop.stop()
                 self.stop()
                 sys.exit(1)

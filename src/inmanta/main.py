@@ -207,11 +207,13 @@ class Client(object):
         return env_id
 
 
-def print_table(header, rows):
+def print_table(header, rows, data_type=None):
     width, _ = click.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
     table.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
+    if data_type is not None:
+        table.set_cols_dtype(data_type)
     table.header(header)
     for row in rows:
         table.add_row(row)
@@ -412,7 +414,8 @@ def version_list(client, environment):
     versions = client.do_request("list_versions", "versions", arguments=dict(tid=env_id))
 
     print_table(('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
-                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']) for x in versions))
+                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']) for x in versions),
+                ["t", "t", "t", "t", "t", "t", "t"])
 
 
 @version.command(name="release")

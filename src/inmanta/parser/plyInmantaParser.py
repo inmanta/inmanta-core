@@ -134,8 +134,8 @@ def p_assign(p):
 
 
 def p_for(p):
-    "for : FOR ID IN operand implementation"
-    p[0] = For(p[4], p[2], BasicBlock(namespace, p[5]))
+    "for : FOR ID IN operand ':' block"
+    p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
 #######################
 # DEFINITIONS
@@ -246,12 +246,26 @@ def p_implement_when(p):
     p[0] = DefineImplement(p[2], p[4], p[6])
     attach_lnr(p)
 
+
+def p_implement_comment(p):
+    "implement_def : IMPLEMENT class_ref USING ns_list mls"
+    p[0] = DefineImplement(p[2], p[4], Literal(True), comment=p[5])
+    attach_lnr(p)
+
+
+def p_implement_when_comment(p):
+    "implement_def : IMPLEMENT class_ref USING ns_list WHEN condition mls"
+    p[0] = DefineImplement(p[2], p[4], p[6], comment=p[7])
+    attach_lnr(p)
+
+
 # IMPLEMENTATION
 
 
 def p_implementation_def(p):
     "implementation_def : IMPLEMENTATION ID FOR class_ref implementation"
-    p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, p[5]))
+    docstr, stmts = p[5]
+    p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, stmts), docstr)
     attach_lnr(p)
 
 
@@ -260,19 +274,23 @@ def p_implementation_def(p):
 #     p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
 #     attach_lnr(p)
 
-
 def p_implementation(p):
-    "implementation : ':' mls stmt_list END"
-    p[0] = p[3]
+    "implementation : ':' mls block"
+    p[0] = (p[2], p[3])
 
 
 def p_implementation_1(p):
-    "implementation : ':' stmt_list END"
-    p[0] = p[2]
+    "implementation : ':' block"
+    p[0] = (None, p[2])
 
 
-def p_implementation_2(p):
-    "implementation : ':' END"
+def p_block(p):
+    "block : stmt_list END"
+    p[0] = p[1]
+
+
+def p_block_empty(p):
+    "block : END"
     p[0] = []
 
 # RELATION
@@ -287,26 +305,49 @@ def p_relation(p):
     attach_lnr(p, 2)
 
 
+def p_relation_comment(p):
+    "relation : class_ref ID multi REL multi class_ref ID mls"
+    if not(p[4] == '--'):
+        LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
+                       (p[4], Location(file, p.lineno(4))))
+    rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
+    rel.comment = p[8]
+    p[0] = rel
+    attach_lnr(p, 2)
+
+
+def p_relation_new_outer_comment(p):
+    "relation : relationnew mls"
+    rel = p[1]
+    rel.comment = p[2]
+    p[0] = rel
+
+
+def p_relation_new_outer(p):
+    "relation : relationnew"
+    p[0] = p[1]
+
+
 def p_relation_new(p):
-    "relation : class_ref '.' ID multi REL class_ref '.' ID multi"
+    "relationnew : class_ref '.' ID multi REL class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
 def p_relation_new_unidir(p):
-    "relation : class_ref '.' ID multi REL class_ref"
+    "relationnew : class_ref '.' ID multi REL class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
 def p_relation_new_annotated(p):
-    "relation : class_ref '.' ID multi operand_list class_ref '.' ID multi"
+    "relationnew : class_ref '.' ID multi operand_list class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
 def p_relation_new_annotated_unidir(p):
-    "relation : class_ref '.' ID multi operand_list class_ref"
+    "relationnew : class_ref '.' ID multi operand_list class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
@@ -333,15 +374,27 @@ def p_multi_4(p):
 # typedef
 
 
+def p_typedef_outer(p):
+    """typedef : typedef_inner"""
+    p[0] = p[1]
+
+
+def p_typedef_outer_comment(p):
+    """typedef : typedef_inner mls"""
+    tdef = p[1]
+    tdef.comment = p[2]
+    p[0] = tdef
+
+
 def p_typedef_1(p):
-    """typedef : TYPEDEF ID AS ns_ref MATCHING REGEX
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING REGEX
                 | TYPEDEF ID AS ns_ref MATCHING condition"""
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p)
 
 
 def p_typedef_cls(p):
-    """typedef : TYPEDEF CID AS constructor"""
+    """typedef_inner : TYPEDEF CID AS constructor"""
     p[0] = DefineTypeDefault(namespace, p[2], p[4])
     attach_lnr(p)
 # index

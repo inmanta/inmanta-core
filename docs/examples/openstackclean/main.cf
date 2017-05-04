@@ -1,35 +1,30 @@
-connection_url = ""
-tenant = ""
-username = ""
-password = ""
-image_id = ""
-network_name = ""
-machine_flavor_name = ""
-
-ssh_public_key=""" """
-
-# change OS parameter to match the actual image
-import redhat
-import ubuntu
-os = redhat::fedora23
-
 import mymodule
 import ssh
+import redhat
+import ubuntu
+
+## Edit this parameters
+image_id = ""
+network_name = ""
+subnet_name = ""
+network_address = ""
+
+flavor_name = ""
+ssh_public_key=""
+
+# change OS parameter to match the actual image. If an OS is not modelled in an existing module,
+# std::linux can be used for example. However, other modules might not have support for a
+# generic os definition such as std::linux
+os = redhat::fedora23
+## End edit
 
 # register ssh key
-my_key = ssh::Key(name="mykey", public_key=ssh_public_key)     
+ssh_key = ssh::Key(name="mykey", public_key=ssh_public_key)
 
-#cluster
-cluster = mymodule::MyCluster(
-            connection_url=connection_url,
-            username=username,
-            password=password,
-            tenant=tenant,
-            network_name=network_name,
-            image_id = image_id,
-            flavor = machine_flavor_name,
-            key = my_key,
-            os = os)
-              
+# create the cluster
+cluster = mymodule::MyCluster(network_name=network_name, subnet_name=subnet_name,
+                              image_id=image_id, flavor=flavor_name, key=ssh_key,
+                              network_address=network_address, os=os)
+
 # make a vm!
 host1 = mymodule::MyHost(name="testhost", cluster=cluster)

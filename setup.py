@@ -2,25 +2,25 @@ from setuptools import setup, find_packages
 
 requires = [
         'click',
-        'texttable',
-        'execnet',
-        'tornado',
         'colorlog',
-        'urllib3',
-        'python-dateutil',
+        'execnet',
+        'mongobox',
+        'motor >= 1.1',
         'ply',
+        'pymongo',
+        'python-dateutil',
         'pyyaml',
         'ruamel.yaml',
+        'texttable',
+        'tornado',
         'virtualenv',
-        'motor >= 1.1',
-        'pymongo',
-        'mongobox']
+    ]
 
 setup(
     name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2017.1",
+    version="2017.2",
     description="Inmanta deployment tool",
     author="Inmanta",
     author_email="code@inmanta.com",

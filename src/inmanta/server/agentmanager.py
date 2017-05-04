@@ -24,6 +24,7 @@ from inmanta.config import Config
 from inmanta.agent.io.remote import RemoteIO
 from inmanta.resources import HostNotFoundException
 from inmanta import data
+from inmanta.agent import config as agent_config
 from inmanta.server.config import server_agent_autostart
 from inmanta.protocol import Session
 from inmanta.asyncutil import retry_limited
@@ -428,12 +429,16 @@ class AgentManager(object):
 
         # todo: cache what is what
         agent_map = {}
+        config_map = agent_config.agent_map.get()
         for agent in agent_data["agents"]:
-            try:
-                gw = RemoteIO(agent)
-                gw.close()
-            except HostNotFoundException:
-                agent_map[agent] = "localhost"
+            if agent in config_map:
+                agent_map[agent] = config_map[agent]
+            else:
+                try:
+                    gw = RemoteIO(agent)
+                    gw.close()
+                except HostNotFoundException:
+                    agent_map[agent] = "localhost"
 
         config = self._make_agent_config(environment_id, agent_names, agent_map)
 
