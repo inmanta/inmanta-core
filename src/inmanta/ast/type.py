@@ -17,7 +17,7 @@
 """
 
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
-from inmanta.execute.util import Unknown, AnyType
+from inmanta.execute.util import AnyType
 
 
 class BasicResolver(object):

@@ -1269,7 +1269,7 @@ def test_275_duplicate_parent(snippetcompiler):
 def test_null(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         a = null
-        
+
     """)
 
     (_, scopes) = compiler.do_compile()

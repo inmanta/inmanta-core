@@ -544,7 +544,7 @@ a=true b=false
     assert not statements[1].value.value
 
 
-def test_None():
+def test_none():
     statements = parse_code("""
 a=null
 """)
