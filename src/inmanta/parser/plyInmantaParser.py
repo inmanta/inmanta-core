@@ -723,7 +723,7 @@ def p_mls_term(p):
 
 def p_mls_collect(p):
     "mls : MLS mls"
-    p[0] = "%s\n%s" % (p[1], p[2])
+    p[0] = "%s%s" % (p[1], p[2])
     # attach_lnr_for_parser(p)
 
 
