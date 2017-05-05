@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit
+from inmanta.ast import Locatable, Location
 
 
-class Statement(object):
+class Statement(Locatable):
     """
         An abstract baseclass representing a statement in the configuration policy.
     """
@@ -38,6 +39,9 @@ class Statement(object):
 
     def pretty_print(self):
         return str(self)
+
+    def get_location(self) -> Location:
+        return self.location
 
 
 class DynamicStatement(Statement):

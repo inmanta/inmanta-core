@@ -160,6 +160,7 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         cls = self.namespace.get_type(self.entity)
         self.type.set_type(cls)
+        self.copy_location(self.type)
 
 
 class DefineImplement(DefinitionStatement):

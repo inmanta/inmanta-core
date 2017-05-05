@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Namespaced
+from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Namespaced, Locatable, NamespacedLocatable
 from inmanta.execute.util import Unknown
 
 
@@ -64,7 +64,7 @@ class CastException(Exception):
     """
 
 
-class Type(Namespaced):
+class Type(NamespacedLocatable):
     """
         This class is the base class for all types that represent basic data.
         These are types that are not relations.

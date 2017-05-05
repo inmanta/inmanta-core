@@ -20,17 +20,13 @@ from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.ast.type import TypedList
 
-from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 
 if TYPE_CHECKING:
-    import inmanta.ast.statements
     from inmanta.ast.type import Type
-    from inmanta.execute.runtime import ExecutionContext, Instance
-    from inmanta.ast.statements import Statement
+    from inmanta.execute.runtime import Instance
     from inmanta.ast.entity import Entity
-    from inmanta.ast.statements.define import DefineImport
-
 
 class Attribute(object):
     """
@@ -88,7 +84,7 @@ class Attribute(object):
         if not isinstance(value, Unknown):
             self.type.validate(value)
 
-    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> "ResultVariable":
+    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         out = ResultVariable()
         if self.__multi:
             out.set_type(TypedList(self.__type))
@@ -120,12 +116,12 @@ class RelationAttribute(Attribute):
         self.low = values[0]
         self.high = values[1]
 
-    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> "ResultVariable":
+    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
         if self.low == 1 and self.high == 1:
-            out = AttributeVariable(self, instance)
+            out = AttributeVariable(self, instance)  # type: ResultVariable
         elif self.low == 0 and self.high == 1:
-            out = OptionVariable(self, instance, queue)
+            out = OptionVariable(self, instance, queue)  # type: ResultVariable
         else:
-            out = ListVariable(self, instance, queue)
+            out = ListVariable(self, instance, queue)  # type: ResultVariable
         out.set_type(self.get_type())
         return out

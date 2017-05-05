@@ -18,7 +18,7 @@
 
 from inmanta import util
 
-from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Sequence, List, Optional, Union
 
 if TYPE_CHECKING:
     import inmanta.ast.statements
@@ -46,7 +46,7 @@ class Location(object):
 
 class Namespaced(object):
 
-    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
+    def get_double_defined_exception(self, other: "NamespacedLocatable") -> "DuplicateException":
         """produce a customized error message for this type"""
         raise NotImplementedError()
 
@@ -55,6 +55,16 @@ class Namespaced(object):
 
     def get_namespace(self) -> "Namespace":
         raise NotImplementedError()
+
+
+class Locatable(object):
+
+    def get_location(self) -> Location:
+        raise NotImplementedError()
+
+
+class NamespacedLocatable(Namespaced, Locatable):
+    pass
 
 
 class MockImport(object):
@@ -74,7 +84,8 @@ class Namespace(Namespaced):
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,Type]
         if self.__parent is not None:
-            self.visible_namespaces = {self.get_full_name(): MockImport(self)} # type: Dict[str,Union[DefineImport, MockImport]]
+            # type: Dict[str,Union[DefineImport, MockImport]]
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
         else:
             self.visible_namespaces = {name: MockImport(self)}
@@ -282,17 +293,17 @@ class CompilerException(Exception):
 
 class RuntimeException(CompilerException):
 
-    def __init__(self, stmt: "Optional[Statement]", msg: str, root_cause_chance=10) -> None:
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, root_cause_chance=10) -> None:
         CompilerException.__init__(self)
         self.stmt = None
         if stmt is not None:
-            self.set_location(stmt.location)
+            self.set_location(stmt.get_location())
             self.stmt = stmt
         self.msg = msg
         self.root_cause_chance = root_cause_chance
 
-    def set_statement(self, stmt: "Statement"):
-        self.set_location(stmt.location)
+    def set_statement(self, stmt: "Locatable"):
+        self.set_location(stmt.get_location())
         self.stmt = stmt
 
     def __str__(self) -> str:
@@ -321,7 +332,7 @@ def stringify_exception(exn: Exception) -> str:
 
 class WrappingRuntimeException(RuntimeException):
 
-    def __init__(self, stmt: "Statement", msg: str, cause: Exception) -> None:
+    def __init__(self, stmt: Locatable, msg: str, cause: Exception) -> None:
         if stmt is None:
             if isinstance(cause, RuntimeException):
                 stmt = cause.stmt
@@ -383,12 +394,12 @@ class DoubleSetException(RuntimeException):
 
 class DuplicateException(TypingException):
 
-    def __init__(self, stmt: "Statement", other: "Statement", msg: str) -> None:
+    def __init__(self, stmt: Locatable, other: Locatable, msg: str) -> None:
         TypingException.__init__(self, stmt, msg)
         self.other = other
 
     def __str__(self) -> str:
-        return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.location)
+        return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.get_location())
 
 
 class CompilerError(Exception):

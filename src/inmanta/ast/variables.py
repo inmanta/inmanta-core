@@ -21,7 +21,7 @@ import logging
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit, Instance
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement
-from inmanta.ast import RuntimeException
+from inmanta.ast import RuntimeException, Locatable
 
 LOGGER = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class Reference(ExpressionStatement):
         return self.name
 
 
-class AttributeReferenceHelper(object):
+class AttributeReferenceHelper(Locatable):
     """
         Helper class for AttributeReference, reschedules itself
     """
@@ -115,6 +115,9 @@ class AttributeReferenceHelper(object):
 
     def __str__(self, *args, **kwargs):
         return "%s.%s" % (self.instance, self.attribute)
+
+    def get_location(self) -> "Location":
+        return self.location
 
 
 class IsDefinedReferenceHelper(object):
