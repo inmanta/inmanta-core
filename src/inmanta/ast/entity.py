@@ -22,21 +22,8 @@ from inmanta.ast.type import Type
 from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced
 from inmanta.util import memoize
-
-
-class Namespaced(object):
-
-    def get_double_defined_exception(self, other):
-        """produce a customized error message for this type"""
-        raise NotImplementedError()
-
-    def get_full_name(self):
-        raise NotImplementedError()
-
-    def get_namespace(self):
-        raise NotImplementedError()
 
 
 class Entity(Type, Namespaced):
@@ -460,6 +447,7 @@ class Implementation(Namespaced):
         high level roles that do not have any arguments, or they can be used
         to create mixin like aspects.
     """
+
     def __init__(self, name, stmts: BasicBlock, namespace, target_type, comment: str=None):
         self.name = name
         self.statements = stmts

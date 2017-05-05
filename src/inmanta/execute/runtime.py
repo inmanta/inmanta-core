@@ -530,7 +530,7 @@ class ExecutionContext(object):
             return self.slots[name]
         return self.resolver.lookup(name, root)
 
-    def direct_lookup(self, name):
+    def direct_lookup(self, name: str) -> "Type":
         if name in self.slots:
             return self.slots[name]
         else:
