@@ -17,8 +17,19 @@
 """
 
 from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable
+from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.ast.type import TypedList
+
+from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple
+
+
+if TYPE_CHECKING:
+    import inmanta.ast.statements
+    from inmanta.ast.type import Type
+    from inmanta.execute.runtime import ExecutionContext, Instance
+    from inmanta.ast.statements import Statement
+    from inmanta.ast.entity import Entity
+    from inmanta.ast.statements.define import DefineImport
 
 
 class Attribute(object):
@@ -28,16 +39,15 @@ class Attribute(object):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity, value_type, name, multi=False):
-        self.__name = name  # : String
-
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False) -> None:
+        self.__name = name
         entity.add_attribute(self)
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
-        self.comment = None
+        self.comment = None  # type: str
 
-    def get_type(self):
+    def get_type(self) -> "Type":
         """
             Get the type of this data item
         """
@@ -45,7 +55,7 @@ class Attribute(object):
 
     type = property(get_type)
 
-    def get_name(self):
+    def get_name(self) -> str:
         """
             Get the name of the attribute. This is the name this attribute
             is associated with in the entity.
@@ -54,16 +64,16 @@ class Attribute(object):
 
     name = property(get_name)
 
-    def __hash__(self):
+    def __hash__(self) -> "int":
         """
             The hash of this object is based on the name of the attribute
         """
         return hash(self.__name)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__name
 
-    def get_entity(self):
+    def get_entity(self) -> "Entity":
         """
             Return the entity this attribute belongs to
         """
@@ -71,14 +81,14 @@ class Attribute(object):
 
     entity = property(get_entity)
 
-    def validate(self, value):
+    def validate(self, value: object) -> None:
         """
             Validate a value that is going to be assigned to this attribute
         """
-        if (not hasattr(value, "is_unknown") or not value.is_unknown()) and not isinstance(value, Unknown):
+        if not isinstance(value, Unknown):
             self.type.validate(value)
 
-    def get_new_result_variable(self, instance, queue):
+    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> "ResultVariable":
         out = ResultVariable()
         if self.__multi:
             out.set_type(TypedList(self.__type))
@@ -93,24 +103,24 @@ class RelationAttribute(Attribute):
         An attribute that is a relation
     """
 
-    def __init__(self, entity, value_type, name):
+    def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
         Attribute.__init__(self, entity, value_type, name)
-        self.end = None
+        self.end = None  # type: RelationAttribute
         self.low = 1
         self.high = 1
         self.depends = False
 
-    def __repr__(self):
-        return "[%s:%s] %s" % (self.low, self.high, self.name)
+    def __repr__(self) -> str:
+        return "[%d:%d] %s" % (self.low, self.high, self.name)
 
-    def set_multiplicity(self, values):
+    def set_multiplicity(self, values: "Tuple[int, int]") -> None:
         """
             Set the multiplicity of this end
         """
         self.low = values[0]
         self.high = values[1]
 
-    def get_new_result_variable(self, instance, queue):
+    def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> "ResultVariable":
         if self.low == 1 and self.high == 1:
             out = AttributeVariable(self, instance)
         elif self.low == 0 and self.high == 1:
