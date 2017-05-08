@@ -44,9 +44,18 @@ class Location(object):
         return self.file == other.file and self.lnr == other.lnr
 
 
-class Namespaced(object):
+class Locatable(object):
 
-    def get_double_defined_exception(self, other: "NamespacedLocatable") -> "DuplicateException":
+    def __init__(self):
+        self.location = None  # type: Location
+
+    def get_location(self) -> Location:
+        return self.location
+
+
+class Namespaced(Locatable):
+
+    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         """produce a customized error message for this type"""
         raise NotImplementedError()
 
@@ -57,17 +66,7 @@ class Namespaced(object):
         raise NotImplementedError()
 
 
-class Locatable(object):
-
-    def get_location(self) -> Location:
-        raise NotImplementedError()
-
-
-class NamespacedLocatable(Namespaced, Locatable):
-    pass
-
-
-class MockImport(object):
+class MockImport(Locatable):
 
     def __init__(self, target: "Namespace") -> None:
         self.target = target
@@ -91,6 +90,7 @@ class Namespace(Namespaced):
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Dict[str,Type]
         self.scope = None  # type: ExecutionContext
+        self.location = None  # type: Location
 
     def set_primitives(self, primitives: "Dict[str,Type]") -> None:
         self.primitives = primitives
@@ -279,6 +279,9 @@ class Namespace(Namespaced):
     def get_namespace(self) -> "Namespace":
         return self
 
+    def get_location(self) -> Location:
+        return self.location
+
 
 class CompilerException(Exception):
 
@@ -343,7 +346,7 @@ class WrappingRuntimeException(RuntimeException):
 
 class AttributeException(WrappingRuntimeException):
 
-    def __init__(self, stmt: "Statement", entity: "Entity", attribute: str, cause: Exception) -> None:
+    def __init__(self, stmt: "Statement", entity: "Instance", attribute: str, cause: Exception) -> None:
         WrappingRuntimeException.__init__(
             self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(entity)), cause=cause)
         self.attribute = attribute

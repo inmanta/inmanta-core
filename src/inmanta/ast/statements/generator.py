@@ -160,7 +160,7 @@ class Constructor(GeneratorStatement):
         preout.extend([x for x in self.type.get_entity().get_default_values().items()])
 
         out2 = {rk: rv for (k, v) in self.type.get_defaults().items()
-                for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_containing_namespace()), queue).items()}
+                for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_namespace()), queue).items()}
 
         out = {rk: rv for (k, v) in preout for (rk, rv) in v.requires_emit(resolver, queue).items()}
         out.update(out2)

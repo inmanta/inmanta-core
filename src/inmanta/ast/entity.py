@@ -22,7 +22,7 @@ from inmanta.ast.type import Type
 from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Instance, ResultVariable, Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable, NamespacedLocatable
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable
 from inmanta.util import memoize
 
 
@@ -439,7 +439,7 @@ class Entity(Type, Namespaced, Locatable):
                 excns.append(NotFoundException(stmt, key,
                                                "No match in index on type %s with key %s" % (self.get_full_name(), key)))
 
-    def get_double_defined_exception(self, other: "NamespacedLocatable") -> "DuplicateException":
+    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         return DuplicateException(
             self, other, "Entity %s is already defined" % (self.get_full_name()))
 
@@ -478,7 +478,7 @@ class Implementation(Namespaced, Locatable):
     def get_namespace(self) -> Namespace:
         return self.namespace
 
-    def get_double_defined_exception(self, other: "NamespacedLocatable") -> "DuplicateException":
+    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         raise DuplicateException(self, other, "Implementation %s for type %s is already defined" %
                                  (self.get_full_name(), self.target_type))
 

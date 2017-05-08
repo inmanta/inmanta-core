@@ -16,35 +16,37 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast.statements import Statement
+from inmanta.ast.statements import Statement, DynamicStatement
 from inmanta.ast.statements.assign import Assign
-from inmanta.ast import TypeNotFoundException, RuntimeException
+from inmanta.ast import TypeNotFoundException, RuntimeException, Namespace
+from typing import List
+from inmanta.execute.runtime import Resolver, QueueScheduler
 
 
 class BasicBlock(object):
 
-    def __init__(self, namespace, stmts=[]):
-        self.__stmts = []
-        self.variables = []
+    def __init__(self, namespace: Namespace, stmts: List[DynamicStatement]=[]) -> None:
+        self.__stmts = []  # type: List[DynamicStatement]
+        self.variables = []  # type: List[str]
         self.namespace = namespace
 
         for st in stmts:
             self.add(st)
 
-    def get_stmts(self):
+    def get_stmts(self) -> List[DynamicStatement]:
         return self.__stmts
 
-    def add(self, stmt: Statement):
+    def add(self, stmt: DynamicStatement) -> None:
         self.__stmts.append(stmt)
 
-    def get_variables(self):
+    def get_variables(self) -> List[str]:
         return self.variables
 
-    def add_var(self, name):
+    def add_var(self, name: str) -> None:
         self.variables.append(name)
 
-    def normalize(self):
-        assigns = [s for s in self.__stmts if isinstance(s, Assign)]
+    def normalize(self) -> None:
+        assigns = [s for s in self.__stmts if isinstance(s, Assign)]  # type: List[Assign]
         self.variables = [s.name for s in assigns]
 
         for s in self.__stmts:
@@ -60,10 +62,10 @@ class BasicBlock(object):
 
         # self.external_not_global = [x for x in self.external if "::" not in x]
 
-    def get_requires(self):
-        return self.external
+#     def get_requires(self) -> List[str]:
+#         return self.external
 
-    def emit(self, resolver, queue):
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for s in self.__stmts:
             try:
                 s.emit(resolver, queue)

@@ -15,29 +15,34 @@
 
     Contact: code@inmanta.com
 """
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit
-from inmanta.ast import Locatable, Location
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
+from inmanta.ast import Locatable, Location, Namespaced, Namespace
+from typing import Any, Dict, TYPE_CHECKING, List, Tuple
+
+if TYPE_CHECKING:
+    from inmanta.ast.variables import Reference
+    from inmanta.ast.type import Type
 
 
-class Statement(Locatable):
+class Statement(Namespaced):
     """
         An abstract baseclass representing a statement in the configuration policy.
     """
 
-    def __init__(self):
-        self.location = None
-        self.namespace = None
+    def __init__(self) -> None:
+        self.location = None  # type: Location
+        self.namespace = None  # type: Namespace
 
-    def copy_location(self, statement):
+    def copy_location(self, statement: Locatable) -> None:
         """
             Copy the location of this statement in the given statement
         """
         statement.location = self.location
 
-    def get_containing_namespace(self,):
+    def get_namespace(self) -> "Namespace":
         return self.namespace
 
-    def pretty_print(self):
+    def pretty_print(self) -> str:
         return str(self)
 
     def get_location(self) -> Location:
@@ -50,35 +55,64 @@ class DynamicStatement(Statement):
         These are all statements that do not define typing.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         Statement.__init__(self)
 
-    def normalize(self):
+    def normalize(self) -> None:
         raise Exception("Not Implemented" + str(type(self)))
 
-    def requires(self):
+    def requires(self) -> List[str]:
+        """ List of all variable names used by this statement"""
         raise Exception("Not Implemented" + str(type(self)))
 
-    def emit(self, resolver, queue):
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
+        """ emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise Exception("Not Implemented" + str(type(self)))
 
 
 class ExpressionStatement(DynamicStatement):
 
-    def __init__(self):
+    def __init__(self) -> None:
         DynamicStatement.__init__(self)
 
-    def emit(self, resolver, queue):
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         target = ResultVariable()
         reqs = self.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self)
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         """
             returns a dict of the result variables required, names are an opaque identifier
-            may emit statements to break execution is smaller segements
+            may emit statements to break execution is smaller segments
         """
         raise Exception("Not Implemented" + str(type(self)))
+
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+        """
+            execute the expression, give the values provided in the requires dict.
+            These values correspond to the values requested via requires_emit
+        """
+        raise Exception("Not Implemented" + str(type(self)))
+
+
+class ReferenceStatement(ExpressionStatement):
+    """
+        This class models statements that refer to other statements
+    """
+
+    def __init__(self, children: List[ExpressionStatement]) -> None:
+        ExpressionStatement.__init__(self)
+        self.children = children
+
+    def normalize(self) -> None:
+        for c in self.children:
+            c.normalize()
+
+    def requires(self) -> List[str]:
+        return [req for v in self.children for req in v.requires()]
+
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        return {rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()}
 
 
 class AssignStatement(DynamicStatement):
@@ -86,64 +120,18 @@ class AssignStatement(DynamicStatement):
     This class models binary sts
     """
 
-    def __init__(self, lhs, rhs):
+    def __init__(self, lhs: "Reference", rhs: ExpressionStatement) -> None:
         DynamicStatement.__init__(self)
         self.lhs = lhs
         self.rhs = rhs
 
-    def normalize(self):
+    def normalize(self) -> None:
         self.rhs.normalize()
 
-    def requires(self):
-        out = self.lhs.requires()
-        out.extend(self.rhs.requires())
+    def requires(self) -> List[str]:
+        out = self.lhs.requires()  # type : List[str]
+        out.extend(self.rhs.requires())  # type : List[str]
         return out
-
-
-class ReferenceStatement(ExpressionStatement):
-    """
-        This class models statements that refer to somethings
-    """
-
-    def __init__(self, children):
-        ExpressionStatement.__init__(self)
-        self.children = children
-
-    def normalize(self):
-        for c in self.children:
-            c.normalize()
-
-    def requires(self):
-        return [req for v in self.children for req in v.requires()]
-
-    def requires_emit(self, resolver, queue):
-        return {rk: rv for i in self.children for (rk, rv) in i.requires_emit(resolver, queue).items()}
-
-
-class DefinitionStatement(Statement):
-    """
-        This statement defines a new entity in the configuration.
-    """
-
-    def __init__(self):
-        Statement.__init__(self)
-
-
-class TypeDefinitionStatement(DefinitionStatement):
-
-    def __init__(self, namespace, name):
-        DefinitionStatement.__init__(self)
-        self.name = name
-        self.namespace = namespace
-        self.fullName = namespace.get_full_name() + "::" + name
-
-    def register_types(self):
-        self.copy_location(self.type)
-        self.namespace.define_type(self.name, self.type)
-        return (self.fullName, self.type)
-
-    def evaluate(self):
-        pass
 
 
 class GeneratorStatement(ExpressionStatement):
@@ -151,30 +139,57 @@ class GeneratorStatement(ExpressionStatement):
         This statement models a statement that generates new statements
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         ExpressionStatement.__init__(self)
 
 
 class Literal(ExpressionStatement):
 
-    def __init__(self, value):
+    def __init__(self, value: object) -> None:
         ExpressionStatement.__init__(self)
         self.value = value
 
-    def normalize(self):
+    def normalize(self) -> None:
         pass
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(self.value)
 
-    def requires(self):
+    def requires(self) -> List[str]:
         return []
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return {}
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         return self.value
+
+
+class DefinitionStatement(Statement):
+    """
+        This statement defines a new entity in the configuration.
+    """
+
+    def __init__(self) -> None:
+        Statement.__init__(self)
+
+
+class TypeDefinitionStatement(DefinitionStatement):
+
+    def __init__(self, namespace: Namespace, name: str) -> None:
+        DefinitionStatement.__init__(self)
+        self.name = name
+        self.namespace = namespace
+        self.fullName = namespace.get_full_name() + "::" + name
+        self.type = None  # type: Type
+
+    def register_types(self) -> Tuple[str, "Type"]:
+        self.copy_location(self.type)
+        self.namespace.define_type(self.name, self.type)
+        return (self.fullName, self.type)
+
+    def evaluate(self) -> None:
+        pass

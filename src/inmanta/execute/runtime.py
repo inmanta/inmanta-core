@@ -486,7 +486,7 @@ class Resolver(object):
     def __init__(self, namespace):
         self.namespace = namespace
 
-    def lookup(self, name, root=None):
+    def lookup(self, name, root=None) -> ResultVariable:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         if root is not None:
@@ -574,7 +574,7 @@ class Instance(ExecutionContext, Locatable):
         except RuntimeException as e:
             raise AttributeException(None, self, name, cause=e)
 
-    def get_attribute(self, name):
+    def get_attribute(self, name) -> ResultVariable:
         try:
             return self.slots[name]
         except KeyError:
