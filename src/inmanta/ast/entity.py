@@ -24,6 +24,7 @@ from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast import RuntimeException, DuplicateException, NotFoundException
 from inmanta.util import memoize
+from inmanta.execute.util import AnyType
 
 
 class Namespaced(object):
@@ -316,6 +317,9 @@ class Entity(Type, Namespaced):
         """
             Validate the given value
         """
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, Instance):
             raise RuntimeException(None, "Invalid type for value '%s', should be type %s" % (value, self))
 

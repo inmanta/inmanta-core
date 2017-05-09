@@ -17,7 +17,7 @@
 """
 
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import AnyType, NoneValue
 
 
 class BasicResolver(object):
@@ -98,6 +98,32 @@ class Type(object):
         pass
 
 
+class NullableType(Type):
+
+    def __init__(self, basetype):
+        Type.__init__(self)
+        self.basetype = basetype
+
+    def cast(self, value):
+        """
+            Cast the value to the basetype of this constraint
+        """
+        return self.basetype.cast(value)
+
+    def validate(self, value):
+        """
+            Validate the given value to check if it satisfies the constraint and
+            the basetype.
+        """
+        if isinstance(value, NoneValue):
+            return True
+
+        return self.basetype.validate(value)
+
+    def __str__(self):
+        return "%s?" % (self.basetype)
+
+
 class Number(Type):
     """
         This class represents an integer or float in the configuration model. On
@@ -115,6 +141,9 @@ class Number(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
+
         try:
             float(value)
         except TypeError:
@@ -167,6 +196,8 @@ class Bool(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
         if isinstance(value, bool):
             return True
         else:
@@ -215,7 +246,7 @@ class String(Type, str):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
             raise RuntimeException(None, "Invalid value '%s', expected String" % value)
@@ -244,14 +275,14 @@ class TypedList(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
 
         if value is None:
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
 
         for x in value:
             self.basetype.validate(x)
@@ -289,8 +320,11 @@ class List(Type, list):
         if value is None:
             return True
 
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
 
         return True
 
@@ -323,11 +357,14 @@ class Dict(Type, dict):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
+
         if value is None:
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s' expected dict" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
 
         return True
 
@@ -381,7 +418,7 @@ class ConstraintType(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
 
         self.basetype.validate(value)

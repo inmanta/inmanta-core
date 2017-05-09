@@ -127,7 +127,6 @@ end
         " (duplicate at ({dir}/main.cf:5))"
     )
 
-
 def test_400_typeloops(snippetcompiler):
     snippetcompiler.setup_for_error("""
     entity Test extends Test:
@@ -152,3 +151,41 @@ def test_400_typeloops_2(snippetcompiler):
     """,
         "Entity can not be its own parent __config__::Test[1-2],__config__::Test[1-2] " +
         "\(reported in Entity\(Test[1-2]\) \({dir}/main.cf:[59]\)\)")
+
+
+def test_null(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string a = null
+        end
+        implement A using std::none
+        a = A()
+
+    """,
+        "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        " caused by Invalid value 'null', expected String (reported in Construct(A) ({dir}/main.cf:6))")
+
+
+def test_null_on_list(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string[] a = null
+        end
+        implement A using std::none
+        a = A()
+    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        " caused by Invalid value 'null', expected list (reported in Construct(A) ({dir}/main.cf:6))")
+
+
+def test_null_on_dict(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            dict a = null
+        end
+        implement A using std::none
+        a = A()
+    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        " caused by Invalid value 'null', expected dict (reported in Construct(A) ({dir}/main.cf:6))")
