@@ -25,6 +25,7 @@ from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable
 from inmanta.util import memoize
 from inmanta.execute.runtime import Instance
+from inmanta.execute.util import AnyType
 
 from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
 
@@ -308,6 +309,9 @@ class Entity(Type, Namespaced, Locatable):
         """
             Validate the given value
         """
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, Instance):
             raise RuntimeException(None, "Invalid type for value '%s', should be type %s" % (value, self))
 

@@ -33,7 +33,7 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True):
+    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True, nullable=False):
         """
             if default_value is None, this is an explicit removal of a default value
         """
@@ -42,6 +42,7 @@ class DefineAttribute(Statement):
         self.default = default_value
         self.multi = multi
         self.remove_default = remove_default
+        self.nullable = nullable
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -61,6 +62,7 @@ class DefineEntity(TypeDefinitionStatement):
             self.parents.append("std::Entity")
 
         self.type = Entity(self.name, namespace)
+        self.type.location = self.location
 
     def add_attribute(self, attr_type, name, default_value=None):
         """
@@ -95,7 +97,7 @@ class DefineEntity(TypeDefinitionStatement):
                 if not isinstance(attr_type, (Type, type)):
                     raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
-                attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi)
+                attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi, attribute.nullable)
                 attribute.copy_location(attr_obj)
 
                 add_attributes[attribute.name] = attr_obj
@@ -109,6 +111,8 @@ class DefineEntity(TypeDefinitionStatement):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(str(parent))
+                if parent_type is self.type:
+                    raise TypingException(self, "Entity can not be its own parent (%s) " % parent)
                 if not isinstance(parent_type, Entity):
                     raise TypingException(self, "Parents of an entity need to be entities. "
                                           "Default constructors are not supported. %s is not an entity" % parent)

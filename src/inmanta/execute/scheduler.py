@@ -27,7 +27,7 @@ from inmanta.ast.type import TYPES, Type
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
-from inmanta.ast import RuntimeException, MultiException
+from inmanta.ast import RuntimeException, MultiException, CycleExcpetion
 from inmanta.execute.tracking import ModuleTracker
 
 DEBUG = True
@@ -81,18 +81,27 @@ class Scheduler(object):
 
     def sort_entities(self, entity_map):
         out = []
+        loopstack = set()
         while len(entity_map) > 0:
             workon = next(iter(entity_map.keys()))
-            self.do_sort_entities(entity_map, workon, out)
+            self.do_sort_entities(entity_map, workon, out, loopstack)
         return out
 
-    def do_sort_entities(self, entity_map, name, acc):
+    def do_sort_entities(self, entity_map, name, acc, loopstack):
         nexte = entity_map[name]
-        del entity_map[name]
-        for p in nexte.get_full_parent_names():
-            if p in entity_map:
-                self.do_sort_entities(entity_map, p, acc)
-        acc.append(nexte)
+        try:
+            del entity_map[name]
+            loopstack.add(name)
+            for p in nexte.get_full_parent_names():
+                if p in loopstack:
+                    raise CycleExcpetion(nexte, p)
+                if p in entity_map:
+                    self.do_sort_entities(entity_map, p, acc, loopstack)
+            loopstack.remove(name)
+            acc.append(nexte)
+        except CycleExcpetion as ce:
+            ce.add(nexte)
+            raise
 
     def define_types(self, compiler, statements, blocks):
         """

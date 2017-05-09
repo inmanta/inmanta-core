@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
-from inmanta.ast.type import TypedList
+from inmanta.ast.type import TypedList, NullableType
 
 from typing import TYPE_CHECKING
 
@@ -35,12 +35,13 @@ class Attribute(object):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False) -> None:
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable=False) -> None:
         self.__name = name
         entity.add_attribute(self)
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
+        self.__nullallble = nullable
         self.comment = None  # type: str
 
     def get_type(self) -> "Type":
@@ -85,11 +86,22 @@ class Attribute(object):
             self.type.validate(value)
 
     def get_new_result_variable(self, instance: "Instance", queue: QueueScheduler) -> ResultVariable:
-        out = ResultVariable()
         if self.__multi:
-            out.set_type(TypedList(self.__type))
+            mytype = (TypedList(self.__type))
         else:
-            out.set_type(self.__type)
+            mytype = (self.__type)
+
+        if(self.__nullallble):
+            # be a 0-1 relation
+            self.end = None
+            self.low = 0
+            self.high = 1
+            out = OptionVariable(self, instance, queue)
+            mytype = NullableType(mytype)
+        else:
+            out = ResultVariable()
+
+        out.set_type(mytype)
         out.set_provider(instance)
         return out
 
