@@ -127,6 +127,7 @@ end
         " (duplicate at ({dir}/main.cf:5))"
     )
 
+
 def test_400_typeloops(snippetcompiler):
     snippetcompiler.setup_for_error("""
     entity Test extends Test:
