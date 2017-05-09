@@ -39,6 +39,7 @@ from click import testing
 import inmanta.main
 from concurrent.futures.thread import ThreadPoolExecutor
 from tornado import gen
+import re
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -296,6 +297,17 @@ class SnippetCompilationTest(object):
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert shouldbe == text
 
+    def setup_for_error_re(self, snippet, shouldbe):
+        self.setup_for_snippet(snippet)
+        try:
+            compiler.do_compile()
+            assert False, "Should get exception"
+        except CompilerException as e:
+            text = str(e)
+            print(text)
+            shouldbe = shouldbe.format(dir=self.project_dir)
+            assert re.search(shouldbe, text) is not None
+
 
 @pytest.fixture(scope="session")
 def snippetcompiler():
@@ -307,6 +319,7 @@ def snippetcompiler():
 
 
 class CLI(object):
+
     def __init__(self, io_loop):
         self.io_loop = io_loop
         self._thread_pool = ThreadPoolExecutor(1)

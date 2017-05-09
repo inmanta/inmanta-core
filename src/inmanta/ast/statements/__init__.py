@@ -138,6 +138,12 @@ class TypeDefinitionStatement(DefinitionStatement):
         self.namespace.define_type(self.name, self.type)
         return (self.fullName, self.type)
 
+    def get_type(self):
+        return self.type
+
+    def get_full_name(self):
+        return self.fullName
+
     def evaluate(self):
         pass
 

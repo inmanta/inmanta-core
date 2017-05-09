@@ -331,6 +331,26 @@ class TypingException(RuntimeException):
     pass
 
 
+class CycleExcpetion(TypingException):
+
+    def __init__(self, first_type, final_name):
+        super(CycleExcpetion, self).__init__(first_type, None)
+        self.types = []
+        self.complete = False
+        self.final_name = final_name
+
+    def add(self, element):
+        if(self.complete):
+            return
+        if element.get_full_name() == self.final_name:
+            self.complete = True
+        self.types.append(element)
+
+    def __str__(self, *args, **kwargs):
+        trace = ",".join([x.get_full_name() for x in self.types])
+        return "Entity can not be its own parent %s (reported in %s (%s))" % (trace, self.stmt, self.location)
+
+
 class ModuleNotFoundException(RuntimeException):
 
     def __init__(self, name, stmt, msg=None):

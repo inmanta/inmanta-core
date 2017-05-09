@@ -1468,3 +1468,27 @@ implement Host using test
     (types, _) = compiler.do_compile()
 
     assert types["__config__::Host"].implements[0].comment.strip() == "Always use test!"
+
+
+def test_400_typeloops(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity Test extends Test:
+
+    end
+    """)
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_400_typeloops_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity Test extends Test2:
+
+    end
+
+    entity Test2 extends Test:
+
+    end
+    """)
+    with pytest.raises(TypingException):
+        compiler.do_compile()

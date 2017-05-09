@@ -62,6 +62,7 @@ class DefineEntity(TypeDefinitionStatement):
             self.parents.append("std::Entity")
 
         self.type = Entity(self.name, namespace)
+        self.type.location = self.location
 
     def add_attribute(self, attr_type, name, default_value=None):
         """
@@ -110,6 +111,8 @@ class DefineEntity(TypeDefinitionStatement):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(str(parent))
+                if parent_type is self.type:
+                    raise TypingException(self, "Entity can not be its own parent (%s) " % parent)
                 if not isinstance(parent_type, Entity):
                     raise TypingException(self, "Parents of an entity need to be entities. "
                                           "Default constructors are not supported. %s is not an entity" % parent)
