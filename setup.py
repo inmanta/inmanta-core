@@ -13,6 +13,7 @@ requires = [
         'ruamel.yaml',
         'texttable',
         'tornado',
+        'typing',
         'virtualenv',
         'typing'
     ]
