@@ -17,11 +17,11 @@
 """
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
 from inmanta.ast import Locatable, Location, Namespaced, Namespace
-from typing import Any, Dict, TYPE_CHECKING, List, Tuple
+from typing import Any, Dict, TYPE_CHECKING, List, Tuple  # noqa: F401
 
 if TYPE_CHECKING:
-    from inmanta.ast.variables import Reference
-    from inmanta.ast.type import Type
+    from inmanta.ast.variables import Reference  # noqa: F401
+    from inmanta.ast.type import Type  # noqa: F401
 
 
 class Statement(Namespaced):
@@ -62,11 +62,11 @@ class DynamicStatement(Statement):
         raise Exception("Not Implemented" + str(type(self)))
 
     def requires(self) -> List[str]:
-        """ List of all variable names used by this statement"""
+        """List of all variable names used by this statement"""
         raise Exception("Not Implemented" + str(type(self)))
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
-        """ emit new instructions to the queue, executing this instruction in the context of the resolver"""
+        """Emit new instructions to the queue, executing this instruction in the context of the resolver"""
         raise Exception("Not Implemented" + str(type(self)))
 
 

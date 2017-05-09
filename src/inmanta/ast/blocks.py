@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast.statements import Statement, DynamicStatement
+from inmanta.ast.statements import DynamicStatement
 from inmanta.ast.statements.assign import Assign
 from inmanta.ast import TypeNotFoundException, RuntimeException, Namespace
 from typing import List

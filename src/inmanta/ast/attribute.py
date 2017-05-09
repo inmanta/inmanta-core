@@ -20,13 +20,13 @@ from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.ast.type import TypedList
 
-from typing import TYPE_CHECKING, Tuple
-
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from inmanta.ast.type import Type
-    from inmanta.execute.runtime import Instance
-    from inmanta.ast.entity import Entity
+    from inmanta.ast.type import Type  # noqa: F401
+    from inmanta.execute.runtime import Instance  # noqa: F401
+    from inmanta.ast.entity import Entity  # noqa: F401
+
 
 class Attribute(object):
     """

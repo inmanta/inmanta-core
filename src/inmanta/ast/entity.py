@@ -20,20 +20,19 @@
 
 from inmanta.ast.type import Type
 from inmanta.ast.blocks import BasicBlock
-from inmanta.execute.runtime import Instance, ResultVariable, Resolver, QueueScheduler
+from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable
 from inmanta.util import memoize
 
 
-from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, ItemsView, Set
+from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
 
 if TYPE_CHECKING:
-    from inmanta.ast.type import Type
-    from inmanta.execute.runtime import ExecutionContext, Instance
-    from inmanta.ast.statements import Statement, ExpressionStatement
-    from inmanta.ast.statements.define import DefineImport
-    from inmanta.ast.attribute import Attribute
+    from inmanta.execute.runtime import ExecutionContext, Instance, ResultVariable  # noqa: F401
+    from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
+    from inmanta.ast.statements.define import DefineImport  # noqa: F401
+    from inmanta.ast.attribute import Attribute  # noqa: F401
 
 
 class Entity(Type, Namespaced, Locatable):
@@ -283,7 +282,11 @@ class Entity(Type, Namespaced, Locatable):
         for parent in self.parent_entities:
             parent.add_instance(obj)
 
-    def get_instance(self, attributes: Dict[str, object], resolver: Resolver, queue: QueueScheduler, location: Location) -> Instance:
+    def get_instance(self,
+                     attributes: Dict[str, object],
+                     resolver: Resolver,
+                     queue: QueueScheduler,
+                     location: Location) -> Instance:
         """
             Return an instance of the class defined in this entity
         """
@@ -396,7 +399,10 @@ class Entity(Type, Namespaced, Locatable):
                         x.set_value(instance, stmt.location)
                     self.index_queue.pop(keys)
 
-    def lookup_index(self, params: "Dict[str,object]", stmt: "Statement", target: "Optional[ResultVariable]"=None) -> "Optional[Instance]":
+    def lookup_index(self,
+                     params: "Dict[str,object]",
+                     stmt: "Statement",
+                     target: "Optional[ResultVariable]"=None) -> "Optional[Instance]":
         """
             Search an instance in the index.
         """
@@ -454,7 +460,12 @@ class Implementation(Namespaced, Locatable):
         to create mixin like aspects.
     """
 
-    def __init__(self, name: str, stmts: BasicBlock, namespace: Namespace, target_type: str, comment: Optional[str]=None) -> None:
+    def __init__(self,
+                 name: str,
+                 stmts: BasicBlock,
+                 namespace: Namespace,
+                 target_type: str,
+                 comment: Optional[str]=None) -> None:
         self.name = name
         self.statements = stmts
         self.namespace = namespace

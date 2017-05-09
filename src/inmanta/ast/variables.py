@@ -51,7 +51,7 @@ class Reference(ExpressionStatement):
     def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
-    def execute_direct(self, requires:  Dict[object, object]) -> object:
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         return requires[self.name]
 
     def as_assign(self, value: ExpressionStatement) -> AssignStatement:
@@ -81,7 +81,11 @@ class AttributeReferenceHelper(Locatable):
         self.target = target
         self.instance = instance
 
-    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler, target: ResultVariable) -> None:
+    def resume(self,
+               requires: Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue_scheduler: QueueScheduler,
+               target: ResultVariable) -> None:
         """
             Instance is ready to execute, do it and see if the attribute is already present
         """

@@ -27,7 +27,7 @@ from inmanta.ast import RuntimeException, AttributeException, DuplicateException
 import typing
 
 if typing.TYPE_CHECKING:
-    from inmanta.ast.variables import Reference
+    from inmanta.ast.variables import Reference  # noqa: F401
 
 
 class CreateList(ReferenceStatement):
@@ -39,7 +39,10 @@ class CreateList(ReferenceStatement):
         ReferenceStatement.__init__(self, items)
         self.items = items
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self,
+                requires: typing.Dict[object, ResultVariable],
+                resolver: Resolver,
+                queue: QueueScheduler) -> object:
         """
             Create this list
         """
@@ -97,7 +100,11 @@ class SetAttribute(AssignStatement):
         reqs = self.instance.requires_emit(resolver, queue)
         HangUnit(queue, resolver, reqs, None, self)
 
-    def resume(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
+    def resume(self,
+               requires: typing.Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         var = instance.get_attribute(self.attribute_name)
         reqs = self.value.requires_emit(resolver, queue)
@@ -109,9 +116,14 @@ class SetAttribute(AssignStatement):
 
 class SetAttributeHelper(ExecutionUnit):
 
-    def __init__(self, queue_scheduler: QueueScheduler, resolver: Resolver, result: ResultVariable,
-                 requires: typing.Dict[object, ResultVariable], expression: ExpressionStatement,
-                 stmt: SetAttribute, instance: Instance) -> None:
+    def __init__(self,
+                 queue_scheduler: QueueScheduler,
+                 resolver: Resolver,
+                 result: ResultVariable,
+                 requires: typing.Dict[object, ResultVariable],
+                 expression: ExpressionStatement,
+                 stmt: SetAttribute,
+                 instance: Instance) -> None:
         ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
         self.stmt = stmt
         self.instance = instance
@@ -177,10 +189,14 @@ class IndexLookup(ReferenceStatement):
         HangUnit(queue, resolver, sub, temp, self)
         return {self: temp}
 
-    def resume(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler, target: ResultVariable) -> None:
+    def resume(self,
+               requires: typing.Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
         self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
 
-    def execute(self, requires:  typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def __repr__(self) -> str:
@@ -213,5 +229,5 @@ class StringFormat(ReferenceStatement):
 
         return result_string
 
-    def __repr__(self) -> str   :
+    def __repr__(self) -> str:
         return "Format(%s)" % self._format_string

@@ -18,15 +18,16 @@
 
 from inmanta import util
 
-from typing import TYPE_CHECKING, Dict, Sequence, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Sequence, List, Optional, Union  # noqa: F401
+
 
 if TYPE_CHECKING:
-    import inmanta.ast.statements
-    from inmanta.ast.type import Type
-    from inmanta.execute.runtime import ExecutionContext, Instance
-    from inmanta.ast.statements import Statement
-    from inmanta.ast.entity import Entity
-    from inmanta.ast.statements.define import DefineImport
+    import inmanta.ast.statements    # noqa: F401
+    from inmanta.ast.type import Type     # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, Instance  # noqa: F401
+    from inmanta.ast.statements import Statement  # noqa: F401
+    from inmanta.ast.entity import Entity  # noqa: F401
+    from inmanta.ast.statements.define import DefineImport  # noqa: F401
 
 
 class Location(object):
@@ -285,7 +286,7 @@ class Namespace(Namespaced):
 
 class CompilerException(Exception):
 
-    def __init__(self, msg: str = None) -> None:
+    def __init__(self, msg: str=None) -> None:
         Exception.__init__(self, msg)
         self.location = None  # type: Location
 
@@ -367,7 +368,7 @@ class TypingException(RuntimeException):
 
 class ModuleNotFoundException(RuntimeException):
 
-    def __init__(self, name: str, stmt: "Statement", msg: str =None) -> None:
+    def __init__(self, name: str, stmt: "Statement", msg: str=None) -> None:
         if msg is None:
             msg = "could not find module %s" % name
         RuntimeException.__init__(self, stmt, msg)
