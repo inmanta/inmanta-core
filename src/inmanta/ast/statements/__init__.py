@@ -16,12 +16,12 @@
     Contact: code@inmanta.com
 """
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
-from inmanta.ast import Locatable, Location, Namespaced, Namespace
+from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named
 from typing import Any, Dict, TYPE_CHECKING, List, Tuple  # noqa: F401
 
 if TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401
-    from inmanta.ast.type import Type  # noqa: F401
+    from inmanta.ast.type import Type, NamedType  # noqa: F401
 
 
 class Statement(Namespaced):
@@ -177,16 +177,16 @@ class DefinitionStatement(Statement):
         Statement.__init__(self)
 
 
-class TypeDefinitionStatement(DefinitionStatement):
+class TypeDefinitionStatement(DefinitionStatement, Named):
 
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + name
-        self.type = None  # type: Type
+        self.type = None  # type: NamedType
 
-    def register_types(self) -> Tuple[str, "Type"]:
+    def register_types(self) -> Tuple[str, "NamedType"]:
         self.copy_location(self.type)
         self.namespace.define_type(self.name, self.type)
         return (self.fullName, self.type)

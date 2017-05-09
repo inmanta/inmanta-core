@@ -19,11 +19,12 @@
 from inmanta import util
 
 from typing import TYPE_CHECKING, Dict, Sequence, List, Optional, Union  # noqa: F401
+from abc import abstractmethod
 
 
 if TYPE_CHECKING:
     import inmanta.ast.statements    # noqa: F401
-    from inmanta.ast.type import Type     # noqa: F401
+    from inmanta.ast.type import Type, NamedType     # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, Instance  # noqa: F401
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
@@ -56,14 +57,15 @@ class Locatable(object):
 
 class Namespaced(Locatable):
 
-    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
-        """produce a customized error message for this type"""
-        raise NotImplementedError()
-
-    def get_full_name(self) -> str:
-        raise NotImplementedError()
-
+    @abstractmethod
     def get_namespace(self) -> "Namespace":
+        raise NotImplementedError()
+
+
+class Named(Namespaced):
+
+    @abstractmethod
+    def get_full_name(self) -> str:
         raise NotImplementedError()
 
 
@@ -82,7 +84,7 @@ class Namespace(Namespaced):
         self.__name = name
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
-        self.defines_types = {}  # type: Dict[str,Type]
+        self.defines_types = {}  # type: Dict[str,NamedType]
         if self.__parent is not None:
             # type: Dict[str,Union[DefineImport, MockImport]]
             self.visible_namespaces = {self.get_full_name(): MockImport(self)}
@@ -100,7 +102,7 @@ class Namespace(Namespaced):
 
         self.visible_namespaces["std"] = MockImport(self.get_ns_from_string("std"))
 
-    def define_type(self, name: str, newtype: "Type") -> None:
+    def define_type(self, name: str, newtype: "NamedType") -> None:
         if name in self.defines_types:
             raise newtype.get_double_defined_exception(self.defines_types[name])
         self.defines_types[name] = newtype

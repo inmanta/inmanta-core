@@ -18,11 +18,12 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from inmanta.ast.type import Type
+from inmanta.ast.type import Type, NamedType
 from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable,\
+    Named
 from inmanta.util import memoize
 from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
@@ -30,13 +31,13 @@ from inmanta.execute.util import AnyType
 from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
 
 if TYPE_CHECKING:
-    from inmanta.execute.runtime import ExecutionContext, Instance, ResultVariable  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
     from inmanta.ast.statements.define import DefineImport  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
 
 
-class Entity(Type, Namespaced, Locatable):
+class Entity(NamedType):
     """
         This class models a defined entity in the domain model of the configuration model.
 
@@ -457,7 +458,7 @@ class Entity(Type, Namespaced, Locatable):
         return self.location
 
 
-class Implementation(Namespaced, Locatable):
+class Implementation(Named):
     """
         A module functions as a grouping of objects. This can be used to create
         high level roles that do not have any arguments, or they can be used
@@ -520,25 +521,25 @@ class Default(Type):
         This class models default values for a constructor.
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.entity = None
-        self._defaults = {}
-        self.comment = None
+        self.entity = None  # type: Entity
+        self._defaults = {}  # type: Dict[str,ExpressionStatement]
+        self.comment = None  # type: str
 
-    def get_defaults(self) -> "Dict[str,ExpressionStatement]":
+    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
         return self._defaults
 
-    def set_entity(self, entity: Entity):
+    def set_entity(self, entity: Entity) -> None:
         self.entity = entity
 
-    def add_default(self, name, value):
+    def add_default(self, name: str, value: "ExpressionStatement") -> None:
         """
             Add a default value
         """
         self._defaults[name] = value
 
-    def get_default(self, name):
+    def get_default(self, name: str) -> "ExpressionStatement":
         """
             Get a default value for a given name
         """
@@ -550,11 +551,11 @@ class Default(Type):
 
         raise AttributeError(name)
 
-    def get_entity(self):
+    def get_entity(self) -> Entity:
         """
             Get the entity (follow through defaults if needed)
         """
         return self.entity.get_entity()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Default(%s)" % self.name
