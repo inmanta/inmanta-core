@@ -14,6 +14,7 @@ requires = [
         'texttable',
         'tornado',
         'virtualenv',
+        'typing'
     ]
 
 setup(

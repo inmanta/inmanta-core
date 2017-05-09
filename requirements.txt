@@ -22,3 +22,4 @@ texttable==0.8.8
 tornado==4.5.1
 virtualenv==15.1.0
 git+https://github.com/inmanta/inmanta-sphinx#egg=inmanta-sphinx
+typing==3.6.1

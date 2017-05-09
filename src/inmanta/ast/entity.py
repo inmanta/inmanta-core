@@ -24,7 +24,7 @@ from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable
 from inmanta.util import memoize
-
+from inmanta.execute.runtime import Instance
 
 from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
 
@@ -272,7 +272,7 @@ class Entity(Type, Namespaced, Locatable):
         """
         return self._instance_list
 
-    def add_instance(self, obj: Instance) -> None:
+    def add_instance(self, obj: "Instance") -> None:
         """
             Register a new instance
         """
@@ -286,7 +286,7 @@ class Entity(Type, Namespaced, Locatable):
                      attributes: Dict[str, object],
                      resolver: Resolver,
                      queue: QueueScheduler,
-                     location: Location) -> Instance:
+                     location: Location) -> "Instance":
         """
             Return an instance of the class defined in this entity
         """
