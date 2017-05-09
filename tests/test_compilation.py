@@ -29,13 +29,14 @@ from io import StringIO
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException,\
+    OptionalValueException
 from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
 import pytest
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, NoneValue
 from inmanta.export import DependencyCycleException
 from utils import assert_graph
 from conftest import SnippetCompilationTest
@@ -1264,6 +1265,81 @@ def test_275_duplicate_parent(snippetcompiler):
     """)
     with pytest.raises(TypingException):
         compiler.do_compile()
+
+
+def test_null(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string? a = null
+        end
+        implement A using std::none
+        a = A()
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
+def test_null_unset(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string? a
+        end
+        implement A using std::none
+        a = A()
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    with pytest.raises(OptionalValueException):
+        root.lookup("a").get_value().get_attribute("a").get_value()
+
+
+def test_null_unset_hang(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+            entity A:
+                string? a
+            end
+            implement A using std::none
+            a = A()
+            b = a.a
+        """)
+    with pytest.raises(UnsetException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_null_on_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string[]? a = null
+        end
+        implement A using std::none
+        a = A()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
+def test_null_on_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            dict? a = null
+        end
+        implement A using std::none
+        a = A()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
 
 
 def test_default_remove(snippetcompiler):
