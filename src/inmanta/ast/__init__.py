@@ -125,7 +125,7 @@ class Namespace(Namespaced):
 
         return self.visible_namespaces[parts[0]].target.scope.direct_lookup(parts[1])
 
-    def get_type(self, name: str) -> "Type":
+    def get_type(self, name: str) -> "NamedType":
         if "::" in name:
             parts = name.rsplit("::", 1)
             if parts[0] in self.visible_namespaces:

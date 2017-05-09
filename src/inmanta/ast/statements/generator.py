@@ -23,10 +23,12 @@ from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, Instance
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace
 from inmanta.execute.tracking import ImplementsTracker
-from inmanta.ast.entity import Entity, Implement
-from typing import List, Dict
+from typing import List, Dict, TYPE_CHECKING, Tuple
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
+
+if TYPE_CHECKING:
+    from inmanta.ast.entity import Entity, Implement
 
 
 class SubConstructor(GeneratorStatement):
@@ -35,7 +37,7 @@ class SubConstructor(GeneratorStatement):
         imports the statements
     """
 
-    def __init__(self, instance_type: Entity, implements: Implement) -> None:
+    def __init__(self, instance_type: "", implements: "Implement") -> None:
         GeneratorStatement.__init__(self)
         self.type = instance_type
         self.implements = implements
@@ -133,7 +135,7 @@ class Constructor(GeneratorStatement):
             constructor call.
     """
 
-    def __init__(self, class_type: str, attributes: List[str, ExpressionStatement], location: Location, namespace: Namespace) -> None:
+    def __init__(self, class_type: str, attributes: List[Tuple[str, ExpressionStatement]], location: Location, namespace: Namespace) -> None:
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}
