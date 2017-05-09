@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Namespaced, Locatable, Named, DuplicateException
+from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException
 from inmanta.execute.util import AnyType, NoneValue
 
 

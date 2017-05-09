@@ -22,8 +22,8 @@ from inmanta.ast.type import Type, NamedType
 from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespaced, Namespace, Location, Locatable,\
-    Named
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespace, Location,\
+    Named, Locatable
 from inmanta.util import memoize
 from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
@@ -502,7 +502,7 @@ class Implementation(Named):
         return self.location
 
 
-class Implement(object):
+class Implement(Locatable):
     """
         Define an implementation of an entity in functions of implementations
     """

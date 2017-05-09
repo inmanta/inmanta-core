@@ -548,7 +548,7 @@ class ExecutionContext(object):
         return NamespaceResolver(self, namespace)
 
 
-class Instance(ExecutionContext, Locatable):
+class Instance(ExecutionContext, Locatable, Resolver):
 
     def __init__(self, mytype, resolver, queue):
         self.resolver = resolver.get_root_resolver()
