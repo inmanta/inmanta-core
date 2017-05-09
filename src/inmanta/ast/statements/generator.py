@@ -20,7 +20,7 @@
 
 from . import GeneratorStatement
 from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, Instance
+from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace
 from inmanta.execute.tracking import ImplementsTracker
 from typing import List, Dict, TYPE_CHECKING, Tuple
@@ -28,7 +28,7 @@ from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Entity, Implement
+    from inmanta.ast.entity import Entity, Implement  # noqa: F401
 
 
 class SubConstructor(GeneratorStatement):
@@ -135,7 +135,11 @@ class Constructor(GeneratorStatement):
             constructor call.
     """
 
-    def __init__(self, class_type: str, attributes: List[Tuple[str, ExpressionStatement]], location: Location, namespace: Namespace) -> None:
+    def __init__(self,
+                 class_type: str,
+                 attributes: List[Tuple[str, ExpressionStatement]],
+                 location: Location,
+                 namespace: Namespace) -> None:
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}

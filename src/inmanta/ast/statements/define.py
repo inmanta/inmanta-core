@@ -52,7 +52,12 @@ class DefineEntity(TypeDefinitionStatement):
         Define a new entity in the configuration
     """
 
-    def __init__(self, namespace: Namespace, name: str, comment: str, parents: List[str], attributes: List[DefineAttribute]) -> None:
+    def __init__(self,
+                 namespace: Namespace,
+                 name: str,
+                 comment: str,
+                 parents: List[str],
+                 attributes: List[DefineAttribute]) -> None:
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
         self.attributes = attributes
@@ -178,7 +183,11 @@ class DefineImplement(DefinitionStatement):
         @param whem: A clause that determines when this implementation is "active"
     """
 
-    def __init__(self, entity_name: str, implementations: List[str], select: ExpressionStatement=None, comment: str=None) -> None:
+    def __init__(self,
+                 entity_name: str,
+                 implementations: List[str],
+                 select: ExpressionStatement=None,
+                 comment: str=None) -> None:
         DefinitionStatement.__init__(self)
         self.entity = entity_name
         self.implementations = implementations
