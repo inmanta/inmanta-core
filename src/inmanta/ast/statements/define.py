@@ -24,8 +24,9 @@ from inmanta.ast.type import ConstraintType, Type
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
-from inmanta.ast.statements import TypeDefinitionStatement, Statement
+from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException
+from typing import List
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +34,8 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True, nullable=False):
+    def __init__(self, attr_type: str, name: str, default_value: ExpressionStatement=None,
+                 multi=False, remove_default=True, nullable=False) -> None:
         """
             if default_value is None, this is an explicit removal of a default value
         """
@@ -50,7 +52,12 @@ class DefineEntity(TypeDefinitionStatement):
         Define a new entity in the configuration
     """
 
-    def __init__(self, namespace: Namespace, name, comment, parents, attributes):
+    def __init__(self,
+                 namespace: Namespace,
+                 name: str,
+                 comment: str,
+                 parents: List[str],
+                 attributes: List[DefineAttribute]) -> None:
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
         self.attributes = attributes
@@ -64,26 +71,26 @@ class DefineEntity(TypeDefinitionStatement):
         self.type = Entity(self.name, namespace)
         self.type.location = self.location
 
-    def add_attribute(self, attr_type, name, default_value=None):
+    def add_attribute(self, attr_type: str, name: str, default_value: ExpressionStatement=None):
         """
             Add an attribute to this entity
         """
         self.attributes.append(DefineAttribute(attr_type, name, default_value))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             A textual representation of this entity
         """
         return "Entity(%s)" % self.name
 
-    def get_full_parent_names(self):
+    def get_full_parent_names(self) -> List[str]:
         try:
             return [self.namespace.get_type(str(parent)).get_full_name() for parent in self.parents]
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this statement.
         """
@@ -144,7 +151,7 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
-    def __init__(self, namespace, name, target_type, statements, comment):
+    def __init__(self, namespace: Namespace, name: str, target_type: str, statements: List[Statement], comment: str):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
         self.block = statements
@@ -152,18 +159,19 @@ class DefineImplementation(TypeDefinitionStatement):
         self.type = Implementation(self.name, self.block, self.namespace, target_type, comment)
         self.comment = comment
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of this implementation
         """
         return "Implementation(%s)" % self.name
 
-    def evaluate(self):
+    def evaluate(self) -> str:
         """
             Evaluate this statement in the given scope
         """
         cls = self.namespace.get_type(self.entity)
         self.type.set_type(cls)
+        self.copy_location(self.type)
 
 
 class DefineImplement(DefinitionStatement):
@@ -175,7 +183,11 @@ class DefineImplement(DefinitionStatement):
         @param whem: A clause that determines when this implementation is "active"
     """
 
-    def __init__(self, entity_name, implementations, select=None, comment=None):
+    def __init__(self,
+                 entity_name: str,
+                 implementations: List[str],
+                 select: ExpressionStatement=None,
+                 comment: str=None) -> None:
         DefinitionStatement.__init__(self)
         self.entity = entity_name
         self.implementations = implementations

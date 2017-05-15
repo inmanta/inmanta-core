@@ -36,7 +36,7 @@ from io import BytesIO
 import yaml
 import inmanta
 from inmanta import env
-from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException
+from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
 from inmanta import plugins
 from inmanta.parser.plyInmantaParser import parse
 import ruamel.yaml
@@ -335,6 +335,7 @@ class ModuleLike(object):
             fd.write(ruamel.yaml.dump(data, Dumper=ruamel.yaml.RoundTripDumper))
 
     def _load_file(self, ns, file):
+        ns.location = Location(file, 1)
         statements = []
         stmts = plyInmantaParser.parse(ns, file)
         block = BasicBlock(ns)

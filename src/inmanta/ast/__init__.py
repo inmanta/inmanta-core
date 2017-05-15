@@ -18,63 +18,103 @@
 
 from inmanta import util
 
+from typing import TYPE_CHECKING, Dict, Sequence, List, Optional, Union  # noqa: F401
+from abc import abstractmethod
+
+
+if TYPE_CHECKING:
+    import inmanta.ast.statements    # noqa: F401
+    from inmanta.ast.type import Type, NamedType     # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, Instance  # noqa: F401
+    from inmanta.ast.statements import Statement  # noqa: F401
+    from inmanta.ast.entity import Entity  # noqa: F401
+    from inmanta.ast.statements.define import DefineImport  # noqa: F401
+
 
 class Location(object):
 
-    def __init__(self, file, lnr):
+    def __init__(self, file: str, lnr: int) -> None:
         self.file = file
         self.lnr = lnr
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
         return "%s:%d" % (self.file, self.lnr)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Location):
+            return False
         return self.file == other.file and self.lnr == other.lnr
 
 
-class MockImport(object):
+class Locatable(object):
 
-    def __init__(self, target):
+    def __init__(self):
+        self.location = None  # type: Location
+
+    def get_location(self) -> Location:
+        return self.location
+
+
+class Namespaced(Locatable):
+
+    @abstractmethod
+    def get_namespace(self) -> "Namespace":
+        raise NotImplementedError()
+
+
+class Named(Namespaced):
+
+    @abstractmethod
+    def get_full_name(self) -> str:
+        raise NotImplementedError()
+
+
+class MockImport(Locatable):
+
+    def __init__(self, target: "Namespace") -> None:
         self.target = target
 
 
-class Namespace(object):
+class Namespace(Namespaced):
     """
         This class models a namespace that contains defined types, modules, ...
     """
 
-    def __init__(self, name, parent=None):
+    def __init__(self, name: str, parent: "Optional[Namespace]"=None) -> None:
         self.__name = name
         self.__parent = parent
-        self.__children = {}
-        self.unit = None
-        self.defines_types = {}
+        self.__children = {}  # type: Dict[str,Namespace]
+        self.defines_types = {}  # type: Dict[str,NamedType]
         if self.__parent is not None:
+            # type: Dict[str,Union[DefineImport, MockImport]]
             self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
         else:
             self.visible_namespaces = {name: MockImport(self)}
-        self.primitives = None
-        self.scope = None
+        self.primitives = None  # type: Dict[str,Type]
+        self.scope = None  # type: ExecutionContext
+        self.location = None  # type: Location
 
-    def set_primitives(self, primitives):
+    def set_primitives(self, primitives: "Dict[str,Type]") -> None:
         self.primitives = primitives
         for child in self.children():
             child.set_primitives(primitives)
 
         self.visible_namespaces["std"] = MockImport(self.get_ns_from_string("std"))
 
-    def define_type(self, name, newtype: "Namespaced"):
+    def define_type(self, name: str, newtype: "NamedType") -> None:
         if name in self.defines_types:
             raise newtype.get_double_defined_exception(self.defines_types[name])
         self.defines_types[name] = newtype
 
-    def import_ns(self, name, ns):
-        if name in self.visible_namespaces and not isinstance(self.visible_namespaces[name], MockImport):
-            raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
+    def import_ns(self, name: str, ns: "DefineImport") -> None:
+        if name in self.visible_namespaces:
+            other = self.visible_namespaces[name]
+            if not isinstance(other, MockImport):
+                raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
-    def lookup(self, name):
+    def lookup(self, name: str) -> "Type":
         if "::" not in name:
             return self.scope.direct_lookup(name)
 
@@ -85,7 +125,7 @@ class Namespace(object):
 
         return self.visible_namespaces[parts[0]].target.scope.direct_lookup(parts[1])
 
-    def get_type(self, name):
+    def get_type(self, name: str) -> "NamedType":
         if "::" in name:
             parts = name.rsplit("::", 1)
             if parts[0] in self.visible_namespaces:
@@ -106,13 +146,13 @@ class Namespace(object):
                 cns = cns.get_parent()
             raise TypeNotFoundException(name, self)
 
-    def get_name(self):
+    def get_name(self) -> str:
         """
             Get the name of this namespace
         """
         return self.__name
 
-    def get_full_name(self):
+    def get_full_name(self) -> str:
         """
             Get the fully qualified name of this namespace
         """
@@ -124,7 +164,7 @@ class Namespace(object):
 
     name = property(get_name)
 
-    def set_parent(self, parent):
+    def set_parent(self, parent: "Namespace") -> None:
         """
             Set the parent of this namespace. This namespace is also added to
             the child list of the parent.
@@ -132,7 +172,7 @@ class Namespace(object):
         self.__parent = parent
         self.__parent.add_child(self)
 
-    def get_parent(self):
+    def get_parent(self) -> "Namespace":
         """
             Get the parent namespace
         """
@@ -140,7 +180,7 @@ class Namespace(object):
 
     parent = property(get_parent, set_parent)
 
-    def get_root(self):
+    def get_root(self) -> "Namespace":
         """
             Get the root
         """
@@ -148,22 +188,22 @@ class Namespace(object):
             return self
         return self.__parent.get_root()
 
-    def add_child(self, child_ns):
+    def add_child(self, child_ns: "Namespace") -> None:
         """
             Add a child to the namespace.
         """
         self.__children[child_ns.get_name()] = child_ns
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of this object
         """
-        if self.parent is not None and self.parent.name != "__root__":
-            return repr(self.parent) + "::" + self.name
+        if self.__parent is not None and self.__parent.get_name() != "__root__":
+            return repr(self.__parent) + "::" + self.__name
 
-        return self.name
+        return self.__name
 
-    def children(self, recursive=False):
+    def children(self, recursive: bool=False) -> "List[Namespace]":
         """
             Get the children of this namespace
         """
@@ -176,16 +216,7 @@ class Namespace(object):
 
         return children
 
-    def to_list(self):
-        """
-            Convert to a list
-        """
-        ns_list = [self.name]
-        for child in self.children():
-            ns_list.extend(child.to_list())
-        return ns_list
-
-    def get_child(self, name):
+    def get_child(self, name: str) -> "Namespace":
         """
             Returns the child namespace with the given name or None if it does
             not exist.
@@ -194,7 +225,7 @@ class Namespace(object):
             return self.__children[name]
         return None
 
-    def get_child_or_create(self, name):
+    def get_child_or_create(self, name: str) -> "Namespace":
         """
             Returns the child namespace with the given name or None if it does
             not exist.
@@ -204,7 +235,7 @@ class Namespace(object):
         out = Namespace(name, self)
         return out
 
-    def get_ns_or_create(self, name):
+    def get_ns_or_create(self, name: str) -> "Namespace":
         """
             Returns the child namespace with the given name or None if it does
             not exist.
@@ -216,7 +247,7 @@ class Namespace(object):
             parent = self.get_root()._get_ns(name_parts[:-1])
         return parent.get_child_or_create(name_parts[-1])
 
-    def get_ns_from_string(self, fqtn):
+    def get_ns_from_string(self, fqtn: str) -> "Namespace":
         """
             Get the namespace that is referenced to in the given fully qualified
             type name.
@@ -226,7 +257,7 @@ class Namespace(object):
         name_parts = fqtn.split("::")
         return self.get_root()._get_ns(name_parts)
 
-    def _get_ns(self, ns_parts):
+    def _get_ns(self, ns_parts: List[str]) -> "Namespace":
         """
             Return the namespace indicated by the parts list. Each element of
             the array represents a level in the namespace hierarchy.
@@ -239,61 +270,67 @@ class Namespace(object):
             return self.get_child(ns_parts[0])._get_ns(ns_parts[1:])
 
     @util.memoize
-    def to_path(self):
+    def to_path(self) -> List[str]:
         """
             Return a list with the namespace path elements in it.
         """
-        if self.parent is None or self.parent.name == "__root__":
-            return [self.name]
+        if self.__parent is None or self.__parent.get_name() == "__root__":
+            return [self.__name]
         else:
-            return self.parent.to_path() + [self.name]
+            return self.__parent.to_path() + [self.__name]
+
+    def get_namespace(self) -> "Namespace":
+        return self
+
+    def get_location(self) -> Location:
+        return self.location
 
 
 class CompilerException(Exception):
 
-    def __init__(self, msg=None):
+    def __init__(self, msg: str=None) -> None:
         Exception.__init__(self, msg)
-        self.location = None
+        self.location = None  # type: Location
 
-    def set_location(self, location):
+    def set_location(self, location: Location) -> None:
         if self.location is None:
             self.location = location
 
 
 class RuntimeException(CompilerException):
 
-    def __init__(self, stmt, msg, root_cause_chance=10):
+    def __init__(self, stmt: "Optional[Locatable]", msg: str, root_cause_chance=10) -> None:
         CompilerException.__init__(self)
         self.stmt = None
         if stmt is not None:
-            self.set_location(stmt.location)
+            self.set_location(stmt.get_location())
             self.stmt = stmt
         self.msg = msg
         self.root_cause_chance = root_cause_chance
 
-    def set_statement(self, stmt):
-        self.set_location(stmt.location)
+    def set_statement(self, stmt: "Locatable"):
+        self.set_location(stmt.get_location())
         self.stmt = stmt
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
         if self.stmt is None and self.location is None:
             return self.msg
         else:
             return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
 
-    def __le__(self, other):
+    def __le__(self, other) -> bool:
         return self.root_cause_chance < other.root_cause_chance
 
 
 class TypeNotFoundException(RuntimeException):
 
-    def __init__(self, type, ns):
+    def __init__(self, type: str, ns: Namespace) -> None:
         RuntimeException.__init__(self, stmt=None, msg="could not find type %s in namespace %s" % (type, ns))
         self.type = type
         self.ns = ns
 
 
-def stringify_exception(exn: Exception):
+def stringify_exception(exn: Exception) -> str:
     if isinstance(exn, CompilerException):
         return str(exn)
     return "%s: %s" % (exn.__class__.__name__, str(exn))
@@ -301,7 +338,7 @@ def stringify_exception(exn: Exception):
 
 class WrappingRuntimeException(RuntimeException):
 
-    def __init__(self, stmt, msg, cause):
+    def __init__(self, stmt: Locatable, msg: str, cause: Exception) -> None:
         if stmt is None:
             if isinstance(cause, RuntimeException):
                 stmt = cause.stmt
@@ -312,7 +349,7 @@ class WrappingRuntimeException(RuntimeException):
 
 class AttributeException(WrappingRuntimeException):
 
-    def __init__(self, stmt, entity, attribute, cause):
+    def __init__(self, stmt: "Statement", entity: "Instance", attribute: str, cause: Exception) -> None:
         WrappingRuntimeException.__init__(
             self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(entity)), cause=cause)
         self.attribute = attribute
@@ -321,7 +358,7 @@ class AttributeException(WrappingRuntimeException):
 
 class OptionalValueException(RuntimeException):
 
-    def __init__(self, instance, attribute):
+    def __init__(self, instance: "Instance", attribute: str) -> None:
         RuntimeException.__init__(self, None, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute))
         self.instance = instance
         self.attribute = attribute
@@ -353,7 +390,7 @@ class CycleExcpetion(TypingException):
 
 class ModuleNotFoundException(RuntimeException):
 
-    def __init__(self, name, stmt, msg=None):
+    def __init__(self, name: str, stmt: "Statement", msg: str=None) -> None:
         if msg is None:
             msg = "could not find module %s" % name
         RuntimeException.__init__(self, stmt, msg)
@@ -362,7 +399,7 @@ class ModuleNotFoundException(RuntimeException):
 
 class NotFoundException(RuntimeException):
 
-    def __init__(self, stmt, name, msg=None):
+    def __init__(self, stmt: "Statement", name: str, msg: "Optional[str]"=None) -> None:
         if msg is None:
             msg = "could not find value %s" % name
         RuntimeException.__init__(self, stmt, msg)
@@ -371,10 +408,10 @@ class NotFoundException(RuntimeException):
 
 class DoubleSetException(RuntimeException):
 
-    def __init__(self, stmt, value, location, newvalue, newlocation):
-        self.value = value
+    def __init__(self, stmt: "Statement", value: object, location: Location, newvalue: object, newlocation: Location) -> None:
+        self.value = value  # type: object
         self.location = location
-        self.newvalue = newvalue
+        self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
         msg = ("Value set twice: old value: %s (set at (%s)), new value: %s (set at (%s))"
                % (self.value, self.location, self.newvalue, self.newlocation))
@@ -383,12 +420,12 @@ class DoubleSetException(RuntimeException):
 
 class DuplicateException(TypingException):
 
-    def __init__(self, stmt, other, msg):
+    def __init__(self, stmt: Locatable, other: Locatable, msg: str) -> None:
         TypingException.__init__(self, stmt, msg)
         self.other = other
 
-    def __str__(self, *args, **kwargs):
-        return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.location)
+    def __str__(self) -> str:
+        return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.get_location())
 
 
 class CompilerError(Exception):
@@ -398,8 +435,8 @@ class CompilerError(Exception):
 
 class MultiException(CompilerException):
 
-    def __init__(self, others):
+    def __init__(self, others: List[Exception]) -> None:
         self.others = others
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "Reported %d errors:\n\t" % len(self.others) + '\n\t'.join([str(e) for e in self.others])

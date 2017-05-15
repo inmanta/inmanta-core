@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
+from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException
 from inmanta.execute.util import AnyType, NoneValue
 
 
@@ -64,7 +64,7 @@ class CastException(Exception):
     """
 
 
-class Type(object):
+class Type(Locatable):
     """
         This class is the base class for all types that represent basic data.
         These are types that are not relations.
@@ -96,6 +96,13 @@ class Type(object):
 
     def normalize(self):
         pass
+
+
+class NamedType(Type, Named):
+
+    def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
+        """produce a customized error message for this type"""
+        raise NotImplementedError()
 
 
 class NullableType(Type):

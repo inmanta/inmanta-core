@@ -20,9 +20,10 @@ from abc import ABCMeta, abstractmethod
 import re
 
 from inmanta.ast.statements import ReferenceStatement, Literal
-from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit
+from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit, Resolver, QueueScheduler
 from inmanta.ast.type import Bool, create_function
-from inmanta.ast.variables import IsDefinedReferenceHelper
+from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
+from typing import Dict
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -31,7 +32,7 @@ class InvalidNumberOfArgumentsException(Exception):
         to an operator.
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: str) -> None:
         Exception.__init__(self, msg)
 
 
@@ -41,7 +42,7 @@ class UnboundVariableException(Exception):
         variables have been resolved
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: str) -> None:
         Exception.__init__(self, msg)
 
 
@@ -61,12 +62,12 @@ class OpMetaClass(ABCMeta):
 
 class IsDefined(ReferenceStatement):
 
-    def __init__(self, attr, name):
+    def __init__(self, attr: Reference, name: str) -> None:
         super(IsDefined, self).__init__([attr])
         self.attr = attr.root_in_self()
         self.name = name
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         temp.set_provider(self)
@@ -78,11 +79,11 @@ class IsDefined(ReferenceStatement):
         RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
         return {self: temp}
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 
-    def pretty_print(self):
+    def pretty_print(self) -> str:
         name = "%s.%s is defined" % (self.attr, self.name)
         if name[:len("self.")] == "self.":
             name = name[len("self."):]
