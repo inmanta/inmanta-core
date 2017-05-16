@@ -29,7 +29,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineI
     DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
 from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict
+from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
 from inmanta.ast.variables import Reference, AttributeReference
 from inmanta.parser import plyInmantaLex, ParserException
 from inmanta.ast.blocks import BasicBlock
@@ -113,6 +113,15 @@ def p_stmt(p):
                 | function_call
                 | for'''
     p[0] = p[1]
+
+
+# def p_stmt_err(p):
+#     '''statement : list_def
+#               | map_def
+#               | var_ref
+#               | index_lookup'''
+#     raise ParserException(file, p[1].location.lnr, lexer.lexpos, "",
+#                           msg="expressions are not valid statements, assign this value to a variable to fix this error")
 
 
 def p_stmt_list_collect(p):
@@ -584,6 +593,13 @@ def p_index_lookup(p):
     " index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3])
     attach_lnr(p, 2)
+
+
+def p_short_index_lookup(p):
+    " index_lookup : attr_ref '[' param_list ']'"
+    attref = p[1]
+    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3])
+    attach_lnr(p, 2)
 #######################
 # HELPERS
 
@@ -720,7 +736,12 @@ def p_ns_list_term(p):
 
 
 def p_var_ref(p):
-    "var_ref : var_ref '.' ID"
+    "var_ref : attr_ref"
+    p[0] = p[1]
+
+
+def p_attr_ref(p):
+    "attr_ref : var_ref '.' ID"
     p[0] = AttributeReference(p[1], p[3])
     attach_lnr(p, 2)
 
