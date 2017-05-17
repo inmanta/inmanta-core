@@ -1,0 +1,8 @@
+entity Item:
+	string name
+end
+
+implement Item using none
+
+implementation none for std::Entity:
+end
