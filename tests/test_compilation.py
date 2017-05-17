@@ -45,13 +45,17 @@ from inmanta.execute.proxy import UnsetException
 
 class CompilerBaseTest(object):
 
-    def __init__(self, name):
+    def __init__(self, name, mainfile=None):
         self.project_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", name)
         if not os.path.isdir(self.project_dir):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
+        self.mainfile = mainfile
 
     def setUp(self):
-        Project.set(Project(self.project_dir, autostd=False))
+        project = Project(self.project_dir, autostd=False)
+        if self.mainfile is not None:
+            project.main_file = self.mainfile
+        Project.set(project)
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
@@ -1184,6 +1188,47 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
         (types, _) = compiler.do_compile()
         assert (types['std::Host'].get_all_instances()[0].get_attribute("agent").get_value().
                 get_attribute("names").get_value() is not None)
+
+
+class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):  # noqa: H803
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_plugin_typing")
+
+    def test_compile(self):
+        (_, scopes) = compiler.do_compile()
+        root = scopes.get_child("__config__")
+
+        def verify(name):
+            c1a1 = root.lookup(name).get_value()
+            name = sorted([item.get_attribute("name").get_value() for item in c1a1])
+            assert name == ["t1", "t2", "t3"]
+
+        verify("c1a1")
+        verify("c1a2")
+
+        s1 = root.lookup("s1").get_value()
+        s2 = root.lookup("s2").get_value()
+
+        assert s2[0] == s1
+        assert isinstance(s2, list)
+        assert isinstance(s2[0], str)
+
+
+class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):  # noqa: H803
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_plugin_typing", "invalid.cf")
+
+    def test_compile(self):
+        with pytest.raises(RuntimeException) as e:
+            compiler.do_compile()
+        text = str(e.value)
+        print(text)
+        assert text.startswith("Exception in plugin test::badtype caused by Invalid type for value 'a'," +
+                               " should be type test::Item (reported in test::badtype(c1.items) (")
 
 
 def test_275_default_override(snippetcompiler):

@@ -23,8 +23,9 @@ import typing
 
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import Unknown
-from inmanta.ast import Namespace, CompilerException, TypeNotFoundException
+from inmanta.ast import Namespace, CompilerException, TypeNotFoundException, RuntimeException
 from inmanta.execute.runtime import ExecutionUnit
+from inmanta.ast.type import TypedList
 
 
 class Context(object):
@@ -247,6 +248,11 @@ class Plugin(object, metaclass=PluginMeta):
         if arg_type == "expression":
             return None
 
+        if arg_type.endswith("[]"):
+            basetypename = arg_type[0:-2]
+            basetype = resolver.get_type(basetypename)
+            return TypedList(basetype)
+
         return resolver.get_type(arg_type)
 
     def _is_instance(self, value, arg_type):
@@ -321,8 +327,7 @@ class Plugin(object, metaclass=PluginMeta):
 
         value = self.call(*new_args)
 
-        if isinstance(value, DynamicProxy):
-            value = value._get_instance()
+        value = DynamicProxy.unwrap(value)
 
         if self.returntype is not None and not isinstance(value, Unknown):
             valid = False
@@ -330,6 +335,8 @@ class Plugin(object, metaclass=PluginMeta):
 
             try:
                 valid = (value is None or self._is_instance(value, self.returntype))
+            except RuntimeException as e:
+                raise e
             except Exception as exp:
                 exception = exp
 
