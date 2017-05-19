@@ -745,6 +745,11 @@ b=""
 """)
 
 
+def test_eol_comment():
+    parse_code("""a="a"
+    # valid_target_types: tosca.capabilities.network.Bindable""")
+
+
 def test_mls():
     statements = parse_code("""
 entity MANO:
@@ -789,10 +794,10 @@ a=|
 def test_error_on_relation():
     with pytest.raises(ParserException) as e:
         parse_code("""
- Host.provider [1] -- Provider test""")
+Host.provider [1] -- Provider test""")
     assert e.value.location.file == "test"
-    assert e.value.location.lnr == 2
-    assert e.value.column == 38
+    assert e.value.location.lnr == 3
+    assert e.value.column == 3
 
 
 def test_doc_string_on_new_relation():

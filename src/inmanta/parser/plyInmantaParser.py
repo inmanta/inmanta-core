@@ -810,6 +810,8 @@ def myparse(ns, tfile, content):
         if content is None:
             with open(tfile, 'r') as myfile:
                 data = myfile.read()
+                # prevent problems with EOF
+                data = data + "\n"
                 if len(data) == 0:
                     return []
                 lexer.lineno = 1
@@ -818,8 +820,10 @@ def myparse(ns, tfile, content):
             data = content
             if len(data) == 0:
                 return []
+            # prevent problems with EOF
+            data = data + "\n"
             lexer.lineno = 1
-            return parser.parse(content, lexer=lexer, debug=False)
+            return parser.parse(data, lexer=lexer, debug=False)
     except ParserException as e:
         e.findCollumn(data)
         e.location.file = tfile
