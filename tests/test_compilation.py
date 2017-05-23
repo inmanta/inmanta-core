@@ -1492,3 +1492,38 @@ def test_400_typeloops_2(snippetcompiler):
     """)
     with pytest.raises(TypingException):
         compiler.do_compile()
+
+
+def test_394_short_index(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""implementation none for std::Entity:
+
+end
+
+entity Host:
+    string name
+    string blurp
+end
+
+entity File:
+    string name
+end
+
+implement Host using none
+implement File using none
+
+Host host [1] -- [0:] File files
+
+index Host(name)
+index File(host, name)
+
+h1 = Host(name="h1", blurp="blurp1")
+f1h1=File(host=h1,name="f1")
+f2h1=File(host=h1,name="f2")
+
+z = h1.files[name="f1"]
+""")
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    z = root.lookup("z").get_value()
+    f1h1 = root.lookup("f1h1").get_value()
+    assert z is f1h1

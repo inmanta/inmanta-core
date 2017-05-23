@@ -23,8 +23,9 @@ from inmanta.ast.type import List, Dict
 from inmanta.ast.statements import AssignStatement, ExpressionStatement
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, AttributeException, DuplicateException
+from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException
 import typing
+from inmanta.ast.attribute import RelationAttribute
 
 if typing.TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401
@@ -204,6 +205,50 @@ class IndexLookup(ReferenceStatement):
             The representation of this statement
         """
         return "%s[%s]" % (self.index_type, self.query)
+
+
+class ShortIndexLookup(IndexLookup):
+    """lookup of the form
+vm = ip::Host(...)
+file = std::File(host=vm, path="/etc/motd", ...)
+
+vm.files[path="/etc/motd"]
+    """
+
+    def __init__(self, rootobject: ExpressionStatement,
+                 relation: str, query:
+                 typing.List[typing.Tuple[str, ExpressionStatement]]):
+        ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
+        self.rootobject = rootobject
+        self.relation = relation
+        self.querypart = query
+
+    def normalize(self) -> None:
+        ReferenceStatement.normalize(self)
+        # currently there is no way to get the type of an expression prior to evaluation
+        self.type = None
+
+    def resume(self,
+               requires: typing.Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
+        root_object = self.rootobject.execute(requires, resolver, queue)
+
+        if not isinstance(root_object, Instance):
+            raise TypingException(self, "short index lookup is only possible one objects, %s is not an object" % root_object)
+
+        from_entity = root_object.get_type()
+
+        relation = from_entity.get_attribute(self.relation)
+        if not isinstance(relation, RelationAttribute):
+            raise TypingException(self, "short index lookup is only possible on relations, %s is an attribute" % relation)
+
+        self.type = relation.get_type()
+
+        self.type.lookup_index([(relation.end.name, root_object)] +
+                               [(k, v.execute(requires, resolver, queue))
+                                for (k, v) in self.querypart], self, target)
 
 
 class StringFormat(ReferenceStatement):

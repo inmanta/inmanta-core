@@ -26,7 +26,7 @@ from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint,
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
 from inmanta.execute.util import NoneValue
@@ -456,6 +456,20 @@ a=File[host = 5, path = "Jos"]
     assert isinstance(stmt, IndexLookup)
     assert stmt.index_type == "File"
     assert {k: v.value for k, v in stmt.query} == {"host": 5, "path": "Jos"}
+
+
+def test_short_index_lookup():
+    statements = parse_code("""
+a = vm.files[path="/etc/motd"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0].value
+    assert isinstance(stmt, ShortIndexLookup)
+    assert isinstance(stmt.rootobject, Reference)
+    assert stmt.rootobject.name == "vm"
+    assert stmt.relation == "files"
+    assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
 
 
 def test_ctr_2():
