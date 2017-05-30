@@ -96,13 +96,14 @@ First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 
     import ip
     import redhat
+    import redhat::epel
     import apache
     import mysql
     import web
     import drupal
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -185,8 +186,8 @@ to the new virtual machine. Update ``main.cf`` to the following:
     :linenos:
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
-    vm2=ip::Host(name="vm2", os=redhat::fedora23, ip="192.168.33.102")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101")
+    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="192.168.33.102")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -380,11 +381,12 @@ required.
 
     import ip
     import redhat
+    import redhat::epel
     import lamp
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
-    vm2=ip::Host(name="vm2", os=redhat::fedora23, ip="192.168.33.102")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101")
+    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="192.168.33.102")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
                       admin_password="test", admin_email="admin@example.com", site_name="localhost")
