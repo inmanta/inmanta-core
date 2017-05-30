@@ -64,6 +64,16 @@ class DynamicProxy(object):
         return object.__getattribute__(self, "__instance")
 
     @classmethod
+    def unwrap(cls, item):
+        if isinstance(item, DynamicProxy):
+            return item._get_instance()
+
+        if isinstance(item, list):
+            return [cls.unwrap(x) for x in item]
+
+        return item
+
+    @classmethod
     def return_value(cls, value):
         if value is None:
             return None

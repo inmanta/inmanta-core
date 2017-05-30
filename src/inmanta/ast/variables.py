@@ -70,6 +70,9 @@ class Reference(ExpressionStatement):
     def __str__(self) -> str:
         return self.name
 
+    def __repr__(self, *args, **kwargs):
+        return self.name
+
 
 class AttributeReferenceHelper(Locatable):
     """
@@ -206,3 +209,6 @@ class AttributeReference(Reference):
 
     def root_in_self(self) -> Reference:
         return AttributeReference(self.instance.root_in_self(), self.attribute)
+
+    def __repr__(self, *args, **kwargs):
+        return "%s.%s" % (repr(self.instance), self.attribute)
