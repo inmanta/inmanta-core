@@ -42,6 +42,8 @@ class Unknown(AnyType):
 
 
 class NoneValue(object):
+    def __eq__(self, other):
+        return isinstance(other, NoneValue)
 
     def __str__(self):
         return "null"
