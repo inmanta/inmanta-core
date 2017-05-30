@@ -18,29 +18,26 @@
 
 # pylint: disable-msg=R0902,R0904
 
-from inmanta.ast.type import Type
+from inmanta.ast.type import Type, NamedType
 from inmanta.ast.blocks import BasicBlock
-from inmanta.execute.runtime import Instance, ResultVariable
+from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespace, Location,\
+    Named, Locatable
 from inmanta.util import memoize
+from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
 
+from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
 
-class Namespaced(object):
-
-    def get_double_defined_exception(self, other):
-        """produce a customized error message for this type"""
-        raise NotImplementedError()
-
-    def get_full_name(self):
-        raise NotImplementedError()
-
-    def get_namespace(self):
-        raise NotImplementedError()
+if TYPE_CHECKING:
+    from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401
+    from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
+    from inmanta.ast.statements.define import DefineImport  # noqa: F401
+    from inmanta.ast.attribute import Attribute  # noqa: F401
 
 
-class Entity(Type, Namespaced):
+class Entity(NamedType):
     """
         This class models a defined entity in the domain model of the configuration model.
 
@@ -51,36 +48,33 @@ class Entity(Type, Namespaced):
             after this object has been created
     """
 
-    def __init__(self, name, namespace="__root__"):
+    def __init__(self, name: str, namespace: Namespace) -> None:
         Type.__init__(self)
 
-        self.__name = name  # : string
+        self.__name = name  # type: str
 
         self.__namespace = namespace
 
-        self.parent_entities = []  # : Entity<>
-        self.child_entities = []
-        self._attributes = {}
+        self.parent_entities = []  # type: List[Entity]
+        self.child_entities = []  # type: List[Entity]
+        self._attributes = {}  # type: Dict[str,Attribute]
 
-        self.__cls_type = None
-        self.implementations = []
-        self.implements = []
+        self.implementations = []  # type: List[Implementation]
+        self.implements = []  # type: List[Implement]
 
         # default values
-        self.__default_value = {}
+        self.__default_value = {}  # type: Dict[str,object]
 
-        self.ids = {}
+        self._index_def = []  # type: List[List[str]]
+        self._index = {}  # type: Dict[str,Instance]
+        self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
 
-        self._index_def = []
-        self._index = {}
-        self._instance_attributes = {}
-        self.index_queue = {}
-
-        self._instance_list = []
+        self._instance_list = []  # type: List[Instance]
 
         self.comment = ""
+        self.location = None  # type: Location
 
-    def normalize(self):
+    def normalize(self) -> None:
         for d in self.implementations:
             d.normalize()
 
@@ -91,31 +85,26 @@ class Entity(Type, Namespaced):
         for sub in self.subc:
             sub.normalize()
 
-    def get_sub_constructor(self):
+    def get_sub_constructor(self) -> List[SubConstructor]:
         return self.subc
 
-    def get_implements(self):
+    def get_implements(self) -> "List[Implement]":
         return self.implements + [i for p in self.parent_entities for i in p.get_implements()]
 
-    """
-        A list of all instances that exist in the configuration model
-    """
-    instances = []
-
-    def add_default_value(self, name, value):
+    def add_default_value(self, name: str, value: object) -> None:
         """
             Add a default value for an attribute
         """
         self.__default_value[name] = value
 
-    def get_defaults(self):
+    def get_defaults(self) -> "Dict[str,ExpressionStatement]":
         return {}
 
-    def get_default_values(self):
+    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
         """
             Return the dictionary with default values
         """
-        values = []
+        values = []  # type: List[Tuple[str,ExpressionStatement]]
 
         # left most parent takes precedence
         for parent in reversed(self.parent_entities):
@@ -124,11 +113,11 @@ class Entity(Type, Namespaced):
         # self takes precedence
         values.extend(self.__default_value.items())
         # make dict, remove doubles
-        values = dict(values)
+        dvalues = dict(values)
         # remove erased defaults
-        return {k: v for k, v in values.items() if v is not None}
+        return {k: v for k, v in dvalues.items() if v is not None}
 
-    def get_namespace(self):
+    def get_namespace(self) -> Namespace:
         """
             The namespace of this entity
         """
@@ -136,14 +125,14 @@ class Entity(Type, Namespaced):
 
     namespace = property(get_namespace)
 
-    def __hash__(self):
+    def __hash__(self) -> "int":
         """
             The hashcode of this entity is defined as the hash of the name
             of this entity
         """
         return hash(self.__name)
 
-    def get_name(self):
+    def get_name(self) -> str:
         """
             Return the name of this entity. The name string has been
             internalised for faster dictionary lookups
@@ -152,19 +141,19 @@ class Entity(Type, Namespaced):
 
     name = property(get_name)
 
-    def get_full_name(self):
+    def get_full_name(self) -> str:
         """
             Get the full name of the entity
         """
         return self.__namespace.get_full_name() + "::" + self.__name
 
-    def get_attributes(self):
+    def get_attributes(self) -> "Dict[str,Attribute]":
         """
             Get a set with all attributes that are defined in this entity
         """
         return self._attributes
 
-    def set_attributes(self, attributes):
+    def set_attributes(self, attributes: "Dict[str,Attribute]") -> None:
         """
             Set a set of attributes that are defined in this entities
         """
@@ -172,7 +161,7 @@ class Entity(Type, Namespaced):
 
     attributes = property(get_attributes, set_attributes, None, None)
 
-    def is_parent(self, entity):
+    def is_parent(self, entity: "Entity") -> bool:
         """
             Check if the given entity is a parent of this entity
         """
@@ -184,7 +173,7 @@ class Entity(Type, Namespaced):
                     return True
         return False
 
-    def get_all_parent_names(self):
+    def get_all_parent_names(self) -> "List[str]":
         """
             Get a set with all parents of this entity
         """
@@ -194,13 +183,13 @@ class Entity(Type, Namespaced):
 
         return parents
 
-    def get_all_parent_entities(self):
+    def get_all_parent_entities(self) -> "Set[Entity]":
         parents = [x for x in self.parent_entities]
         for entity in self.parent_entities:
             parents.extend(entity.get_all_parent_entities())
         return set(parents)
 
-    def get_all_attribute_names(self):
+    def get_all_attribute_names(self) -> "List[str]":
         """
             Return a list of all attribute names, including parents
         """
@@ -211,7 +200,7 @@ class Entity(Type, Namespaced):
 
         return names
 
-    def add_attribute(self, attribute):
+    def add_attribute(self, attribute: "Attribute") -> None:
         """
             Add an attribute to this entity. The attribute should not exist yet.
         """
@@ -220,7 +209,7 @@ class Entity(Type, Namespaced):
         else:
             raise Exception("attribute already exists")
 
-    def get_attribute(self, name):
+    def get_attribute(self, name: str) -> "Attribute":
         """
             Get the attribute with the given name
         """
@@ -234,17 +223,17 @@ class Entity(Type, Namespaced):
         return None
 
     @memoize
-    def __get_related(self):
+    def __get_related(self) -> "Set[Entity]":
         # down
-        all_children = [self]
-        done = set()
+        all_children = [self]  # type: List[Entity]
+        done = set()  # type: Set[Entity]
         while len(all_children) != 0:
             current = all_children.pop()
             if current not in done:
                 all_children.extend(current.child_entities)
                 done.add(current)
         # up
-        parents = set()
+        parents = set()  # type: Set[Entity]
         work = list(done)
         while len(work) != 0:
             current = work.pop()
@@ -254,7 +243,7 @@ class Entity(Type, Namespaced):
 
         return parents
 
-    def get_attribute_from_related(self, name):
+    def get_attribute_from_related(self, name: str) -> "Attribute":
         """
             Get the attribute with the given name, in both parents and children
             (for type checking)
@@ -266,7 +255,7 @@ class Entity(Type, Namespaced):
 
         return None
 
-    def has_attribute(self, attribute):
+    def has_attribute(self, attribute: str) -> bool:
         """
             Does the attribute already exist in this entity.
         """
@@ -279,13 +268,13 @@ class Entity(Type, Namespaced):
         else:
             return True
 
-    def get_all_instances(self):
+    def get_all_instances(self) -> "List[Instance]":
         """
             Return all instances of this entity
         """
         return self._instance_list
 
-    def add_instance(self, obj):
+    def add_instance(self, obj: "Instance") -> None:
         """
             Register a new instance
         """
@@ -295,7 +284,11 @@ class Entity(Type, Namespaced):
         for parent in self.parent_entities:
             parent.add_instance(obj)
 
-    def get_instance(self, attributes, resolver, queue, location):
+    def get_instance(self,
+                     attributes: Dict[str, object],
+                     resolver: Resolver,
+                     queue: QueueScheduler,
+                     location: Location) -> "Instance":
         """
             Return an instance of the class defined in this entity
         """
@@ -307,13 +300,13 @@ class Entity(Type, Namespaced):
         self.add_instance(out)
         return out
 
-    def is_subclass(self, cls):
+    def is_subclass(self, cls: "Entity") -> bool:
         """
             Is the given class a subclass of this class
         """
         return cls.is_parent(self)
 
-    def validate(self, value):
+    def validate(self, value: object) -> bool:
         """
             Validate the given value
         """
@@ -329,25 +322,25 @@ class Entity(Type, Namespaced):
 
         return True
 
-    def add_implementation(self, implement):
+    def add_implementation(self, implement: "Implementation") -> None:
         """
             Register an implementation for this entity
         """
         self.implementations.append(implement)
 
-    def add_implement(self, implement):
+    def add_implement(self, implement: "Implement") -> None:
         """
             Register an implementation for this entity
         """
         self.implements.append(implement)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of this type
         """
         return "Entity(%s::%s)" % (self.namespace, self.name)
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
             The pretty string of this type
         """
@@ -360,7 +353,7 @@ class Entity(Type, Namespaced):
         """
         return value
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         """
             Override list eq method
         """
@@ -369,20 +362,20 @@ class Entity(Type, Namespaced):
 
         return self.name == other.name and self.namespace == other.namespace
 
-    def add_index(self, attributes):
+    def add_index(self, attributes: List[str]) -> None:
         """
             Add an index over the given attributes.
         """
         self._index_def.append(attributes)
 
-    def get_indices(self):
+    def get_indices(self) -> List[List[str]]:
         base = []
         base.extend(self._index_def)
         for parent in self.parent_entities:
             base.extend(parent.get_indices())
         return base
 
-    def add_to_index(self, instance):
+    def add_to_index(self, instance: Instance) -> None:
         """
             Update indexes based on the instance and the attribute that has
             been set
@@ -399,19 +392,22 @@ class Entity(Type, Namespaced):
                     key.append("%s=%s" % (attribute, attributes[attribute]))
 
             if index_ok:
-                key = ", ".join(key)
+                keys = ", ".join(key)
 
-                if key in self._index and self._index[key] is not instance:
-                    raise DuplicateException(instance, self._index[key], "Duplicate key in index. %s" % key)
+                if keys in self._index and self._index[keys] is not instance:
+                    raise DuplicateException(instance, self._index[keys], "Duplicate key in index. %s" % keys)
 
-                self._index[key] = instance
+                self._index[keys] = instance
 
-                if key in self.index_queue:
-                    for x, stmt in self.index_queue[key]:
+                if keys in self.index_queue:
+                    for x, stmt in self.index_queue[keys]:
                         x.set_value(instance, stmt.location)
-                    self.index_queue.pop(key)
+                    self.index_queue.pop(keys)
 
-    def lookup_index(self, params, stmt, target: ResultVariable=None):
+    def lookup_index(self,
+                     params: "Dict[str,object]",
+                     stmt: "Statement",
+                     target: "Optional[ResultVariable]"=None) -> "Optional[Instance]":
         """
             Search an instance in the index.
         """
@@ -440,69 +436,83 @@ class Entity(Type, Namespaced):
                 self.index_queue[key].append((target, stmt))
             else:
                 self.index_queue[key] = [(target, stmt)]
+        return None
 
-    def get_entity(self):
+    def get_entity(self) -> "Entity":
         """
             Get the entity (follow through defaults if needed)
         """
         return self
 
-    def final(self, excns):
+    def final(self, excns: List[Exception]) -> None:
         for key, indices in self.index_queue.items():
             for _, stmt in indices:
                 excns.append(NotFoundException(stmt, key,
                                                "No match in index on type %s with key %s" % (self.get_full_name(), key)))
 
-    def get_double_defined_exception(self, other):
-        raise DuplicateException(
+    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
+        return DuplicateException(
             self, other, "Entity %s is already defined" % (self.get_full_name()))
 
+    def get_location(self) -> Location:
+        return self.location
 
-class Implementation(Namespaced):
+
+class Implementation(Named):
     """
         A module functions as a grouping of objects. This can be used to create
         high level roles that do not have any arguments, or they can be used
         to create mixin like aspects.
     """
-    def __init__(self, name, stmts: BasicBlock, namespace, target_type, comment: str=None):
+
+    def __init__(self,
+                 name: str,
+                 stmts: BasicBlock,
+                 namespace: Namespace,
+                 target_type: str,
+                 comment: Optional[str]=None) -> None:
         self.name = name
         self.statements = stmts
         self.namespace = namespace
         self.target_type = target_type
         self.comment = comment
+        self.location = None  # type: Location
 
-    def set_type(self, entity):
+    def set_type(self, entity: Entity) -> None:
         self.entity = entity
         entity.add_implementation(self)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Implementation(name = %s)" % self.name
 
-    def normalize(self):
+    def normalize(self) -> None:
         self.statements.normalize()
 
-    def get_full_name(self):
+    def get_full_name(self) -> str:
         return self.namespace.get_full_name() + "::" + self.name
 
-    def get_namespace(self):
+    def get_namespace(self) -> Namespace:
         return self.namespace
 
-    def get_double_defined_exception(self, other):
+    def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         raise DuplicateException(self, other, "Implementation %s for type %s is already defined" %
                                  (self.get_full_name(), self.target_type))
 
+    def get_location(self) -> Location:
+        return self.location
 
-class Implement(object):
+
+class Implement(Locatable):
     """
         Define an implementation of an entity in functions of implementations
     """
 
-    def __init__(self):
-        self.constraint = None
-        self.implementations = []
-        self.comment = None
+    def __init__(self) -> None:
+        self.constraint = None  # type: ExpressionStatement
+        self.implementations = []  # type: List[Implementation]
+        self.comment = None  # type: str
 
-    def normalize(self):
+    def normalize(self) -> None:
         self.constraint.normalize()
 
 
@@ -511,25 +521,25 @@ class Default(Type):
         This class models default values for a constructor.
     """
 
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.entity = None
-        self._defaults = {}
-        self.comment = None
+        self.entity = None  # type: Entity
+        self._defaults = {}  # type: Dict[str,ExpressionStatement]
+        self.comment = None  # type: str
 
-    def get_defaults(self):
+    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
         return self._defaults
 
-    def set_entity(self, entity: Entity):
+    def set_entity(self, entity: Entity) -> None:
         self.entity = entity
 
-    def add_default(self, name, value):
+    def add_default(self, name: str, value: "ExpressionStatement") -> None:
         """
             Add a default value
         """
         self._defaults[name] = value
 
-    def get_default(self, name):
+    def get_default(self, name: str) -> "ExpressionStatement":
         """
             Get a default value for a given name
         """
@@ -541,11 +551,11 @@ class Default(Type):
 
         raise AttributeError(name)
 
-    def get_entity(self):
+    def get_entity(self) -> Entity:
         """
             Get the entity (follow through defaults if needed)
         """
         return self.entity.get_entity()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Default(%s)" % self.name

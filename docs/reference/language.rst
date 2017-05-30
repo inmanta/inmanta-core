@@ -376,7 +376,20 @@ Defining an index::
 Explicit index lookup is performed with a query statement::
 
     testhost = Host[name="test"]
+    
+For indices on relations (instead of attributes) an alternative syntax can be used::
 
+	entity File:
+		string path
+	end
+	
+	Host.files [0:] -- [1] File.host
+	
+	index File(host, path)
+	
+	a = File[host=vm1, path="/etc/passwd"]  # normal index lookup
+	b = vm1.files[path="/etc/passwd"]  # selector style index lookup
+	# a == b
 
 For loop
 =========

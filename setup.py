@@ -15,6 +15,7 @@ requires = [
         'tornado',
         'typing',
         'virtualenv',
+        'typing'
     ]
 
 setup(

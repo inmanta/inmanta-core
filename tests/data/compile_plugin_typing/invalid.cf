@@ -1,0 +1,16 @@
+import test
+
+entity Collection:
+end
+
+implement Collection using test::none
+
+Collection.items [0:] -- test::Item.collection [0:]
+
+c1 = Collection()
+
+t1 = test::Item(name="t1", collection=c1)
+t2 = test::Item(name="t2", collection=c1)
+t3 = test::Item(name="t3", collection=c1)
+
+a = test::badtype(c1.items)

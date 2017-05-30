@@ -20,9 +20,15 @@
 
 from . import GeneratorStatement
 from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ExecutionContext
-from inmanta.ast import RuntimeException, TypingException, NotFoundException
+from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable
+from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace
 from inmanta.execute.tracking import ImplementsTracker
+from typing import List, Dict, TYPE_CHECKING, Tuple
+from inmanta.ast.statements import ExpressionStatement
+from inmanta.ast.blocks import BasicBlock
+
+if TYPE_CHECKING:
+    from inmanta.ast.entity import Entity, Implement  # noqa: F401
 
 
 class SubConstructor(GeneratorStatement):
@@ -31,16 +37,16 @@ class SubConstructor(GeneratorStatement):
         imports the statements
     """
 
-    def __init__(self, instance_type, implements):
+    def __init__(self, instance_type: "", implements: "Implement") -> None:
         GeneratorStatement.__init__(self)
         self.type = instance_type
         self.implements = implements
 
-    def normalize(self):
+    def normalize(self) -> None:
         # done in define type
         pass
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         try:
             resv = resolver.for_namespace(self.implements.constraint.namespace)
             return self.implements.constraint.requires_emit(resv, queue)
@@ -48,13 +54,13 @@ class SubConstructor(GeneratorStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires, instance, queue):
+    def execute(self, requires: Dict[object, ResultVariable], instance: Resolver, queue: QueueScheduler) -> object:
         """
             Evaluate this statement
         """
         expr = self.implements.constraint
         if not expr.execute(requires, instance, queue):
-            return
+            return None
 
         myqueue = queue.for_tracker(ImplementsTracker(self, instance))
 
@@ -66,7 +72,9 @@ class SubConstructor(GeneratorStatement):
                 xc = ExecutionContext(impl.statements, instance.for_namespace(impl.statements.namespace))
                 xc.emit(myqueue)
 
-    def __repr__(self):
+        return None
+
+    def __repr__(self) -> str:
         return "SubConstructor(%s)" % self.type
 
 
@@ -75,38 +83,38 @@ class For(GeneratorStatement):
         A for loop
     """
 
-    def __init__(self, variable, loop_var, module):
+    def __init__(self, variable: ExpressionStatement, loop_var: str, module: BasicBlock) -> None:
         GeneratorStatement.__init__(self)
         self.base = variable
         self.loop_var = loop_var
         self.module = module
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "For(%s)" % self.loop_var
 
-    def normalize(self):
+    def normalize(self) -> None:
         self.base.normalize()
         # self.loop_var.normalize(resolver)
         self.module.normalize()
         self.module.add_var(self.loop_var)
 
-    def requires(self):
+    def requires(self) -> List[str]:
         base = self.base.requires()
         var = self.loop_var
         ext = self.module.requires
         return list(set(base).union(ext) - set(var))
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return self.base.requires_emit(resolver, queue)
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Evaluate this statement.
         """
         var = self.base.execute(requires, resolver, queue)
 
         if isinstance(var, Unknown):
-            return
+            return None
 
         for loop_var in var:
             # generate a subscope/namespace for each loop
@@ -115,6 +123,8 @@ class For(GeneratorStatement):
             loopvar.set_provider(self)
             loopvar.set_value(loop_var, self.location)
             xc.emit(queue)
+
+        return None
 
 
 class Constructor(GeneratorStatement):
@@ -125,7 +135,11 @@ class Constructor(GeneratorStatement):
             constructor call.
     """
 
-    def __init__(self, class_type, attributes, location, namespace):
+    def __init__(self,
+                 class_type: str,
+                 attributes: List[Tuple[str, ExpressionStatement]],
+                 location: Location,
+                 namespace: Namespace) -> None:
         GeneratorStatement.__init__(self)
         self.class_type = class_type
         self.__attributes = {}
@@ -136,7 +150,7 @@ class Constructor(GeneratorStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
-    def normalize(self):
+    def normalize(self) -> None:
         self.type = self.namespace.get_type(self.class_type)
         for (k, v) in self.__attributes.items():
             v.normalize()
@@ -148,25 +162,25 @@ class Constructor(GeneratorStatement):
                 if attr not in self.attributes:
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
 
-    def requires(self):
+    def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
         out.extend([req for (k, v) in self.type.get_defaults().items() for req in v.requires()])
         out.extend([req for (k, v) in self.type.get_entity().get_default_values().items() for req in v.requires()])
 
         return out
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         preout = [x for x in self.__attributes.items()]
         preout.extend([x for x in self.type.get_entity().get_default_values().items()])
 
         out2 = {rk: rv for (k, v) in self.type.get_defaults().items()
-                for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_containing_namespace()), queue).items()}
+                for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_namespace()), queue).items()}
 
         out = {rk: rv for (k, v) in preout for (rk, rv) in v.requires_emit(resolver, queue).items()}
         out.update(out2)
         return out
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler):
         """
             Evaluate this statement.
         """
@@ -214,7 +228,7 @@ class Constructor(GeneratorStatement):
         # add anonymous implementations
         if self.implemented:
             # generate an import for the module
-            raise "don't know this feature"
+            raise Exception("don't know this feature")
 
         else:
             # generate an implementation
@@ -222,13 +236,13 @@ class Constructor(GeneratorStatement):
                 stmt.emit(object_instance, queue)
 
         if self.register:
-            raise "don't know this feature"
+            raise Exception("don't know this feature")
 
         object_instance.trackers.append(queue.get_tracker())
 
         return object_instance
 
-    def add_attribute(self, name, value):
+    def add_attribute(self, name: str, value: object):
         """
             Add an attribute to this constructor call
         """
@@ -238,7 +252,7 @@ class Constructor(GeneratorStatement):
             raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
                                    % (name, self.class_type))
 
-    def get_attributes(self):
+    def get_attributes(self) -> Dict[str, ExpressionStatement]:
         """
             Get the attribtues that are set for this constructor call
         """
@@ -246,7 +260,7 @@ class Constructor(GeneratorStatement):
 
     attributes = property(get_attributes)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of the this statement
         """

@@ -20,10 +20,15 @@
 
 from . import ReferenceStatement
 from inmanta.ast.type import List, Dict
-from inmanta.ast.statements import AssignStatement
-from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance
+from inmanta.ast.statements import AssignStatement, ExpressionStatement
+from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, AttributeException, DuplicateException
+from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException
+import typing
+from inmanta.ast.attribute import RelationAttribute
+
+if typing.TYPE_CHECKING:
+    from inmanta.ast.variables import Reference  # noqa: F401
 
 
 class CreateList(ReferenceStatement):
@@ -31,11 +36,14 @@ class CreateList(ReferenceStatement):
         Create list of values
     """
 
-    def __init__(self, items):
+    def __init__(self, items: typing.List[ExpressionStatement]) -> None:
         ReferenceStatement.__init__(self, items)
         self.items = items
 
-    def execute(self, requires, resolver, queue):
+    def execute(self,
+                requires: typing.Dict[object, ResultVariable],
+                resolver: Resolver,
+                queue: QueueScheduler) -> object:
         """
             Create this list
         """
@@ -47,22 +55,22 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "List()"
 
 
 class CreateDict(ReferenceStatement):
 
-    def __init__(self, items):
+    def __init__(self, items: typing.List[typing.Tuple[str, ReferenceStatement]]) -> None:
         ReferenceStatement.__init__(self, [x[1] for x in items])
         self.items = items
-        seen = {}
+        seen = {}  # type: typing.Dict[str,ReferenceStatement]
         for x, v in items:
             if x in seen:
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Create this list
         """
@@ -74,7 +82,7 @@ class CreateDict(ReferenceStatement):
 
         return qlist
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Dict()"
 
 
@@ -83,42 +91,52 @@ class SetAttribute(AssignStatement):
         Set an attribute of a given instance to a given value
     """
 
-    def __init__(self, instance, attribute_name, value):
+    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement) -> None:
         AssignStatement.__init__(self, instance, value)
         self.instance = instance
         self.attribute_name = attribute_name
         self.value = value
 
-    def emit(self, resolver, queue):
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
         HangUnit(queue, resolver, reqs, None, self)
 
-    def resume(self, requires, resolver, queue, target):
+    def resume(self,
+               requires: typing.Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         var = instance.get_attribute(self.attribute_name)
         reqs = self.value.requires_emit(resolver, queue)
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance)
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
 
 
 class SetAttributeHelper(ExecutionUnit):
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression,
-                 stmt: SetAttribute, instance: Instance):
+    def __init__(self,
+                 queue_scheduler: QueueScheduler,
+                 resolver: Resolver,
+                 result: ResultVariable,
+                 requires: typing.Dict[object, ResultVariable],
+                 expression: ExpressionStatement,
+                 stmt: SetAttribute,
+                 instance: Instance) -> None:
         ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
         self.stmt = stmt
         self.instance = instance
 
-    def execute(self):
+    def execute(self) -> None:
         try:
             ExecutionUnit.execute(self)
         except RuntimeException as e:
             e.set_statement(self.stmt)
             raise AttributeException(self.stmt, self.instance, self.stmt.attribute_name, e)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.stmt)
 
 
@@ -133,20 +151,20 @@ class Assign(AssignStatement):
         provides:      variable
     """
 
-    def __init__(self, name, value):
-        AssignStatement.__init__(self, name, value)
+    def __init__(self, name: str, value: ExpressionStatement) -> None:
+        AssignStatement.__init__(self, None, value)
         self.name = name
         self.value = value
 
-    def requires(self):
+    def requires(self) -> typing.List[str]:
         return self.value.requires()
 
-    def emit(self, resolver, queue):
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         target = resolver.lookup(self.name)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Assign(%s, %s)" % (self.name, self.value)
 
 
@@ -155,16 +173,16 @@ class IndexLookup(ReferenceStatement):
         Lookup a value in a dictionary
     """
 
-    def __init__(self, index_type, query):
+    def __init__(self, index_type: str, query: typing.List[typing.Tuple[str, ExpressionStatement]]) -> None:
         ReferenceStatement.__init__(self, [v for (k, v) in query])
         self.index_type = index_type
         self.query = query
 
-    def normalize(self):
+    def normalize(self) -> None:
         ReferenceStatement.normalize(self)
         self.type = self.namespace.get_type(self.index_type)
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> typing.Dict[object, ResultVariable]:
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
         temp = ResultVariable()
         temp.set_type(self.type)
@@ -172,17 +190,65 @@ class IndexLookup(ReferenceStatement):
         HangUnit(queue, resolver, sub, temp, self)
         return {self: temp}
 
-    def resume(self, requires, resolver, queue, target):
+    def resume(self,
+               requires: typing.Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
         self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of this statement
         """
         return "%s[%s]" % (self.index_type, self.query)
+
+
+class ShortIndexLookup(IndexLookup):
+    """lookup of the form
+vm = ip::Host(...)
+file = std::File(host=vm, path="/etc/motd", ...)
+
+vm.files[path="/etc/motd"]
+    """
+
+    def __init__(self, rootobject: ExpressionStatement,
+                 relation: str, query:
+                 typing.List[typing.Tuple[str, ExpressionStatement]]):
+        ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
+        self.rootobject = rootobject
+        self.relation = relation
+        self.querypart = query
+
+    def normalize(self) -> None:
+        ReferenceStatement.normalize(self)
+        # currently there is no way to get the type of an expression prior to evaluation
+        self.type = None
+
+    def resume(self,
+               requires: typing.Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
+        root_object = self.rootobject.execute(requires, resolver, queue)
+
+        if not isinstance(root_object, Instance):
+            raise TypingException(self, "short index lookup is only possible one objects, %s is not an object" % root_object)
+
+        from_entity = root_object.get_type()
+
+        relation = from_entity.get_attribute(self.relation)
+        if not isinstance(relation, RelationAttribute):
+            raise TypingException(self, "short index lookup is only possible on relations, %s is an attribute" % relation)
+
+        self.type = relation.get_type()
+
+        self.type.lookup_index([(relation.end.name, root_object)] +
+                               [(k, v.execute(requires, resolver, queue))
+                                for (k, v) in self.querypart], self, target)
 
 
 class StringFormat(ReferenceStatement):
@@ -190,12 +256,12 @@ class StringFormat(ReferenceStatement):
         Create a new string by doing a string interpolation
     """
 
-    def __init__(self, format_string, variables):
-        ReferenceStatement.__init__(self, [k for (k, v) in variables])
+    def __init__(self, format_string: str, variables: typing.List[typing.Tuple["Reference", str]]) -> None:
+        ReferenceStatement.__init__(self, [k for (k, _) in variables])
         self._format_string = format_string
         self._variables = variables
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)
@@ -208,5 +274,5 @@ class StringFormat(ReferenceStatement):
 
         return result_string
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Format(%s)" % self._format_string

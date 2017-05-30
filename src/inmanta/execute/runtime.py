@@ -18,8 +18,10 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException,\
+    Locatable, Location
 from inmanta.ast.type import Type
+from typing import Dict, Any
 
 
 class ResultVariable(object):
@@ -35,7 +37,7 @@ class ResultVariable(object):
         In order to assist heuristic evaluation, result variables keep track of any statement that will assign a value to it
     """
 
-    def __init__(self, value=None):
+    def __init__(self, value: object=None):
         self.provider = None
         self.waiters = []
         self.value = value
@@ -388,7 +390,7 @@ class ExecutionUnit(Waiter):
         @param provides: Whether to register this XU as provider to the result variable
     """
 
-    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires, expression):
+    def __init__(self, queue_scheduler, resolver, result: ResultVariable, requires: Dict[Any, ResultVariable], expression):
         Waiter.__init__(self, queue_scheduler)
         self.result = result.get_promise(expression)
         self.requires = requires
@@ -484,7 +486,7 @@ class Resolver(object):
     def __init__(self, namespace):
         self.namespace = namespace
 
-    def lookup(self, name, root=None):
+    def lookup(self, name, root=None) -> ResultVariable:
         # override lexial root
         # i.e. delegate to parent, until we get to the root, then either go to our root or lexical root of our caller
         if root is not None:
@@ -530,7 +532,7 @@ class ExecutionContext(object):
             return self.slots[name]
         return self.resolver.lookup(name, root)
 
-    def direct_lookup(self, name):
+    def direct_lookup(self, name: str) -> "Type":
         if name in self.slots:
             return self.slots[name]
         else:
@@ -546,7 +548,7 @@ class ExecutionContext(object):
         return NamespaceResolver(self, namespace)
 
 
-class Instance(ExecutionContext):
+class Instance(ExecutionContext, Locatable, Resolver):
 
     def __init__(self, mytype, resolver, queue):
         self.resolver = resolver.get_root_resolver()
@@ -559,6 +561,7 @@ class Instance(ExecutionContext):
 
         # see inmanta.ast.execute.scheduler.QueueScheduler
         self.trackers = []
+        self.location = None
 
     def get_type(self):
         return self.type
@@ -571,7 +574,7 @@ class Instance(ExecutionContext):
         except RuntimeException as e:
             raise AttributeException(None, self, name, cause=e)
 
-    def get_attribute(self, name):
+    def get_attribute(self, name) -> ResultVariable:
         try:
             return self.slots[name]
         except KeyError:
@@ -623,3 +626,6 @@ class Instance(ExecutionContext):
             if not v.can_get():
                 return False
         return True
+
+    def get_location(self) -> Location:
+        return self.location
