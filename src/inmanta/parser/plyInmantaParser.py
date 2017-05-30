@@ -833,14 +833,18 @@ def myparse(ns, tfile, content):
                 data = myfile.read()
                 if len(data) == 0:
                     return []
+                # prevent problems with EOF
+                data = data + "\n"
                 lexer.lineno = 1
                 return parser.parse(data, lexer=lexer, debug=False)
         else:
             data = content
             if len(data) == 0:
                 return []
+            # prevent problems with EOF
+            data = data + "\n"
             lexer.lineno = 1
-            return parser.parse(content, lexer=lexer, debug=False)
+            return parser.parse(data, lexer=lexer, debug=False)
     except ParserException as e:
         e.findCollumn(data)
         e.location.file = tfile
