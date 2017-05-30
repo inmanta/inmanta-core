@@ -105,8 +105,12 @@ class BashIO(object):
         """
             Execute a command with the given argument and return the result
         """
+        current_env = os.environ.copy()
+        if env is not None:
+            current_env.update(env)
         cmds = [command] + arguments
-        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
+        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env,
+                                  cwd=cwd)
 
         if sys.version_info < (3, 0, 0):
             # TODO timeout is not supported
@@ -348,8 +352,14 @@ class LocalIO(object):
             :return: A tuple with (stdout, stderr, returncode)
             :rtype: tuple
         """
+        current_env = os.environ.copy()
+        if env is not None:
+            current_env.update(env)
+        if sys.version_info < (3, 0, 0):
+            current_env = {k.encode(): str(v)   .encode() for k, v in current_env.items()}
+
         cmds = [command] + arguments
-        result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=cwd)
+        result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
         if sys.version_info < (3, 0, 0):
             # TODO timeout is not supported

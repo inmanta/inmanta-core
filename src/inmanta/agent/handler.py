@@ -126,7 +126,7 @@ class HandlerContext(object):
         self._purged = False
         self._updated = False
         self._created = False
-        self._change = None
+        self._change = const.Change.nochange
 
         self._changes = {}
 
@@ -375,16 +375,34 @@ class ResourceHandler(object):
             This method implements the deprecated reload mechanism. Make sure to call this method from a subclass if the
             reload behaviour is required.
 
+            This method is called for all dependents of the given resource (inverse of the requires relationship)
+            that have send_event set to true and for which a deploy was started. These are the only conditions, even if all
+            dependents have failed or no changes were deployed. It is up to the handler to decide what to do.
+
+            The default implementation provides the reload mechanism. It will call do_reload when the handler can_reload() and
+            if at least one of the dependents have successfully deployed and there were changes.
+
             :param ctx: Context object to report changes and logs to the agent and server.
             :param resource: The resource to process the events for.
-            :param dict: A dict with events of the resource the given resource requires.
+            :param dict: A dict with events of the resource the given resource requires. The keys of the dict are the resources.
+                         Each value is a dict with the items status (const.ResourceState), changes (dict) and
+                         change (const.Change).
         """
         if self.can_reload():
-            self.do_reload(ctx, resource)
+            reload = False
+            for result in events.values():
+                if result["status"] == const.ResourceState.deployed and len(result["changes"]) > 0:
+                    reload = True
+                    break
+
+            if reload:
+                self.do_reload(ctx, resource)
 
     def can_process_events(self) -> bool:
         """
             Can this handler process events? This is a more generic version of the reload mechanism.
+
+            See the :py:func:`ResourceHandler.process_events` for more details about this mechanism.
 
             :return: Return true if this handler processes events.
         """

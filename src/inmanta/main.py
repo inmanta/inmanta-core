@@ -467,11 +467,11 @@ def param_set(client, environment, name, value):
     # first fetch the parameter
     param = client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=""), allow_none=True)
 
-    # check the source
-    if param is not None and param["source"] != "user":
-        raise Exception("Only parameters set by users can be modified!")
+    if param is None:
+        param = {"source": "user", "metadata": {}}
 
-    param = client.do_request("set_param", "parameter", dict(tid=tid, id=name, value=value, source="user", resource_id=""))
+    param = client.do_request("set_param", "parameter", dict(tid=tid, id=name, value=value, source=param["source"],
+                                                             resource_id="", metadata=param["metadata"]))
 
     print_table(('Name', 'Value', 'Source', 'Updated'),
                 ((param['name'], param['value'], param['source'], param['updated']),))

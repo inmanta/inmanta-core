@@ -115,10 +115,12 @@ class ResourceAction(object):
 
         yield self.scheduler.agent.thread_pool.submit(provider.execute, ctx, self.resource)
 
+        send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
+
         if ctx.status is not const.ResourceState.deployed:
             provider.close()
             cache.close_version(self.resource.id.version)
-            return False, False
+            return False, send_event
 
         if len(events) > 0 and provider.can_process_events():
             ctx.info("Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id))
@@ -127,7 +129,6 @@ class ResourceAction(object):
         provider.close()
         cache.close_version(self.resource_id.version)
 
-        send_event = (ctx.changed and hasattr(self.resource, "send_event") and self.resource.send_event)
         return True, send_event
 
     @gen.coroutine
@@ -168,7 +169,8 @@ class ResourceAction(object):
                 send_event = False
             else:
                 if result.receive_events:
-                    received_events = {x.resource_id: dict(status=x.status, change=x.change, changes=x.changes)
+                    received_events = {x.resource_id: dict(status=x.status, change=x.change,
+                                                           changes=x.changes.get(x.resource_id, {}))
                                        for x in self.dependencies}
                 else:
                     received_events = {}
@@ -236,8 +238,13 @@ class RemoteResourceAction(ResourceAction):
                 send_event = False
                 if "logs" in result.result and len(result.result["logs"]) > 0:
                     log = result.result["logs"][0]
-                    self.change = const.Change[log["change"]]
-                    if str(self.resource_id) in log["changes"]:
+
+                    if "change" in log:
+                        self.change = const.Change[log["change"]]
+                    else:
+                        self.change = const.Change.nochange
+
+                    if "changes" in log and str(self.resource_id) in log["changes"]:
                         self.changes = log["changes"]
                     else:
                         self.changes = {}
@@ -294,7 +301,7 @@ class ResourceScheduler(object):
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
         if resourceid not in self.cad:
-            LOGGER.warning("received CAD notification that was not required, %s", resourceid)
+            LOGGER.warning("Agent %s received CAD notification that was not required, %s", self.name, resourceid)
             return
         self.cad[resourceid].notify(send_events, state, change, changes)
 
@@ -430,7 +437,8 @@ class AgentInstance(object):
                 except TypeError as e:
                     LOGGER.error("Failed to receive update", e)
 
-                self._nq.reload(resources)
+                if len(resources) > 0:
+                    self._nq.reload(resources)
 
     @gen.coroutine
     def dryrun(self, dry_run_id, version):
@@ -829,13 +837,9 @@ class Agent(AgentEndPoint):
                         env, agent, resource, state)
             return 200
 
-        if state is not const.ResourceState.deployed:
-            LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                        env, agent, resource, state)
-        else:
-            LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
-                         agent, env, agent, resource, state)
-            self._instances[agent].notify_ready(resource, send_events, state, change, changes)
+        LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
+                     agent, env, agent, resource, state)
+        self._instances[agent].notify_ready(resource, send_events, state, change, changes)
 
         return 200
 

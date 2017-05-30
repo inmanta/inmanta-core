@@ -227,16 +227,20 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.ParameterMethod.get_param, param_id="id", env="tid")
     @gen.coroutine
     def get_param(self, env, param_id, resource_id=None):
-        params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
+        if resource_id is None:
+            params = yield data.Parameter.get_list(environment=env.id, name=param_id)
+        else:
+            params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
-        if len(params) == 0:
+        if len(params) == 0 and resource_id is not None:
             out = yield self.agentmanager._request_parameter(env.id, resource_id)
             return out
 
         param = params[0]
+
         # check if it was expired
         now = datetime.datetime.now()
-        if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
+        if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
