@@ -44,12 +44,12 @@ class EnumDoc(data.BaseDocument):
 
 @pytest.mark.gen_test
 def test_motor(motor):
-    yield motor.testCollection.insert({"a": 1, "b": "abcd"})
+    yield motor.testCollection.insert_one({"a": 1, "b": "abcd"})
     results = yield motor.testCollection.find_one({"a": {"$gt": 0}})
 
     assert "_id" in results
 
-    yield motor.testCollection.insert({"a": {"b": {"c": 1}}})
+    yield motor.testCollection.insert_one({"a": {"b": {"c": 1}}})
     results = motor.testCollection.find({})
 
     while (yield results.fetch_next):

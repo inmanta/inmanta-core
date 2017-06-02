@@ -115,16 +115,16 @@ class Config(object):
     @classmethod
     def validate_option_request(cls, section, name, default_value):
         if section not in cls.__config_definition:
-            LOGGER.warn("Config section %s not defined" % (section))
+            LOGGER.warning("Config section %s not defined" % (section))
             # raise Exception("Config section %s not defined" % (section))
             return
         if name not in cls.__config_definition[section]:
-            LOGGER.warn("Config name %s not defined in section %s" % (name, section))
+            LOGGER.warning("Config name %s not defined in section %s" % (name, section))
             # raise Exception("Config name %s not defined in section %s" % (name, section))
             return
         opt = cls.__config_definition[section][name]
         if not opt.get_default_value() == opt.get_default_value():
-            LOGGER.warn("Inconsistent default value for option %s.%s: defined as %s, got %s" %
+            LOGGER.warning("Inconsistent default value for option %s.%s: defined as %s, got %s" %
                         (section, name, opt.default, default_value))
 
         return opt

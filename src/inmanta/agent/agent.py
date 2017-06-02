@@ -451,7 +451,7 @@ class AgentInstance(object):
             with (yield self.ratelimiter.acquire()):
                 result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
                 if result.code == 404:
-                    LOGGER.warn("Version %s does not exist, can not run dryrun", version)
+                    LOGGER.warning("Version %s does not exist, can not run dryrun", version)
                     return
 
                 elif result.code != 200:
@@ -771,9 +771,9 @@ class Agent(AgentEndPoint):
                 if "enabled" in state and isinstance(state["enabled"], bool):
                     self.set_state(name, state["enabled"])
                 else:
-                    LOGGER.warn("Server reported invalid state %s" % (repr(state)))
+                    LOGGER.warning("Server reported invalid state %s" % (repr(state)))
             else:
-                LOGGER.warn("could not get state from the server")
+                LOGGER.warning("could not get state from the server")
 
     @gen.coroutine
     def get_latest_version(self):
@@ -828,12 +828,12 @@ class Agent(AgentEndPoint):
     def resource_event(self, env, agent: str, resource: str, send_events: bool,
                        state: const.ResourceState, change: const.Change, changes: dict):
         if env != self._env_id:
-            LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
+            LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
                         env, agent, resource, state)
             return 200
 
         if agent not in self._instances:
-            LOGGER.warn("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
+            LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
                         env, agent, resource, state)
             return 200
 

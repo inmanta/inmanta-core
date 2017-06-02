@@ -49,7 +49,7 @@ def test_autostart(server, client, environment):
     assert not res
     assert len(server._sessions) == 1
 
-    LOGGER.warn("Killing agent")
+    LOGGER.warning("Killing agent")
     server.agentmanager._requires_agents[environment]["process"].terminate()
     yield retry_limited(lambda: len(server._sessions) == 0, 20)
     res = yield server.agentmanager._ensure_agent(environment, "iaas_jos")
@@ -120,7 +120,7 @@ def test_autostart_batched(client, server, environment):
     assert not res
     assert len(server._sessions) == 1
 
-    LOGGER.warn("Killing agent")
+    LOGGER.warning("Killing agent")
     server.agentmanager._requires_agents[environment]["process"].terminate()
     yield retry_limited(lambda: len(server._sessions) == 0, 20)
     res = yield server.agentmanager._ensure_agents(environment, ["iaas_jos", "iaas_josx"])

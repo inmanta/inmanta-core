@@ -590,7 +590,7 @@ class Project(ModuleLike):
             Load all plug-ins
         """
         if not self.loaded:
-            LOGGER.warn("loading plugins on project that has not been loaded completely")
+            LOGGER.warning("loading plugins on project that has not been loaded completely")
         for module in self.modules.values():
             module.load_plugins()
 
@@ -625,7 +625,7 @@ class Project(ModuleLike):
             Collect the list of all requirements of all modules in the project.
         """
         if not self.loaded:
-            LOGGER.warn("collecting reqs on project that has not been loaded completely")
+            LOGGER.warning("collecting reqs on project that has not been loaded completely")
 
         specs = {}
         merge_specs(specs, self.requires())
@@ -839,7 +839,7 @@ class Module(ModuleLike):
             else:
                 hi = mid
         if hi == len(versions):
-            LOGGER.warn("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
+            LOGGER.warning("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
             return None
         return versions[lo]
 

@@ -94,7 +94,8 @@ def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: b
 
     def actual(f):
         myignore = set(ignore)
-        myargs = inspect.getargspec(f).args[1:]
+        sig = inspect.signature(f)
+        myargs = list(sig.parameters.keys())[1:]
 
         def wrapper(self, *args, **kwds):
 

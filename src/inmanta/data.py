@@ -369,7 +369,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
 
-        yield self._coll.update({"_id": self.id}, self.to_mongo())
+        yield self._coll.replace_one({"_id": self.id}, self.to_mongo())
 
     @gen.coroutine
     def update_fields(self, **kwargs):
@@ -382,7 +382,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             setattr(self, name, value)
             items[name] = self._value_to_dict(value)
 
-        yield self._coll.update({"_id": self.id}, {"$set": items})
+        yield self._coll.update_one({"_id": self.id}, {"$set": items})
 
     @classmethod
     @gen.coroutine
@@ -425,7 +425,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Delete this document
         """
-        yield self._coll.remove({"_id": self.id})
+        yield self._coll.delete_one({"_id": self.id})
 
     @gen.coroutine
     def delete_cascade(self):
@@ -883,7 +883,7 @@ class ResourceAction(BaseDocument):
         """
         query = {"environment": self.environment, "action_id": self.action_id}
         if len(self._updates) > 0:
-            yield ResourceAction._coll.update(query, self._updates)
+            yield ResourceAction._coll.update_one(query, self._updates)
             self._updates = {}
 
 
@@ -1211,8 +1211,8 @@ class ConfigurationModel(BaseDocument):
         """
         entry_uuid = uuid.uuid5(resource_uuid, resource_id)
         resource_key = "status.%s" % entry_uuid
-        yield cls._coll.update({"environment": environment, "version": version},
-                               {"$set": {resource_key: {"status": cls._value_to_dict(status), "id": resource_id}}})
+        yield cls._coll.update_one({"environment": environment, "version": version},
+                                   {"$set": {resource_key: {"status": cls._value_to_dict(status), "id": resource_id}}})
 
     @gen.coroutine
     def delete_cascade(self):
@@ -1284,7 +1284,7 @@ class DryRun(BaseDocument):
         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
         update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: cls._value_to_dict(dryrun_data)}}
 
-        yield cls._coll.update(query, update)
+        yield cls._coll.update_one(query, update)
 
     @classmethod
     @gen.coroutine
@@ -1358,11 +1358,11 @@ class SnapshotRestore(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self):
-        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
+        yield SnapshotRestore._coll.update_one({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
         self.resources_todo -= 1
 
         now = datetime.datetime.now()
-        result = yield SnapshotRestore._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        result = yield SnapshotRestore._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
         if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
             self.finished = now
 
@@ -1396,14 +1396,14 @@ class Snapshot(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self, size):
-        yield Snapshot._coll.update({"_id": self.id},
+        yield Snapshot._coll.update_one({"_id": self.id},
                                     {"$inc": {"resources_todo": int(-1), "total_size": size}})
         self.total_size += size
         self.resources_todo -= 1
 
         now = datetime.datetime.now()
-        result = yield Snapshot._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
+        result = yield Snapshot._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        if result.matched_count == 1 and result.modified_count == 1:
             self.finished = now
 
 
