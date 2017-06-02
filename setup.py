@@ -28,7 +28,6 @@ setup(
     author_email="code@inmanta.com",
     license="Apache Software License",
 
-    scripts=["bin/inmanta"],
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
@@ -37,7 +36,8 @@ setup(
 
     entry_points={
     'console_scripts': [
-        'inmanta-cli = inmanta.main:main'
+        'inmanta-cli = inmanta.main:main',
+        'inmanta = inmanta.app:app'
     ],
 },
 )
