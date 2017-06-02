@@ -746,7 +746,7 @@ def monitor_deploy(client, environment):
     last = done
     ident = first["version"]
 
-    with click.progressbar(label="version:%d" % ident, length=total, show_pos=True) as bar:
+    with click.progressbar(label="version:%d" % ident, length=total, show_pos=True, show_eta=False) as bar:
         bar.update(done)
         while done != total:
             if done != last:
