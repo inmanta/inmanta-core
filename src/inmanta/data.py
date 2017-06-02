@@ -1397,7 +1397,7 @@ class Snapshot(BaseDocument):
     @gen.coroutine
     def resource_updated(self, size):
         yield Snapshot._coll.update_one({"_id": self.id},
-                                    {"$inc": {"resources_todo": int(-1), "total_size": size}})
+                                        {"$inc": {"resources_todo": int(-1), "total_size": size}})
         self.total_size += size
         self.resources_todo -= 1
 

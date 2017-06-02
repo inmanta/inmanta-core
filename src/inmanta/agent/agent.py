@@ -829,12 +829,12 @@ class Agent(AgentEndPoint):
                        state: const.ResourceState, change: const.Change, changes: dict):
         if env != self._env_id:
             LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, tid unknown",
-                        env, agent, resource, state)
+                           env, agent, resource, state)
             return 200
 
         if agent not in self._instances:
             LOGGER.warning("received unexpected resource event: tid: %s, agent: %s, resource: %s, state: %s, agent unknown",
-                        env, agent, resource, state)
+                           env, agent, resource, state)
             return 200
 
         LOGGER.debug("Agent %s got a resource event: tid: %s, agent: %s, resource: %s, state: %s",
