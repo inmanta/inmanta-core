@@ -91,7 +91,7 @@ In this section we will use the configuration concepts defined in the existing m
 First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     import ip
@@ -182,7 +182,7 @@ A second virtual machine is easily added to the system by adding the definition
 of the virtual machine to the configuration model and assigning the MySQL server
 to the new virtual machine. Update ``main.cf`` to the following:
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     # define the machine we want to deploy Drupal on
@@ -320,7 +320,7 @@ Configuration model
 In ``lamp/model/_init.cf`` we define the configuration model that defines the *lamp*
 configuration module.
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     import ip
@@ -376,7 +376,7 @@ With our new LAMP module we can reduce the amount of required configuration code
 by using more *reusable* configuration code. Only three lines of site-specific configuration code are
 required.
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     import ip
