@@ -478,8 +478,17 @@ class Environment(BaseDocument):
     @gen.coroutine
     def delete_cascade(self):
         yield Agent.delete_all(environment=self.id)
+        yield AgentProcess.delete_all(environment=self.id)
+        yield AgentInstance.delete_all(environment=self.id)
         yield Compile.delete_all(environment=self.id)
-        yield ConfigurationModel.delete_all(environment=self.id)
+        models = yield ConfigurationModel.get_list(environment=self.id)
+        for model in models:
+            yield model.delete_cascade()
+
+        yield Parameter.delete_all(environment=self.id)
+        yield Form.delete_all(environment=self.id)
+        yield FormRecord.delete_all(environment=self.id)
+
         yield self.delete()
 
 
@@ -1217,7 +1226,9 @@ class ConfigurationModel(BaseDocument):
     @gen.coroutine
     def delete_cascade(self):
         yield Resource.delete_all(environment=self.environment, model=self.version)
-        yield Snapshot.delete_all(environment=self.environment, model=self.version)
+        snaps = yield Snapshot.get_list(environment=self.id)
+        for snap in snaps:
+            yield snap.delete_cascade()
         yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
         yield Code.delete_all(environment=self.environment, model=self.version)
         yield DryRun.delete_all(environment=self.environment, model=self.version)

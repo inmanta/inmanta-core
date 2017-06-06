@@ -1460,13 +1460,5 @@ class Server(protocol.ServerEndpoint):
         """
             Clear the environment
         """
-        yield data.Agent.delete_all(environment=env.id)
-        models = yield data.ConfigurationModel.get_list(environment=env.id)
-        for model in models:
-            yield model.delete_cascade()
-
-        yield data.Parameter.delete_all(environment=env.id)
-        yield data.Form.delete_all(environment=env.id)
-        yield data.FormRecord.delete_all(environment=env.id)
-        yield data.Compile.delete_all(environment=env.id)
+        yield env.delete_cascade()
         return 200
