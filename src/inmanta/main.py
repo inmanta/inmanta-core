@@ -30,6 +30,7 @@ from inmanta.config import Config, cmdline_rest_transport
 from tornado.ioloop import IOLoop
 import click
 import texttable
+from time import sleep
 
 
 class Client(object):
@@ -728,6 +729,37 @@ def record_delete(client, environment, record):
 
     client.do_request("delete_record", arguments=dict(tid=tid, id=record_id))
     return ((), ())
+
+
+@cmd.command(name="monitor")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def monitor_deploy(client, environment):
+    tid = client.to_environment_id(environment)
+
+    versions = client.do_request("list_versions", arguments=dict(tid=tid))
+    allversion = versions["versions"]
+    first = next(version for version in allversion if version["result"] != "pending")
+
+    total = first["total"]
+    done = first["done"]
+    last = done
+    ident = first["version"]
+
+    with click.progressbar(label="version:%d" % ident, length=total, show_pos=True, show_eta=False) as bar:
+        bar.update(done)
+        while done != total:
+            if done != last:
+                bar.update(done - last)
+                last = done
+            sleep(1)
+            version = client.do_request("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
+            done = version["model"]["done"]
+        if done != last:
+            bar.update(done - last)
+            last = done
+
+    click.echo("Complete: %s/%s" % (done, total))
 
 
 def main():
