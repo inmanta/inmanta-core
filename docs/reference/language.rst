@@ -72,7 +72,10 @@ Variable names must start with a lower case character and can consist of the cha
 A value can be assigned to a variable exactly once. The type of the variable is the type of the value.
 Assigning a value to the same variable twice will produce a compiler error, unless the values are identical.
 
-Variables from other modules can be referenced by prefixing them with the module name (or alias)::
+Variables from other modules can be referenced by prefixing them with the module name (or alias)
+
+
+.. code-block:: inmanta
 
     import redhat
     os = redhat::fedora23
@@ -82,7 +85,9 @@ Variables from other modules can be referenced by prefixing them with the module
 
 Literals values
 ==============================
-Literal values can be assigned to variables::
+Literal values can be assigned to variables
+
+.. code-block:: inmanta
 
     var1 = 1 # assign an integer, var1 contains now a number
     var2 = 3.14 # assign a float, var2 also contains a number
@@ -126,7 +131,9 @@ The name of the constrained primitive type must not collide with the name of a v
 
     typedef : 'typedef' ID 'as' PRIMITIVE 'matching' condition|regex;
 
-For example::
+For example
+
+.. code-block:: inmanta
 
     typedef tcp_port as number matching self > 0 and self < 65565
     typedef mac_addr as string matching /([0-9a-fA-F]{2})(:[0-9a-fA-F]{2}){5}$/
@@ -167,7 +174,9 @@ Each module can define plugins. Plugins can contribute functions to the module's
     arglist : value
             | arglist ',' value
 
-For example::
+For example
+
+.. code-block:: inmanta
 
     std::familyof(host.os, "rhel")
     a = param::one("region", "demo::forms::AWSForm")
@@ -203,7 +212,9 @@ The syntax for defining entities is:
 
     attribute: primitve_type ID ('=' literal)?;
 
-Defining entities in a configuration model::
+Defining entities in a configuration model
+
+.. code-block:: inmanta
 
     entity File:
        string path
@@ -213,7 +224,9 @@ Defining entities in a configuration model::
        dict things = {}
     end
 
-Default values can also be set using a type alias::
+Default values can also be set using a type alias
+
+.. code-block:: inmanta
 
     typedef PublicFile as File(mode = 0644)
 
@@ -224,29 +237,11 @@ A constructor call using a type alias will result in an instance of the base typ
 Relations
 =========
 
-A Relation is a bi-direction relation between two entities. Consistency of the double binding is maintained by the compiler: assignment to one side of the relation is an implicit assignment of the reverse relation.
+A Relation is a unidirectional or bidirectional relation between two entities. The consistency of a bidirectional double binding is maintained by the compiler: assignment to one side of the relation is an implicit assignment of the reverse relation.
 
 Relations are defined by specifying each end of the relation together with the multiplicity of each relation end. Each end of the relation is named and is maintained as a double binding by the compiler.
 
-Defining relations between entities in the domain model::
-
-    # Each config file belongs to one service.
-    # Each service can have one or more config files
-    File file [1:] -- [1] Service service
-
-    cf = ConfigFile()
-    service = Service()
-
-    cf.service = service
-    # implies service.configfile == cf
-
-Relation multiplicities are enforced by the compiler. If they are violated a compilation error
-is issued.
-
-New Relation syntax
-====================
-
-A new relation syntex is available, to give a more natural object oriented feeling.
+Defining relations between entities in the domain model
 
 .. code-block:: antlr
 
@@ -255,14 +250,14 @@ A new relation syntex is available, to give a more natural object oriented feeli
    annotation_list: value
            | annotation_list ',' value
 
-For example (as above)::
+For example a bidirectional relation:
+
+.. code-block:: inmanta
 
     File.service [1] -- Service.file [1:]
 
 
-.. warning:: The names and multiplicities are on the other side in the old and new syntax!
-
-In this new syntax, relations can also be unidirectional
+Or a unidirectional relation
 
 .. code-block:: antlr
 
@@ -270,9 +265,19 @@ In this new syntax, relations can also be unidirectional
            | class '.' ID multi annotation_list class;
 
 
-For example)::
+For example
+
+.. code-block:: inmanta
 
     Service.file [1:] -- File
+
+Relation multiplicities are enforced by the compiler. If they are violated a compilation error
+is issued.
+
+.. note:: 
+
+    In previous version another relation syntax was used that was less natural to read and allowed only bidirectional relations. The relation above was defined as ``File file [1:] -- [1] Service service``
+    This synax is deprecated but still widely used in many modules.
 
 
 .. _lang-instance:
@@ -280,16 +285,20 @@ For example)::
 Instantiation
 =============
 
-Instances of an entity are created with a constructor statement::
+Instances of an entity are created with a constructor statement
+
+.. code-block:: inmanta
 
     File(path="/etc/motd")
 
 A constructor can assign values to any of the properties (attributes or relations) of the entity. It can also leave the properties unassigned.
 For attributes with default values, the constructor is the only place where the defaults can be overridden.
 
-Values can be assigned to the remaining properties as if they are variables. To relations with a higher arity, multiple values can be assigned::
+Values can be assigned to the remaining properties as if they are variables. To relations with a higher arity, multiple values can be assigned
 
-    Host host [1] -- [0:] File files
+.. code-block:: inmanta
+
+    Host.files [0:] -- File.host [1]
 
     h1 = Host("test")
     f1 = File(host=h1, path="/opt/1")
@@ -298,7 +307,7 @@ Values can be assigned to the remaining properties as if they are variables. To 
 
     // h1.files equals [f1, f2, f3]
 
-    FileSet set [1] -- [0:] File files
+    FileSet.files [0:] -- File.set [1]
 
     s1 = FileSet()
     s1.files = [f1,f2]
@@ -317,7 +326,9 @@ Entities define what should be deployed.
 Entities can either be deployed directly (such as files and packages) or they can be refined.
 Refinement expands an abstract entity into one or more more concrete entities.
 
-For example, ``apache.Server`` is refined as follows::
+For example, ``apache.Server`` is refined as follows
+
+.. code-block:: inmanta
 
     implementation apacheServerDEB for Server:
         pkg = std::Package(host=host, name="apache2-mpm-worker", state="installed")
@@ -354,7 +365,6 @@ The syntax for implements and implementation is:
     implement: 'implement' class 'using' ID ('when' condition)?;
 
 
-
 Indexes and queries
 ===================
 
@@ -365,7 +375,9 @@ All identifying properties must be set in the constructor.
 
 Indices are inherited. i.e. all identifying properties of all parent types must be set in the constructor.
 
-Defining an index::
+Defining an index
+
+.. code-block:: inmanta
 
     entity Host:
         string  name
@@ -373,31 +385,37 @@ Defining an index::
 
     index Host(name)
 
-Explicit index lookup is performed with a query statement::
+Explicit index lookup is performed with a query statement
+
+.. code-block:: inmanta
 
     testhost = Host[name="test"]
     
-For indices on relations (instead of attributes) an alternative syntax can be used::
+For indices on relations (instead of attributes) an alternative syntax can be used
 
-	entity File:
-		string path
-	end
+.. code-block:: inmanta
+
+    entity File:
+        string path
+    end
 	
-	Host.files [0:] -- [1] File.host
+    Host.files [0:] -- File.host [1]
+
+    index File(host, path)
 	
-	index File(host, path)
-	
-	a = File[host=vm1, path="/etc/passwd"]  # normal index lookup
-	b = vm1.files[path="/etc/passwd"]  # selector style index lookup
-	# a == b
+    a = File[host=vm1, path="/etc/passwd"]  # normal index lookup
+    b = vm1.files[path="/etc/passwd"]  # selector style index lookup
+    # a == b
+
 
 For loop
 =========
 
-To iterate over the items of a list, a for loop can be used::
+To iterate over the items of a list, a for loop can be used
 
-    n_s = std::sequence(size, 1)
-    for i in n_s:
+.. code-block:: inmanta
+
+    for i in std::sequence(size, 1):
         app_vm = Host(name="app{{i}}")
     end
 
@@ -423,7 +441,9 @@ String interpolation allows variables to be include as parameters inside a strin
 
 The included variables are resolved in the lexical scope of the string they are included in.
 
-Interpolating strings::
+Interpolating strings
+
+.. code-block:: inmanta
 
     hostname = "serv1.example.org"
     motd = """Welcome to {{hostname}}\n"""
@@ -441,13 +461,17 @@ The integrated Jinja2 engine supports to the entire Jinja feature set, except fo
 available in the scope where the template is evaluated. However, the ``::`` in paths needs to be replaced with a
 ``.``. The result of the template is returned by the template function.
 
-Using a template to transform variables to a configuration file::
+Using a template to transform variables to a configuration file
+
+.. code-block:: inmanta
 
     hostname = "wwwserv1.example.com"
     admin = "joe@example.com"
     motd_content = std::template("motd/message.tmpl")
 
-The template used in the previous listing::
+The template used in the previous listing
+
+.. code-block:: inmanta
 
     Welcome to {{ hostname }}
     This machine is maintainted by {{ admin }}
@@ -458,82 +482,6 @@ The template used in the previous listing::
 Plug-ins
 ===========
 
-For more complex operations, python plugins can be used.
-Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
-accepts parameters and returns a value that it computed out of the variables.
-
-Each module that is
-included can also provide plug-ins. These plug-ins are accessible within the namespace of the
-module.
-
-To define a plugin, add a ``__init__.py`` file to the plugins directory.
-
-In this file, plugins can be define according to the following template::
-
-    from inmanta.plugins import plugin, Context
-    from inmanta.execute.util import Unknown
-    from inmanta.config import Config
-
-    @plugin
-    def example(ctx: Context, vm: "std::Host") -> "ip::ip":
-        # get compiler config
-        env = Config.get("config", "environment", None)
-
-        # use exceptions
-        if not env:
-            raise Exception("The environment of this model should be configured in config>environment")
-
-        # access compiler data via context
-        scrapspace = ctx.get_data_dir()
-
-        return "127.0.0.1"
-
-Plugins have to be decorated with @plugin to work.
-
-Arguments to the plugin have to be annotated with a type that is visible in the namespace of the module (or with ``any``).
-An argument of the type ``inmanta.plugins.Context`` can be used to get access to the internal state of the compiler.
-
-The ``inmanta.config.Config`` singleton can be used to get access to the configuration of the compiler.
-
-Often, plugins are used to collect information from external systems, such as for example, the IP of virtual machine. When the virtual machine has not been created yet, the IP is not known yet. To indicate that situation (where information is not available yet), the type ``Unknown`` is used.
-i.e. When the plugin is used to collect information from external systems, but this information is not available yet (but will be when the model deployment advances) then the plugin should return an instance of the type ``inmanta.execute.util.Unknown``.
-
-Resources
-============
-
-Resources are entities that can be deployed directly, such as ``std::File`` or ``std::Package``.
-
-Resource deployment has the following flow:
- 1. a model is compiled
- 2. all resources are identified and converted in serializeable form (``Resource`` object)
- 3. all resources (and their associated python files) are uploaded to the server
- 4. deploy is triggered
- 5. resources are deployed to the agents that are responsible for this resource
- 6. agents download the associated python code
- 7. agents deserialize the resources
- 8. agent execute the relevant handlers for the resources
-
-To create new types of resource, two python objects are required: the ``Resource`` and the ``Handler``.
-
-The resource convert a model object into a serializable form::
-
-    @resource("std::File", agent="host.name", id_attribute="path")
-    class File(Resource):
-        """
-            A file on a filesystem
-        """
-        fields = ("path", "owner", "hash", "group", "permissions", "purged", "reload")
-        map = {"hash": store_file, "permissions": lambda y, x: int(x.mode)}
-
-
-A resource is a subclass of ``inmanta.resources.Resource`` annotated with ``inmanta.resources.resource``. The annotation takes 3 parameters:
- * ``name``: the name of the entity to convert into a resource
- * ``agent``: the name of the agent that will deploy this resource. Often the name of the host on which the resource will be deployed.
- * ``id_attribute``: the attribute of the entity that uniquely distinguishes this instance from the others within its agent.
-
-The class has two class fields:
- * ``fields``: the list of fields to be serialized and sent to the agent
- * ``map``: a dict, providing functions to generate values for fields that do not directly correspond to a property of the entity.
-
-
-The handler is responsible for the actual deployment. For this, we refer to the examples available in the ``std`` module.
+For more complex operations, python plugins can be used. Plugins are exposed in the Inmanta language as function calls, such as the template function call. A template
+accepts parameters and returns a value that it computed out of the variables. Each module that is included can also provide plug-ins. These plug-ins are accessible within the namespace of the
+module. The :ref:`module-plugins` section of the module guid provides more details about how to write a plugin.

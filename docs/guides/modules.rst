@@ -138,6 +138,7 @@ install this dependencies with ``pip install`` in an virtual environment dedicat
 or agent. By default this is in `.env` of the project for the compiler and in
 `/var/lib/inmanta/agent/env` for the agent.
 
+.. _module-plugins:
 
 Plugins
 *******
