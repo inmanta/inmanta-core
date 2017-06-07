@@ -1096,13 +1096,18 @@ class Resource(BaseDocument):
         for deleted_resource in deleted:
             # get the full resource history, and determine the purge status of this resource
             cursor = cls._coll.find({"environment": environment, "model": {"$lt": current_version},
-                                     "resource_id": deleted_resource}).sort("model", pymongo.DESCENDING).limit(1)
-            yield cursor.fetch_next
-            obj = cursor.next_object()
+                                     "resource_id": deleted_resource}).sort("model", pymongo.DESCENDING)
 
-            # check filter cases
-            if obj["model"] in versions and not obj["attributes"]["purged"]:
-                should_purge.append(cls(from_mongo=True, **obj))
+            while (yield cursor.fetch_next):
+                obj = cursor.next_object()
+
+                # if a resource is part of a released version and it is deployed (this last condition is acutally enough
+                # at the moment), we have found the last status of the resource. If it was not purged in that version,
+                # add it to the should purge list.
+                if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
+                    if not obj["attributes"]["purged"]:
+                        should_purge.append(cls(from_mongo=True, **obj))
+                    break
 
         return should_purge
 
