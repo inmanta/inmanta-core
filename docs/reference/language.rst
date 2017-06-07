@@ -190,8 +190,10 @@ Entities model configuration concepts. They are like classes in other object ori
 
 Entity names must start with an upper case character and can consist of the characters: ``a-zA-Z_0-9-``
 
-Entities can have a number of attributes and relations to other entities.
-Entity attributes have primitive types, with an optional default value.
+Entities can have a number of attributes and relations to other entities. Entity attributes have primitive types, with an optional default value. An attribute has to have
+a value unless the nulable variant of the primitive type is used. An attribute that can be null uses a primitive type with a ``?`` such as ``string?``. A value can also be assigned
+only once to an attribute that can be null. To indicate that no value will be assigned, the literal ``null`` is available. ``null`` can also be the default value of an
+attribute.
 
 Entities can inherit from multiple other entities. Entities inherits attributes and relations from parent entities.
 All entities inherit from ``std::Entity``.
@@ -224,13 +226,7 @@ Defining entities in a configuration model
        dict things = {}
     end
 
-Default values can also be set using a type alias
 
-.. code-block:: inmanta
-
-    typedef PublicFile as File(mode = 0644)
-
-A constructor call using a type alias will result in an instance of the base type.
 
 .. _lang-relation:
 
