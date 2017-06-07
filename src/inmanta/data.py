@@ -1374,7 +1374,8 @@ class SnapshotRestore(BaseDocument):
 
         now = datetime.datetime.now()
         result = yield SnapshotRestore._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
+        if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
+            # modified_count is None for mongodb < 2.6
             self.finished = now
 
 
@@ -1414,7 +1415,8 @@ class Snapshot(BaseDocument):
 
         now = datetime.datetime.now()
         result = yield Snapshot._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if result.matched_count == 1 and result.modified_count == 1:
+        if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
+            # modified_count is None for mongodb < 2.6
             self.finished = now
 
 
