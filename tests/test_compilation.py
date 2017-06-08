@@ -29,13 +29,14 @@ from io import StringIO
 from inmanta.module import Project
 import inmanta.compiler as compiler
 from inmanta import config
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException,\
+    OptionalValueException
 from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.parser import ParserException
 import pytest
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, NoneValue
 from inmanta.export import DependencyCycleException
 from utils import assert_graph
 from conftest import SnippetCompilationTest
@@ -44,13 +45,17 @@ from inmanta.execute.proxy import UnsetException
 
 class CompilerBaseTest(object):
 
-    def __init__(self, name):
+    def __init__(self, name, mainfile=None):
         self.project_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", name)
         if not os.path.isdir(self.project_dir):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
+        self.mainfile = mainfile
 
     def setUp(self):
-        Project.set(Project(self.project_dir, autostd=False))
+        project = Project(self.project_dir, autostd=False)
+        if self.mainfile is not None:
+            project.main_file = self.mainfile
+        Project.set(project)
         self.state_dir = tempfile.mkdtemp()
         config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
@@ -1185,6 +1190,47 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
                 get_attribute("names").get_value() is not None)
 
 
+class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):  # noqa: H803
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_plugin_typing")
+
+    def test_compile(self):
+        (_, scopes) = compiler.do_compile()
+        root = scopes.get_child("__config__")
+
+        def verify(name):
+            c1a1 = root.lookup(name).get_value()
+            name = sorted([item.get_attribute("name").get_value() for item in c1a1])
+            assert name == ["t1", "t2", "t3"]
+
+        verify("c1a1")
+        verify("c1a2")
+
+        s1 = root.lookup("s1").get_value()
+        s2 = root.lookup("s2").get_value()
+
+        assert s2[0] == s1
+        assert isinstance(s2, list)
+        assert isinstance(s2[0], str)
+
+
+class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
+
+    def __init__(self, methodName='runTest'):  # noqa: H803
+        unittest.TestCase.__init__(self, methodName)
+        CompilerBaseTest.__init__(self, "compile_plugin_typing", "invalid.cf")
+
+    def test_compile(self):
+        with pytest.raises(RuntimeException) as e:
+            compiler.do_compile()
+        text = str(e.value)
+        print(text)
+        assert text.startswith("Exception in plugin test::badtype caused by Invalid type for value 'a'," +
+                               " should be type test::Item (reported in test::badtype(c1.items) (")
+
+
 def test_275_default_override(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
     entity A:
@@ -1266,6 +1312,81 @@ def test_275_duplicate_parent(snippetcompiler):
         compiler.do_compile()
 
 
+def test_null(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string? a = null
+        end
+        implement A using std::none
+        a = A()
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
+def test_null_unset(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string? a
+        end
+        implement A using std::none
+        a = A()
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    with pytest.raises(OptionalValueException):
+        root.lookup("a").get_value().get_attribute("a").get_value()
+
+
+def test_null_unset_hang(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+            entity A:
+                string? a
+            end
+            implement A using std::none
+            a = A()
+            b = a.a
+        """)
+    with pytest.raises(UnsetException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_null_on_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            string[]? a = null
+        end
+        implement A using std::none
+        a = A()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
+def test_null_on_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        entity A:
+            dict? a = null
+        end
+        implement A using std::none
+        a = A()
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value().get_attribute("a").get_value()
+    assert isinstance(a, NoneValue)
+
+
 def test_default_remove(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
     entity A:
@@ -1283,3 +1404,171 @@ def test_default_remove(snippetcompiler):
     """)
     with pytest.raises(UnsetException):
         compiler.do_compile()
+
+
+def test_emptylists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    implement std::Entity using std::none
+
+    a=std::Entity()
+    b=std::Entity()
+    c=std::Entity()
+
+    a.provides = b.provides
+    b.provides = c.provides
+    """)
+    compiler.do_compile()
+
+
+def test_doc_string_on_new_relation(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity File:
+end
+
+entity Host:
+end
+
+File.host [1] -- Host
+\"""
+Each file needs to be associated with a host
+\"""
+""")
+    (types, _) = compiler.do_compile()
+    assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_relation(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity File:
+end
+
+entity Host:
+end
+
+File file [1] -- [0:] Host host
+\"""
+Each file needs to be associated with a host
+\"""
+""")
+    (types, _) = compiler.do_compile()
+    assert types["__config__::File"].get_attribute("host").comment.strip() == "Each file needs to be associated with a host"
+    assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_typedef(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+typedef foo as string matching /^a+$/
+\"""
+    Foo is a stringtype that only allows "a"
+\"""
+""")
+    (types, _) = compiler.do_compile()
+    assert types["__config__::foo"].comment.strip() == "Foo is a stringtype that only allows \"a\""
+
+
+def test_doc_string_on_typedefault(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity File:
+    number x
+end
+
+typedef Foo as File(x=5)
+\"""
+    Foo is a stringtype that only allows "a"
+\"""
+""")
+    (types, _) = compiler.do_compile()
+    assert types["__config__::Foo"].comment.strip() == "Foo is a stringtype that only allows \"a\""
+
+
+def test_doc_string_on_impl(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Host:
+end
+
+implementation test for Host:
+    \"""
+        Bla bla
+    \"""
+end
+""")
+
+    (types, _) = compiler.do_compile()
+    assert types["__config__::Host"].implementations[0].comment.strip() == "Bla bla"
+
+
+def test_doc_string_on_implements(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Host:
+end
+
+implementation test for Host:
+end
+
+implement Host using test
+\"""
+    Always use test!
+\"""
+""")
+    (types, _) = compiler.do_compile()
+
+    assert types["__config__::Host"].implements[0].comment.strip() == "Always use test!"
+
+
+def test_400_typeloops(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity Test extends Test:
+
+    end
+    """)
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_400_typeloops_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity Test extends Test2:
+
+    end
+
+    entity Test2 extends Test:
+
+    end
+    """)
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_394_short_index(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""implementation none for std::Entity:
+
+end
+
+entity Host:
+    string name
+    string blurp
+end
+
+entity File:
+    string name
+end
+
+implement Host using none
+implement File using none
+
+Host host [1] -- [0:] File files
+
+index Host(name)
+index File(host, name)
+
+h1 = Host(name="h1", blurp="blurp1")
+f1h1=File(host=h1,name="f1")
+f2h1=File(host=h1,name="f2")
+
+z = h1.files[name="f1"]
+""")
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    z = root.lookup("z").get_value()
+    f1h1 = root.lookup("f1h1").get_value()
+    assert z is f1h1

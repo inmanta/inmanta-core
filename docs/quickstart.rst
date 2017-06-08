@@ -13,7 +13,8 @@ Then, we use Inmanta to install Drupal on these VMs.
 Setting up the tutorial
 _________________________
 
-To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_.
+To quickly get started with Inmanta, use Vagrant to set up an environment to host the Inmanta server and some machines to be
+managed. Before starting this tutorial, first `install vagrant on your machine <https://www.vagrantup.com/docs/installation/>`_.
 
 
 Next, grab the Vagrant box from our Git repo and let Vagrant do the setup of the Inmanta server.
@@ -51,8 +52,6 @@ _______________________________
 
 At this point, you can go through the quickstart guide in two ways: via the dashboard or via the command line interface.
 For the CLI, go to the next section. For the Dashboard, go to :ref:`qsdashboard`.
-
-
 
 .. _cli:
 
@@ -92,18 +91,19 @@ In this section we will use the configuration concepts defined in the existing m
 First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
 
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     import ip
     import redhat
+    import redhat::epel
     import apache
     import mysql
     import web
     import drupal
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -182,12 +182,12 @@ A second virtual machine is easily added to the system by adding the definition
 of the virtual machine to the configuration model and assigning the MySQL server
 to the new virtual machine. Update ``main.cf`` to the following:
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
-    vm2=ip::Host(name="vm2", os=redhat::fedora23, ip="192.168.33.102")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101")
+    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="192.168.33.102")
 
     # add a mysql and apache http server
     web_server=apache::Server(host=vm1)
@@ -246,7 +246,7 @@ Using the dashboard
     * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server.
     * It will automatically install the required software and configure it properly.
 
-#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/install.php <http://localhost:8080/install.php>`_.
+#. When the deployment is done, you can find your freshly deployed Drupal instance at `http://localhost:8080/ <http://localhost:8080/>`_.
 
 
 Create your own modules
@@ -320,7 +320,7 @@ Configuration model
 In ``lamp/model/_init.cf`` we define the configuration model that defines the *lamp*
 configuration module.
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     import ip
@@ -376,16 +376,17 @@ With our new LAMP module we can reduce the amount of required configuration code
 by using more *reusable* configuration code. Only three lines of site-specific configuration code are
 required.
 
-.. code-block:: ruby
+.. code-block:: inmanta
     :linenos:
 
     import ip
     import redhat
+    import redhat::epel
     import lamp
 
     # define the machine we want to deploy Drupal on
-    vm1=ip::Host(name="vm1", os=redhat::fedora23, ip="192.168.33.101")
-    vm2=ip::Host(name="vm2", os=redhat::fedora23, ip="192.168.33.102")
+    vm1=ip::Host(name="vm1", os=redhat::centos7, ip="192.168.33.101")
+    vm2=ip::Host(name="vm2", os=redhat::centos7, ip="192.168.33.102")
 
     lamp::DrupalStack(webhost=vm1, mysqlhost=vm2, hostname="localhost", admin_user="admin",
                       admin_password="test", admin_email="admin@example.com", site_name="localhost")

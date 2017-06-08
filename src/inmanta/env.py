@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -172,6 +172,7 @@ class VirtualEnv(object):
             fd.close()
 
             cmd = [self.virtual_pip, "install", "-r", path]
+            output = b""
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except Exception:

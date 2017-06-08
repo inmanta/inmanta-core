@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -29,12 +29,13 @@ from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineI
     DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
 from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict
+from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
 from inmanta.ast.variables import Reference, AttributeReference
 from inmanta.parser import plyInmantaLex, ParserException
 from inmanta.ast.blocks import BasicBlock
 import re
 import logging
+from inmanta.execute.util import NoneValue
 
 
 LOGGER = logging.getLogger()
@@ -114,6 +115,15 @@ def p_stmt(p):
     p[0] = p[1]
 
 
+# def p_stmt_err(p):
+#     '''statement : list_def
+#               | map_def
+#               | var_ref
+#               | index_lookup'''
+#     raise ParserException(file, p[1].location.lnr, lexer.lexpos, "",
+#                           msg="expressions are not valid statements, assign this value to a variable to fix this error")
+
+
 def p_stmt_list_collect(p):
     """stmt_list : statement stmt_list"""
     v = p[2]
@@ -133,8 +143,8 @@ def p_assign(p):
 
 
 def p_for(p):
-    "for : FOR ID IN operand implementation"
-    p[0] = For(p[4], p[2], BasicBlock(namespace, p[5]))
+    "for : FOR ID IN operand ':' block"
+    p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))
     attach_lnr(p, 1)
 #######################
 # DEFINITIONS
@@ -184,40 +194,74 @@ def p_entity_body(p):
     p[0] = [p[1]]
 
 
+def p_attribute_type(p):
+    '''attr_type : ns_ref'''
+    p[0] = (p[1], False)
+
+
+def p_attribute_type_opt(p):
+    "attr_type : ns_ref '?'"
+    p[0] = (p[1], True)
+
+
 def p_attr(p):
-    "attr : ns_ref ID"
-    p[0] = DefineAttribute(p[1], p[2], None)
+    "attr : attr_type ID"
+    (attr, nullable) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, nullable=nullable)
     attach_lnr(p, 2)
 
 
 def p_attr_cte(p):
-    "attr : ns_ref ID '=' constant"
-    p[0] = DefineAttribute(p[1], p[2], p[4])
+    "attr : attr_type ID '=' constant"
+    (attr, nullable) = p[1]
+    p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
     attach_lnr(p, 2)
 
 
 def p_attr_undef(p):
-    "attr : ns_ref ID '=' UNDEF"
-    p[0] = DefineAttribute(p[1], p[2], None, remove_default=True)
+    "attr : attr_type ID '=' UNDEF"
+    (attr, nullable) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, remove_default=True, nullable=nullable)
     attach_lnr(p, 2)
+
+
+def p_attribute_type_multi(p):
+    "attr_type_multi : ns_ref '[' ']'"
+    p[0] = (p[1], False, Location(file, p.lineno(1)))
+
+
+def p_attribute_type_multi_opt(p):
+    "attr_type_multi : ns_ref '[' ']' '?'"
+    p[0] = (p[1], True, Location(file, p.lineno(1)))
 
 
 def p_attr_list(p):
-    "attr : ns_ref '[' ']' ID"
-    p[0] = DefineAttribute(p[1], p[4], None, True)
-    attach_lnr(p, 4)
+    "attr : attr_type_multi ID"
+    (attr, nullable, location) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, True, nullable=nullable)
+    p[0].location = location
+    p[0].namespace = namespace
 
 
 def p_attr_list_cte(p):
-    "attr : ns_ref '[' ']' ID '=' constant_list"
-    p[0] = DefineAttribute(p[1], p[4], p[6], True)
-    attach_lnr(p, 2)
+    "attr : attr_type_multi ID '=' constant_list"
+    (attr, nullable, _) = p[1]
+    p[0] = DefineAttribute(attr, p[2], p[4], True, nullable=nullable)
+    attach_lnr(p, 3)
 
 
 def p_attr_list_undef(p):
-    "attr : ns_ref '[' ']' ID '=' UNDEF"
-    p[0] = DefineAttribute(p[1], p[4], None, True, remove_default=True)
-    attach_lnr(p, 2)
+    "attr : attr_type_multi ID '=' UNDEF"
+    (attr, nullable, _) = p[1]
+    p[0] = DefineAttribute(attr, p[2], None, True, remove_default=True, nullable=nullable)
+    attach_lnr(p, 3)
+
+
+def p_attr_list_null(p):
+    "attr : attr_type_multi ID '=' NULL"
+    (attr, nullable, _) = p[1]
+    p[0] = DefineAttribute(attr, p[2], Literal(NoneValue()), True, nullable=nullable)
+    attach_lnr(p, 3)
 
 
 def p_attr_dict(p):
@@ -229,6 +273,18 @@ def p_attr_dict(p):
 def p_attr_list_dict(p):
     "attr : DICT ID '=' map_def"
     p[0] = DefineAttribute("dict", p[2], p[4])
+    attach_lnr(p, 1)
+
+
+def p_attr_dict_nullable(p):
+    "attr : DICT '?' ID"
+    p[0] = DefineAttribute("dict", p[3], None, nullable=True)
+    attach_lnr(p, 1)
+
+
+def p_attr_list_dict_nullable(p):
+    "attr : DICT '?'  ID '=' map_def"
+    p[0] = DefineAttribute("dict", p[3], p[5], nullable=True)
     attach_lnr(p, 1)
 
 # IMPLEMENT
@@ -245,12 +301,26 @@ def p_implement_when(p):
     p[0] = DefineImplement(p[2], p[4], p[6])
     attach_lnr(p)
 
+
+def p_implement_comment(p):
+    "implement_def : IMPLEMENT class_ref USING ns_list mls"
+    p[0] = DefineImplement(p[2], p[4], Literal(True), comment=p[5])
+    attach_lnr(p)
+
+
+def p_implement_when_comment(p):
+    "implement_def : IMPLEMENT class_ref USING ns_list WHEN condition mls"
+    p[0] = DefineImplement(p[2], p[4], p[6], comment=p[7])
+    attach_lnr(p)
+
+
 # IMPLEMENTATION
 
 
 def p_implementation_def(p):
     "implementation_def : IMPLEMENTATION ID FOR class_ref implementation"
-    p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, p[5]))
+    docstr, stmts = p[5]
+    p[0] = DefineImplementation(namespace, p[2], p[4], BasicBlock(namespace, stmts), docstr)
     attach_lnr(p)
 
 
@@ -259,19 +329,23 @@ def p_implementation_def(p):
 #     p[0] = DefineImplementation(namespace, p[2], None, BasicBlock(namespace, p[3]))
 #     attach_lnr(p)
 
-
 def p_implementation(p):
-    "implementation : ':' mls stmt_list END"
-    p[0] = p[3]
+    "implementation : ':' mls block"
+    p[0] = (p[2], p[3])
 
 
 def p_implementation_1(p):
-    "implementation : ':' stmt_list END"
-    p[0] = p[2]
+    "implementation : ':' block"
+    p[0] = (None, p[2])
 
 
-def p_implementation_2(p):
-    "implementation : ':' END"
+def p_block(p):
+    "block : stmt_list END"
+    p[0] = p[1]
+
+
+def p_block_empty(p):
+    "block : END"
     p[0] = []
 
 # RELATION
@@ -286,26 +360,49 @@ def p_relation(p):
     attach_lnr(p, 2)
 
 
+def p_relation_comment(p):
+    "relation : class_ref ID multi REL multi class_ref ID mls"
+    if not(p[4] == '--'):
+        LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
+                       (p[4], Location(file, p.lineno(4))))
+    rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
+    rel.comment = p[8]
+    p[0] = rel
+    attach_lnr(p, 2)
+
+
+def p_relation_new_outer_comment(p):
+    "relation : relationnew mls"
+    rel = p[1]
+    rel.comment = p[2]
+    p[0] = rel
+
+
+def p_relation_new_outer(p):
+    "relation : relationnew"
+    p[0] = p[1]
+
+
 def p_relation_new(p):
-    "relation : class_ref '.' ID multi REL class_ref '.' ID multi"
+    "relationnew : class_ref '.' ID multi REL class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
 def p_relation_new_unidir(p):
-    "relation : class_ref '.' ID multi REL class_ref"
+    "relationnew : class_ref '.' ID multi REL class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]))
     attach_lnr(p, 2)
 
 
 def p_relation_new_annotated(p):
-    "relation : class_ref '.' ID multi operand_list class_ref '.' ID multi"
+    "relationnew : class_ref '.' ID multi operand_list class_ref '.' ID multi"
     p[0] = DefineRelation((p[1], p[8], p[9]), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
 
 def p_relation_new_annotated_unidir(p):
-    "relation : class_ref '.' ID multi operand_list class_ref"
+    "relationnew : class_ref '.' ID multi operand_list class_ref"
     p[0] = DefineRelation((p[1], None, None), (p[6], p[3], p[4]), p[5])
     attach_lnr(p, 2)
 
@@ -332,15 +429,27 @@ def p_multi_4(p):
 # typedef
 
 
+def p_typedef_outer(p):
+    """typedef : typedef_inner"""
+    p[0] = p[1]
+
+
+def p_typedef_outer_comment(p):
+    """typedef : typedef_inner mls"""
+    tdef = p[1]
+    tdef.comment = p[2]
+    p[0] = tdef
+
+
 def p_typedef_1(p):
-    """typedef : TYPEDEF ID AS ns_ref MATCHING REGEX
+    """typedef_inner : TYPEDEF ID AS ns_ref MATCHING REGEX
                 | TYPEDEF ID AS ns_ref MATCHING condition"""
     p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
     attach_lnr(p)
 
 
 def p_typedef_cls(p):
-    """typedef : TYPEDEF CID AS constructor"""
+    """typedef_inner : TYPEDEF CID AS constructor"""
     p[0] = DefineTypeDefault(namespace, p[2], p[4])
     attach_lnr(p)
 # index
@@ -474,9 +583,22 @@ def p_map_def_empty(p):
     attach_lnr(p, 1)
 
 
+def p_map_def_null(p):
+    " map_def : NULL"
+    p[0] = Literal(NoneValue())
+    attach_lnr(p, 1)
+
+
 def p_index_lookup(p):
     " index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3])
+    attach_lnr(p, 2)
+
+
+def p_short_index_lookup(p):
+    " index_lookup : attr_ref '[' param_list ']'"
+    attref = p[1]
+    p[0] = ShortIndexLookup(attref.instance, attref.attribute, p[3])
     attach_lnr(p, 2)
 #######################
 # HELPERS
@@ -488,6 +610,13 @@ def p_constant(p):
     | mls
     """
     p[0] = Literal(p[1])
+    attach_lnr(p)
+
+
+def p_constant_none(p):
+    """ constant : NULL
+    """
+    p[0] = Literal(NoneValue())
     attach_lnr(p)
 
 
@@ -607,7 +736,12 @@ def p_ns_list_term(p):
 
 
 def p_var_ref(p):
-    "var_ref : var_ref '.' ID"
+    "var_ref : attr_ref"
+    p[0] = p[1]
+
+
+def p_attr_ref(p):
+    "attr_ref : var_ref '.' ID"
     p[0] = AttributeReference(p[1], p[3])
     attach_lnr(p, 2)
 
@@ -670,7 +804,7 @@ def p_mls_term(p):
 
 def p_mls_collect(p):
     "mls : MLS mls"
-    p[0] = "%s\n%s" % (p[1], p[2])
+    p[0] = "%s%s" % (p[1], p[2])
     # attach_lnr_for_parser(p)
 
 
@@ -699,14 +833,18 @@ def myparse(ns, tfile, content):
                 data = myfile.read()
                 if len(data) == 0:
                     return []
+                # prevent problems with EOF
+                data = data + "\n"
                 lexer.lineno = 1
                 return parser.parse(data, lexer=lexer, debug=False)
         else:
             data = content
             if len(data) == 0:
                 return []
+            # prevent problems with EOF
+            data = data + "\n"
             lexer.lineno = 1
-            return parser.parse(content, lexer=lexer, debug=False)
+            return parser.parse(data, lexer=lexer, debug=False)
     except ParserException as e:
         e.findCollumn(data)
         e.location.file = tfile

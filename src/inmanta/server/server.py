@@ -227,16 +227,20 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.ParameterMethod.get_param, param_id="id", env="tid")
     @gen.coroutine
     def get_param(self, env, param_id, resource_id=None):
-        params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
+        if resource_id is None:
+            params = yield data.Parameter.get_list(environment=env.id, name=param_id)
+        else:
+            params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
-        if len(params) == 0:
+        if len(params) == 0 and resource_id is not None:
             out = yield self.agentmanager._request_parameter(env.id, resource_id)
             return out
 
         param = params[0]
+
         # check if it was expired
         now = datetime.datetime.now()
-        if (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
+        if resource_id is None or (param.updated + datetime.timedelta(0, self._fact_expire)) > now:
             return 200, {"parameter": params[0]}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
@@ -639,18 +643,17 @@ class Server(protocol.ServerEndpoint):
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.Resource.get_resources_for_version(env.id, version_id)
+        resources = yield data.Resource.get_resources_for_version(env.id, version_id, include_attributes=True, no_obj=True)
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
         d = {"model": version}
 
         d["resources"] = []
-        for res in resources:
-            res_dict = res.to_dict()
-
+        for res_dict in resources:
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(env.id, res.resource_version_id, log_filter, limit)
+                res_dict["actions"] = yield data.ResourceAction.get_log(env.id, res_dict["resource_version_id"],
+                                                                        log_filter, limit)
 
             d["resources"].append(res_dict)
 
@@ -1457,13 +1460,5 @@ class Server(protocol.ServerEndpoint):
         """
             Clear the environment
         """
-        yield data.Agent.delete_all(environment=env.id)
-        models = yield data.ConfigurationModel.get_list()
-        for model in models:
-            yield model.delete_cascade()
-
-        yield data.Parameter.delete_all(environment=env.id)
-        yield data.Form.delete_all(environment=env.id)
-        yield data.FormRecord.delete_all(environment=env.id)
-        yield data.Compile.delete_all(environment=env.id)
+        yield env.delete_cascade(only_content=True)
         return 200

@@ -1,81 +1,50 @@
 # Use release 0 for prerelease version.
 %define release 0
-%define version 2017.1
+%define version 2017.2
+%define venv %{buildroot}/opt/inmanta
+%define _p3 %{venv}/bin/python3
 
 %define sourceversion %{version}%{?buildid}
 
-%{?scl:%scl_package python-colorlog}
-%{!?scl:%global pkg_name %{name}}
-
-Name:           %{?scl_prefix}python%{?!scl:3}-inmanta
+Name:           python3-inmanta
 Version:        %{version}
 
 Release:        %{release}%{?buildid}%{?tag}%{?dist}
-Summary:        Inmanta configuration management tool
+Summary:        Inmanta automation and orchestration tool
 
 Group:          Development/Languages
 License:        LGPLv2+
 URL:            http://inmanta.com
 Source0:        inmanta-%{sourceversion}.tar.gz
+Source1:        deps-%{sourceversion}.tar.gz
+Source2:        inmanta-dashboard-%{sourceversion}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildArch:      noarch
-%{?scl:Requires: %scl_runtime}
-
-%if 0%{?scl:1}
-BuildRequires:  scl-utils-build
-BuildRequires:  %scl_require_package rh-python34 python-devel
-BuildRequires:  %scl_require_package rh-python34 python-setuptools
-BuildRequires:  %scl_require_package rh-python34 python-ply
-BuildRequires:  %scl_require_package rh-python34 python-sphinx
-
-Requires:       %scl_require_package rh-python34 runtime
-Requires:       %scl_require_package rh-python34 python-tornado
-Requires:       %scl_require_package rh-python34 python-dateutil
-Requires:       %scl_require_package rh-python34 python-execnet
-Requires:       %scl_require_package rh-python34 python-colorlog
-Requires:       %scl_require_package rh-python34 python-ply
-Requires:       %scl_require_package rh-python34 python-PyYAML
-Requires:       %scl_require_package rh-python34 python-virtualenv
-Requires:       %scl_require_package rh-python34 python-pymongo
-Requires:       %scl_require_package rh-python34 python-motorengine
-Requires:       %scl_require_package rh-python34 python-ruamel-yaml
-%else
-BuildRequires:  python3-devel
-BuildRequires:  python3-setuptools
-BuildRequires:  python3-ply
-BuildRequires:  python3-sphinx
-
-Requires:       python3
-Requires:       python3-tornado
-Requires:       python3-dateutil
-Requires:       python3-execnet
-Requires:       python3-colorlog
-Requires:       python3-ply
-Requires:       python3-PyYAML
-Requires:       python3-virtualenv
-Requires:       python-virtualenv
-Requires:       python3-pymongo = 2.7.2
-Requires:       python3-motorengine
-Requires:       python3-devel
-Requires:       python3-cliff
-Requires:       python3-blessings
-Requires:       python3-ruamel-yaml
-%endif
-
 BuildRequires:  systemd
+BuildRequires:  sed
 
 Requires:       git
 Requires(pre):  shadow-utils
-Obsoletes:      %{?scl_prefix}python%{?!scl:3}-impera
+
+%if 0%{?rhel}
+BuildRequires:  python34-devel
+BuildRequires:  python34-pip
+BuildRequires:  curl
+Requires:       python34
+%define __python3 /usr/bin/python3
+%else
+BuildRequires:  python3-devel
+BuildRequires:  python3-pip
+Requires:       python3
+%endif
 
 %package server
 Summary:        The configuration and service files to start the Inmanta server
-Requires:       %{?scl_prefix}python%{?!scl:3}-inmanta
+Requires:       python3-inmanta
 
 %package agent
 Summary:        The configuration and service files to start the Inmanta agent
-Requires:       %{?scl_prefix}python%{?!scl:3}-inmanta
+Requires:       python3-inmanta
 
 %description
 
@@ -85,32 +54,57 @@ Requires:       %{?scl_prefix}python%{?!scl:3}-inmanta
 
 %prep
 %setup -q -n inmanta-%{sourceversion}
+%setup -T -D -a 1 -n inmanta-%{sourceversion}
+%setup -T -D -a 2 -n inmanta-%{sourceversion}
 
 %build
-%{?scl:scl enable %{scl} "}
-PYTHONPATH=src %{__python3} src/inmanta/parser/plyInmantaParser.py
-%{__python3} setup.py build
-%{?scl:"}
 
 %install
 rm -rf %{buildroot}
-%{?scl:scl enable %{scl} "}
-%{__python3} setup.py install -O1 --skip-build --root %{buildroot}
-%{?scl:"}
+mkdir -p %{buildroot}/opt/inmanta
+%if 0%{?rhel}
+# venv is broken in epel, install pip manually
+%{__python3} -m venv --without-pip %{venv}
+curl https://bootstrap.pypa.io/get-pip.py | %{_p3}
+rm %{buildroot}/opt/inmanta/pip-selfcheck.json
+%else
+%{__python3} -m venv %{venv}
+%endif
+%{_p3} -m pip install -U --no-index --find-links deps-%{sourceversion} wheel setuptools virtualenv pip
+%{_p3} -m pip install --no-index --find-links deps-%{sourceversion} inmanta
+%{_p3} -m inmanta.app
+
+# Use the correct python for bycompiling
+%define __python %{_p3}
+
+# Fix shebang
+sed -i "s|%{buildroot}||g" %{venv}/bin/*
+find %{venv} -name RECORD | xargs sed -i "s|%{buildroot}||g"
+
+# Put symlinks
+mkdir -p %{buildroot}%{_bindir}
+ln -s /opt/inmanta/bin/inmanta %{buildroot}%{_bindir}/inmanta
+ln -s /opt/inmanta/bin/inmanta-cli %{buildroot}%{_bindir}/inmanta-cli
+
+# Additional dirs and config
 chmod -x LICENSE
 mkdir -p %{buildroot}%{_localstatedir}/lib/inmanta
 mkdir -p %{buildroot}/etc/inmanta
 mkdir -p %{buildroot}/var/log/inmanta
 install -p -m 644 misc/inmanta.cfg %{buildroot}/etc/inmanta.cfg
 
+# Setup systemd
 mkdir -p %{buildroot}%{_unitdir}
-%if 0%{?scl:1}
-install -p -m 644 misc/inmanta-agent-scl.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-agent.service
-install -p -m 644 misc/inmanta-server-scl.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-server.service
-%else
 install -p -m 644 misc/inmanta-agent.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-agent.service
 install -p -m 644 misc/inmanta-server.service $RPM_BUILD_ROOT%{_unitdir}/inmanta-server.service
-%endif
+
+# Install the dashboard
+cp -a dist %{venv}/dashboard
+cat > %{buildroot}/etc/inmanta/server.cfg <<EOF
+[dashboard]
+enabled=true
+path=/opt/inmanta/dashboard
+EOF
 
 %clean
 rm -rf %{buildroot}
@@ -118,16 +112,20 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %doc LICENSE docs/*
-%{python3_sitelib}/inmanta-%{sourceversion}-py*.egg-info
-%{python3_sitelib}/inmanta
+/opt/inmanta/bin
+/opt/inmanta/lib
+/opt/inmanta/lib64
+/opt/inmanta/include
+/opt/inmanta/pyvenv.cfg
 %{_bindir}/inmanta
 %{_bindir}/inmanta-cli
 %attr(-, inmanta, inmanta) %{_localstatedir}/lib/inmanta
 %config %attr(-, root, root) /etc/inmanta.cfg
 %attr(-, inmanta, inmanta) /var/log/inmanta
-%attr(-, root, root)/etc/inmanta
+%config %attr(-, root, root)/etc/inmanta
 
 %files server
+/opt/inmanta/dashboard
 %attr(-,root,root) %{_unitdir}/inmanta-server.service
 
 %files agent

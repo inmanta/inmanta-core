@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException
-from inmanta.execute.util import Unknown
+from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException
+from inmanta.execute.util import AnyType, NoneValue
 
 
 class BasicResolver(object):
@@ -64,7 +64,7 @@ class CastException(Exception):
     """
 
 
-class Type(object):
+class Type(Locatable):
     """
         This class is the base class for all types that represent basic data.
         These are types that are not relations.
@@ -98,6 +98,39 @@ class Type(object):
         pass
 
 
+class NamedType(Type, Named):
+
+    def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
+        """produce a customized error message for this type"""
+        raise NotImplementedError()
+
+
+class NullableType(Type):
+
+    def __init__(self, basetype):
+        Type.__init__(self)
+        self.basetype = basetype
+
+    def cast(self, value):
+        """
+            Cast the value to the basetype of this constraint
+        """
+        return self.basetype.cast(value)
+
+    def validate(self, value):
+        """
+            Validate the given value to check if it satisfies the constraint and
+            the basetype.
+        """
+        if isinstance(value, NoneValue):
+            return True
+
+        return self.basetype.validate(value)
+
+    def __str__(self):
+        return "%s?" % (self.basetype)
+
+
 class Number(Type):
     """
         This class represents an integer or float in the configuration model. On
@@ -115,6 +148,9 @@ class Number(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
+
         try:
             float(value)
         except TypeError:
@@ -167,6 +203,8 @@ class Bool(Type):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
         if isinstance(value, bool):
             return True
         else:
@@ -215,7 +253,7 @@ class String(Type, str):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
         if not isinstance(value, str):
             raise RuntimeException(None, "Invalid value '%s', expected String" % value)
@@ -244,14 +282,14 @@ class TypedList(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
 
         if value is None:
             return True
 
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
 
         for x in value:
             self.basetype.validate(x)
@@ -289,8 +327,11 @@ class List(Type, list):
         if value is None:
             return True
 
+        if isinstance(value, AnyType):
+            return True
+
         if not isinstance(value, list):
-            raise RuntimeException(None, "Invalid value '%s' expected list" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected list" % value)
 
         return True
 
@@ -323,11 +364,14 @@ class Dict(Type, dict):
             Validate the given value to check if it satisfies the constraints
             associated with this type
         """
+        if isinstance(value, AnyType):
+            return True
+
         if value is None:
             return True
 
         if not isinstance(value, dict):
-            raise RuntimeException(None, "Invalid value '%s' expected dict" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
 
         return True
 
@@ -344,13 +388,14 @@ class ConstraintType(Type):
         The constraint on this type is defined by a regular expression.
     """
 
-    def __init__(self, name):
+    def __init__(self, namespace, name):
         Type.__init__(self)
 
         self.basetype = None  # : ConstrainableType
         self._constraint = None
         self.name = name
-        self.namespace = None
+        self.namespace = namespace
+        self.comment = None
 
     def set_constraint(self, expression):
         """
@@ -380,7 +425,7 @@ class ConstraintType(Type):
             Validate the given value to check if it satisfies the constraint and
             the basetype.
         """
-        if isinstance(value, Unknown):
+        if isinstance(value, AnyType):
             return True
 
         self.basetype.validate(value)

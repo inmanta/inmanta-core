@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -20,9 +20,10 @@ from abc import ABCMeta, abstractmethod
 import re
 
 from inmanta.ast.statements import ReferenceStatement, Literal
-from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit
+from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, RawUnit, Resolver, QueueScheduler
 from inmanta.ast.type import Bool, create_function
-from inmanta.ast.variables import IsDefinedReferenceHelper
+from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
+from typing import Dict
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -31,7 +32,7 @@ class InvalidNumberOfArgumentsException(Exception):
         to an operator.
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: str) -> None:
         Exception.__init__(self, msg)
 
 
@@ -41,7 +42,7 @@ class UnboundVariableException(Exception):
         variables have been resolved
     """
 
-    def __init__(self, msg):
+    def __init__(self, msg: str) -> None:
         Exception.__init__(self, msg)
 
 
@@ -61,12 +62,12 @@ class OpMetaClass(ABCMeta):
 
 class IsDefined(ReferenceStatement):
 
-    def __init__(self, attr, name):
+    def __init__(self, attr: Reference, name: str) -> None:
         super(IsDefined, self).__init__([attr])
         self.attr = attr.root_in_self()
         self.name = name
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # introduce temp variable to contain the eventual result of this stmt
         temp = ResultVariable()
         temp.set_provider(self)
@@ -78,9 +79,16 @@ class IsDefined(ReferenceStatement):
         RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
         return {self: temp}
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
+
+    def pretty_print(self) -> str:
+        name = "%s.%s is defined" % (self.attr, self.name)
+        if name[:len("self.")] == "self.":
+            name = name[len("self."):]
+
+        return "%s is defined" % name
 
 
 class Operator(ReferenceStatement, metaclass=OpMetaClass):
@@ -113,11 +121,20 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         ReferenceStatement.__init__(self, self._arguments)
         self.__name = name
 
+    def get_name(self):
+        return self.__name
+
     def execute(self, requires, resolver, queue):
         return self._op([x.execute(requires, resolver, queue) for x in self._arguments])
 
     def execute_direct(self, requires):
         return self._op([x.execute_direct(requires) for x in self._arguments])
+
+    def get_op(self):
+        attribute = "_%s__op" % type(self).__name__
+        if hasattr(self, attribute):
+            return getattr(self, attribute)
+        return self.get_name()
 
     @abstractmethod
     def _op(self, args):
@@ -140,6 +157,9 @@ class Operator(ReferenceStatement, metaclass=OpMetaClass):
         """
         return create_function(self)
 
+    def pretty_print(self):
+        return repr(self)
+
 
 class BinaryOperator(Operator):
     """
@@ -161,6 +181,9 @@ class BinaryOperator(Operator):
         """
             The implementation of the binary op
         """
+
+    def pretty_print(self):
+        return "(%s %s %s)" % (self._arguments[0].pretty_print(), self.get_op(), self._arguments[1].pretty_print())
 
 
 class LazyBinaryOperator(BinaryOperator):
@@ -232,6 +255,9 @@ class UnaryOperator(Operator):
         """
             The implementation of the operator
         """
+
+    def pretty_print(self):
+        return "(%s %s)" % (self.get_op(), self._arguments[0].pretty_print())
 
 
 class Not(UnaryOperator):

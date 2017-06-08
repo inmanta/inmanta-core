@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -84,13 +84,16 @@ class FunctionCall(ReferenceStatement):
                 result.set_value(value, self.location)
             except UnknownException as e:
                 result.set_value(e.unknown, self.location)
-            except RuntimeException as e:
+            except UnsetException as e:
                 raise e
             except Exception as e:
                 raise WrappingRuntimeException(self, "Exception in plugin %s" % self.name, e)
 
     def __repr__(self):
         return "%s(%s)" % (self.name, ','.join([repr(a) for a in self.arguments]))
+
+    def pretty_print(self):
+        return "%s(%s)" % (self.name, ','.join([a.pretty_print() for a in self.arguments]))
 
 
 class FunctionUnit(Waiter):

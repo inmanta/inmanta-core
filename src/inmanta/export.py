@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -177,7 +177,10 @@ class Exporter(object):
             Call all dep managers and let them add dependencies
         """
         for fnc in self.__class__.__dep_manager:
-            fnc(types, self._resources)
+            try:
+                fnc(types, self._resources)
+            except UnknownException:
+                LOGGER.debug("Dependency manager %s caused an unknown exception", fnc)
 
         # TODO: check for cycles
 

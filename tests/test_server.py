@@ -49,7 +49,7 @@ def test_autostart(server, client, environment):
     assert not res
     assert len(server._sessions) == 1
 
-    LOGGER.warn("Killing agent")
+    LOGGER.warning("Killing agent")
     server.agentmanager._requires_agents[environment]["process"].terminate()
     yield retry_limited(lambda: len(server._sessions) == 0, 20)
     res = yield server.agentmanager._ensure_agent(environment, "iaas_jos")
@@ -120,7 +120,7 @@ def test_autostart_batched(client, server, environment):
     assert not res
     assert len(server._sessions) == 1
 
-    LOGGER.warn("Killing agent")
+    LOGGER.warning("Killing agent")
     server.agentmanager._requires_agents[environment]["process"].terminate()
     yield retry_limited(lambda: len(server._sessions) == 0, 20)
     res = yield server.agentmanager._ensure_agents(environment, ["iaas_jos", "iaas_josx"])
@@ -360,3 +360,24 @@ def test_resource_update(io_loop, client, server, environment):
     result = yield client.get_version(environment, version)
     assert(result.code == 200)
     assert result.result["model"]["done"] == 10
+
+
+@pytest.mark.gen_test
+def test_clear_environment(client, server, environment):
+    """
+        Test clearing out an environment
+    """
+    version = int(time.time())
+    result = yield client.put_version(tid=environment, version=version, resources=[], unknowns=[], version_info={})
+    assert result.code == 200
+
+    result = yield client.get_environment(id=environment, versions=10)
+    assert result.code == 200
+    assert len(result.result["environment"]["versions"]) == 1
+
+    result = yield client.clear_environment(id=environment)
+    assert result.code == 200
+
+    result = yield client.get_environment(id=environment, versions=10)
+    assert result.code == 200
+    assert len(result.result["environment"]["versions"]) == 0

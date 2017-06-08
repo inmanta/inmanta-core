@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -100,7 +100,23 @@ class DataDocument(object):
         return self._data
 
 
-class BaseDocument(object):
+class DocumentMeta(type):
+    def __new__(cls, class_name, bases, dct):
+        dct["_fields"] = {}
+        for name, field in dct.items():
+            if isinstance(field, Field):
+                dct["_fields"][name] = field
+
+        for base in bases:
+            if hasattr(base, "_fields"):
+                dct["_fields"].update(base._fields)
+
+        if len(dct["_fields"]) == 0:
+            print(class_name, bases, dict)
+        return type.__new__(cls, class_name, bases, dct)
+
+
+class BaseDocument(object, metaclass=DocumentMeta):
     """
         A base document in the mongodb. Subclasses of this document determine collections names. This type is mainly used to
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
@@ -124,7 +140,7 @@ class BaseDocument(object):
     @gen.coroutine
     def create_indexes(cls):
         # first define all unique indexes
-        for name, field in cls._get_all_fields().items():
+        for name, field in cls._fields.items():
             if field.unique:
                 yield cls._coll.create_index([(name, pymongo.ASCENDING)], unique=True, background=True)
 
@@ -136,8 +152,11 @@ class BaseDocument(object):
                 yield cls._coll.create_index(keys, background=True, **other)
 
     def __init__(self, from_mongo=False, **kwargs):
-        self.__fields = {}
+        self.__fields = self._create_dict(from_mongo, kwargs)
 
+    @classmethod
+    def _create_dict(cls, from_mongo, kwargs):
+        result = {}
         if from_mongo:
             kwargs = BaseDocument._dict_to_value(kwargs)
 
@@ -150,12 +169,12 @@ class BaseDocument(object):
             if "id" in kwargs:
                 raise AttributeError("The id attribute is generated per collection by the document class.")
 
-            kwargs["id"] = self.__class__._new_id()
+            kwargs["id"] = cls._new_id()
 
-        fields = self.__class__._get_all_fields()
+        fields = cls._fields.copy()
         for name, value in kwargs.items():
             if name not in fields:
-                raise AttributeError("%s field is not defined for this document %s" % (name, self.__class__.collection_name()))
+                raise AttributeError("%s field is not defined for this document %s" % (name, cls.collection_name()))
 
             if value is None and fields[name].required:
                 raise TypeError("%s field is required" % name)
@@ -163,21 +182,22 @@ class BaseDocument(object):
             if from_mongo and issubclass(fields[name].field_type, enum.Enum):
                 value = fields[name].field_type[value]
 
-            if value is not None and not isinstance(value, fields[name].field_type):
+            if value is not None and not (value.__class__ is fields[name].field_type or
+                                          isinstance(value, fields[name].field_type)):
                 raise TypeError("Field %s should have the correct type (%s instead of %s)" %
                                 (name, fields[name].field_type.__name__, type(value).__name__))
 
             if value is not None:
-                setattr(self, name, value)
+                result[name] = value
 
             elif fields[name].default:
-                setattr(self, name, fields[name].default_value)
+                result[name] = fields[name].default_value
 
             del fields[name]
 
         for name in list(fields.keys()):
             if fields[name].default:
-                setattr(self, name, fields[name].default_value)
+                result[name] = fields[name].default_value
                 del fields[name]
 
             elif not fields[name].required:
@@ -186,8 +206,16 @@ class BaseDocument(object):
         if len(fields) > 0:
             raise AttributeError("%s fields are required." % ", ".join(fields.keys()))
 
-    def _get_field(self, name):
+        return result
 
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        """
+            Validate and transform a dict straight from mongo to a serialization that can be send over rpc
+        """
+        return cls._create_dict(True, kwargs)
+
+    def _get_field(self, name):
         if hasattr(self.__class__, name):
             field = getattr(self.__class__, name)
             if isinstance(field, Field):
@@ -195,17 +223,8 @@ class BaseDocument(object):
 
         return None
 
-    @classmethod
-    def _get_all_fields(cls):
-        fields = {}
-        for attr in dir(cls):
-            value = getattr(cls, attr)
-            if isinstance(value, Field):
-                fields[attr] = value
-        return fields
-
     def __getattribute__(self, name):
-        if name.startswith("_"):
+        if name[0] == "_":
             return object.__getattribute__(self, name)
 
         field = self._get_field(name)
@@ -218,7 +237,7 @@ class BaseDocument(object):
         return object.__getattribute__(self, name)
 
     def __setattr__(self, name, value):
-        if name.startswith("_"):
+        if name[0] == "_":
             return object.__setattr__(self, name, value)
 
         field = self._get_field(name)
@@ -292,13 +311,13 @@ class BaseDocument(object):
             Return a dict representing the document
         """
         result = {}
-        for name, typing in self.__class__._get_all_fields().items():
+        for name, typing in self._fields.items():
             value = None
             if name in self.__fields:
                 value = self.__fields[name]
 
             if typing.required and value is None:
-                raise TypeError("%s should have field '%s'" % (self.__class__.__name__, name))
+                raise TypeError("%s should have field '%s'" % (self.__name__, name))
 
             if value is not None:
                 if not isinstance(value, typing.field_type):
@@ -350,7 +369,7 @@ class BaseDocument(object):
         for name, value in kwargs.items():
             setattr(self, name, value)
 
-        yield self._coll.update({"_id": self.id}, self.to_mongo())
+        yield self._coll.replace_one({"_id": self.id}, self.to_mongo())
 
     @gen.coroutine
     def update_fields(self, **kwargs):
@@ -363,7 +382,7 @@ class BaseDocument(object):
             setattr(self, name, value)
             items[name] = self._value_to_dict(value)
 
-        yield self._coll.update({"_id": self.id}, {"$set": items})
+        yield self._coll.update_one({"_id": self.id}, {"$set": items})
 
     @classmethod
     @gen.coroutine
@@ -406,7 +425,7 @@ class BaseDocument(object):
         """
             Delete this document
         """
-        yield self._coll.remove({"_id": self.id})
+        yield self._coll.delete_one({"_id": self.id})
 
     @gen.coroutine
     def delete_cascade(self):
@@ -457,11 +476,21 @@ class Environment(BaseDocument):
     ]
 
     @gen.coroutine
-    def delete_cascade(self):
+    def delete_cascade(self, only_content=False):
         yield Agent.delete_all(environment=self.id)
+        yield AgentProcess.delete_all(environment=self.id)
+        yield AgentInstance.delete_all(environment=self.id)
         yield Compile.delete_all(environment=self.id)
-        yield ConfigurationModel.delete_all(environment=self.id)
-        yield self.delete()
+        models = yield ConfigurationModel.get_list(environment=self.id)
+        for model in models:
+            yield model.delete_cascade()
+
+        yield Parameter.delete_all(environment=self.id)
+        yield Form.delete_all(environment=self.id)
+        yield FormRecord.delete_all(environment=self.id)
+
+        if not only_content:
+            yield self.delete()
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")
@@ -864,7 +893,7 @@ class ResourceAction(BaseDocument):
         """
         query = {"environment": self.environment, "action_id": self.action_id}
         if len(self._updates) > 0:
-            yield ResourceAction._coll.update(query, self._updates)
+            yield ResourceAction._coll.update_one(query, self._updates)
             self._updates = {}
 
 
@@ -970,15 +999,22 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_resources_for_version(cls, environment, version, agent=None):
+    def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False):
+        projection = None
+        if not include_attributes:
+            projection = {"attributes": False}
+
         if agent is not None:
-            cursor = cls._coll.find({"environment": environment, "model": version, "agent": agent})
+            cursor = cls._coll.find({"environment": environment, "model": version, "agent": agent}, projection)
         else:
-            cursor = cls._coll.find({"environment": environment, "model": version})
+            cursor = cls._coll.find({"environment": environment, "model": version}, projection)
 
         resources = []
         while (yield cursor.fetch_next):
-            resources.append(cls(from_mongo=True, **cursor.next_object()))
+            if no_obj:
+                resources.append(cls.mongo_to_dict(**cursor.next_object()))
+            else:
+                resources.append(cls(from_mongo=True, **cursor.next_object()))
 
         return resources
 
@@ -1036,8 +1072,8 @@ class Resource(BaseDocument):
         """
         # find all resources in previous version that have "purge_on_delete" set
         resources = yield cls._coll.find({"model": {"$lt": current_version}, "environment": environment,
-                                          "$or": [{"attributes.purge_on_delete": {"$exists": True}},
-                                                  {"attributes.purge_on_delete": True}]},
+                                          "$and": [{"attributes.purge_on_delete": {"$exists": True}},
+                                                   {"attributes.purge_on_delete": True}]},
                                          ["resource_id"]).distinct("resource_id")
 
         # get all models that have been released
@@ -1061,15 +1097,26 @@ class Resource(BaseDocument):
         for deleted_resource in deleted:
             # get the full resource history, and determine the purge status of this resource
             cursor = cls._coll.find({"environment": environment, "model": {"$lt": current_version},
-                                     "resource_id": deleted_resource}).sort("model", pymongo.DESCENDING).limit(1)
-            yield cursor.fetch_next
-            obj = cursor.next_object()
+                                     "resource_id": deleted_resource}).sort("model", pymongo.DESCENDING)
 
-            # check filter cases
-            if obj["model"] in versions and not obj["attributes"]["purged"]:
-                should_purge.append(cls(from_mongo=True, **obj))
+            while (yield cursor.fetch_next):
+                obj = cursor.next_object()
+
+                # if a resource is part of a released version and it is deployed (this last condition is acutally enough
+                # at the moment), we have found the last status of the resource. If it was not purged in that version,
+                # add it to the should purge list.
+                if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
+                    if not obj["attributes"]["purged"]:
+                        should_purge.append(cls(from_mongo=True, **obj))
+                    break
 
         return should_purge
+
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        dct = super(Resource, cls).mongo_to_dict(**kwargs)
+        dct["id"] = dct["resource_version_id"]
+        return dct
 
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
@@ -1107,6 +1154,12 @@ class ConfigurationModel(BaseDocument):
     @property
     def done(self):
         return len(self.status)
+
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        dct = super(DryRun, cls).mongo_to_dict(**kwargs)
+        dct["done"] = len(dct["status"])
+        return dct
 
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
@@ -1173,13 +1226,15 @@ class ConfigurationModel(BaseDocument):
         """
         entry_uuid = uuid.uuid5(resource_uuid, resource_id)
         resource_key = "status.%s" % entry_uuid
-        yield cls._coll.update({"environment": environment, "version": version},
-                               {"$set": {resource_key: {"status": cls._value_to_dict(status), "id": resource_id}}})
+        yield cls._coll.update_one({"environment": environment, "version": version},
+                                   {"$set": {resource_key: {"status": cls._value_to_dict(status), "id": resource_id}}})
 
     @gen.coroutine
     def delete_cascade(self):
         yield Resource.delete_all(environment=self.environment, model=self.version)
-        yield Snapshot.delete_all(environment=self.environment, model=self.version)
+        snaps = yield Snapshot.get_list(environment=self.id)
+        for snap in snaps:
+            yield snap.delete_cascade()
         yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
         yield Code.delete_all(environment=self.environment, model=self.version)
         yield DryRun.delete_all(environment=self.environment, model=self.version)
@@ -1246,7 +1301,7 @@ class DryRun(BaseDocument):
         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
         update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: cls._value_to_dict(dryrun_data)}}
 
-        yield cls._coll.update(query, update)
+        yield cls._coll.update_one(query, update)
 
     @classmethod
     @gen.coroutine
@@ -1254,6 +1309,13 @@ class DryRun(BaseDocument):
         obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
         obj.insert()
         return obj
+
+    @classmethod
+    def mongo_to_dict(cls, **kwargs):
+        dct = super(DryRun, cls).mongo_to_dict(**kwargs)
+        resources = {r["id"]: r for r in dct["resources"].values()}
+        dct["resources"] = resources
+        return dct
 
     def to_dict(self):
         dict_result = BaseDocument.to_dict(self)
@@ -1313,12 +1375,13 @@ class SnapshotRestore(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self):
-        yield SnapshotRestore._coll.update({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
+        yield SnapshotRestore._coll.update_one({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
         self.resources_todo -= 1
 
         now = datetime.datetime.now()
-        result = yield SnapshotRestore._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
+        result = yield SnapshotRestore._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
+            # modified_count is None for mongodb < 2.6
             self.finished = now
 
 
@@ -1351,14 +1414,15 @@ class Snapshot(BaseDocument):
 
     @gen.coroutine
     def resource_updated(self, size):
-        yield Snapshot._coll.update({"_id": self.id},
-                                    {"$inc": {"resources_todo": int(-1), "total_size": size}})
+        yield Snapshot._coll.update_one({"_id": self.id},
+                                        {"$inc": {"resources_todo": int(-1), "total_size": size}})
         self.total_size += size
         self.resources_todo -= 1
 
         now = datetime.datetime.now()
-        result = yield Snapshot._coll.update({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if ("nModified" in result and result["nModified"] == 1) or ("n" in result and result["n"] == 1):
+        result = yield Snapshot._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
+        if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
+            # modified_count is None for mongodb < 2.6
             self.finished = now
 
 

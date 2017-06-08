@@ -31,6 +31,7 @@ class ResourceState(Enum):
 
 
 class Change(Enum):
+    nochange = 0
     created = 1
     purged = 2
     updated = 3

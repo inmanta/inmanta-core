@@ -36,4 +36,6 @@ src/*/parser/parser.out
 src/*/parser/parsetab.py
 .env
 .eggs/*
-
+docs/reference/modules
+.vscode
+docs/moduleguides

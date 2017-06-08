@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -31,11 +31,20 @@ LOGGER = logging.getLogger(__name__)
 
 class resource(object):  # noqa: H801
     """
-    A decorator that registers a new resource and the typename used in the protocol
+        A decorator that registers a new resource. The decorator must be applied to classes that inherit from
+        :class:`~inmanta.resources.Resource`
+
+        :param name: The name of the entity in the configuration model it creates a resources from. For example
+                     :inmanta:entity:`std::File`
+        :param id_attribute: The attribute of `this` resource that uniquely identifies a resource on an agent. This attribute
+                             can be mapped.
+        :param agent: This string indicates how the agent of this resource is determined. This string points to an attribute,
+                      but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
+                      ``host.name``
     """
     _resources = {}
 
-    def __init__(self, name, id_attribute, agent):
+    def __init__(self, name: str, id_attribute: str, agent: str):
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
@@ -60,7 +69,7 @@ class resource(object):  # noqa: H801
     @classmethod
     def get_class(cls, name):
         """
-        Get the class definition for the given imp entity.
+        Get the class definition for the given entity.
         """
         if name in cls._resources:
             return cls._resources[name]
@@ -172,10 +181,10 @@ class Resource(metaclass=ResourceMeta):
     """
         Plugins should inherit resource from this class so a resource from a model can be serialized and deserialized.
 
-        Such as class is registered when the @resource decorator is used. Each class needs to indicate the fields the resource
-        will have with a class field named "fields". A metaclass merges all fields lists from the class itself and all
-        superclasses. If a field it not available directly in the model object the serializer will look for static methods in
-        the class with the name "get_$fieldname".
+        Such as class is registered when the :func:`~inmanta.resources.resource` decorator is used. Each class needs to indicate
+        the fields the resource will have with a class field named "fields". A metaclass merges all fields lists from the class
+        itself and all superclasses. If a field it not available directly in the model object the serializer will look for
+        static methods in the class with the name "get_$fieldname".
     """
     fields = ("send_event",)
 
@@ -377,7 +386,12 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self):
         return str(self)
 
-    def clone(self, **kwargs):
+    def clone(self, **kwargs) -> "Resource":
+        """
+            Create a clone of this resource. The given kwargs can be used to override attributes.
+
+            :return: The cloned resource
+        """
         res = Resource.deserialize(Resource.serialize(self))
         for k, v in kwargs.items():
             setattr(res, k, v)

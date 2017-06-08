@@ -2,30 +2,31 @@ from setuptools import setup, find_packages
 
 requires = [
         'click',
-        'texttable',
-        'execnet',
-        'tornado',
         'colorlog',
-        'urllib3',
-        'python-dateutil',
-        'ply',
-        'pyyaml',
-        'virtualenv',
+        'execnet',
+        'mongobox',
         'motor >= 1.1',
+        'ply',
         'pymongo',
-        'mongobox']
+        'python-dateutil',
+        'pyyaml',
+        'texttable',
+        'tornado',
+        'typing',
+        'virtualenv',
+        'typing'
+    ]
 
 setup(
     name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2017.1",
+    version="2017.2",
     description="Inmanta deployment tool",
     author="Inmanta",
     author_email="code@inmanta.com",
     license="Apache Software License",
 
-    scripts=["bin/inmanta"],
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
@@ -34,7 +35,8 @@ setup(
 
     entry_points={
     'console_scripts': [
-        'inmanta-cli = inmanta.main:main'
+        'inmanta-cli = inmanta.main:main',
+        'inmanta = inmanta.app:app'
     ],
 },
 )

@@ -44,12 +44,12 @@ class EnumDoc(data.BaseDocument):
 
 @pytest.mark.gen_test
 def test_motor(motor):
-    yield motor.testCollection.insert({"a": 1, "b": "abcd"})
+    yield motor.testCollection.insert_one({"a": 1, "b": "abcd"})
     results = yield motor.testCollection.find_one({"a": {"$gt": 0}})
 
     assert "_id" in results
 
-    yield motor.testCollection.insert({"a": {"b": {"c": 1}}})
+    yield motor.testCollection.insert_one({"a": {"b": {"c": 1}}})
     results = motor.testCollection.find({})
 
     while (yield results.fetch_next):
@@ -361,8 +361,46 @@ def test_resource_purge_on_delete(data_module):
         yield cm2.insert()
 
         res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent5,path=/etc/motd],v=%s" % version,
+                                  status=const.ResourceState.available,
                                   attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
         yield res21.insert()
+
+    # model 3
+    version += 1
+    cm3 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0, version_info={})
+    yield cm3.insert()
+
+    to_purge = yield data.Resource.get_deleted_resources(env_id, version)
+
+    assert len(to_purge) == 1
+    assert to_purge[0].model == 1
+    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
+
+
+@pytest.mark.gen_test
+def test_issue_422(data_module):
+    env_id = uuid.uuid4()
+    version = 1
+    # model 1
+    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=1, version_info={},
+                                  released=True, deployed=True)
+    yield cm1.insert()
+
+    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+                              status=const.ResourceState.deployed,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res11.insert()
+
+    # model 2 (multiple undeployed versions)
+    version += 1
+    cm2 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=1,
+                                  version_info={}, released=False, deployed=False)
+    yield cm2.insert()
+
+    res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+                              status=const.ResourceState.available,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res21.insert()
 
     # model 3
     version += 1

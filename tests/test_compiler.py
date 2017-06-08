@@ -26,9 +26,10 @@ from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint,
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
+from inmanta.execute.util import NoneValue
 
 
 def parse_code(model_code: str):
@@ -118,7 +119,7 @@ entity Test extends Foo, foo::sub::Bar:
     \"\"\"
     string hello
     bool bar = true
-    number ten=5
+    number? ten=5
 end
 """ % documentation)
 
@@ -457,6 +458,20 @@ a=File[host = 5, path = "Jos"]
     assert {k: v.value for k, v in stmt.query} == {"host": 5, "path": "Jos"}
 
 
+def test_short_index_lookup():
+    statements = parse_code("""
+a = vm.files[path="/etc/motd"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0].value
+    assert isinstance(stmt, ShortIndexLookup)
+    assert isinstance(stmt.rootobject, Reference)
+    assert stmt.rootobject.name == "vm"
+    assert stmt.relation == "files"
+    assert {k: v.value for k, v in stmt.querypart} == {"path": "/etc/motd"}
+
+
 def test_ctr_2():
     statements = parse_code("""
 File( )
@@ -541,6 +556,17 @@ a=true b=false
     assert isinstance(stmt, Assign)
     assert stmt.value.value
     assert not statements[1].value.value
+
+
+def test_none():
+    statements = parse_code("""
+a=null
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value.value, NoneValue)
 
 
 def test_numbers():
@@ -643,6 +669,27 @@ implement Test1 using tt when a.other is defined
     assert stmt.select.name == 'other'
 
 
+def assert_is_non_value(x):
+    assert isinstance(x, Literal)
+    assert isinstance(x.value, NoneValue)
+
+
+def compare_attr(attr, name, mytype, defs, multi=False, opt=False):
+    assert attr.name == name
+    defs(attr.default)
+    assert attr.multi == multi
+    assert attr.type == mytype
+    assert attr.nullable == opt
+
+
+def assert_is_none(x):
+    assert x is None
+
+
+def assert_equals(x, y):
+    assert x == y
+
+
 def test_define_list_attribute():
     statements = parse_code("""
 entity Jos:
@@ -650,27 +697,16 @@ entity Jos:
   ip::ip[] ips = ["a"]
   string[] floom = []
   string[] floomx = ["a", "b"]
+  string[]? floomopt = null
 end""")
 
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineEntity)
-    assert len(stmt.attributes) == 4
+    assert len(stmt.attributes) == 5
 
-    def compare_attr(attr, name, type, defs):
-        assert attr.name == name
-        defs(attr.default)
-        assert attr.multi
-        assert attr.type == type
-
-    def assert_is_none(x):
-        assert x is None
-
-    def assert_equals(x, y):
-        assert x == y
-
-    compare_attr(stmt.attributes[0], "bar", "bool", assert_is_none)
-    compare_attr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items))
+    compare_attr(stmt.attributes[0], "bar", "bool", assert_is_none, multi=True)
+    compare_attr(stmt.attributes[2], "floom", "string", lambda x: assert_equals([], x.items), multi=True)
 
     def compare_default(list):
         def comp(x):
@@ -679,8 +715,9 @@ end""")
                 assert isinstance(it, Literal)
                 assert it.value == one
         return comp
-    compare_attr(stmt.attributes[1], "ips", "ip::ip", compare_default(['a']))
-    compare_attr(stmt.attributes[3], "floomx", "string", compare_default(['a', 'b']))
+    compare_attr(stmt.attributes[1], "ips", "ip::ip", compare_default(['a']), multi=True)
+    compare_attr(stmt.attributes[3], "floomx", "string", compare_default(['a', 'b']), multi=True)
+    compare_attr(stmt.attributes[4], "floomopt", "string", assert_is_non_value, opt=True, multi=True)
 
 
 def test_define_dict_attribute():
@@ -689,24 +726,14 @@ entity Jos:
   dict bar
   dict foo = {}
   dict blah = {"a":"a"}
+  dict? xxx = {"a":"a"}
+  dict? xxxx = null
 end""")
 
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineEntity)
-    assert len(stmt.attributes) == 3
-
-    def compare_attr(attr, name, type, defs):
-        assert attr.name == name
-        defs(attr.default)
-        assert not attr.multi
-        assert attr.type == "dict"
-
-    def assert_is_none(x):
-        assert x is None
-
-    def assert_equals(x, y):
-        assert x == y
+    assert len(stmt.attributes) == 5
 
     compare_attr(stmt.attributes[0], "bar", "dict", assert_is_none)
     compare_attr(stmt.attributes[1], "foo", "dict", lambda x: assert_equals([], x.items))
@@ -719,6 +746,8 @@ end""")
                 assert ov == v.value
         return comp
     compare_attr(stmt.attributes[2], "blah", "dict", compare_default([('a', 'a')]))
+    compare_attr(stmt.attributes[3], "xxx", "dict", compare_default([('a', 'a')]), opt=True)
+    compare_attr(stmt.attributes[4], "xxxx", "dict", assert_is_non_value, opt=True)
 
 
 def test_lexer():
@@ -730,14 +759,35 @@ b=""
 """)
 
 
+def test_eol_comment():
+    parse_code("""a="a"
+    # valid_target_types: tosca.capabilities.network.Bindable""")
+
+
 def test_mls():
-    parse_code("""
+    statements = parse_code("""
 entity MANO:
     \"""
-        This entity provides mangement, orchestration and monitoring
+        This entity provides management, orchestration and monitoring
+
+        More test
     \"""
 end
 """)
+    assert len(statements) == 1
+    stmt = statements[0]
+
+    assert isinstance(stmt, DefineEntity)
+
+    mls = stmt.comment
+
+    print(mls)
+
+    assert mls == """
+        This entity provides management, orchestration and monitoring
+
+        More test
+    """
 
 
 def test_bad():
@@ -758,7 +808,86 @@ a=|
 def test_error_on_relation():
     with pytest.raises(ParserException) as e:
         parse_code("""
- Host.provider [1] -- Provider test""")
+Host.provider [1] -- Provider test""")
     assert e.value.location.file == "test"
-    assert e.value.location.lnr == 2
-    assert e.value.column == 38
+    assert e.value.location.lnr == 3
+    assert e.value.column == 3
+
+
+def test_doc_string_on_new_relation():
+    statements = parse_code("""
+File.host [1] -- Host
+\"""
+Each file needs to be associated with a host
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_relation():
+    statements = parse_code("""
+File file [1] -- [0:] Host host
+\"""
+Each file needs to be associated with a host
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+
+
+def test_doc_string_on_typedef():
+    statements = parse_code("""
+typedef foo as string matching /^a+$/
+\"""
+    Foo is a stringtype that only allows "a"
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+
+
+def test_doc_string_on_typedefault():
+    statements = parse_code("""
+typedef Foo as File(x=5)
+\"""
+    Foo is a stringtype that only allows "a"
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+
+
+def test_doc_string_on_impl():
+    statements = parse_code("""
+implementation test for Host:
+    \"""
+        Bla bla
+    \"""
+end
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Bla bla"
+
+
+def test_doc_string_on_implements():
+    statements = parse_code("""
+implement Host using test
+\"""
+    Always use test!
+\"""
+""")
+    assert len(statements) == 1
+
+    stmt = statements[0]
+    assert stmt.comment.strip() == "Always use test!"

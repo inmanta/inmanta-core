@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@
 
 import logging
 
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit, Instance
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.ast.statements.assign import Assign, SetAttribute
-from inmanta.ast.statements import ExpressionStatement
-from inmanta.ast import RuntimeException
+from inmanta.ast.statements import ExpressionStatement, AssignStatement
+from inmanta.ast import RuntimeException, Locatable, Location
+from typing import List, Dict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,35 +32,32 @@ class Reference(ExpressionStatement):
         This class represents a reference to a value
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str) -> None:
         super().__init__()
         self.name = name
         self.full_name = name
 
-    def normalize(self):
+    def normalize(self) -> None:
         pass
 
-    def requires(self):
+    def requires(self) -> List[str]:
         return [self.full_name]
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # FIXME: may be done more efficient?
-        out = {self.name: resolver.lookup(self.full_name)}
+        out = {self.name: resolver.lookup(self.full_name)}  # type : Dict[object, ResultVariable]
         return out
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
-    def execute_direct(self, requires):
+    def execute_direct(self, requires: Dict[object, object]) -> object:
         return requires[self.name]
 
-    def get_containing_namespace(self,):
-        return self.namespace
-
-    def as_assign(self, value):
+    def as_assign(self, value: ExpressionStatement) -> AssignStatement:
         return Assign(self.name, value)
 
-    def root_in_self(self):
+    def root_in_self(self) -> "Reference":
         if self.name == 'self':
             return self
         else:
@@ -69,21 +67,28 @@ class Reference(ExpressionStatement):
             self.copy_location(attr_ref)
             return attr_ref
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
+        return self.name
+
+    def __repr__(self, *args, **kwargs):
         return self.name
 
 
-class AttributeReferenceHelper(object):
+class AttributeReferenceHelper(Locatable):
     """
         Helper class for AttributeReference, reschedules itself
     """
 
-    def __init__(self, target, instance, attribute):
+    def __init__(self, target: ResultVariable, instance: Reference, attribute: str) -> None:
         self.attribute = attribute
         self.target = target
         self.instance = instance
 
-    def resume(self, requires, resolver, queue_scheduler, target):
+    def resume(self,
+               requires: Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue_scheduler: QueueScheduler,
+               target: ResultVariable) -> None:
         """
             Instance is ready to execute, do it and see if the attribute is already present
         """
@@ -109,25 +114,28 @@ class AttributeReferenceHelper(object):
             # reschedule on the attribute, XU will assign it to the target variable
             ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         # Attribute is ready, return it,
         return self.attr.get_value()
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
         return "%s.%s" % (self.instance, self.attribute)
 
+    def get_location(self) -> Location:
+        return self.location
 
-class IsDefinedReferenceHelper(object):
+
+class IsDefinedReferenceHelper(Locatable):
     """
         Helper class for AttributeReference, reschedules itself
     """
 
-    def __init__(self, target, instance, attribute):
+    def __init__(self, target: ResultVariable, instance: Reference, attribute: str) -> None:
         self.attribute = attribute
         self.target = target
         self.instance = instance
 
-    def resume(self, requires, resolver, queue_scheduler):
+    def resume(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> None:
         """
             Instance is ready to execute, do it and see if the attribute is already present
         """
@@ -156,7 +164,7 @@ class IsDefinedReferenceHelper(object):
         except RuntimeException:
             self.target.set_value(False, self.location)
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> object:
         # Attribute is ready, return it,
         return self.attr.get_value()
 
@@ -167,21 +175,17 @@ class AttributeReference(Reference):
         attributes of a class or class instance.
     """
 
-    def __init__(self, instance, attribute):
-        # don't init superclass, we override everything
+    def __init__(self, instance: Reference, attribute: str) -> None:
         Reference.__init__(self, "%s.%s" % (instance.full_name, attribute))
         self.attribute = attribute
 
         # a reference to the instance
         self.instance = instance
 
-        # if the reference resolves, this attribute contains the instance
-        self._instance_value = None
-
-    def requires(self):
+    def requires(self) -> List[str]:
         return self.instance.requires()
 
-    def requires_emit(self, resolver, queue):
+    def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
@@ -196,12 +200,15 @@ class AttributeReference(Reference):
         HangUnit(queue, resolver, self.instance.requires_emit(resolver, queue), None, resumer)
         return {self: temp}
 
-    def execute(self, requires, resolver, queue):
+    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 
-    def as_assign(self, value):
+    def as_assign(self, value: ExpressionStatement) -> AssignStatement:
         return SetAttribute(self.instance, self.attribute, value)
 
-    def root_in_self(self):
+    def root_in_self(self) -> Reference:
         return AttributeReference(self.instance.root_in_self(), self.attribute)
+
+    def __repr__(self, *args, **kwargs):
+        return "%s.%s" % (repr(self.instance), self.attribute)

@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -24,8 +24,9 @@ from inmanta.ast.type import ConstraintType, Type
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
-from inmanta.ast.statements import TypeDefinitionStatement, Statement
+from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException
+from typing import List
 
 
 LOGGER = logging.getLogger(__name__)
@@ -33,7 +34,8 @@ LOGGER = logging.getLogger(__name__)
 
 class DefineAttribute(Statement):
 
-    def __init__(self, attr_type, name, default_value=None, multi=False, remove_default=True):
+    def __init__(self, attr_type: str, name: str, default_value: ExpressionStatement=None,
+                 multi=False, remove_default=True, nullable=False) -> None:
         """
             if default_value is None, this is an explicit removal of a default value
         """
@@ -42,6 +44,7 @@ class DefineAttribute(Statement):
         self.default = default_value
         self.multi = multi
         self.remove_default = remove_default
+        self.nullable = nullable
 
 
 class DefineEntity(TypeDefinitionStatement):
@@ -49,7 +52,12 @@ class DefineEntity(TypeDefinitionStatement):
         Define a new entity in the configuration
     """
 
-    def __init__(self, namespace: Namespace, name, comment, parents, attributes):
+    def __init__(self,
+                 namespace: Namespace,
+                 name: str,
+                 comment: str,
+                 parents: List[str],
+                 attributes: List[DefineAttribute]) -> None:
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
         self.attributes = attributes
@@ -61,27 +69,28 @@ class DefineEntity(TypeDefinitionStatement):
             self.parents.append("std::Entity")
 
         self.type = Entity(self.name, namespace)
+        self.type.location = self.location
 
-    def add_attribute(self, attr_type, name, default_value=None):
+    def add_attribute(self, attr_type: str, name: str, default_value: ExpressionStatement=None):
         """
             Add an attribute to this entity
         """
         self.attributes.append(DefineAttribute(attr_type, name, default_value))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             A textual representation of this entity
         """
         return "Entity(%s)" % self.name
 
-    def get_full_parent_names(self):
+    def get_full_parent_names(self) -> List[str]:
         try:
             return [self.namespace.get_type(str(parent)).get_full_name() for parent in self.parents]
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this statement.
         """
@@ -95,7 +104,7 @@ class DefineEntity(TypeDefinitionStatement):
                 if not isinstance(attr_type, (Type, type)):
                     raise TypingException(self, "Attributes can only be a type. Entities need to be defined as relations.")
 
-                attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi)
+                attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi, attribute.nullable)
                 attribute.copy_location(attr_obj)
 
                 add_attributes[attribute.name] = attr_obj
@@ -109,6 +118,8 @@ class DefineEntity(TypeDefinitionStatement):
                 raise TypingException(self, "same parent defined twice")
             for parent in self.parents:
                 parent_type = self.namespace.get_type(str(parent))
+                if parent_type is self.type:
+                    raise TypingException(self, "Entity can not be its own parent (%s) " % parent)
                 if not isinstance(parent_type, Entity):
                     raise TypingException(self, "Parents of an entity need to be entities. "
                                           "Default constructors are not supported. %s is not an entity" % parent)
@@ -140,25 +151,27 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
-    def __init__(self, namespace, name, target_type, statements):
+    def __init__(self, namespace: Namespace, name: str, target_type: str, statements: List[Statement], comment: str):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.name = name
         self.block = statements
         self.entity = target_type
-        self.type = Implementation(self.name, self.block)
+        self.type = Implementation(self.name, self.block, self.namespace, target_type, comment)
+        self.comment = comment
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of this implementation
         """
         return "Implementation(%s)" % self.name
 
-    def evaluate(self):
+    def evaluate(self) -> str:
         """
             Evaluate this statement in the given scope
         """
         cls = self.namespace.get_type(self.entity)
         self.type.set_type(cls)
+        self.copy_location(self.type)
 
 
 class DefineImplement(DefinitionStatement):
@@ -170,11 +183,16 @@ class DefineImplement(DefinitionStatement):
         @param whem: A clause that determines when this implementation is "active"
     """
 
-    def __init__(self, entity_name, implementations, select=None):
+    def __init__(self,
+                 entity_name: str,
+                 implementations: List[str],
+                 select: ExpressionStatement=None,
+                 comment: str=None) -> None:
         DefinitionStatement.__init__(self)
         self.entity = entity_name
         self.implementations = implementations
         self.select = select
+        self.comment = comment
 
     def __repr__(self):
         """
@@ -192,6 +210,7 @@ class DefineImplement(DefinitionStatement):
             entity_type = entity_type.get_entity()
 
             implement = Implement()
+            implement.comment = self.comment
             implement.constraint = self.select
             implement.location = self.location
 
@@ -231,7 +250,8 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         self.basetype = basetype
         self.__expression = None
         self.set_expression(expression)
-        self.type = ConstraintType(name)
+        self.type = ConstraintType(self.namespace, name)
+        self.comment = None
 
     def get_expression(self):
         """
@@ -273,7 +293,10 @@ class DefineTypeConstraint(TypeDefinitionStatement):
             Evaluate this statement.
         """
         basetype = self.namespace.get_type(self.basetype)
+
         constraint_type = self.type
+
+        constraint_type.comment = self.comment
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
 
@@ -290,6 +313,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
         TypeDefinitionStatement.__init__(self, namespace, name)
         self.type = Default(self.name)
         self.ctor = class_ctor
+        self.comment = None
 
     def __repr__(self):
         """
@@ -303,6 +327,8 @@ class DefineTypeDefault(TypeDefinitionStatement):
         """
         # the base class
         type_class = self.namespace.get_type(self.ctor.class_type)
+
+        self.type.comment = self.comment
 
         default = self.type
         default.set_entity(type_class)
@@ -324,6 +350,7 @@ class DefineRelation(DefinitionStatement):
         self.right = right
 
         self.requires = None
+        self.comment = None
 
     def __repr__(self):
         """
@@ -364,6 +391,7 @@ class DefineRelation(DefinitionStatement):
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, self.left[1])
             left_end.set_multiplicity(self.left[2])
+            left_end.comment = self.comment
             self.copy_location(left_end)
         else:
             left_end = None
@@ -371,6 +399,7 @@ class DefineRelation(DefinitionStatement):
         if self.right[1] is not None:
             right_end = RelationAttribute(left, right, self.right[1])
             right_end.set_multiplicity(self.right[2])
+            right_end.comment = self.comment
             self.copy_location(right_end)
         else:
             right_end = None

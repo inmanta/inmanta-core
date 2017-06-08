@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -20,7 +20,14 @@ import imp
 import sys
 
 
-class Unknown(object):
+class AnyType(object):
+    """
+        Supertype for objects that are an instance of all types
+    """
+    pass
+
+
+class Unknown(AnyType):
     """
         An instance of this class is used to indicate that this value can not be determined yet.
 
@@ -32,6 +39,14 @@ class Unknown(object):
 
     def __iter__(self):
         return iter([])
+
+
+class NoneValue(object):
+    def __eq__(self, other):
+        return isinstance(other, NoneValue)
+
+    def __str__(self):
+        return "null"
 
 
 def ensure_module(name):

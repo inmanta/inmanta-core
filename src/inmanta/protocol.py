@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -739,7 +739,6 @@ class RESTTransport(Transport):
         else:
             protocol = "http"
 
-        LOGGER.debug("Using %s:%d", host, port)
         return "%s://%s:%d" % (protocol, host, port)
 
     def build_call(self, properties, args, kwargs={}):
@@ -839,7 +838,8 @@ class RESTTransport(Transport):
             password = Config.get(self.id, "password", None)
             ca_certs = Config.get(self.id, "ssl_ca_cert_file", None)
 
-            LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
+            if username is not None:
+                LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
 
             if username is not None and password is not None:
                 body = {"user": username, "password": password}

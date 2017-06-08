@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 from copy import copy
 from collections import Mapping
 
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, NoneValue
 from inmanta.ast import RuntimeException
 
 
@@ -64,8 +64,21 @@ class DynamicProxy(object):
         return object.__getattribute__(self, "__instance")
 
     @classmethod
+    def unwrap(cls, item):
+        if isinstance(item, DynamicProxy):
+            return item._get_instance()
+
+        if isinstance(item, list):
+            return [cls.unwrap(x) for x in item]
+
+        return item
+
+    @classmethod
     def return_value(cls, value):
         if value is None:
+            return None
+
+        if isinstance(value, NoneValue):
             return None
 
         if isinstance(value, Unknown):

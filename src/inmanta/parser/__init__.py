@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -21,11 +21,12 @@ from inmanta.ast import CompilerException, Location
 
 class ParserException(CompilerException):
 
-    def __init__(self, file, lnr, position, value):
+    def __init__(self, file, lnr, position, value, msg=None):
         CompilerException.__init__(self)
         self.set_location(Location(file, lnr))
         self.value = value
         self.position = position
+        self.msg = msg
 
     def findCollumn(self, content):  # noqa: N802
         last_cr = content.rfind('\n', 0, self.position)
@@ -34,4 +35,7 @@ class ParserException(CompilerException):
         self.column = (self.position - last_cr) + 1
 
     def __str__(self, *args, **kwargs):
-        return "Syntax error: %s:%d, at token %s" % (self.location, self.column, self.value)
+        if self.msg is None:
+            return "Syntax error: %s:%d, at token %s" % (self.location, self.column, self.value)
+        else:
+            return "Syntax error: %s %s:%d, at token %s" % (self.msg, self.location, self.column, self.value)

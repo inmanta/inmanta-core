@@ -30,6 +30,7 @@ from inmanta.config import Config, cmdline_rest_transport
 from tornado.ioloop import IOLoop
 import click
 import texttable
+from time import sleep
 
 
 class Client(object):
@@ -207,11 +208,13 @@ class Client(object):
         return env_id
 
 
-def print_table(header, rows):
+def print_table(header, rows, data_type=None):
     width, _ = click.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
     table.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
+    if data_type is not None:
+        table.set_cols_dtype(data_type)
     table.header(header)
     for row in rows:
         table.add_row(row)
@@ -412,7 +415,8 @@ def version_list(client, environment):
     versions = client.do_request("list_versions", "versions", arguments=dict(tid=env_id))
 
     print_table(('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
-                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']) for x in versions))
+                ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']) for x in versions),
+                ["t", "t", "t", "t", "t", "t", "t"])
 
 
 @version.command(name="release")
@@ -464,11 +468,11 @@ def param_set(client, environment, name, value):
     # first fetch the parameter
     param = client.do_request("get_param", "parameter", dict(tid=tid, id=name, resource_id=""), allow_none=True)
 
-    # check the source
-    if param is not None and param["source"] != "user":
-        raise Exception("Only parameters set by users can be modified!")
+    if param is None:
+        param = {"source": "user", "metadata": {}}
 
-    param = client.do_request("set_param", "parameter", dict(tid=tid, id=name, value=value, source="user", resource_id=""))
+    param = client.do_request("set_param", "parameter", dict(tid=tid, id=name, value=value, source=param["source"],
+                                                             resource_id="", metadata=param["metadata"]))
 
     print_table(('Name', 'Value', 'Source', 'Updated'),
                 ((param['name'], param['value'], param['source'], param['updated']),))
@@ -725,6 +729,37 @@ def record_delete(client, environment, record):
 
     client.do_request("delete_record", arguments=dict(tid=tid, id=record_id))
     return ((), ())
+
+
+@cmd.command(name="monitor")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def monitor_deploy(client, environment):
+    tid = client.to_environment_id(environment)
+
+    versions = client.do_request("list_versions", arguments=dict(tid=tid))
+    allversion = versions["versions"]
+    first = next(version for version in allversion if version["result"] != "pending")
+
+    total = first["total"]
+    done = first["done"]
+    last = done
+    ident = first["version"]
+
+    with click.progressbar(label="version:%d" % ident, length=total, show_pos=True, show_eta=False) as bar:
+        bar.update(done)
+        while done != total:
+            if done != last:
+                bar.update(done - last)
+                last = done
+            sleep(1)
+            version = client.do_request("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
+            done = version["model"]["done"]
+        if done != last:
+            bar.update(done - last)
+            last = done
+
+    click.echo("Complete: %s/%s" % (done, total))
 
 
 def main():

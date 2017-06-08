@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2017 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ from io import BytesIO
 import yaml
 import inmanta
 from inmanta import env
-from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException
+from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
 from inmanta import plugins
 from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import plyInmantaParser
@@ -353,6 +353,7 @@ class ModuleLike(object):
             fd.write(new_module_def)
 
     def _load_file(self, ns, file):
+        ns.location = Location(file, 1)
         statements = []
         stmts = plyInmantaParser.parse(ns, file)
         block = BasicBlock(ns)
@@ -418,8 +419,7 @@ class Project(ModuleLike):
         project_file = os.path.join(path, Project.PROJECT_FILE)
 
         if not os.path.exists(project_file):
-            raise Exception(
-                "Project directory does not contain a project file")
+            raise Exception("Project directory does not contain a project file")
 
         with open(project_file, "r") as fd:
             self._meta = yaml.load(fd)
@@ -483,7 +483,7 @@ class Project(ModuleLike):
 
         parent_dir = os.path.abspath(os.path.join(cur_dir, os.pardir))
         if parent_dir == cur_dir:
-            raise ProjectNotFoundExcpetion("Unable to find an inmanta project")
+            raise ProjectNotFoundExcpetion("Unable to find an inmanta project (project.yml expected)")
 
         return cls.get_project_dir(parent_dir)
 
@@ -608,7 +608,7 @@ class Project(ModuleLike):
             Load all plug-ins
         """
         if not self.loaded:
-            LOGGER.warn("loading plugins on project that has not been loaded completely")
+            LOGGER.warning("loading plugins on project that has not been loaded completely")
         for module in self.modules.values():
             module.load_plugins()
 
@@ -643,7 +643,7 @@ class Project(ModuleLike):
             Collect the list of all requirements of all modules in the project.
         """
         if not self.loaded:
-            LOGGER.warn("collecting reqs on project that has not been loaded completely")
+            LOGGER.warning("collecting reqs on project that has not been loaded completely")
 
         specs = {}
         merge_specs(specs, self.requires())
@@ -711,6 +711,7 @@ class Module(ModuleLike):
     """
         This class models an inmanta configuration module
     """
+    MODEL_DIR = "model"
     requires_fields = ["name", "license", "version"]
 
     def __init__(self, project: Project, path: str, **kwmeta: dict):
@@ -856,7 +857,7 @@ class Module(ModuleLike):
             else:
                 hi = mid
         if hi == len(versions):
-            LOGGER.warn("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
+            LOGGER.warning("Could not find version of module %s suitable for this compiler, try a newer compiler" % modulename)
             return None
         return versions[lo]
 
@@ -921,14 +922,15 @@ class Module(ModuleLike):
 
     def get_ast(self, name):
         if name == self.name:
-            file = os.path.join(self._path, "model/_init.cf")
+            file = os.path.join(self._path, Module.MODEL_DIR, "_init.cf")
         else:
             parts = name.split("::")
             parts = parts[1:]
-            if os.path.isdir(os.path.join(self._path, "model/" + "/".join(parts))):
-                file = os.path.join(self._path, "model/" + "/".join(parts) + "/_init.cf")
+            if os.path.isdir(os.path.join(self._path, Module.MODEL_DIR, *parts)):
+                path_elements = [self._path, Module.MODEL_DIR] + parts + ["_init.cf"]
             else:
-                file = os.path.join(self._path, "model/" + "/".join(parts) + ".cf")
+                path_elements = [self._path, Module.MODEL_DIR] + parts[:-1] + [parts[-1] + ".cf"]
+            file = os.path.join(*path_elements)
 
         ns = self._project.get_root_namespace().get_ns_or_create(name)
 
@@ -936,6 +938,43 @@ class Module(ModuleLike):
             return self._load_file(ns, file)
         except FileNotFoundError:
             raise InvalidModuleException("could not locate module with name: %s", name)
+
+    def _get_model_files(self, curdir):
+        files = []
+        init_cf = os.path.join(curdir, "_init.cf")
+        if not os.path.exists(init_cf):
+            return files
+
+        for entry in os.listdir(curdir):
+            entry = os.path.join(curdir, entry)
+            if os.path.isdir(entry):
+                files.extend(self._get_model_files(entry))
+
+            elif entry[-3:] == ".cf":
+                files.append(entry)
+
+        return files
+
+    def get_all_submodules(self):
+        """
+            Get all submodules of this module
+        """
+        modules = []
+        cur_dir = os.path.join(self._path, Module.MODEL_DIR)
+        files = self._get_model_files(cur_dir)
+
+        for f in files:
+            name = f[len(cur_dir) + 1:-3]
+            parts = name.split("/")
+            if parts[-1] == "_init":
+                parts = parts[:-1]
+
+            parts.insert(0, self.get_name())
+            name = "::".join(parts)
+
+            modules.append(name)
+
+        return modules
 
     def load_plugins(self):
         """
