@@ -17,6 +17,7 @@
 """
 
 import glob
+import re
 import imp
 import logging
 import os
@@ -39,7 +40,6 @@ from inmanta import env
 from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
 from inmanta import plugins
 from inmanta.parser.plyInmantaParser import parse
-import ruamel.yaml
 from inmanta.parser import plyInmantaParser
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement
@@ -326,13 +326,33 @@ class ModuleLike(object):
 
     name = property(get_name)
 
-    def get_config_for_rewrite(self):
+    def rewrite_version(self, new_version):
+        new_version = str(new_version)  # make sure it is a string!
         with open(self.get_config_file_name(), "r") as fd:
-            return ruamel.yaml.load(fd.read(), ruamel.yaml.RoundTripLoader)
+            module_def = fd.read()
 
-    def rewrite_config(self, data):
-        with open(self.get_config_file_name(), "w") as fd:
-            fd.write(ruamel.yaml.dump(data, Dumper=ruamel.yaml.RoundTripDumper))
+        module_info = yaml.safe_load(module_def)
+        if "version" not in module_info:
+            raise Exception("Not a valid module definition")
+
+        current_version = str(module_info["version"])
+        if current_version == new_version:
+            LOGGER.debug("Current version is the same as the new version: %s", current_version)
+
+        new_module_def = re.sub("([\s]version\s*:\s*['\"\s]?)[^\"'}]+(['\"]?)",
+                                "\g<1>" + new_version + "\g<2>", module_def)
+
+        try:
+            new_info = yaml.safe_load(new_module_def)
+        except Exception:
+            raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
+
+        if str(new_info["version"]) != new_version:
+            raise Exception("Unable to write module definition, should be %s got %s instead." %
+                            (new_version, new_info["version"]))
+
+        with open(self.get_config_file_name(), "w+") as fd:
+            fd.write(new_module_def)
 
     def _load_file(self, ns, file):
         ns.location = Location(file, 1)
@@ -1360,9 +1380,7 @@ class ModuleTool(object):
         if outversion is None:
             return
 
-        cfg = module.get_config_for_rewrite()
-        cfg["version"] = str(outversion)
-        module.rewrite_config(cfg)
+        module.rewrite_version(str(outversion))
         print("set version to: " + str(outversion))
         # commit
         gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])

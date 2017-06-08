@@ -10,7 +10,6 @@ requires = [
         'pymongo',
         'python-dateutil',
         'pyyaml',
-        'ruamel.yaml',
         'texttable',
         'tornado',
         'typing',
