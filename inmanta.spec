@@ -1,5 +1,5 @@
 # Use release 0 for prerelease version.
-%define release 1
+%define release 0
 %define version 2017.2
 %define venv %{buildroot}/opt/inmanta
 %define _p3 %{venv}/bin/python3
@@ -16,8 +16,8 @@ Group:          Development/Languages
 License:        LGPLv2+
 URL:            http://inmanta.com
 Source0:        inmanta-%{sourceversion}.tar.gz
-Source1:        deps-%{version}.tar.gz
-Source2:        inmanta-dashboard-%{version}.tar.gz
+Source1:        deps-%{sourceversion}.tar.gz
+Source2:        inmanta-dashboard-%{sourceversion}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  systemd
@@ -70,8 +70,8 @@ rm %{buildroot}/opt/inmanta/pip-selfcheck.json
 %else
 %{__python3} -m venv %{venv}
 %endif
-%{_p3} -m pip install -U --no-index --find-links deps-%{version} wheel setuptools virtualenv pip
-%{_p3} -m pip install --no-index --find-links deps-%{version} inmanta
+%{_p3} -m pip install -U --no-index --find-links deps-%{sourceversion} wheel setuptools virtualenv pip
+%{_p3} -m pip install --no-index --find-links deps-%{sourceversion} inmanta
 %{_p3} -m inmanta.app
 
 # Use the correct python for bycompiling
