@@ -1460,5 +1460,5 @@ class Server(protocol.ServerEndpoint):
         """
             Clear the environment
         """
-        yield env.delete_cascade()
+        yield env.delete_cascade(only_content=True)
         return 200

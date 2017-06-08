@@ -476,7 +476,7 @@ class Environment(BaseDocument):
     ]
 
     @gen.coroutine
-    def delete_cascade(self):
+    def delete_cascade(self, only_content=False):
         yield Agent.delete_all(environment=self.id)
         yield AgentProcess.delete_all(environment=self.id)
         yield AgentInstance.delete_all(environment=self.id)
@@ -489,7 +489,8 @@ class Environment(BaseDocument):
         yield Form.delete_all(environment=self.id)
         yield FormRecord.delete_all(environment=self.id)
 
-        yield self.delete()
+        if not only_content:
+            yield self.delete()
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")
