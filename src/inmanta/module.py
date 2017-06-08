@@ -17,6 +17,7 @@
 """
 
 import glob
+import re
 import imp
 import logging
 import os
@@ -338,11 +339,20 @@ class ModuleLike(object):
         if current_version == new_version:
             LOGGER.debug("Current version is the same as the new version: %s", current_version)
 
-        new_module_def = module_def.replace(current_version, new_version)
+        new_module_def = re.sub("([\s]version\s*:\s*['\"\s]?)[^\"'}]+(['\"]?)",
+                                "\g<1>" + new_version + "\g<2>", module_def)
 
         try:
             new_info = yaml.safe_load(new_module_def)
         except Exception:
+            print("START --------------")
+            print(current_version, new_version)
+            print("--------------")
+            print(module_def)
+            print("--------------")
+            print(new_module_def)
+            print("END  --------------")
+
             raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
 
         if str(new_info["version"]) != new_version:
