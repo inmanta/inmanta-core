@@ -345,14 +345,6 @@ class ModuleLike(object):
         try:
             new_info = yaml.safe_load(new_module_def)
         except Exception:
-            print("START --------------")
-            print(current_version, new_version)
-            print("--------------")
-            print(module_def)
-            print("--------------")
-            print(new_module_def)
-            print("END  --------------")
-
             raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
 
         if str(new_info["version"]) != new_version:
