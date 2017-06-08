@@ -22,13 +22,18 @@ from inmanta.ast.type import Type, NamedType
 from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
-from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespace, Location,\
+from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespace, Location, \
     Named, Locatable
 from inmanta.util import memoize
 from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
 
-from typing import TYPE_CHECKING, Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
+from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.execute.runtime import ExecutionContext, ResultVariable  # noqa: F401

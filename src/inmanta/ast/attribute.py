@@ -20,7 +20,10 @@ from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.ast.type import TypedList, NullableType
 
-from typing import TYPE_CHECKING
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.type import Type  # noqa: F401

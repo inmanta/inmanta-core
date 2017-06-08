@@ -18,13 +18,19 @@
 
 from inmanta import util
 
-from typing import TYPE_CHECKING, Dict, Sequence, List, Optional, Union  # noqa: F401
+from typing import Dict, Sequence, List, Optional, Union  # noqa: F401
 from abc import abstractmethod
 
 
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+
 if TYPE_CHECKING:
-    import inmanta.ast.statements    # noqa: F401
-    from inmanta.ast.type import Type, NamedType     # noqa: F401
+    import inmanta.ast.statements  # noqa: F401
+    from inmanta.ast.type import Type, NamedType  # noqa: F401
     from inmanta.execute.runtime import ExecutionContext, Instance  # noqa: F401
     from inmanta.ast.statements import Statement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401

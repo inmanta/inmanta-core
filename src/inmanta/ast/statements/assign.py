@@ -24,10 +24,16 @@ from inmanta.ast.statements import AssignStatement, ExpressionStatement
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException
-import typing
 from inmanta.ast.attribute import RelationAttribute
+import typing
 
-if typing.TYPE_CHECKING:
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+
+if TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401
 
 

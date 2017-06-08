@@ -17,7 +17,13 @@
 """
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
 from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named
-from typing import Any, Dict, TYPE_CHECKING, List, Tuple  # noqa: F401
+from typing import Any, Dict, List, Tuple  # noqa: F401
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
 
 if TYPE_CHECKING:
     from inmanta.ast.variables import Reference  # noqa: F401

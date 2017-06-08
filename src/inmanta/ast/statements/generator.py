@@ -23,9 +23,14 @@ from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace
 from inmanta.execute.tracking import ImplementsTracker
-from typing import List, Dict, TYPE_CHECKING, Tuple
+from typing import List, Dict, Tuple
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Entity, Implement  # noqa: F401
