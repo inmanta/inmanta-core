@@ -471,6 +471,7 @@ def convert_boolean(value):
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 
+
 class Environment(BaseDocument):
     """
         A deployment environment of a project
@@ -490,8 +491,8 @@ class Environment(BaseDocument):
 
     _settings = {
         AUTO_DEPLOY: {"type": "bool", "default": False, "help": "When this boolean is set to true, the orchestrator will "
-                        "automatically release a new version that was compiled by the orchestrator itself.",
-                        "validator": convert_boolean},
+                      "automatically release a new version that was compiled by the orchestrator itself.",
+                      "validator": convert_boolean},
         PUSH_ON_AUTO_DEPLOY: {"type": "bool", "default": False, "help": "Push a new version when it has been autodeployed.",
                               "validator": convert_boolean},
     }
