@@ -382,6 +382,64 @@ def environment_delete(client, environment):
     click.echo("Environment successfully deleted")
 
 
+@environment.group("setting")
+@click.pass_context
+def env_setting(ctx):
+    pass
+
+
+@env_setting.command(name="list")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.pass_obj
+def env_setting_list(client, environment):
+    tid = client.to_environment_id(environment)
+    settings = client.do_request("list_settings", arguments=dict(tid=tid))
+
+    table_body = []
+    for key, meta in settings["metadata"].items():
+        value = ""
+        if key in settings["settings"]:
+            value = str(settings["settings"][key])
+
+        default_value = ""
+        if "default" in meta:
+            default_value = str(meta["default"])
+
+        table_body.append((key, value, default_value, meta["type"], meta["help"]))
+
+    click.echo("Settings for environment %s" % tid)
+    print_table(("Key", "Value", "Default value", "Type", "Help"), table_body)
+
+
+@env_setting.command(name="set")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--key", "-k", help="The key to set", required=True)
+@click.option("--value", "-o", help="The value to set", required=True)
+@click.pass_obj
+def env_setting_set(client, environment, key, value):
+    tid = client.to_environment_id(environment)
+    client.do_request("set_setting", arguments=dict(tid=tid, id=key, value=value))
+
+
+@env_setting.command(name="get")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--key", "-k", help="The key to get", required=True)
+@click.pass_obj
+def env_setting_get(client, environment, key):
+    tid = client.to_environment_id(environment)
+    value = client.do_request("get_setting", arguments=dict(tid=tid, id=key))
+    click.echo(value["value"])
+
+
+@env_setting.command(name="delete")
+@click.option("--environment", "-e", help="The environment to use", required=True)
+@click.option("--key", "-k", help="The key to delete", required=True)
+@click.pass_obj
+def env_setting_del(client, environment, key):
+    tid = client.to_environment_id(environment)
+    client.do_request("delete_setting", arguments=dict(tid=tid, id=key))
+
+
 @cmd.group("agent")
 @click.pass_context
 def agent(ctx):

@@ -1584,3 +1584,82 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
 
     agent.stop()
     agent2.stop()
+
+
+@pytest.mark.gen_test
+def test_auto_deploy(io_loop, server, client, resource_container, environment):
+    """
+        dryrun and deploy a configuration model
+    """
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key2", "incorrect_value")
+    resource_container.Provider.set("agent1", "key3", "value")
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'send_event': False,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key3',
+                  'value': None,
+                  'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                  'send_event': False,
+                  'requires': [],
+                  'purged': True,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    # set auto deploy and push
+    result = yield client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = yield client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    assert result.code == 200
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # check deploy
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 3
+    assert result.result["model"]["result"] == "deploying"
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    assert resource_container.Provider.isset("agent1", "key1")
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert not resource_container.Provider.isset("agent1", "key3")
+
+    agent.stop()

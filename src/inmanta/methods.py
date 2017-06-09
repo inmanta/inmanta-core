@@ -204,6 +204,37 @@ class Environment(Method):
         """
 
 
+class EnvironmentSettings(Method):
+    """
+        Method for listing/getting/setting/removing settings of an environment
+    """
+    __method_name__ = "environment_settings"
+
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS)
+    def list_settings(self, tid: uuid.UUID):
+        """
+            List the settings in the current environment
+        """
+
+    @protocol(operation="POST", id=True, arg_options=ENV_OPTS)
+    def set_setting(self, tid: uuid.UUID, id: str, value: str):
+        """
+            Set a value
+        """
+
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
+    def get_setting(self, tid: uuid.UUID, id: str):
+        """
+            get a value
+        """
+
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS)
+    def delete_setting(self, tid: uuid.UUID, id: str):
+        """
+            delete a value
+        """
+
+
 class Decommision(Method):
     """
         Decomission an environment

@@ -101,6 +101,29 @@ def test_environment(server, client, cli):
 
 
 @pytest.mark.gen_test
+def test_environment_settings(server, environment, client, cli):
+    result = yield cli.run("environment", "setting", "list", "-e", environment)
+    assert result.exit_code == 0
+
+    result = yield cli.run("environment", "setting", "set", "-e", environment, "-k", "auto_deploy", "-o", "true")
+    assert result.exit_code == 0
+    result = yield cli.run("environment", "setting", "set", "-e", environment, "--key", "auto_deploy", "--value", "true")
+    assert result.exit_code == 0
+
+    result = yield cli.run("environment", "setting", "list", "-e", environment)
+    assert result.exit_code == 0
+    assert environment in result.output
+    assert "auto_deploy" in result.output
+
+    result = yield cli.run("environment", "setting", "get", "-e", environment, "--key", "auto_deploy")
+    assert result.exit_code == 0
+    assert "True" in result.output
+
+    result = yield cli.run("environment", "setting", "delete", "-e", environment, "--key", "auto_deploy")
+    assert result.exit_code == 0
+
+
+@pytest.mark.gen_test
 def test_agent(server, client, environment, cli):
     result = yield cli.run("agent", "list", "-e", environment)
     assert result.exit_code == 0

@@ -363,6 +363,54 @@ def test_resource_update(io_loop, client, server, environment):
 
 
 @pytest.mark.gen_test
+def test_environment_settings(io_loop, client, server, environment):
+    """
+        Test environment settings
+    """
+    result = yield client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "settings" in result.result
+    assert "metadata" in result.result
+    assert "auto_deploy" in result.result["metadata"]
+    assert len(result.result["settings"]) == 0
+
+    result = yield client.set_setting(tid=environment, id="auto_deploy", value="test")
+    assert result.code == 500
+
+    result = yield client.set_setting(tid=environment, id="auto_deploy", value=False)
+    assert result.code == 200
+
+    result = yield client.list_settings(tid=environment)
+    assert result.code == 200
+    assert len(result.result["settings"]) == 1
+
+    result = yield client.get_setting(tid=environment, id="auto_deploy")
+    assert result.code == 200
+    assert not result.result["value"]
+
+    result = yield client.get_setting(tid=environment, id="test2")
+    assert result.code == 404
+
+    result = yield client.set_setting(tid=environment, id="auto_deploy", value=True)
+    assert result.code == 200
+
+    result = yield client.get_setting(tid=environment, id="auto_deploy")
+    assert result.code == 200
+    assert result.result["value"]
+
+    result = yield client.delete_setting(tid=environment, id="test2")
+    assert result.code == 404
+
+    result = yield client.delete_setting(tid=environment, id="auto_deploy")
+    assert result.code == 200
+
+    result = yield client.list_settings(tid=environment)
+    assert result.code == 200
+    assert "settings" in result.result
+    assert len(result.result["settings"]) == 1
+
+
+@pytest.mark.gen_test
 def test_clear_environment(client, server, environment):
     """
         Test clearing out an environment

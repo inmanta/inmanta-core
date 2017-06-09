@@ -769,7 +769,13 @@ class Server(protocol.ServerEndpoint):
                                  messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                             version=version)])
         yield ra.insert()
-        LOGGER.debug("Successfully stored version %d" % version)
+        LOGGER.debug("Successfully stored version %d", version)
+
+        auto_deploy = yield env.get(data.AUTO_DEPLOY)
+        if auto_deploy:
+            LOGGER.debug("Auto deploying version %d", version)
+            push = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
+            yield self.release_version(env, version, push)
 
         return 200
 
@@ -1102,6 +1108,40 @@ class Server(protocol.ServerEndpoint):
 
         return 200
 
+    @protocol.handle(methods.EnvironmentSettings.list_settings, env="tid")
+    @gen.coroutine
+    def list_settings(self, env: data.Environment):
+        return 200, {"settings": env.settings, "metadata": data.Environment.get_metadata()}
+
+    @protocol.handle(methods.EnvironmentSettings.set_setting, env="tid", key="id")
+    @gen.coroutine
+    def set_setting(self, env: data.Environment, key: str, value: str):
+        try:
+            yield env.set(key, value)
+            return 200
+        except KeyError:
+            return 404
+        except ValueError:
+            return 500, {"message": "Invalid value"}
+
+    @protocol.handle(methods.EnvironmentSettings.get_setting, env="tid", key="id")
+    @gen.coroutine
+    def get_setting(self, env: data.Environment, key: str):
+        try:
+            value = yield env.get(key)
+            return 200, {"value": value, "metadata": data.Environment.get_metadata()[key]}
+        except KeyError:
+            return 404
+
+    @protocol.handle(methods.EnvironmentSettings.delete_setting, env="tid", key="id")
+    @gen.coroutine
+    def delete_setting(self, env: data.Environment, key: str):
+        try:
+            yield env.unset(key)
+            return 200
+        except KeyError:
+            return 404
+
     @protocol.handle(methods.NotifyMethod.is_compiling, environment_id="id")
     @gen.coroutine
     def is_compiling(self, environment_id):
@@ -1220,11 +1260,11 @@ class Server(protocol.ServerEndpoint):
 
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()
-            result = yield self._run_compile_stage("Recompiling configuration model",
-                                                   inmanta_path + ["-vvv", "export", "-e", str(environment_id),
-                                                                   "--server_address", server_address, "--server_port",
-                                                                   opt.transport_port.get()],
-                                                   project_dir, env=os.environ.copy())
+            cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
+                                  "--server_port", opt.transport_port.get()]
+
+            result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
+
             stages.append(result)
         except Exception:
             LOGGER.exception("An error occured while recompiling")

@@ -16,16 +16,19 @@
     Contact: code@inmanta.com
 """
 
-import logging
-import uuid
+from configparser import RawConfigParser
+import copy
 import datetime
 import enum
+import logging
+import uuid
 
-from inmanta.resources import Id
-from tornado import gen
 from motor import motor_tornado
 import pymongo
+from tornado import gen
+
 from inmanta import const
+from inmanta.resources import Id
 
 
 LOGGER = logging.getLogger(__name__)
@@ -456,6 +459,18 @@ class Project(BaseDocument):
         yield self.delete()
 
 
+def convert_boolean(value):
+    if isinstance(value, bool):
+        return value
+
+    if value.lower() not in RawConfigParser.BOOLEAN_STATES:
+        raise ValueError('Not a boolean: %s' % value)
+    return RawConfigParser.BOOLEAN_STATES[value.lower()]
+
+
+AUTO_DEPLOY = "auto_deploy"
+PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
+
 class Environment(BaseDocument):
     """
         A deployment environment of a project
@@ -465,15 +480,84 @@ class Environment(BaseDocument):
         :param project The project this environment belongs to.
         :param repo_url The repository url that contains the configuration model code for this environment
         :param repo_url The repository branch that contains the configuration model code for this environment
+        :param settings Key/value settings for this environment
     """
     name = Field(field_type=str, required=True)
     project = Field(field_type=uuid.UUID, required=True)
     repo_url = Field(field_type=str, default="")
     repo_branch = Field(field_type=str, default="")
+    settings = Field(field_type=dict, default={})
+
+    _settings = {
+        AUTO_DEPLOY: {"type": "bool", "default": False, "help": "When this boolean is set to true, the orchestrator will "
+                        "automatically release a new version that was compiled by the orchestrator itself.",
+                        "validator": convert_boolean},
+        PUSH_ON_AUTO_DEPLOY: {"type": "bool", "default": False, "help": "Push a new version when it has been autodeployed.",
+                              "validator": convert_boolean},
+    }
+
+    @classmethod
+    def get_metadata(cls):
+        metadata = {}
+        for key, value in cls._settings.items():
+            metadata[key] = copy.copy(value)
+            if "validator" in metadata[key]:
+                del metadata[key]["validator"]
+
+        return metadata
 
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING), ("project", pymongo.ASCENDING)], unique=True)
     ]
+
+    @gen.coroutine
+    def get(self, key):
+        """
+            Get a setting in this environment.
+
+            :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        """
+        if key not in self._settings:
+            raise KeyError()
+
+        if key in self.settings:
+            return self.settings[key]
+
+        if "default" not in self._settings[key]:
+            raise KeyError()
+
+        value = self._settings[key]["default"]
+        yield self.set(key, value)
+        return value
+
+    @gen.coroutine
+    def set(self, key, value):
+        """
+            Set a new setting in this environment.
+
+            :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+            :param value: The value of the settings. The value should be of type as defined in _settings
+        """
+        if key not in self._settings:
+            raise KeyError()
+        if "validator" in self._settings[key]:
+            value = self._settings[key]["validator"](value)
+        yield self._coll.update_one({"_id": self.id}, {"$set": {"settings." + key: self._value_to_dict(value)}})
+
+    @gen.coroutine
+    def unset(self, key):
+        """
+            Unset a setting in this environment. If a default value is provided, this value will replace the current value.
+
+            :param key: The name/key of the setting. It should be defined in _settings otherwise a keyerror will be raised.
+        """
+        if key not in self._settings:
+            raise KeyError()
+
+        if "default" not in self._settings[key]:
+            yield self._coll.update_one({"_id": self.id}, {"$unset": "settings." + key})
+        else:
+            yield self.set(key, self._settings[key]["default"])
 
     @gen.coroutine
     def delete_cascade(self, only_content=False):
