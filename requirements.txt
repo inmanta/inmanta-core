@@ -14,7 +14,7 @@ python-dateutil==2.6.0
 pyyaml==3.12
 six==1.10.0
 sphinx==1.6.2
-sphinx-argparse==0.2.0
+sphinx-argparse==0.2.1
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.2.4
 texttable==0.9.0
