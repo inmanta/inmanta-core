@@ -1127,16 +1127,6 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
             compiler.do_compile()
 
 
-class TestLexerReset(CompilerBaseTest, unittest.TestCase):
-
-    def __init__(self, methodName='runTest'):  # noqa: H803
-        unittest.TestCase.__init__(self, methodName)
-        CompilerBaseTest.__init__(self, "lexer_reset")
-
-    def test_compile(self):
-        compiler.do_compile()
-
-
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
     def __init__(self, methodName='runTest'):  # noqa: H803

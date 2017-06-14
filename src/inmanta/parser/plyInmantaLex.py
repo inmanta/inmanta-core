@@ -39,6 +39,7 @@ tokens = [
     'SEP',
     'STRING',
     'MLS',
+    'MLS_END',
     'CMP_OP',
     'REGEX',
     'REL'
@@ -88,7 +89,7 @@ def t_begin_mls(t):
 def t_mls_end(t):
     r'.*["]{3}'
     t.lexer.begin('INITIAL')
-    t.type = "MLS"
+    t.type = "MLS_END"
     t.value = t.value[:-3]
     return t
 

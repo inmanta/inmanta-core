@@ -886,8 +886,12 @@ implement Host using test
 \"""
     Always use test!
 \"""
+\"""
+    Not a comment
+\"""
+
 """)
-    assert len(statements) == 1
+    assert len(statements) == 2
 
     stmt = statements[0]
     assert stmt.comment.strip() == "Always use test!"

@@ -49,6 +49,7 @@ precedence = (
     ('left', 'AND'),
     ('right', 'NOT'),
     ('right', 'MLS'),
+    ('right', 'MLS_END')
 )
 
 
@@ -285,6 +286,12 @@ def p_attr_dict_nullable(p):
 def p_attr_list_dict_nullable(p):
     "attr : DICT '?'  ID '=' map_def"
     p[0] = DefineAttribute("dict", p[3], p[5], nullable=True)
+    attach_lnr(p, 1)
+
+
+def p_attr_list_dict_null(p):
+    "attr : DICT '?'  ID '=' NULL"
+    p[0] = DefineAttribute("dict", p[3], Literal(NoneValue()), nullable=True)
     attach_lnr(p, 1)
 
 # IMPLEMENT
@@ -583,12 +590,6 @@ def p_map_def_empty(p):
     attach_lnr(p, 1)
 
 
-def p_map_def_null(p):
-    " map_def : NULL"
-    p[0] = Literal(NoneValue())
-    attach_lnr(p, 1)
-
-
 def p_index_lookup(p):
     " index_lookup : class_ref '[' param_list ']'"
     p[0] = IndexLookup(p[1], p[3])
@@ -797,7 +798,7 @@ def p_id_list_term(p):
 
 
 def p_mls_term(p):
-    "mls : MLS"
+    "mls : MLS_END"
     p[0] = p[1]
     # attach_lnr_for_parser(p)
 

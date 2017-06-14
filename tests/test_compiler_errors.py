@@ -188,5 +188,4 @@ def test_null_on_dict(snippetcompiler):
         end
         implement A using std::none
         a = A()
-    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
-        " caused by Invalid value 'null', expected dict (reported in Construct(A) ({dir}/main.cf:6))")
+    """, "Syntax error: {dir}/main.cf:3:23, at token null")
