@@ -37,7 +37,6 @@ import time
 import sys
 import subprocess
 import uuid
-from uuid import UUID
 
 
 LOGGER = logging.getLogger(__name__)
@@ -105,9 +104,9 @@ class AgentManager(object):
     def expire(self, session: Session):
         self.add_future(self.expire_session(session, datetime.now()))
 
-    def get_agent_client(self, tid: UUID, endpoint):
+    def get_agent_client(self, tid: uuid.UUID, endpoint):
         if isinstance(tid, str):
-            tid = UUID(tid)
+            tid = uuid.UUID(tid)
         key = (tid, endpoint)
         if key in self.tid_endpoint_to_session:
             return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
@@ -337,7 +336,7 @@ class AgentManager(object):
         return 200, {"processes": processes}
 
     @gen.coroutine
-    def get_agent_process_report(self, apid: UUID):
+    def get_agent_process_report(self, apid: uuid.UUID):
         ap = yield data.AgentProcess.get_by_id(apid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
@@ -359,7 +358,8 @@ class AgentManager(object):
 
     # Start/stop agents
     @gen.coroutine
-    def _ensure_agents(self, environment_id: str, agents):
+    def _ensure_agents(self, env: data.Environment, agents):
+        environment_id = str(env.id)
         agents = [agent for agent in agents if self._agent_matches(agent)]
         started = False
         needsstart = False
@@ -377,25 +377,26 @@ class AgentManager(object):
                 for agent in agents:
                     agent_data["agents"].add(agent)
                     with (yield self.session_lock.acquire()):
-                        agent = self.get_agent_client(environment_id, agent)
+                        agent = self.get_agent_client(env.id, agent)
                         if agent is None:
                             needsstart = True
 
                 if needsstart:
-                    res = yield self.__do_start_agent(agent_data, environment_id)
+                    res = yield self.__do_start_agent(agent_data, env)
                     started |= res
             return started
         else:
             return False
 
     @gen.coroutine
-    def _ensure_agent(self, environment_id: str, agent_name):
+    def _ensure_agent(self, env: data.Environment, agent_name):
         """
             Ensure that the agent is running if required
 
             make sure that ensure_agent_registered has been called for this agent
         """
         if self._agent_matches(agent_name):
+            environment_id = str(env.id)
             with (yield agent_lock.acquire()):
                 LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
                 agent_data = None
@@ -418,13 +419,13 @@ class AgentManager(object):
                     self._requires_agents[environment_id] = agent_data
 
                 agent_data["agents"].add(agent_name)
-
-                return (yield self.__do_start_agent(agent_data, environment_id))
+                return (yield self.__do_start_agent(agent_data, env))
         else:
             return False
 
     @gen.coroutine
-    def __do_start_agent(self, agent_data, environment_id):
+    def __do_start_agent(self, agent_data, env):
+        environment_id = env.id
         agent_names = ",".join(agent_data["agents"])
 
         # todo: cache what is what
@@ -440,7 +441,7 @@ class AgentManager(object):
                 except HostNotFoundException:
                     agent_map[agent] = "localhost"
 
-        config = self._make_agent_config(environment_id, agent_names, agent_map)
+        config = yield self._make_agent_config(env, agent_names, agent_map)
 
         config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
         if not os.path.exists(config_dir):
@@ -487,11 +488,14 @@ class AgentManager(object):
 
         return False
 
-    def _make_agent_config(self, environment_id, agent_names, agent_map):
+    @gen.coroutine
+    def _make_agent_config(self, env, agent_names, agent_map):
+        environment_id = str(env.id)
         port = Config.get("server_rest_transport", "port", "8888")
 
         privatestatedir = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
-    # generate config file
+        agent_splay = yield env.get(data.AUTOSTART_SPLAY)
+        # generate config file
         config = """[config]
 heartbeat-interval = 60
 state-dir=%(statedir)s
@@ -500,6 +504,7 @@ agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
 python_binary=%(python_binary)s
+agent_splay=%(agent_splay)d
 
 [agent_rest_transport]
 port=%(port)s
@@ -507,7 +512,7 @@ host=localhost
 """ % {"agents": agent_names, "env_id": environment_id, "port": port,
             "python_binary": Config.get("config", "python_binary", "python"),
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
-            "statedir": privatestatedir}
+            "statedir": privatestatedir, "agent_splay": agent_splay}
 
         user = Config.get("server", "username", None)
         passwd = Config.get("server", "password", None)
@@ -530,21 +535,21 @@ ssl_ca_cert_file=%s
     # Parameters
 
     @gen.coroutine
-    def _request_parameter(self, env, resource_id):
+    def _request_parameter(self, env_id: uuid.UUID, resource_id):
         """
             Request the value of a parameter from an agent
         """
-        tid = str(env)
-
         if resource_id is not None and resource_id != "":
+            env = yield data.Environment.get_by_id(env_id)
+
             # get the latest version
-            version = yield data.ConfigurationModel.get_latest_version(env)
+            version = yield data.ConfigurationModel.get_latest_version(env_id)
 
             if version is None:
                 return 404, {"message": "The environment associated with this parameter does not have any releases."}
 
             # get a resource version
-            res = yield data.Resource.get_latest_version(env, resource_id)
+            res = yield data.Resource.get_latest_version(env_id, resource_id)
 
             if res is None:
                 return 404, {"message": "The resource has no recent version."}
@@ -553,10 +558,10 @@ ssl_ca_cert_file=%s
             now = time.time()
             if (resource_id not in self._fact_resource_block_set or
                     (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
-                yield self._ensure_agent(str(tid), res.agent)
-                client = self.get_agent_client(env, res.agent)
+                yield self._ensure_agent(env, res.agent)
+                client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
-                    future = client.get_parameter(tid, res.agent, res.to_dict())
+                    future = client.get_parameter(str(env_id), res.agent, res.to_dict())
                     self.add_future(future)
 
                 self._fact_resource_block_set[resource_id] = now
@@ -572,7 +577,7 @@ ssl_ca_cert_file=%s
     @gen.coroutine
     def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
         if isinstance(tid, str):
-            tid = UUID(tid)
+            tid = uuid.UUID(tid)
         key = (tid, agent)
         if key in self.tid_endpoint_to_session:
             session = self.tid_endpoint_to_session[(tid, agent)]
@@ -610,4 +615,5 @@ ssl_ca_cert_file=%s
         for env_id in self._requires_agents.keys():
             agent = list(self._requires_agents[env_id]["agents"])[0]
             self._requires_agents[env_id]["agents"].remove(agent)
-            yield self._ensure_agent(str(env_id), agent)
+            env = yield data.Environment.get_by_id(env_id)
+            yield self._ensure_agent(env, agent)

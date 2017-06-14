@@ -468,8 +468,21 @@ def convert_boolean(value):
     return RawConfigParser.BOOLEAN_STATES[value.lower()]
 
 
+def convert_int(value):
+    if isinstance(value, (int, float)):
+        return value
+
+    f_value = float(value)
+    i_value = int(value)
+
+    if i_value == f_value:
+        return i_value
+    return f_value
+
+
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
+AUTOSTART_SPLAY = "autostart_splay"
 
 
 class Environment(BaseDocument):
@@ -495,6 +508,8 @@ class Environment(BaseDocument):
                       "validator": convert_boolean},
         PUSH_ON_AUTO_DEPLOY: {"type": "bool", "default": False, "help": "Push a new version when it has been autodeployed.",
                               "validator": convert_boolean},
+        AUTOSTART_SPLAY: {"type": "int", "default": 10, "help": "Splay time for autostarted agents.",
+                          "validator": convert_int},
     }
 
     @classmethod

@@ -791,7 +791,7 @@ class Server(protocol.ServerEndpoint):
         if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
-            yield self.agentmanager._ensure_agents(str(env.id), agents)
+            yield self.agentmanager._ensure_agents(env, agents)
 
             for agent in agents:
                 client = self.get_agent_client(env.id, agent)
@@ -817,7 +817,7 @@ class Server(protocol.ServerEndpoint):
         dryrun = yield data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
 
         agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
-        yield self.agentmanager._ensure_agents(str(env.id), agents)
+        yield self.agentmanager._ensure_agents(env, agents)
 
         for agent in agents:
             client = self.get_agent_client(env.id, agent)

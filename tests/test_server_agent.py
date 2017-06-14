@@ -25,7 +25,7 @@ import logging
 
 from tornado import gen
 
-from inmanta import agent, data, const
+from inmanta import agent, data, const, config
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
@@ -1589,7 +1589,7 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
 @pytest.mark.gen_test
 def test_auto_deploy(io_loop, server, client, resource_container, environment):
     """
-        dryrun and deploy a configuration model
+        dryrun and deploy a configuration model automatically
     """
     resource_container.Provider.reset()
     agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
@@ -1663,3 +1663,56 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
+
+
+@pytest.mark.gen_test(timeout=15)
+def test_auto_deploy_no_splay(io_loop, server, client, resource_container, environment):
+    """
+        dryrun and deploy a configuration model automatically with agent autostart
+    """
+    config.Config.set("server", "agent-autostart", "agent1")
+    resource_container.Provider.reset()
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 ]
+
+    # set auto deploy and push
+    result = yield client.set_setting(environment, data.AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = yield client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    assert result.code == 200
+    result = yield client.set_setting(environment, data.AUTOSTART_SPLAY, 0)
+    assert result.code == 200
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # check deploy
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    # check if agent 1 is started by the server
+    # deploy will fail because handler code is not uploaded to the server
+    result = yield client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len(result.result["agents"]) == 0:
+        result = yield client.list_agents(tid=environment)
+        yield gen.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert result.result["agents"][0]["name"] == "agent1"
