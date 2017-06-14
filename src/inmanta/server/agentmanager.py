@@ -615,5 +615,5 @@ ssl_ca_cert_file=%s
         for env_id in self._requires_agents.keys():
             agent = list(self._requires_agents[env_id]["agents"])[0]
             self._requires_agents[env_id]["agents"].remove(agent)
-            env = yield data.Environment.get_by_id(env_id)
+            env = yield data.Environment.get_by_id(uuid.UUID(env_id))
             yield self._ensure_agent(env, agent)
