@@ -17,34 +17,36 @@
 """
 
 import glob
-import re
 import imp
+import inspect
+from io import BytesIO
 import logging
 import os
 from os.path import sys
-import subprocess
-import tempfile
+import re
 import shutil
-from argparse import ArgumentParser
-import inspect
-from pkg_resources import parse_version, parse_requirements
-import time
 from subprocess import CalledProcessError
+import subprocess
 from tarfile import TarFile
-from io import BytesIO
+import tempfile
+import time
 
-
+from argparse import ArgumentParser
+from pkg_resources import parse_version, parse_requirements
+import texttable
 import yaml
-import inmanta
+
 from inmanta import env
-from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
 from inmanta import plugins
-from inmanta.parser.plyInmantaParser import parse
-from inmanta.parser import plyInmantaParser
+import inmanta
+from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement
-from inmanta.util import memoize, get_compiler_version
 from inmanta.ast.statements.define import DefineImport
+from inmanta.parser import plyInmantaParser
+from inmanta.parser.plyInmantaParser import parse
+from inmanta.util import memoize, get_compiler_version
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1098,7 +1100,9 @@ class ModuleTool(object):
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-        subparser.add_parser("list", help="List all modules used in this project in a table")
+        lst = subparser.add_parser("list", help="List all modules used in this project in a table")
+        lst.add_argument("-r", help="Output a list of requires that can be included in project.yml", dest="requires",
+                         action="store_true")
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar='command', help='the command to  execute')
         subparser.add_parser("update", help="Update all modules used in this project")
@@ -1157,7 +1161,7 @@ class ModuleTool(object):
             except Exception as e:
                 print(e)
 
-    def list(self):
+    def list(self, requires=False):
         """
             List all modules in a table
         """
@@ -1196,18 +1200,18 @@ class ModuleTool(object):
             version_length = max(len(version), len(reqv), version_length)
 
             table.append((name, version, reqv))
-        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
-        print("| Name%s | Version%s | Expected%s |" % (
-            " " * (name_length - len("Name")),
-            " " * (version_length - len("Version")),
-            " " * (version_length - len("Expected"))))
-        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
-        for name, version, reqv in table:
-            print("| %s | %s | %s |" % (name + " " * (name_length - len(name)),
-                                        version + " " * (version_length - len(version)),
-                                        reqv + " " * (version_length - len(reqv))))
 
-        print("+" + "-" * (name_length + version_length * 2 + 8) + "+")
+        if requires:
+            print("requires:")
+            for name, version, reqv in table:
+                print("    - %s==%s" % (name, version))
+        else:
+            t = texttable.Texttable()
+            t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
+            t.header(("Name", "Version", "Expected"))
+            for row in table:
+                t.add_row(row)
+            print(t.draw())
 
     def update(self, project=None):
         """
