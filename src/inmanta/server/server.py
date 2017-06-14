@@ -43,6 +43,7 @@ from inmanta.resources import Id
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
 import pymongo
+import tempfile
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1186,18 +1187,24 @@ class Server(protocol.ServerEndpoint):
     def _run_compile_stage(self, name, cmd, cwd, **kwargs):
         start = datetime.datetime.now()
 
-        sub_process = process.Subprocess(cmd, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM,
-                                         cwd=cwd, **kwargs)
+        try:
+            out = tempfile.NamedTemporaryFile()
+            err = tempfile.NamedTemporaryFile()
+            sub_process = process.Subprocess(cmd, stdout=out, stderr=err, cwd=cwd, **kwargs)
 
-        returncode = yield sub_process.wait_for_exit(raise_error=False)
-        log_out = yield gen.Task(sub_process.stdout.read_until_close)
-        log_err = yield gen.Task(sub_process.stderr.read_until_close)
+            returncode = yield sub_process.wait_for_exit(raise_error=False)
+            sub_process.uninitialize()
 
-        sub_process.uninitialize()
+            out.seek(0)
+            err.seek(0)
 
-        stop = datetime.datetime.now()
-        return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
-                           errstream=log_err.decode(), outstream=log_out.decode(), returncode=returncode)
+            stop = datetime.datetime.now()
+            return data.Report(started=start, completed=stop, name=name, command=" ".join(cmd),
+                               errstream=err.read().decode(), outstream=out.read().decode(), returncode=returncode)
+
+        finally:
+            out.close()
+            err.close()
 
     @gen.coroutine
     def _recompile_environment(self, environment_id, update_repo=False, wait=0):
