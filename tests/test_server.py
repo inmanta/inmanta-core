@@ -492,7 +492,6 @@ def test_purge_on_delete_requires(io_loop, client, server, environment):
                                                   uuid.uuid4(), "deploy", now, now, "deployed", [], {})
     assert result.code == 200
 
-
     result = yield client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["version"] == version
@@ -597,7 +596,6 @@ def test_purge_on_delete(io_loop, client, server, environment):
                                                   ['std::File[vm1,path=/tmp/file3],v=%d' % version],
                                                   uuid.uuid4(), "deploy", now, now, "deployed", [], {})
     assert result.code == 200
-
 
     result = yield client.get_version(environment, version)
     assert result.code == 200
