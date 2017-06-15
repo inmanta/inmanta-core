@@ -755,7 +755,7 @@ class Server(protocol.ServerEndpoint):
                 req_id = Id.parse_id(require)
                 req_res = rv_dict[req_id.resource_str()]
 
-                req_res.attributes["requires"] = res_obj.resource_version_id
+                req_res.attributes["requires"].append(res_obj.resource_version_id)
                 res_obj.provides.append(req_res.resource_version_id)
 
         yield data.Resource.insert_many(resource_objects)
