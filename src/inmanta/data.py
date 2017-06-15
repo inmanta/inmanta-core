@@ -71,7 +71,7 @@ class Field(object):
     default = property(get_default)
 
     def get_default_value(self):
-        return self._default_value
+        return copy.copy(self._default_value)
 
     default_value = property(get_default_value)
 

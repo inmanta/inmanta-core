@@ -529,3 +529,18 @@ def test_data_document_recursion(data_module):
                                  messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                             version=2)])
         yield ra.insert()
+
+
+@pytest.mark.gen_test
+def test_resource_provides(data_module):
+    env_id = uuid.uuid4()
+    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+
+    print(id(res1.provides) == id(res2.provides))
+    res1.provides.append(res2.resource_version_id)
+    assert len(res2.provides) == 0
