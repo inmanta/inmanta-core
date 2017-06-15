@@ -462,3 +462,26 @@ def test_versioning():
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
     newversion = mt.determine_new_version(parse_version("1.2.3.dev025"), None, False, False, False, True)
     assert re.search("1.2.3.dev[0-9]+", str(newversion))
+
+
+def test_rewrite(tmpdir):
+    module_path = tmpdir.join("mod").mkdir()
+    model = module_path.join("model").mkdir()
+    model.join("_init.cf").write("\n")
+
+    module_yml = module_path.join("module.yml")
+    module_yml.write("""
+name: mod
+license: ASL
+version: 1.2
+compiler_version: 2017.2
+    """)
+
+    mod = module.Module(None, module_path.strpath)
+
+    assert mod.version == "1.2"
+    assert mod.compiler_version == "2017.2"
+
+    mod.rewrite_version("1.3.1")
+    assert mod.version == "1.3.1"
+    assert mod.compiler_version == "2017.2"

@@ -28,6 +28,7 @@ import sys
 import time
 import uuid
 from uuid import UUID
+import tempfile
 
 
 import dateutil
@@ -43,7 +44,6 @@ from inmanta.resources import Id
 from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
 import pymongo
-import tempfile
 
 
 LOGGER = logging.getLogger(__name__)

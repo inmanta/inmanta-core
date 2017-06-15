@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import pytest
+import subprocess
 
 
 @pytest.mark.gen_test

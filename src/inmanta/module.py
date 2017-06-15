@@ -322,39 +322,12 @@ class ModuleLike(object):
             @param path: root git directory
         """
         self._path = path
+        self._meta = {}
 
     def get_name(self):
         raise NotImplemented()
 
     name = property(get_name)
-
-    def rewrite_version(self, new_version):
-        new_version = str(new_version)  # make sure it is a string!
-        with open(self.get_config_file_name(), "r") as fd:
-            module_def = fd.read()
-
-        module_info = yaml.safe_load(module_def)
-        if "version" not in module_info:
-            raise Exception("Not a valid module definition")
-
-        current_version = str(module_info["version"])
-        if current_version == new_version:
-            LOGGER.debug("Current version is the same as the new version: %s", current_version)
-
-        new_module_def = re.sub("([\s]version\s*:\s*['\"\s]?)[^\"'}]+(['\"]?)",
-                                "\g<1>" + new_version + "\g<2>", module_def)
-
-        try:
-            new_info = yaml.safe_load(new_module_def)
-        except Exception:
-            raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
-
-        if str(new_info["version"]) != new_version:
-            raise Exception("Unable to write module definition, should be %s got %s instead." %
-                            (new_version, new_info["version"]))
-
-        with open(self.get_config_file_name(), "w+") as fd:
-            fd.write(new_module_def)
 
     def _load_file(self, ns, file):
         ns.location = Location(file, 1)
@@ -387,6 +360,7 @@ class ModuleLike(object):
             req = req[0]
             reqs.append(req)
         return reqs
+
 
 INSTALL_RELEASES = "release"
 INSTALL_PRERELEASES = "prerelease"
@@ -738,6 +712,36 @@ class Module(ModuleLike):
         self.load_module_file()
         self.is_versioned()
 
+    def rewrite_version(self, new_version):
+        new_version = str(new_version)  # make sure it is a string!
+        with open(self.get_config_file_name(), "r") as fd:
+            module_def = fd.read()
+
+        module_info = yaml.safe_load(module_def)
+        if "version" not in module_info:
+            raise Exception("Not a valid module definition")
+
+        current_version = str(module_info["version"])
+        if current_version == new_version:
+            LOGGER.debug("Current version is the same as the new version: %s", current_version)
+
+        new_module_def = re.sub("([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)",
+                                "\g<1>" + new_version + "\g<2>", module_def)
+
+        try:
+            new_info = yaml.safe_load(new_module_def)
+        except Exception:
+            raise Exception("Unable to rewrite module definition %s" % self.get_config_file_name())
+
+        if str(new_info["version"]) != new_version:
+            raise Exception("Unable to write module definition, should be %s got %s instead." %
+                            (new_version, new_info["version"]))
+
+        with open(self.get_config_file_name(), "w+") as fd:
+            fd.write(new_module_def)
+
+        self._meta = new_info
+
     def get_name(self):
         """
             Returns the name of the module (if the meta data is set)
@@ -749,16 +753,26 @@ class Module(ModuleLike):
 
     name = property(get_name)
 
-    def get_version(self):
+    def get_version(self) -> str:
         """
             Return the version of this module
         """
         if "version" in self._meta:
-            return self._meta["version"]
+            return str(self._meta["version"])
 
         return None
 
     version = property(get_version)
+
+    @property
+    def compiler_version(self) -> str:
+        """
+            Get the minimal compiler version required for this module version. Returns none is the compiler version is not
+            constrained.
+        """
+        if "compiler_version" in self._meta:
+            return str(self._meta["compiler_version"])
+        return None
 
     @classmethod
     def install(cls, project, modulename, requirements, install=True, install_mode=INSTALL_RELEASES):
