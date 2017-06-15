@@ -726,27 +726,39 @@ class Server(protocol.ServerEndpoint):
 
         # hook up all CADs
         for f, t in cross_agent_dep:
-            rv_dict[t.resource_str()].provides.append(f.resource_version_id)
-
-        yield data.Resource.insert_many(resource_objects)
+            res_obj = rv_dict[t.resource_str()]
+            res_obj.provides.append(f.resource_version_id)
 
         # search for deleted resources
         resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version)
+        previous_requires = {}
         for res in resources_to_purge:
             LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, res.resource_version_id))
 
             attributes = res.attributes.copy()
             attributes["purged"] = "true"
-
-            # TODO: handle delete relations
             attributes["requires"] = []
 
             res_obj = data.Resource.new(env.id, resource_version_id="%s,v=%s" % (res.resource_id, version),
                                         attributes=attributes)
-            yield res_obj.insert()
+            resource_objects.append(res_obj)
 
+            previous_requires[res_obj.resource_id] = res.attributes["requires"]
             resource_version_ids.append(res_obj.resource_version_id)
             agents.add(res_obj.agent)
+            rv_dict[res_obj.resource_id] = res_obj
+
+        # invert dependencies on purges
+        for res_id, requires in previous_requires.items():
+            res_obj = rv_dict[res_id]
+            for require in requires:
+                req_id = Id.parse_id(require)
+                req_res = rv_dict[req_id.resource_str()]
+
+                req_res.attributes["requires"] = res_obj.resource_version_id
+                res_obj.provides.append(req_res.resource_version_id)
+
+        yield data.Resource.insert_many(resource_objects)
 
         yield cm.update_fields(total=cm.total + len(resources_to_purge))
 

@@ -148,7 +148,7 @@ def test_version_removal(client, server):
 
         yield server._purge_versions()
         res = yield client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
-        assert res.code, 200
+        assert res.code == 200
         result = yield client.get_project(id=project_id)
 
         versions = yield client.list_versions(tid=env_id)
@@ -242,7 +242,6 @@ def test_get_resource_for_agent(io_loop, motor, server_multi, client, environmen
     result = yield aclient.resource_action_update(environment,
                                                   ["std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version],
                                                   action_id, "deploy", now, now, "deployed", [], {})
-    print(result.result)
     assert result.code == 200
 
     result = yield client.get_version(environment, version)
@@ -439,3 +438,92 @@ def test_clear_environment(client, server, environment):
     result = yield client.get_environment(id=environment, versions=10)
     assert result.code == 200
     assert len(result.result["environment"]["versions"]) == 0
+
+
+@pytest.mark.gen_test
+def test_purge_on_delete_requires(io_loop, client, server, environment):
+    """
+        Test purge on delete of resources and inversion of requires
+    """
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent.start()
+    aclient = agent._client
+
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file1',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'purge_on_delete': True,
+                  'version': version},
+                 {'group': 'root',
+                  'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
+                  'id': 'std::File[vm2,path=/tmp/file2],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file2',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'purge_on_delete': True,
+                  'requires': ['std::File[vm1,path=/tmp/file1],v=%d' % version],
+                  'version': version}]
+
+    res = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    # Release the model and set all resources as deployed
+    result = yield client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    now = datetime.now()
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm2,path=/tmp/file2],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["version"] == version
+    assert result.result["model"]["total"] == len(resources)
+    assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["released"]
+    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    # validate requires and provides
+    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
+    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
+
+    assert file2["id"] in file1["provides"]
+    assert len(file1["attributes"]["requires"]) == 0
+
+    assert len(file2["provides"]) == 0
+    assert file1["id"] in file2["attributes"]["requires"]
+
+    result = yield client.decomission_environment(id=environment)
+    assert result.code == 200
+
+    version = result.result["version"]
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["total"] == len(resources)
+
+    # validate requires and provides
+    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
+    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
+
+    assert file2["id"] in file1["attributes"]["requires"]
+    assert len(file1["provides"]) == 0
+
+    assert len(file2["attributes"]["requires"]) == 0
+    assert file1["id"] in file2["provides"]
