@@ -370,7 +370,7 @@ def test_resource_purge_on_delete(data_module):
     cm3 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0, version_info={})
     yield cm3.insert()
 
-    to_purge = yield data.Resource.get_deleted_resources(env_id, version)
+    to_purge = yield data.Resource.get_deleted_resources(env_id, version, set())
 
     assert len(to_purge) == 1
     assert to_purge[0].model == 1
@@ -407,7 +407,7 @@ def test_issue_422(data_module):
     cm3 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0, version_info={})
     yield cm3.insert()
 
-    to_purge = yield data.Resource.get_deleted_resources(env_id, version)
+    to_purge = yield data.Resource.get_deleted_resources(env_id, version, set())
 
     assert len(to_purge) == 1
     assert to_purge[0].model == 1

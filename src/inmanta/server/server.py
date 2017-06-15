@@ -730,7 +730,7 @@ class Server(protocol.ServerEndpoint):
             res_obj.provides.append(f.resource_version_id)
 
         # search for deleted resources
-        resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version)
+        resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
         previous_requires = {}
         for res in resources_to_purge:
             LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, res.resource_version_id))
@@ -759,7 +759,6 @@ class Server(protocol.ServerEndpoint):
                 res_obj.provides.append(req_res.resource_version_id)
 
         yield data.Resource.insert_many(resource_objects)
-
         yield cm.update_fields(total=cm.total + len(resources_to_purge))
 
         for uk in unknowns:

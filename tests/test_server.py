@@ -492,6 +492,7 @@ def test_purge_on_delete_requires(io_loop, client, server, environment):
                                                   uuid.uuid4(), "deploy", now, now, "deployed", [], {})
     assert result.code == 200
 
+
     result = yield client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["version"] == version
@@ -527,3 +528,110 @@ def test_purge_on_delete_requires(io_loop, client, server, environment):
 
     assert len(file2["attributes"]["requires"]) == 0
     assert file1["id"] in file2["provides"]
+
+
+@pytest.mark.gen_test
+def test_purge_on_delete(io_loop, client, server, environment):
+    """
+        Test purge on delete of resources
+    """
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent.start()
+    aclient = agent._client
+
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file1',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'purge_on_delete': True,
+                  'version': version},
+                 {'group': 'root',
+                  'hash': 'b4350bef50c3ec3ee532d4a3f9d6daedec3d2aba',
+                  'id': 'std::File[vm1,path=/tmp/file2],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file2',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'purge_on_delete': True,
+                  'requires': ['std::File[vm1,path=/tmp/file1],v=%d' % version],
+                  'version': version},
+                 {'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1,path=/tmp/file3],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file3',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'purge_on_delete': True,
+                  'version': version}]
+
+    res = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    # Release the model and set all resources as deployed
+    result = yield client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    now = datetime.now()
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm1,path=/tmp/file2],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm1,path=/tmp/file3],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["version"] == version
+    assert result.result["model"]["total"] == len(resources)
+    assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["released"]
+    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    # New version with only file3
+    version = 2
+    res3 = {'group': 'root',
+            'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+            'id': 'std::File[vm1,path=/tmp/file3],v=%d' % version,
+            'owner': 'root',
+            'path': '/tmp/file3',
+            'permissions': 644,
+            'purged': False,
+            'reload': False,
+            'requires': [],
+            'purge_on_delete': True,
+            'version': version}
+    res = yield client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["total"] == 3
+
+    # validate requires and provides
+    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
+    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
+    file3 = [x for x in result.result["resources"] if "file3" in x["id"]][0]
+
+    assert file1["attributes"]["purged"]
+    assert file2["attributes"]["purged"]
+    assert not file3["attributes"]["purged"]

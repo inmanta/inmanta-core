@@ -1165,16 +1165,22 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_deleted_resources(cls, environment, current_version):
+    def get_deleted_resources(cls, environment, current_version, current_resources):
         """
             This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
             the latest version of the resource from a released model.
+
+            :param environment:
+            :param current_version:
+            :param current_resources: A set of all resource ids in the current version.
         """
+        LOGGER.debug("Starting purge_on_delete queries")
         # find all resources in previous version that have "purge_on_delete" set
         resources = yield cls._coll.find({"model": {"$lt": current_version}, "environment": environment,
                                           "$and": [{"attributes.purge_on_delete": {"$exists": True}},
                                                    {"attributes.purge_on_delete": True}]},
                                          ["resource_id"]).distinct("resource_id")
+        LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
         # get all models that have been released
         models = yield ConfigurationModel._coll.find({"environment": environment, "released": True},
@@ -1183,12 +1189,14 @@ class Resource(BaseDocument):
         for model in models:
             versions.add(model["version"])
 
+        LOGGER.debug("  All released versions: %s", versions)
+
         # all resources on current model
-        current_resources = yield cls._coll.find({"model": current_version, "environment": environment},
-                                                 ["resource_id"]).to_list(DBLIMIT)
+        LOGGER.debug("  All resource in current version (%s): %s", current_version, current_resources)
 
         # determined deleted resources
-        deleted = set(resources) - set([x["resource_id"] for x in current_resources])
+        deleted = set(resources) - current_resources
+        LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
 
         # filter out resources that should not be purged:
         # 1- resources from versions that have not been deployed
