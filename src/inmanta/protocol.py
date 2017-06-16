@@ -223,6 +223,11 @@ def custom_json_encoder(o):
     if isinstance(o, enum.Enum):
         return o.name
 
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
