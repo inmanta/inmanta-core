@@ -9,7 +9,7 @@ pytest==3.1.2
 pytest-catchlog==1.2.2
 pytest-cover==3.0.0
 pytest-tornado==0.4.5
-pytest-randomly==1.1.2
+pytest-randomly==1.2.0
 python-dateutil==2.6.0
 pyyaml==3.12
 six==1.10.0
