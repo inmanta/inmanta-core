@@ -409,7 +409,7 @@ class Server(protocol.ServerEndpoint):
                     type_obj = type.TYPES[field_type]
                     record.fields[k] = type_obj.cast(value)
                 else:
-                    LOGGER.warning("Field %s in form %s has an invalid type." % (k, id))
+                    LOGGER.warning("Field %s in record %s of form %s has an invalid type." % (k, record_id, form))
 
         yield record.update()
 
