@@ -419,7 +419,7 @@ class DoubleSetException(RuntimeException):
         self.location = location
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
-        msg = ("Value set twice: old value: %s (set at (%s)), new value: %s (set at (%s))"
+        msg = ("value set twice: \n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n"
                % (self.value, self.location, self.newvalue, self.newlocation))
         RuntimeException.__init__(self, stmt, msg)
 
