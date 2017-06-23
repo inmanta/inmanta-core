@@ -561,7 +561,7 @@ class Environment(BaseDocument):
                                     doc="Automatically start agents when the server starts instead of only just in time."),
         AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={}, typ="dict", validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
-                                     "is either an empty string or an agent map string.")
+                                     "is either an empty string or an agent map string.", agent_restart=True)
     }
 
     __indexes__ = [

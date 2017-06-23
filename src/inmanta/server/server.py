@@ -1123,21 +1123,23 @@ class Server(protocol.ServerEndpoint):
     def list_settings(self, env: data.Environment):
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
 
+    @gen.coroutine
     def _setting_change(self, env, key):
         setting = env._settings[key]
         if setting.recompile:
-            LOGGER.debug("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
+            LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
             self._async_recompile(env.id, setting.update)
 
         if setting.agent_restart:
-            LOGGER.debug("Environment setting %s changed. Restarting agents.", key)
+            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+            yield self.agentmanager.restart_agents(env)
 
     @protocol.handle(methods.EnvironmentSettings.set_setting, env="tid", key="id")
     @gen.coroutine
     def set_setting(self, env: data.Environment, key: str, value: str):
         try:
             yield env.set(key, value)
-            self._setting_change(env, key)
+            yield self._setting_change(env, key)
             return 200
         except KeyError:
             return 404
@@ -1158,7 +1160,7 @@ class Server(protocol.ServerEndpoint):
     def delete_setting(self, env: data.Environment, key: str):
         try:
             yield env.unset(key)
-            self._setting_change(env, key)
+            yield self._setting_change(env, key)
             return 200
         except KeyError:
             return 404

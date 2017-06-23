@@ -25,7 +25,7 @@ import logging
 
 from tornado import gen
 
-from inmanta import agent, data, const, config
+from inmanta import agent, data, const
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
@@ -1670,8 +1670,10 @@ def test_auto_deploy_no_splay(io_loop, server, client, resource_container, envir
     """
         dryrun and deploy a configuration model automatically with agent autostart
     """
-    config.Config.set("server", "agent-autostart", "agent1")
     resource_container.Provider.reset()
+    env = yield data.Environment.get_by_id(uuid.UUID(environment))
+    yield env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    yield env.set(data.AUTOSTART_ON_START, True)
 
     version = int(time.time())
 
@@ -1710,9 +1712,76 @@ def test_auto_deploy_no_splay(io_loop, server, client, resource_container, envir
     result = yield client.list_agents(tid=environment)
     assert result.code == 200
 
-    while len(result.result["agents"]) == 0:
+    while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
         result = yield client.list_agents(tid=environment)
         yield gen.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == "agent1"
+
+
+@pytest.mark.gen_test(timeout=15)
+def test_autostart_mapping(io_loop, server, client, resource_container, environment):
+    """
+        Test autostart mapping and restart agents when the map is modified
+    """
+    resource_container.Provider.reset()
+    env = yield data.Environment.get_by_id(uuid.UUID(environment))
+    yield env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    yield env.set(data.AUTO_DEPLOY, True)
+    yield env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    yield env.set(data.AUTOSTART_SPLAY, 0)
+    yield env.set(data.AUTOSTART_ON_START, True)
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  },
+                 {'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent2,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  },
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # check deploy
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 2
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
+        result = yield client.list_agents(tid=environment)
+        yield gen.sleep(0.1)
+
+    assert len(result.result["agents"]) == 2
+    assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+
+    result = yield client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"agent1": "", "agent2": ""})
+    assert result.code == 200
+
+    result = yield client.list_agents(tid=environment)
+    assert result.code == 200
+    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 2:
+        result = yield client.list_agents(tid=environment)
+        yield gen.sleep(0.1)

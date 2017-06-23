@@ -355,13 +355,17 @@ class AgentManager(object):
 
     # Start/stop agents
     @gen.coroutine
-    def _ensure_agents(self, env: data.Environment, agents: list):
+    def _ensure_agents(self, env: data.Environment, agents: list, restart: bool=False):
         """
             Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
+
+            :param env: The environment to start the agents for
+            :param agents: A list of agent names that possibly should be started in this environment.
+            :param restart: Restart all agents even if the list of agents is up to date.
         """
         agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
         agents = [agent for agent in agents if agent in agent_map]
-        needsstart = False
+        needsstart = restart
         if len(agents) == 0:
             return False
 
@@ -541,3 +545,11 @@ ssl_ca_cert_file=%s
             if autostart:
                 agent_list = [a.name for a in agents]
                 yield self._ensure_agents(env, agent_list)
+
+    @gen.coroutine
+    def restart_agents(self, env):
+        agents = yield data.Agent.get_list(environment=env.id)
+        autostart = yield env.get(data.AUTOSTART_ON_START)
+        if autostart:
+            agent_list = [a.name for a in agents]
+            yield self._ensure_agents(env, agent_list, True)
