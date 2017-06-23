@@ -248,3 +248,40 @@ def test_form_and_records(server, client, environment, cli):
     records = yield client.list_records(tid=environment, form_type=form_type)
     assert records.code == 200
     assert len(records.result["records"]) == 0
+
+
+@pytest.mark.gen_test
+def test_import_export(server, client, environment, cli, tmpdir):
+    form_type = "FormType"
+    result = yield client.put_form(tid=environment, id=form_type,
+                                   form={'attributes': {'field1': {'default': 1, 'options': {'min': 1, 'max': 100},
+                                                                   'type': 'number'},
+                                                        'field2': {'default': "", 'options': {}, 'type': 'string'}},
+                                         'options': {},
+                                         'type': form_type}
+                                   )
+    form_id = result.result["form"]["id"]
+
+    result = yield cli.run("record", "create", "-e", environment, "-t", form_type, "-p", "field1=1234", "-p", "field2=test456")
+    assert result.exit_code == 0
+
+    result = yield cli.run("form", "export", "-e", environment, "-t", form_type)
+    assert form_id in result.output
+
+    f = tmpdir.join("export.json")
+    f.write(result.output)
+
+    records = yield client.list_records(tid=environment, form_type=form_type)
+    assert records.code == 200
+    record = records.result["records"][0]
+
+    yield client.delete_record(tid=environment, id=record["id"])
+    records = yield client.list_records(tid=environment, form_type=form_type)
+    assert records.code == 200
+    assert len(records.result["records"]) == 0
+
+    result = yield cli.run("form", "import", "-e", environment, "-t", form_type, "--file", str(f))
+
+    records = yield client.list_records(tid=environment, form_type=form_type)
+    assert records.code == 200
+    assert len(records.result["records"]) == 1

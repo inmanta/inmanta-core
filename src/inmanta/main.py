@@ -677,8 +677,14 @@ def form_import(client, environment, form_type, file):
     if "records" not in data:
         raise Exception("No records found in input file")
 
+    form_type_def = data["form_type"]
+    if form_type != form_type_def["form_type"]:
+        raise click.ClickException("Unable to load form data for %s into form %s" % (form_type_def["form_type"], form_type))
+
+    form_id = form_type_def["id"]
+
     for record in data["records"]:
-        if record["form_type"] == form_type:
+        if record["form"] == form_id:
             client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))
 
 
