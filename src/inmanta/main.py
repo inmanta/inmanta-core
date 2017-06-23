@@ -405,7 +405,7 @@ def env_setting_list(client, environment):
         if "default" in meta:
             default_value = str(meta["default"])
 
-        table_body.append((key, value, default_value, meta["type"], meta["help"]))
+        table_body.append((key, value, default_value, meta["type"], meta["doc"]))
 
     click.echo("Settings for environment %s" % tid)
     print_table(("Key", "Value", "Default value", "Type", "Help"), table_body)

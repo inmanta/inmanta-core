@@ -717,6 +717,7 @@ class RESTTransport(Transport):
             ssl_ctx.load_cert_chain(crt, key)
 
             self.http_server = HTTPServer(application, ssl_options=ssl_ctx)
+            LOGGER.debug("Created REST transport with SSL")
         else:
             self.http_server = HTTPServer(application)
 

@@ -32,8 +32,9 @@ agent_map = \
            """mapping between agent names and host names.
     If an agent is autostarted, its hostname is looked up in this map.
     If it is not found, the agent name is used as hostname.
-    If the hostname is not localhost or :inmanta.config:option:`config.node-name`, ssh is used to start the agent on the appropriate machine
-    
+    If the hostname is not localhost or :inmanta.config:option:`config.node-name`, ssh is used to start the agent on the appropriate machine.
+    The hostname may contain user@ if inmanta needs to login as another user than root.
+
     example: iaas_openstack=localhost,vm1=192.16.13.2""", is_map)
 
 environment = \

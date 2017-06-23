@@ -21,16 +21,11 @@ from tornado import gen
 from tornado import locks
 
 from inmanta.config import Config
-from inmanta.agent.io.remote import RemoteIO
-from inmanta.resources import HostNotFoundException
 from inmanta import data
-from inmanta.agent import config as agent_config
-from inmanta.server.config import server_agent_autostart
 from inmanta.protocol import Session
 from inmanta.asyncutil import retry_limited
 
 import logging
-import glob
 import os
 from datetime import datetime
 import time
@@ -74,12 +69,11 @@ class AgentManager(object):
     This class contains all server functionality related to the management of agents
     '''
 
-    def __init__(self, server, autostart=True, closesessionsonstart=True, fact_back_off=60):
+    def __init__(self, server, closesessionsonstart=True, fact_back_off=60):
         self._server = server
 
-        self._requires_agents = {}
-        if autostart:
-            server.add_future(self.start_agents())
+        self._agent_procs = {}  # env uuid -> subprocess.Popen
+        server.add_future(self.start_agents())
 
         # back-off timer for fact requests
         self._fact_resource_block = fact_back_off
@@ -134,6 +128,9 @@ class AgentManager(object):
 
     @gen.coroutine
     def ensure_agent_registered(self, env: data.Environment, nodename: str):
+        """
+            Make sure that an agent has been created in the database
+        """
         with (yield self.session_lock.acquire()):
             agent = yield data.Agent.get(env.id, nodename)
             if agent is not None:
@@ -286,7 +283,7 @@ class AgentManager(object):
     # utils
     def _fork_inmanta(self, args, outfile, errfile, cwd=None):
         """
-            For an inmanta process from the same code base as the current code
+            Fork an inmanta process from the same code base as the current code
         """
         inmanta_path = [sys.executable, "-m", "inmanta.app"]
         # handles can be closed, owned by child process,...
@@ -358,92 +355,38 @@ class AgentManager(object):
 
     # Start/stop agents
     @gen.coroutine
-    def _ensure_agents(self, env: data.Environment, agents):
-        environment_id = str(env.id)
-        agents = [agent for agent in agents if self._agent_matches(agent)]
-        started = False
+    def _ensure_agents(self, env: data.Environment, agents: list):
+        """
+            Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
+        """
+        agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
+        agents = [agent for agent in agents if agent in agent_map]
         needsstart = False
-        if len(agents) > 0:
-            with (yield agent_lock.acquire()):
-                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
-                agent_data = None
-                if environment_id in self._requires_agents:
-                    agent_data = self._requires_agents[environment_id]
-
-                if agent_data is None:
-                    agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[environment_id] = agent_data
-
-                for agent in agents:
-                    agent_data["agents"].add(agent)
-                    with (yield self.session_lock.acquire()):
-                        agent = self.get_agent_client(env.id, agent)
-                        if agent is None:
-                            needsstart = True
-
-                if needsstart:
-                    res = yield self.__do_start_agent(agent_data, env)
-                    started |= res
-            return started
-        else:
+        if len(agents) == 0:
             return False
 
-    @gen.coroutine
-    def _ensure_agent(self, env: data.Environment, agent_name):
-        """
-            Ensure that the agent is running if required
+        with (yield agent_lock.acquire()):
+            LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
+            for agent in agents:
+                with (yield self.session_lock.acquire()):
+                    agent = self.get_agent_client(env.id, agent)
+                    if agent is None:
+                        needsstart = True
 
-            make sure that ensure_agent_registered has been called for this agent
-        """
-        if self._agent_matches(agent_name):
-            environment_id = str(env.id)
-            with (yield agent_lock.acquire()):
-                LOGGER.info("%s matches agents managed by server, ensuring it is started.", agent_name)
-                agent_data = None
-                if environment_id in self._requires_agents:
-                    agent_data = self._requires_agents[environment_id]
-
-                    if agent_name in agent_data["agents"]:
-                        # agent existed
-                        with (yield self.session_lock.acquire()):
-                            agent = self.get_agent_client(environment_id, agent_name)
-                            if agent is not None:
-                                # and is live
-                                # TODO: is this the behaviour we want,
-                                # do we want to start the agent locally, if it is already running remotely?
-                                # and do we want this check to be enforced everywhere?
-                                return False
-
-                if agent_data is None:
-                    agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[environment_id] = agent_data
-
-                agent_data["agents"].add(agent_name)
-                return (yield self.__do_start_agent(agent_data, env))
-        else:
-            return False
+            if needsstart:
+                res = yield self.__do_start_agent(agents, env)
+                return res
+        return False
 
     @gen.coroutine
-    def __do_start_agent(self, agent_data, env):
-        environment_id = env.id
-        agent_names = ",".join(agent_data["agents"])
+    def __do_start_agent(self, agents, env):
+        """
+            Start an agent process for the given agents in the given environment
+        """
+        agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
+        config = yield self._make_agent_config(env, agents, agent_map)
 
-        # todo: cache what is what
-        agent_map = {}
-        config_map = agent_config.agent_map.get()
-        for agent in agent_data["agents"]:
-            if agent in config_map:
-                agent_map[agent] = config_map[agent]
-            else:
-                try:
-                    gw = RemoteIO(agent)
-                    gw.close()
-                except HostNotFoundException:
-                    agent_map[agent] = "localhost"
-
-        config = yield self._make_agent_config(env, agent_names, agent_map)
-
-        config_dir = os.path.join(self._server_storage["agents"], str(environment_id))
+        config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
             os.mkdir(config_dir)
 
@@ -452,44 +395,41 @@ class AgentManager(object):
             fd.write(config)
 
         if not self._server._agent_no_log:
-            out = os.path.join(self._server_storage["logs"], "agent-%s.log" % environment_id)
-            err = os.path.join(self._server_storage["logs"], "agent-%s.err" % environment_id)
+            out = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
+            err = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
         else:
             out = None
             err = None
 
         proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "agent"], out, err)
 
-        if agent_data["process"] is not None:
-            LOGGER.debug("Terminating old agent with PID %s", agent_data["process"].pid)
-            agent_data["process"].terminate()
+        if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
+            LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
+            self._agent_procs[env.id].terminate()
 
-        # FIXME: include agent
-        agent_data["process"] = proc
-        self._requires_agents[environment_id] = agent_data
+        self._agent_procs[env.id] = proc
 
-        yield retry_limited(lambda: self.get_agent_client(environment_id, agent) is not None, 5)
+        # Wait for an agent to start
+        yield retry_limited(lambda: self.get_agent_client(env.id, agents[0]) is not None, 5)
         # yield sleep(2)
 
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
 
     def terminate_agents(self):
-        for agent in self._requires_agents.values():
-            if agent["process"] is not None:
-                agent["process"].terminate()
-
-    def _agent_matches(self, agent_name):
-        agent_globs = server_agent_autostart.get()
-
-        for agent_glob in agent_globs:
-            if glob.fnmatch.fnmatchcase(agent_name, agent_glob):
-                return True
-
-        return False
+        for proc in self._agent_procs.values():
+            proc.terminate()
 
     @gen.coroutine
-    def _make_agent_config(self, env, agent_names, agent_map):
+    def _make_agent_config(self, env: data.Environment, agent_names: list, agent_map: dict) -> str:
+        """
+            Generate the config file for the process that hosts the autostarted agents
+
+            :param env: The environment for which to autostart agents
+            :param agent_names: The names of the agents
+            :param agent_map: The agent mapping to use
+            :return: A string that contains the config file content.
+        """
         environment_id = str(env.id)
         port = Config.get("server_rest_transport", "port", "8888")
 
@@ -509,7 +449,7 @@ agent_splay=%(agent_splay)d
 [agent_rest_transport]
 port=%(port)s
 host=localhost
-""" % {"agents": agent_names, "env_id": environment_id, "port": port,
+""" % {"agents": ",".join(agent_names), "env_id": environment_id, "port": port,
             "python_binary": Config.get("config", "python_binary", "python"),
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
             "statedir": privatestatedir, "agent_splay": agent_splay}
@@ -558,7 +498,10 @@ ssl_ca_cert_file=%s
             now = time.time()
             if (resource_id not in self._fact_resource_block_set or
                     (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
-                yield self._ensure_agent(env, res.agent)
+
+                agents = yield data.ConfigurationModel.get_agents(env.id, version.version)
+                yield self._ensure_agents(env, agents)
+
                 client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
                     future = client.get_parameter(str(env_id), res.agent, res.to_dict())
@@ -586,34 +529,15 @@ ssl_ca_cert_file=%s
         return 200, {"enabled": False}
 
     @gen.coroutine
-    def trigger_agent(self, tid, id):
-        env = yield data.Environment.get_by_id(tid)
-        if env is None:
-            return 404, {"message": "The given environment id does not exist!"}
-
-        agent_env = self.get_env(tid)
-        for agent in agent_env.agents:
-            client = self.get_agent_client(tid, agent)
-            if client is not None:
-                future = client.trigger(tid, agent)
-                self.add_future(future)
-
-        return 200
-
-    @gen.coroutine
     def start_agents(self):
-        agents = yield data.Agent.get_list()
-        for agent in agents:
-            if self._agent_matches(agent.name):
-                env_id = str(agent.environment)
-                if env_id not in self._requires_agents:
-                    agent_data = {"agents": set(), "process": None}
-                    self._requires_agents[env_id] = agent_data
-
-                self._requires_agents[env_id]["agents"].add(agent.name)
-
-        for env_id in list(self._requires_agents.keys()):
-            agent = list(self._requires_agents[env_id]["agents"])[0]
-            self._requires_agents[env_id]["agents"].remove(agent)
-            env = yield data.Environment.get_by_id(uuid.UUID(env_id))
-            yield self._ensure_agent(env, agent)
+        """
+            Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
+            is called on server start.
+        """
+        environments = yield data.Environment.get_list()
+        for env in environments:
+            agents = yield data.Agent.get_list(environment=env.id)
+            autostart = yield env.get(data.AUTOSTART_ON_START)
+            if autostart:
+                agent_list = [a.name for a in agents]
+                yield self._ensure_agents(env, agent_list)

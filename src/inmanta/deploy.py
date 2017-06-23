@@ -22,7 +22,7 @@ import sys
 
 from mongobox import mongobox
 from tornado import gen, process
-from inmanta import module, config, server, agent, protocol, const
+from inmanta import module, config, server, agent, protocol, const, data
 
 
 LOGGER = logging.getLogger(__name__)
@@ -88,7 +88,6 @@ class Deploy(object):
         config.Config.set("compiler_rest_transport", "port", str(self._server_port))
         config.Config.set("client_rest_transport", "port", str(self._server_port))
         config.Config.set("cmdline_rest_transport", "port", str(self._server_port))
-        config.Config.set("server", "agent-autostart", "*")
 
         # start the server
         self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop,
@@ -283,28 +282,28 @@ class Deploy(object):
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return []
 
-        agents = set([x["id_fields"]["agent_name"] for x in version_result.result["resources"]])
-        return list(agents)
-
-    @gen.coroutine
-    def get_active_agents(self):
-        agent_result = yield self._client.list_agents(tid=self._environment_id)
-        if agent_result.code != 200:
-            LOGGER.error("Unable to retrieve active agent list")
-            return []
-
-        if len(agent_result.result["agents"]) == 0:
-            return []
-
-        agents = agent_result.result["agents"]
-        return [x["name"] for x in agents
-                if x["state"] == "up"]
+        return [x["agent"] for x in version_result.result["resources"]]
 
     @gen.coroutine
     def deploy(self, dry_run):
         version = yield self._latest_version(self._environment_id)
         if version is None:
             return []
+
+        # Update the agentmap to autostart all agents
+        agents = yield self.get_agents_of_for_model(version)
+        result = yield self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
+
+        if result.code == 200:
+            agent_map = result.result["value"]
+        else:
+            agent_map = {}
+
+        for agent_name in agents:
+            if agent_name not in agent_map:
+                agent_map[agent_name] = ""
+
+        yield self._client.set_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP, value=agent_map)
 
         # release the version!
         if not dry_run:

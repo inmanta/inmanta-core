@@ -480,9 +480,56 @@ def convert_int(value):
     return f_value
 
 
+def convert_agent_map(value):
+    if not isinstance(value, dict):
+        raise ValueError("Agent map should be a dict")
+
+    for key, v in value.items():
+        if not isinstance(key, str):
+            raise ValueError("The key of an agent map should be string")
+
+        if not isinstance(v, str):
+            raise ValueError("The value of an agent map should be string")
+
+    return value
+
+
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AUTOSTART_SPLAY = "autostart_splay"
+AUTOSTART_ON_START = "autostart_on_start"
+AUTOSTART_AGENT_MAP = "autostart_agent_map"
+
+
+class Setting(object):
+    """
+        A class to define a new environment setting.
+    """
+    def __init__(self, name, typ, default=None, doc=None, validator=None, recompile=False, update_model=False,
+                 agent_restart=False):
+        """
+            :param name: The name of the setting.
+            :param type: The type of the value. This type is mainly used for documentation purpose.
+            :param default: An optional default value for this setting. When a default is set and the
+                            is requested from the database, it will return the default value and also store
+                            the default value in the database.
+            :param doc: The documentation/help string for this setting
+            :param validator: A validation and casting function for input settings.
+            :param recompile: Trigger a recompile of the model when a setting is updated?
+            :param update_model: Update the configuration model (git pull on project and repos)
+            :param agent_restart: Restart autostarted agents when this settings is updated.
+        """
+        self.typ = typ
+        self.default = default
+        self.doc = doc
+        self.validator = validator
+        self.recompile = recompile
+        self.update = update_model
+        self.agent_restart = agent_restart
+
+    def to_dict(self):
+        return {"type": self.typ, "default": self.default, "doc": self.doc, "recompile": self.recompile, "update": self.update,
+                "agent_restart": self.agent_restart}
 
 
 class Environment(BaseDocument):
@@ -503,24 +550,19 @@ class Environment(BaseDocument):
     settings = Field(field_type=dict, default={})
 
     _settings = {
-        AUTO_DEPLOY: {"type": "bool", "default": False, "help": "When this boolean is set to true, the orchestrator will "
-                      "automatically release a new version that was compiled by the orchestrator itself.",
-                      "validator": convert_boolean},
-        PUSH_ON_AUTO_DEPLOY: {"type": "bool", "default": False, "help": "Push a new version when it has been autodeployed.",
-                              "validator": convert_boolean},
-        AUTOSTART_SPLAY: {"type": "int", "default": 10, "help": "Splay time for autostarted agents.",
-                          "validator": convert_int},
+        AUTO_DEPLOY: Setting(name=AUTO_DEPLOY, typ="bool", default=False,
+                             doc="When this boolean is set to true, the orchestrator will automatically release a new version "
+                                 "that was compiled by the orchestrator itself.", validator=convert_boolean),
+        PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
+                                     doc="Push a new version when it has been autodeployed.", validator=convert_boolean),
+        AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
+                                 doc="Splay time for autostarted agents.", validator=convert_int),
+        AUTOSTART_ON_START: Setting(name=AUTOSTART_ON_START, default=True, typ="bool", validator=convert_boolean,
+                                    doc="Automatically start agents when the server starts instead of only just in time."),
+        AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={}, typ="dict", validator=convert_agent_map,
+                                     doc="A dict with key the name of agents that should be automatically started. The value "
+                                     "is either an empty string or an agent map string.")
     }
-
-    @classmethod
-    def get_metadata(cls):
-        metadata = {}
-        for key, value in cls._settings.items():
-            metadata[key] = copy.copy(value)
-            if "validator" in metadata[key]:
-                del metadata[key]["validator"]
-
-        return metadata
 
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING), ("project", pymongo.ASCENDING)], unique=True)
@@ -539,10 +581,10 @@ class Environment(BaseDocument):
         if key in self.settings:
             return self.settings[key]
 
-        if "default" not in self._settings[key]:
+        if self._settings[key].default is None:
             raise KeyError()
 
-        value = self._settings[key]["default"]
+        value = self._settings[key].default
         yield self.set(key, value)
         return value
 
@@ -556,9 +598,10 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
-        if "validator" in self._settings[key]:
-            value = self._settings[key]["validator"](value)
+        if callable(self._settings[key].validator):
+            value = self._settings[key].validator(value)
         yield self._coll.update_one({"_id": self.id}, {"$set": {"settings." + key: self._value_to_dict(value)}})
+        self.settings[key] = value
 
     @gen.coroutine
     def unset(self, key):
@@ -570,10 +613,11 @@ class Environment(BaseDocument):
         if key not in self._settings:
             raise KeyError()
 
-        if "default" not in self._settings[key]:
-            yield self._coll.update_one({"_id": self.id}, {"$unset": "settings." + key})
+        if self._settings[key].default is None:
+            yield self._coll.update_one({"_id": self.id}, {"$unset": {"settings." + key: ""}})
+            del self.settings[key]
         else:
-            yield self.set(key, self._settings[key]["default"])
+            yield self.set(key, self._settings[key].default)
 
     @gen.coroutine
     def delete_cascade(self, only_content=False):

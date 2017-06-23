@@ -217,7 +217,7 @@ class EnvironmentSettings(Method):
         """
 
     @protocol(operation="POST", id=True, arg_options=ENV_OPTS)
-    def set_setting(self, tid: uuid.UUID, id: str, value: str):
+    def set_setting(self, tid: uuid.UUID, id: str, value: object):
         """
             Set a value
         """
