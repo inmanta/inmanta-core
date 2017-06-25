@@ -145,14 +145,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         # first define all unique indexes
         for name, field in cls._fields.items():
             if field.unique:
-                yield cls._coll.create_index([(name, pymongo.ASCENDING)], unique=True, background=True)
+                yield cls._coll.create_index([(name, pymongo.ASCENDING)], unique=True)
 
         if hasattr(cls, "__indexes__"):
             for i in cls.__indexes__:
                 keys = i["keys"]
                 other = i.copy()
                 del other["keys"]
-                yield cls._coll.create_index(keys, background=True, **other)
+                yield cls._coll.create_index(keys, **other)
 
     def __init__(self, from_mongo=False, **kwargs):
         self.__fields = self._create_dict(from_mongo, kwargs)
