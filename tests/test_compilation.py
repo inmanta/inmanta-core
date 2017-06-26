@@ -16,31 +16,31 @@
     Contact: code@inmanta.com
 """
 
-import unittest
-import tempfile
-import shutil
+from io import StringIO
+from itertools import groupby
 import os
 import re
-from itertools import groupby
+import shutil
 import sys
-from io import StringIO
+import tempfile
+import unittest
 
+import pytest
 
-from inmanta.module import Project
-import inmanta.compiler as compiler
+from conftest import SnippetCompilationTest
 from inmanta import config
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException,\
-    OptionalValueException
 from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.parser import ParserException
-import pytest
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException,\
+    OptionalValueException
+import inmanta.compiler as compiler
+from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
 from inmanta.export import DependencyCycleException
+from inmanta.module import Project
+from inmanta.parser import ParserException
 from utils import assert_graph
-from conftest import SnippetCompilationTest
-from inmanta.execute.proxy import UnsetException
 
 
 class CompilerBaseTest(object):
@@ -1562,3 +1562,70 @@ z = h1.files[name="f1"]
     z = root.lookup("z").get_value()
     f1h1 = root.lookup("f1h1").get_value()
     assert z is f1h1
+
+
+def test_438_parent_scopes_accessible(snippetcompiler):
+
+    snippetcompiler.setup_for_snippet("""
+entity Host:
+    string name
+end
+
+entity HostConfig:
+    string result
+end
+
+HostConfig.host [1] -- Host
+
+implementation hostDefaults for Host:
+    test="foo"
+    HostConfig(host=self)
+end
+
+implement Host using hostDefaults
+
+implementation test for HostConfig:
+    # fails correctly
+    # std::print(test)
+    # works and should fail
+    self.result = name
+end
+
+implement HostConfig using test
+
+Host(name="bar")
+""", autostd=False)
+    with pytest.raises(NotFoundException):
+        compiler.do_compile()
+
+
+def test_438_parent_scopes_accessible_2(snippetcompiler):
+
+    snippetcompiler.setup_for_snippet("""
+entity Host:
+    string name
+end
+
+entity HostConfig:
+    string result
+end
+
+HostConfig.host [1] -- Host
+
+implementation hostDefaults for Host:
+    test="foo"
+    HostConfig(host=self)
+end
+
+implement Host using hostDefaults
+
+implementation test for HostConfig:
+    self.result = test
+end
+
+implement HostConfig using test
+
+Host(name="bar")
+""", autostd=False)
+    with pytest.raises(NotFoundException):
+        compiler.do_compile()
