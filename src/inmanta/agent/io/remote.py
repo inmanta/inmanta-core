@@ -119,7 +119,6 @@ class SshIO(local.IOBase):
             ch.send((function_name, args, kwargs))
             result = ch.receive()
             ch.close()
-            LOGGER.info((function_name, args, kwargs, result))
 
         # check if we got an exception
         if isinstance(result, dict) and "__type__" in result and result["__type__"] == "RemoteException":

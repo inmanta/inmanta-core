@@ -38,7 +38,7 @@ def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
     run = deploy.Deploy(io_loop, mongoport=mongo_db.port)
     try:
         run.run(options, only_setup=True)
-        yield run.do_deploy(False)
+        yield run.do_deploy(False, "")
         assert file_name.exists()
     except (KeyboardInterrupt, deploy.FinishedException):
         # This is how the deploy command ends

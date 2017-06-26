@@ -660,8 +660,7 @@ class AgentInstance(object):
                 data["id"] = resource["id"]
                 resource_obj = Resource.deserialize(data)
 
-                version = resource_obj.version
-
+                version = resource_obj.id.version
                 try:
                     self._cache.open_version(version)
                     provider = handler.Commander.get_provider(self._cache, self, resource_obj)

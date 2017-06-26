@@ -273,6 +273,7 @@ class Deploy(object):
 
             return False
 
+        LOGGER.info("Export of model complete")
         yield self.deploy(dry_run, agent_map)
         return True
 
@@ -288,11 +289,13 @@ class Deploy(object):
     @gen.coroutine
     def deploy(self, dry_run, agent_map):
         version = yield self._latest_version(self._environment_id)
+        LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
             return
 
         # Update the agentmap to autostart all agents
         agents = yield self.get_agents_of_for_model(version)
+        LOGGER.debug("Agent(s) %s defined, adding them to autostart agent map", ", ".join(agents))
         result = yield self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
 
         if result.code == 200:
@@ -308,7 +311,7 @@ class Deploy(object):
 
         for agent_name in agents:
             if agent_name not in agent_map:
-                current_map[agent_name] = ""
+                current_map[agent_name] = "local:"
 
         yield self._client.set_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP, value=current_map)
 
