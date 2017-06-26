@@ -231,14 +231,19 @@ class Exporter(object):
         agent_name = config._normalize_name(agent_name)
 
         if "unknown_handler" not in Config._get_instance():
-            return default_policy
+            policy = {}
+        else:
+            policy = Config._get_instance()["unknown_handler"]
 
-        for agent_pattern, policy in Config._get_instance()["unknown_handler"].items():
+        for agent_pattern, policy in policy.items():
             if agent_pattern == "default":
                 continue
 
             if glob.fnmatch.fnmatchcase(agent_name, agent_pattern):
                 return policy
+
+        if agent_name == "internal":
+            return "prune-resource"
 
         return default_policy
 

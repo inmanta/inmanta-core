@@ -15,16 +15,77 @@
 
     Contact: code@inmanta.com
 """
+import re
+import urllib
 
-from .local import LocalIO
-from .remote import RemoteIO
+from . import local, remote
+from inmanta.agent.cache import AgentCache
 
 
-def get_io(remote=None):
+def parse_agent_uri(uri: str) -> (str, dict):
+    """
+        Parse an agent uri and return the settings
+
+        :attr uri: The uri to parse
+        :return: (scheme, config)
+    """
+    parts = urllib.parse.urlparse(uri)
+    config = {}
+    scheme = "local"
+
+    if parts.query != "":
+        items = urllib.parse.parse_qs(parts.query)
+        for key, values in items.items():
+            config[key] = values[0]
+
+    if parts.scheme != "":
+        scheme = parts.scheme
+
+    if parts.netloc != "":
+        match = re.search(r"^(?:(?P<user>[^\s@]+)@)?(?P<host>[^\s:]+)(?::(?P<port>[\d]+))?", parts.netloc)
+        if match is None:
+            raise ValueError()
+        config.update(match.groupdict())
+
+    if parts.path != "" and parts.scheme == "" and parts.netloc == "":
+        if parts.path == "localhost":
+            scheme = "local"
+        else:
+            scheme = "ssh"
+            config.update({"host": parts.path, "port": None, "user": None})
+
+    return scheme, config
+
+
+def _get_io_class(scheme) -> local.IOBase:
     """
         Get an IO instance.
     """
-    if remote is not None:
-        return RemoteIO(remote)
+    if scheme == "local":
+        return local.LocalIO
+
+    elif scheme == "ssh":
+        return remote.SshIO
+
+
+def _get_io_instance(uri):
+    scheme, config = parse_agent_uri(uri)
+    io_class = _get_io_class(scheme)
+    io = io_class(uri, config)
+    return io
+
+
+def get_io(cache: AgentCache, uri: str, version: int):
+    """
+        Get an IO instance for the given uri and version
+    """
+    if cache is not None and cache.is_open(version):
+        try:
+            io = cache.find(uri, version=version)
+        except KeyError:
+            io = _get_io_instance(uri)
+            cache.cache_value(uri, io, version=version)
     else:
-        return LocalIO()
+        io = _get_io_instance(uri)
+
+    return io

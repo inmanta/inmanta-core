@@ -396,7 +396,8 @@ def env_setting_list(client, environment):
     settings = client.do_request("list_settings", arguments=dict(tid=tid))
 
     table_body = []
-    for key, meta in settings["metadata"].items():
+    for key in sorted(settings["metadata"].keys()):
+        meta = settings["metadata"][key]
         value = ""
         if key in settings["settings"]:
             value = str(settings["settings"][key])

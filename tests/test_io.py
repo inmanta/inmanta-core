@@ -16,18 +16,21 @@
     Contact: bart@inmanta.com
 """
 
-import tempfile
 import os
-import shutil
 import pwd
-import grp
-
-from inmanta.agent.io.local import LocalIO
-from inmanta.agent.io.local import BashIO
-import pytest
+import shutil
 import subprocess
+import tempfile
 
-io_list = [LocalIO(), BashIO(), BashIO(run_as="root")]
+import pytest
+
+import grp
+from inmanta.agent.io import parse_agent_uri
+from inmanta.agent.io.local import BashIO
+from inmanta.agent.io.local import LocalIO
+
+
+io_list = [LocalIO("local:", {}), BashIO("local:", {}), BashIO("local:", {}, run_as="root")]
 
 
 @pytest.yield_fixture(scope="module")
@@ -219,3 +222,36 @@ def test_hash_dir(io, testdir):
 def test_timeout(io):
     with pytest.raises(subprocess.TimeoutExpired):
         io.run("sleep", ["0.1"], timeout=0.05)
+
+
+def test_uri_parse():
+    scheme, config = parse_agent_uri("local:")
+    assert scheme == "local"
+    assert len(config) == 0
+
+    scheme, config = parse_agent_uri("ssh://ec2-user@1.2.3.4:22")
+    assert scheme == "ssh"
+    assert len(config) == 3
+    assert config["user"] == "ec2-user"
+    assert config["port"] == "22"
+    assert config["host"] == "1.2.3.4"
+
+    scheme, config = parse_agent_uri("")
+    assert scheme == "local"
+    assert len(config) == 0
+
+    scheme, config = parse_agent_uri("hostname")
+    assert scheme == "ssh"
+    assert len(config) == 3
+    assert config["host"] == "hostname"
+
+    scheme, config = parse_agent_uri("localhost")
+    assert scheme == "local"
+
+    scheme, config = parse_agent_uri("ssh://ec2-user@1.2.3.4:22?python=/usr/bin/python2")
+    assert scheme == "ssh"
+    assert len(config) == 4
+    assert config["user"] == "ec2-user"
+    assert config["port"] == "22"
+    assert config["host"] == "1.2.3.4"
+    assert config["python"] == "/usr/bin/python2"

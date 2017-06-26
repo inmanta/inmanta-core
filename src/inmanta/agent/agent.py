@@ -319,10 +319,10 @@ class ResourceScheduler(object):
 
 class AgentInstance(object):
 
-    def __init__(self, process, name: str, hostname: str):
+    def __init__(self, process, name: str, uri: str):
         self.process = process
         self.name = name
-        self.hostname = hostname
+        self._uri = uri
 
         # inherit
         self.ratelimiter = process.ratelimiter
@@ -335,7 +335,7 @@ class AgentInstance(object):
 
         # init
         self._cache = AgentCache()
-        self._nq = ResourceScheduler(self, self.process._env_id, name, self._cache, ratelimiter=self.ratelimiter)
+        self._nq = ResourceScheduler(self, self.process.environment, name, self._cache, ratelimiter=self.ratelimiter)
         self._enabled = None
 
         # do regular deploys
@@ -346,14 +346,16 @@ class AgentInstance(object):
         self._getting_resources = False
         self._get_resource_timeout = 0
 
+    @property
+    def environment(self):
+        return self.process.environment
+
     def get_client(self):
         return self.process._client
 
-    def get_hostname(self):
-        return self.hostname
-
-    def is_local(self):
-        return self.get_client().node_name == self.hostname or self.hostname == "localhost"
+    @property
+    def uri(self):
+        return self._uri
 
     def is_enabled(self):
         return self._enabled is not None
@@ -370,6 +372,7 @@ class AgentInstance(object):
         @gen.coroutine
         def action():
             yield self.get_latest_version_for_agent()
+
         self._enabled = action
         self.process._sched.add_action(action, self._deploy_interval, self._splay_value)
         return 200, "unpaused"

@@ -145,14 +145,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
         # first define all unique indexes
         for name, field in cls._fields.items():
             if field.unique:
-                yield cls._coll.create_index([(name, pymongo.ASCENDING)], unique=True, background=True)
+                yield cls._coll.create_index([(name, pymongo.ASCENDING)], unique=True)
 
         if hasattr(cls, "__indexes__"):
             for i in cls.__indexes__:
                 keys = i["keys"]
                 other = i.copy()
                 del other["keys"]
-                yield cls._coll.create_index(keys, background=True, **other)
+                yield cls._coll.create_index(keys, **other)
 
     def __init__(self, from_mongo=False, **kwargs):
         self.__fields = self._create_dict(from_mongo, kwargs)
@@ -559,7 +559,8 @@ class Environment(BaseDocument):
                                  doc="Splay time for autostarted agents.", validator=convert_int),
         AUTOSTART_ON_START: Setting(name=AUTOSTART_ON_START, default=True, typ="bool", validator=convert_boolean,
                                     doc="Automatically start agents when the server starts instead of only just in time."),
-        AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={}, typ="dict", validator=convert_agent_map,
+        AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={"internal": "local:"}, typ="dict",
+                                     validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
                                      "is either an empty string or an agent map string.", agent_restart=True)
     }

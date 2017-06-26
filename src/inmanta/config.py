@@ -22,6 +22,7 @@ import logging
 from collections import defaultdict
 import uuid
 import sys
+import re
 
 LOGGER = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ def is_map(map_in):
         mappings = map_in.split(",")
 
         for mapping in mappings:
-            parts = mapping.strip().split("=")
+            parts = re.split("=", mapping.strip(), 1)
             if len(parts) == 2:
                 key = parts[0].strip()
                 value = parts[1].strip()

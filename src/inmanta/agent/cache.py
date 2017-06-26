@@ -59,6 +59,12 @@ class AgentCache(object):
         self.timerqueue = []
         self.nextAction = sys.maxsize
 
+    def is_open(self, version: int) -> bool:
+        """
+            Is the given version open in the cache?
+        """
+        return version in self.counterforVersion
+
     def open_version(self, version: int):
         """
             Open the cache for the specific version

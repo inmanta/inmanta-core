@@ -210,25 +210,25 @@ class EnvironmentSettings(Method):
     """
     __method_name__ = "environment_settings"
 
-    @protocol(operation="GET", index=True, arg_options=ENV_OPTS)
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS, api=True, agent_server=True)
     def list_settings(self, tid: uuid.UUID):
         """
             List the settings in the current environment
         """
 
-    @protocol(operation="POST", id=True, arg_options=ENV_OPTS)
+    @protocol(operation="POST", id=True, arg_options=ENV_OPTS, api=True, agent_server=True)
     def set_setting(self, tid: uuid.UUID, id: str, value: object):
         """
             Set a value
         """
 
-    @protocol(operation="GET", id=True, arg_options=ENV_OPTS)
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, api=True, agent_server=True)
     def get_setting(self, tid: uuid.UUID, id: str):
         """
             get a value
         """
 
-    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS)
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, api=True, agent_server=True)
     def delete_setting(self, tid: uuid.UUID, id: str):
         """
             delete a value

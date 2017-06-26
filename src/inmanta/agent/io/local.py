@@ -36,11 +36,48 @@ except ImportError:
     getgrnam = None
 
 
-class BashIO(object):
+class IOBase(object):
+    """
+        Base class for an IO module. This class is python2 compatible so IOs that work remote can load this module on python2.
+    """
+    def __init__(self, uri, config):
+        """
+            Initialize the IO
+
+            :param uri: The uri used to configure this IO
+            :param config: The parsed version of the uri
+        """
+        self.uri = uri
+        self.config = config
+
+    def is_remote(self):
+        """
+            Are operation executed remote
+
+            :return: Returns true if the io operations are remote.
+            :rtype: bool
+        """
+        raise NotImplementedError()
+
+    def close(self):
+        """
+            Close any resources
+        """
+
+    def __del__(self):
+        """
+            An agent caches IO instances to reuse them for multiple resources. This method is called when an item is removed
+            from the cache, for example when a version in the cache is closed.
+        """
+        self.close()
+
+
+class BashIO(IOBase):
     """
         This class provides handler IO methods
     """
-    def __init__(self, run_as=None):
+    def __init__(self, uri, config, run_as=None):
+        super(BashIO, self).__init__(uri, config)
         self.run_as = run_as
 
     def _run_as_args(self, *args):
@@ -125,7 +162,7 @@ class BashIO(object):
             Check if a given file exists
         """
         result = subprocess.Popen(self._run_as_args("stat", "-t", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        result.communicate()
+        print(result.communicate())
 
         if result.returncode > 0:
             return False
@@ -276,9 +313,6 @@ class BashIO(object):
 
         return result.returncode > 0
 
-    def close(self):
-        pass
-
     def __repr__(self):
         if self.run_as is None:
             return "BashIO"
@@ -290,7 +324,7 @@ class BashIO(object):
         return repr(self)
 
 
-class LocalIO(object):
+class LocalIO(IOBase):
     """
         This class provides handler IO methods
     """
@@ -526,17 +560,14 @@ class LocalIO(object):
         """
         shutil.rmtree(path)
 
-    def close(self):
-        pass
-
 
 if __name__ == '__channelexec__':
     global channel
 
     if os.getuid() == 0:
-        local_io = LocalIO()
+        local_io = LocalIO(uri="local:", config={})
     else:
-        local_io = BashIO(run_as="root")
+        local_io = BashIO(uri="local:", config={}, run_as="root")
 
     for item in channel:  # NOQA
         if hasattr(local_io, item[0]):

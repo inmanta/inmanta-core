@@ -447,14 +447,12 @@ state-dir=%(statedir)s
 agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
-python_binary=%(python_binary)s
 agent_splay=%(agent_splay)d
 
 [agent_rest_transport]
 port=%(port)s
 host=localhost
 """ % {"agents": ",".join(agent_names), "env_id": environment_id, "port": port,
-            "python_binary": Config.get("config", "python_binary", "python"),
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
             "statedir": privatestatedir, "agent_splay": agent_splay}
 
