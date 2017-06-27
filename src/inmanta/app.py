@@ -142,7 +142,8 @@ def deploy_parser_config(parser):
     parser.add_argument("-p", dest="project", help="The project name")
     parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
                         "and wildcards are supported")
-    parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map"),
+    parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map",
+                        default=""),
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
     parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
     parser.add_argument("--no-agent-log", help="Do not capture agents logs, print them to stdout", action="store_true",

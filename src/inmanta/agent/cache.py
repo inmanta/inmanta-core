@@ -19,6 +19,10 @@
 import time
 import sys
 import bisect
+import logging
+
+
+LOGGER = logging.getLogger()
 
 
 class Scope(object):
@@ -30,14 +34,22 @@ class Scope(object):
 
 class CacheItem(object):
 
-    def __init__(self, key, scope: Scope, value):
+    def __init__(self, key, scope: Scope, value, call_on_delete):
         self.key = key
         self.scope = scope
         self.value = value
         self.time = time.time() + scope.timeout
+        self.call_on_delete = call_on_delete
 
     def __lt__(self, other):
         return self.time < other.time
+
+    def delete(self):
+        if callable(self.call_on_delete):
+            self.call_on_delete(self.value)
+
+    def __del__(self):
+        self.delete()
 
 
 class AgentCache(object):
@@ -59,6 +71,12 @@ class AgentCache(object):
         self.timerqueue = []
         self.nextAction = sys.maxsize
 
+    def is_open(self, version: int) -> bool:
+        """
+            Is the given version open in the cache?
+        """
+        return version in self.counterforVersion
+
     def open_version(self, version: int):
         """
             Open the cache for the specific version
@@ -68,6 +86,7 @@ class AgentCache(object):
         if version in self.counterforVersion:
             self.counterforVersion[version] += 1
         else:
+            LOGGER.debug("Cache open version %d", version)
             self.counterforVersion[version] = 1
             self.keysforVersion[version] = set()
 
@@ -87,12 +106,16 @@ class AgentCache(object):
         if self.counterforVersion[version] != 0:
             return
 
+        LOGGER.debug("Cache close version %d", version)
         for x in self.keysforVersion[version]:
             try:
+                item = self.cache[x]
+                item.delete()
                 del self.cache[x]
             except KeyError:
                 # already gone
                 pass
+
         del self.counterforVersion[version]
         del self.keysforVersion[version]
 
@@ -133,13 +156,14 @@ class AgentCache(object):
             self.nextAction = item.time
         self._advance_time()
 
-    def cache_value(self, key, value, resource=None, version=0, timeout=5000):
+    def cache_value(self, key, value, resource=None, version=0, timeout=5000, call_on_delete=None):
         """
             add a value to the cache with the given key
 
             if a resource or version is given, these are prepended to the key and expiry is adapted accordingly
 
-            @param timeoute: nr of second before this value is expired
+            :param timeout: nr of second before this value is expired
+            :param call_on_delete: A callback function that is called when the value is removed from the cache.
         """
         key = [key]
         if resource is not None:
@@ -147,7 +171,7 @@ class AgentCache(object):
         if version != 0:
             key.append(str(version))
         key = '__'.join(key)
-        self._cache(CacheItem(key, Scope(timeout, version), value))
+        self._cache(CacheItem(key, Scope(timeout, version), value, call_on_delete))
 
     def find(self, key, resource=None, version=0):
         """

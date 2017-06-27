@@ -26,7 +26,7 @@ from collections import defaultdict
 import typing
 
 
-from inmanta.agent.io import get_io, remote
+from inmanta.agent.io import get_io
 from inmanta import protocol, resources, const, data
 from tornado import ioloop
 from inmanta.module import Project
@@ -40,7 +40,8 @@ class provider(object):  # noqa: H801
     """
         A decorator that registers a new handler.
 
-        :param resource_type: The type of the resource this handler provides an implementation for. For example, ``std::File``
+        :param resource_type: The type of the resource this handler provides an implementation for.
+                              For example, :inmanta:entity:`std::File`
         :param name: A name to reference this provider.
     """
 
@@ -536,8 +537,10 @@ class ResourceHandler(object):
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
 
         except Exception as e:
+            print(e)
+            print(traceback.format_exc())
             ctx.set_status(const.ResourceState.failed)
-            ctx.exception("An error occurred during deployment of %(resource_id)s (excp: %(exception)s",
+            ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                           resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
@@ -783,27 +786,15 @@ class Commander(object):
         """
         resource_id = resource.id
         resource_type = resource_id.entity_type
-        agent_name = agent.get_hostname()
-        if agent.is_local():
-            io = get_io()
-        else:
-            key_name = "remote_io_" + agent_name
-            try:
-                io = cache.find(key_name, version=resource_id.version)
-            except KeyError:
-                try:
-                    io = get_io(agent_name)
-                except (remote.CannotLoginException, resources.HostNotFoundException):
-                    # Unable to login, show an error and ignore this agent
-                    LOGGER.error("Unable to login to host %s (for resource %s)", agent_name, resource_id)
-                    io = None
+        try:
+            io = get_io(cache, agent.uri, resource_id.version)
+        except Exception:
+            LOGGER.exception("Exception raised during creation of IO for uri %s", agent.uri)
+            raise Exception("No handler available for %s (no io available)" % resource_id)
 
-                # TODO: do not add expire to remoteio!!
-                cache.cache_value(key_name, io, version=resource_id.version)
-
-            if io is None:
-                # Skip this resource
-                raise Exception("No handler available for %s (no io available)" % resource_id)
+        if io is None:
+            # Skip this resource
+            raise Exception("No handler available for %s (no io available)" % resource_id)
 
         available = []
         if resource_type in cls.__command_functions:

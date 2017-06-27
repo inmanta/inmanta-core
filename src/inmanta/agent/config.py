@@ -23,18 +23,13 @@ LOGGER = logging.getLogger(__name__)
 
 # flake8: noqa: H904
 
-python_binary = \
-    Option("config", "python_binary", "python",
-           "Python binary used to run the remote agent")
-
 agent_map = \
     Option("config", "agent-map", None,
-           """mapping between agent names and host names.
-    If an agent is autostarted, its hostname is looked up in this map.
-    If it is not found, the agent name is used as hostname.
-    If the hostname is not localhost or :inmanta.config:option:`config.node-name`, ssh is used to start the agent on the appropriate machine
-    
-    example: iaas_openstack=localhost,vm1=192.16.13.2""", is_map)
+           """By default the agent assumes that all agent names map to the host on which the process is executed. With the
+agent map it can be mapped to other hosts. This value consists of a list of key/value pairs. The key is the name of the
+agent and the format of the value is described in :inmanta:entity:`std::AgentConfig`
+
+example: iaas_openstack=localhost,vm1=192.16.13.2""", is_map)
 
 environment = \
     Option("config", "environment", None,

@@ -17,11 +17,15 @@
 """
 
 import threading
+import logging
+import time
 
 from execnet import multi, gateway_bootstrap
 from . import local
 from inmanta import resources
-from inmanta.agent import config as cfg
+
+
+LOGGER = logging.getLogger()
 
 
 class CannotLoginException(Exception):
@@ -33,34 +37,81 @@ class RemoteException(Exception):
         super().__init__(exception_type, msg, traceback)
 
 
-class RemoteIO(object):
+class SshIO(local.IOBase):
     """
-        This class provides handler IO methods
+        This class provides handler IO methods. This io method is used when the ssh scheme is provided in the agent uri.
+
+        The uri supports setting the hostname, user and port. In the query string the following config can be provided:
+         * python: The python interpreter to use. The default value is python
+         * retries: The number of retries before giving up. The default number of retries 10
+         * retry_wait: The time to wait between retries for the remote target to become available. The default wait is 30s
     """
     def is_remote(self):
         return True
 
-    def __init__(self, host):
+    def __init__(self, uri, config):
+        super(SshIO, self).__init__(uri, config)
+        self._host = config["host"]
+        if "port" in config and config["port"] is not None:
+            self._port = int(config["port"])
+        else:
+            self._port = 22
+
+        if "user" in config and config["user"] is not None:
+            self._user = config["user"]
+        else:
+            self._user = "root"
+
+        if "retries" in config and config["retries"] is not None:
+            self._retries = int(config["retries"])
+        else:
+            self._retries = 10
+
+        if "retry_wait" in config and config["retry_wait"] is not None:
+            self._retry_wait = int(config["retry_wait"])
+        else:
+            self._retry_wait = 30
+
         self._lock = threading.Lock()
         self._gw = None
+        connect = self._build_connect_string()
+
         try:
-            self._gw = multi.makegateway(self._build_connect_string(host))
-        except (gateway_bootstrap.HostNotFound, BrokenPipeError) as e:
-            raise resources.HostNotFoundException(hostname=host, user="root", error=e)
+            attempts = self._retries + 1
+            while attempts > 0:
+                try:
+                    self._gw = multi.makegateway(self._build_connect_string())
+                    attempts = 0
+                except gateway_bootstrap.HostNotFound as e:
+                    attempts -= 1
+                    if attempts == 0:
+                        raise resources.HostNotFoundException(hostname=self._host, user=self._user, error=e)
+
+                    LOGGER.info("Failed to login to %s, waiting %d seconds and %d attempts left.",
+                                self.uri, self._retry_wait, attempts)
+                    time.sleep(self._retry_wait)
+
+        except BrokenPipeError as e:
+            raise resources.HostNotFoundException(hostname=self._host, user=self._user, error=e)
         except AssertionError:
             raise CannotLoginException()
 
-    def _build_connect_string(self, host):
+        assert self._gw is not None
+        LOGGER.info("Connected with %s", connect)
+
+    def _build_connect_string(self):
         """
             Build the connection string for execent based on the hostname
         """
-        python_path = cfg.python_binary.get()
+        opts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PasswordAuthentication=no"
+        opts += " -p %d" % self._port
 
-        if "@" in host:
-            username, hostname = host.split("@")
-            return "ssh=%s@%s//python=%s" % (username, hostname, python_path)
+        if "python" in self.config:
+            python = self.config["python"]
         else:
-            return "ssh=root@%s//python=%s" % (host, python_path)
+            python = "python"
+
+        return "ssh=%s %s@%s//python=%s" % (opts, self._user, self._host, python)
 
     def _execute(self, function_name, *args, **kwargs):
         with self._lock:
@@ -96,6 +147,3 @@ class RemoteIO(object):
     def close(self):
         if self._gw is not None:
             self._gw.exit()
-
-    def __del__(self):
-        self.close()

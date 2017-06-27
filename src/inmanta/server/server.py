@@ -88,9 +88,7 @@ class Server(protocol.ServerEndpoint):
 
         self._recompiles = defaultdict(lambda: None)
 
-        self.agentmanager = AgentManager(self,
-                                         autostart=opt.server_autostart_on_start.get(),
-                                         fact_back_off=opt.server_fact_resource_block.get())
+        self.agentmanager = AgentManager(self, fact_back_off=opt.server_fact_resource_block.get())
 
         self.setup_dashboard()
         self.dryrun_lock = locks.Lock()
@@ -1123,13 +1121,25 @@ class Server(protocol.ServerEndpoint):
     @protocol.handle(methods.EnvironmentSettings.list_settings, env="tid")
     @gen.coroutine
     def list_settings(self, env: data.Environment):
-        return 200, {"settings": env.settings, "metadata": data.Environment.get_metadata()}
+        return 200, {"settings": env.settings, "metadata": data.Environment._settings}
+
+    @gen.coroutine
+    def _setting_change(self, env, key):
+        setting = env._settings[key]
+        if setting.recompile:
+            LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
+            self._async_recompile(env.id, setting.update)
+
+        if setting.agent_restart:
+            LOGGER.info("Environment setting %s changed. Restarting agents.", key)
+            yield self.agentmanager.restart_agents(env)
 
     @protocol.handle(methods.EnvironmentSettings.set_setting, env="tid", key="id")
     @gen.coroutine
     def set_setting(self, env: data.Environment, key: str, value: str):
         try:
             yield env.set(key, value)
+            yield self._setting_change(env, key)
             return 200
         except KeyError:
             return 404
@@ -1141,7 +1151,7 @@ class Server(protocol.ServerEndpoint):
     def get_setting(self, env: data.Environment, key: str):
         try:
             value = yield env.get(key)
-            return 200, {"value": value, "metadata": data.Environment.get_metadata()[key]}
+            return 200, {"value": value, "metadata": data.Environment._settings}
         except KeyError:
             return 404
 
@@ -1150,6 +1160,7 @@ class Server(protocol.ServerEndpoint):
     def delete_setting(self, env: data.Environment, key: str):
         try:
             yield env.unset(key)
+            yield self._setting_change(env, key)
             return 200
         except KeyError:
             return 404

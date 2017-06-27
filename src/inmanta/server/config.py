@@ -118,16 +118,6 @@ server_version_to_keep = \
            """On boot and at regular intervals the server will purge versions that have not been deployed.
 This is the number of most recent undeployed versions to keep available.""", is_int)
 
-server_autostart_on_start = \
-    Option("server", "autostart-on-start", True,
-           "Automatically start agents when the server starts instead of only just in time.", is_bool)
-
-server_agent_autostart = \
-    Option("server", "agent-autostart", "iaas_*",
-           """Which agents can the server start itself?
-Setting this value to * will match all agents.
-These agents are started when a dryrun or a deploy is requested.""", is_list)
-
 server_address = \
     Option("server", "server_address", "localhost",
            """The public ip address of the server.

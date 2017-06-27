@@ -19,10 +19,11 @@ import os
 import logging
 import random
 import sys
+import re
 
 from mongobox import mongobox
 from tornado import gen, process
-from inmanta import module, config, server, agent, protocol, const
+from inmanta import module, config, server, agent, protocol, const, data
 
 
 LOGGER = logging.getLogger(__name__)
@@ -88,7 +89,6 @@ class Deploy(object):
         config.Config.set("compiler_rest_transport", "port", str(self._server_port))
         config.Config.set("client_rest_transport", "port", str(self._server_port))
         config.Config.set("cmdline_rest_transport", "port", str(self._server_port))
-        config.Config.set("server", "agent-autostart", "*")
 
         # start the server
         self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop,
@@ -248,7 +248,7 @@ class Deploy(object):
         return True
 
     @gen.coroutine
-    def export(self, dry_run):
+    def export(self, dry_run, agent_map):
         """
             Export a version to the embedded server
         """
@@ -273,7 +273,8 @@ class Deploy(object):
 
             return False
 
-        yield self.deploy(dry_run)
+        LOGGER.info("Export of model complete")
+        yield self.deploy(dry_run, agent_map)
         return True
 
     @gen.coroutine
@@ -283,28 +284,36 @@ class Deploy(object):
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return []
 
-        agents = set([x["id_fields"]["agent_name"] for x in version_result.result["resources"]])
-        return list(agents)
+        return [x["agent"] for x in version_result.result["resources"]]
 
     @gen.coroutine
-    def get_active_agents(self):
-        agent_result = yield self._client.list_agents(tid=self._environment_id)
-        if agent_result.code != 200:
-            LOGGER.error("Unable to retrieve active agent list")
-            return []
-
-        if len(agent_result.result["agents"]) == 0:
-            return []
-
-        agents = agent_result.result["agents"]
-        return [x["name"] for x in agents
-                if x["state"] == "up"]
-
-    @gen.coroutine
-    def deploy(self, dry_run):
+    def deploy(self, dry_run, agent_map):
         version = yield self._latest_version(self._environment_id)
+        LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
-            return []
+            return
+
+        # Update the agentmap to autostart all agents
+        agents = yield self.get_agents_of_for_model(version)
+        LOGGER.debug("Agent(s) %s defined, adding them to autostart agent map", ", ".join(agents))
+        result = yield self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
+
+        if result.code == 200:
+            current_map = result.result["value"]
+        else:
+            current_map = {}
+
+        parts = agent_map.split(",")
+        for part in parts:
+            split = re.split("=", part.strip(), 1)
+            if len(split) == 2:
+                current_map[split[0].strip()] = split[1].strip()
+
+        for agent_name in agents:
+            if agent_name not in agent_map:
+                current_map[agent_name] = "local:"
+
+        yield self._client.set_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP, value=current_map)
 
         # release the version!
         if not dry_run:
@@ -415,13 +424,11 @@ class Deploy(object):
         raise FinishedException()
 
     @gen.coroutine
-    def do_deploy(self, dry_run):
+    def do_deploy(self, dry_run, agent_map):
         yield self.setup_project()
-        yield self.export(dry_run=dry_run)
+        yield self.export(dry_run=dry_run, agent_map=agent_map)
 
     def run(self, options, only_setup=False):
-        if options.map is not None:
-            config.Config.set("config", "agent-map", options.map)
         if options.agent is not None:
             config.Config.set("config", "agent", options.agent)
         self.setup_server(options.no_agent_log)
@@ -435,7 +442,7 @@ class Deploy(object):
                 self.stop()
                 sys.exit(1)
 
-        self._io_loop.add_future(self.do_deploy(dry_run=options.dryrun), handle_result)
+        self._io_loop.add_future(self.do_deploy(dry_run=options.dryrun, agent_map=options.map), handle_result)
 
     def stop(self):
         if self._agent is not None:

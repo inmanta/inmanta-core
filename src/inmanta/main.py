@@ -396,7 +396,8 @@ def env_setting_list(client, environment):
     settings = client.do_request("list_settings", arguments=dict(tid=tid))
 
     table_body = []
-    for key, meta in settings["metadata"].items():
+    for key in sorted(settings["metadata"].keys()):
+        meta = settings["metadata"][key]
         value = ""
         if key in settings["settings"]:
             value = str(settings["settings"][key])
@@ -405,7 +406,7 @@ def env_setting_list(client, environment):
         if "default" in meta:
             default_value = str(meta["default"])
 
-        table_body.append((key, value, default_value, meta["type"], meta["help"]))
+        table_body.append((key, value, default_value, meta["type"], meta["doc"]))
 
     click.echo("Settings for environment %s" % tid)
     print_table(("Key", "Value", "Default value", "Type", "Help"), table_body)
