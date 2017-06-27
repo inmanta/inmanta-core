@@ -517,6 +517,9 @@ class NamespaceResolver(Resolver):
     def for_namespace(self, namespace):
         return NamespaceResolver(self, namespace)
 
+    def get_root_resolver(self):
+        return self.parent.get_root_resolver()
+
 
 class ExecutionContext(object):
 
