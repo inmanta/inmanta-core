@@ -738,7 +738,7 @@ class Agent(AgentEndPoint):
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
 
-        hostname = name
+        hostname = "local:"
         if name in self.agent_map:
             hostname = self.agent_map[name]
 

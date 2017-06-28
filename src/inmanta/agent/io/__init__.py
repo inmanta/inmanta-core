@@ -17,9 +17,13 @@
 """
 import re
 import urllib
+import logging
 
 from . import local, remote
 from inmanta.agent.cache import AgentCache
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def parse_agent_uri(uri: str) -> (str, dict):
@@ -71,6 +75,7 @@ def _get_io_class(scheme) -> local.IOBase:
 def _get_io_instance(uri):
     scheme, config = parse_agent_uri(uri)
     io_class = _get_io_class(scheme)
+    LOGGER.debug("Using io class %s for uri %s (%s, %s)", io_class, uri, scheme, config)
     io = io_class(uri, config)
     return io
 
