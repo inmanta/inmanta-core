@@ -649,3 +649,96 @@ def test_purge_on_delete(io_loop, client, server, environment):
     assert file1["attributes"]["purged"]
     assert file2["attributes"]["purged"]
     assert not file3["attributes"]["purged"]
+
+
+@pytest.mark.gen_test
+def test_purge_on_delete_ignore(io_loop, client, server, environment):
+    """
+        Test purge on delete behavior for resources that have not longer purged_on_delete set
+    """
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent.start()
+    aclient = agent._client
+
+    # Version 1 with purge_on_delete true
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file1',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'purge_on_delete': True,
+                  'version': version}]
+
+    res = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    # Release the model and set all resources as deployed
+    result = yield client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    now = datetime.now()
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["version"] == version
+    assert result.result["model"]["total"] == len(resources)
+    assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["released"]
+    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    # Version 2 with purge_on_delete false
+    version = 2
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1,path=/tmp/file1],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/tmp/file1',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'purge_on_delete': False,
+                  'version': version}]
+
+    res = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    # Release the model and set all resources as deployed
+    result = yield client.release_version(environment, version, push=False)
+    assert result.code == 200
+
+    now = datetime.now()
+    result = yield aclient.resource_action_update(environment,
+                                                  ['std::File[vm1,path=/tmp/file1],v=%d' % version],
+                                                  uuid.uuid4(), "deploy", now, now, "deployed", [], {})
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["version"] == version
+    assert result.result["model"]["total"] == len(resources)
+    assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["released"]
+    assert result.result["model"]["result"] == const.VersionState.success.name
+
+    # Version 3 with no resources
+    version = 3
+    resources = []
+    res = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["version"] == version
+    assert result.result["model"]["total"] == len(resources)

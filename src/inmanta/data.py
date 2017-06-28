@@ -1220,21 +1220,27 @@ class Resource(BaseDocument):
             :param current_resources: A set of all resource ids in the current version.
         """
         LOGGER.debug("Starting purge_on_delete queries")
-        # find all resources in previous version that have "purge_on_delete" set
-        resources = yield cls._coll.find({"model": {"$lt": current_version}, "environment": environment,
+
+        # get all models that have been released
+        models = yield ConfigurationModel._coll.find({"environment": environment, "released": True},
+                                                     {"version": True, "_id": False}
+                                                     ).sort("version", pymongo.DESCENDING).to_list(DBLIMIT)
+        versions = set()
+        latest_version = None
+        for model in models:
+            versions.add(model["version"])
+            if latest_version is None:
+                latest_version = model["version"]
+
+        LOGGER.debug("  All released versions: %s", versions)
+        LOGGER.debug("  Latest released version: %s", latest_version)
+
+        # find all resources in previous versions that have "purge_on_delete" set
+        resources = yield cls._coll.find({"model": latest_version, "environment": environment,
                                           "$and": [{"attributes.purge_on_delete": {"$exists": True}},
                                                    {"attributes.purge_on_delete": True}]},
                                          ["resource_id"]).distinct("resource_id")
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
-
-        # get all models that have been released
-        models = yield ConfigurationModel._coll.find({"environment": environment, "released": True},
-                                                     {"version": True, "_id": False}).to_list(DBLIMIT)
-        versions = set()
-        for model in models:
-            versions.add(model["version"])
-
-        LOGGER.debug("  All released versions: %s", versions)
 
         # all resources on current model
         LOGGER.debug("  All resource in current version (%s): %s", current_version, current_resources)
@@ -1255,7 +1261,7 @@ class Resource(BaseDocument):
             while (yield cursor.fetch_next):
                 obj = cursor.next_object()
 
-                # if a resource is part of a released version and it is deployed (this last condition is acutally enough
+                # if a resource is part of a released version and it is deployed (this last condition is actually enough
                 # at the moment), we have found the last status of the resource. If it was not purged in that version,
                 # add it to the should purge list.
                 if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
