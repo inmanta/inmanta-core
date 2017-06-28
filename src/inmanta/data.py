@@ -1390,7 +1390,9 @@ class ConfigurationModel(BaseDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        yield Resource.delete_all(environment=self.environment, model=self.version)
+        resources = yield Resource.get_list(environment=self.environment, model=self.version)
+        for res in resources:
+            yield res.delete_cascade()
         snaps = yield Snapshot.get_list(environment=self.id)
         for snap in snaps:
             yield snap.delete_cascade()
