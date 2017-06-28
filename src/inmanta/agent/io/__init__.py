@@ -79,10 +79,13 @@ def get_io(cache: AgentCache, uri: str, version: int):
     """
         Get an IO instance for the given uri and version
     """
-    try:
-        io = cache.find(uri, version=version)
-    except KeyError:
+    if cache is None:
         io = _get_io_instance(uri)
-        cache.cache_value(uri, io, version=version, call_on_delete=lambda x: x.close())
+    else:
+        try:
+            io = cache.find(uri, version=version)
+        except KeyError:
+            io = _get_io_instance(uri)
+            cache.cache_value(uri, io, version=version, call_on_delete=lambda x: x.close())
 
     return io
