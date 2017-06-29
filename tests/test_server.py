@@ -64,6 +64,11 @@ def test_autostart(server, client, environment):
     yield retry_limited(lambda: len(server._sessions) == 1, 20)
     assert len(server._sessions) == 1
 
+    # Test stopping all agents
+    yield server.agentmanager.stop_agents(env)
+    assert len(server._sessions) == 0
+    assert len(server.agentmanager._agent_procs) == 0
+
 
 @pytest.mark.gen_test(timeout=60)
 @pytest.mark.slowtest

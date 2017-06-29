@@ -623,9 +623,13 @@ class Environment(BaseDocument):
     @gen.coroutine
     def delete_cascade(self, only_content=False):
         yield Agent.delete_all(environment=self.id)
-        yield AgentProcess.delete_all(environment=self.id)
-        yield AgentInstance.delete_all(environment=self.id)
+
+        procs = yield AgentProcess.get_list(environment=self.id)
+        for proc in procs:
+            yield proc.delete_cascade()
+
         yield Compile.delete_all(environment=self.id)
+
         models = yield ConfigurationModel.get_list(environment=self.id)
         for model in models:
             yield model.delete_cascade()
@@ -750,6 +754,11 @@ class AgentProcess(BaseDocument):
             return cls(from_mongo=True, **objects[0])
         else:
             return cls(from_mongo=True, **objects[0])
+
+    @gen.coroutine
+    def delete_cascade(self):
+        yield AgentInstance.delete_all(process=self.id)
+        yield self.delete()
 
 
 class AgentInstance(BaseDocument):
@@ -1097,7 +1106,7 @@ class Resource(BaseDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        yield ResourceAction.delete_all(resource=self.id)
+        yield ResourceAction.delete_all(resource_version_ids=self.resource_version_id)
         yield self.delete()
 
     @classmethod

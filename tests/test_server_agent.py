@@ -1785,3 +1785,104 @@ def test_autostart_mapping(io_loop, server, client, resource_container, environm
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 2:
         result = yield client.list_agents(tid=environment)
         yield gen.sleep(0.1)
+
+
+@pytest.mark.gen_test(timeout=15)
+def test_autostart_clear_environment(io_loop, server, client, resource_container, environment):
+    """
+        Test clearing an environment with autostarted agents. After clearing, autostart should still work
+    """
+    resource_container.Provider.reset()
+    env = yield data.Environment.get_by_id(uuid.UUID(environment))
+    yield env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    yield env.set(data.AUTO_DEPLOY, True)
+    yield env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    yield env.set(data.AUTOSTART_SPLAY, 0)
+    yield env.set(data.AUTOSTART_ON_START, True)
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  }
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # check deploy
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
+        result = yield client.list_agents(tid=environment)
+        yield gen.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+
+    # clear environment
+    yield client.clear_environment(environment)
+
+    items = yield data.ConfigurationModel.get_list()
+    assert len(items) == 0
+    items = yield data.Resource.get_list()
+    assert len(items) == 0
+    items = yield data.ResourceAction.get_list()
+    assert len(items) == 0
+    items = yield data.Code.get_list()
+    assert len(items) == 0
+    items = yield data.Agent.get_list()
+    assert len(items) == 0
+    items = yield data.AgentInstance.get_list()
+    assert len(items) == 0
+    items = yield data.AgentProcess.get_list()
+    assert len(items) == 0
+
+    # Do a deploy again
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  }
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # check deploy
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.list_agents(tid=environment)
+    assert result.code == 200
+
+    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
+        result = yield client.list_agents(tid=environment)
+        yield gen.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1

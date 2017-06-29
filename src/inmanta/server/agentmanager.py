@@ -207,6 +207,20 @@ class AgentManager(object):
                 yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
+    def get_environment_sessions(self, env_id: uuid.UUID):
+        """
+            Get a list of all sessions for the given environment id
+        """
+        sessions = yield data.AgentProcess.get_live_by_env(env_id)
+
+        session_list = []
+        for session in sessions:
+            if session.sid in self.sessions:
+                session_list.append(self.sessions[session.sid])
+
+        return session_list
+
+    @gen.coroutine
     def flush_agent_presence(self, session: Session, now):
         tid = session.tid
         sid = session.id
@@ -551,3 +565,18 @@ ssl_ca_cert_file=%s
         if autostart:
             agent_list = [a.name for a in agents]
             yield self._ensure_agents(env, agent_list, True)
+
+    @gen.coroutine
+    def stop_agents(self, env):
+        """
+            Stop all agents for this environment and close sessions
+        """
+        LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
+        if env.id in self._agent_procs:
+            self._agent_procs[env.id].terminate()
+            del self._agent_procs[env.id]
+
+        LOGGER.debug("Expiring all sessions for %s", env.id)
+        sessions = yield self.get_environment_sessions(env.id)
+        for session in sessions:
+            session.expire(0)
