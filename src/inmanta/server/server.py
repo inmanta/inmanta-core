@@ -572,8 +572,11 @@ class Server(protocol.ServerEndpoint):
 
         actions = []
         if bool(logs):
+            action_name = None
+            if log_action is not None:
+                action_name = log_action.name
             actions = yield data.ResourceAction.get_log(environment=env.id, resource_version_id=resource_id,
-                                                        action=log_action, limit=log_limit)
+                                                        action=action_name, limit=log_limit)
 
         return 200, {"resource": resv, "logs": actions}
 
