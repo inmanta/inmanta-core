@@ -998,7 +998,7 @@ class ResourceAction(BaseDocument):
     def get_log(cls, environment, resource_version_id, action=None, limit=0):
         if action is not None:
             cursor = cls._coll.find({"environment": environment, "resource_version_ids": resource_version_id,
-                                     "action": action.name}).sort("started", direction=pymongo.DESCENDING)
+                                     "action": action}).sort("started", direction=pymongo.DESCENDING)
         else:
             cursor = cls._coll.find({"environment": environment, "resource_version_ids": resource_version_id
                                      }).sort("started", direction=pymongo.DESCENDING)
