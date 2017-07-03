@@ -176,9 +176,17 @@ def test_check_chown(io, testdir):
         groups = [user]
 
     io.chown(path, user)
+    stat = io.file_stat(path)
+    assert stat["owner"] == user
+
     io.chown(path, user, groups[0])
+    stat = io.file_stat(path)
+    assert stat["owner"] == user
+    assert stat["group"] == groups[0]
+
     io.chown(path, None, groups[0])
-    # TODO(bart): add more checks
+    stat = io.file_stat(path)
+    assert stat["group"] == groups[0]
 
 
 @pytest.mark.parametrize("io", io_list)

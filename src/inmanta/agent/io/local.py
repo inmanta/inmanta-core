@@ -270,12 +270,12 @@ class BashIO(IOBase):
             args = ["chgrp", group]
 
         if args is not None:
+            args.append(path)
             result = subprocess.Popen(self._run_as_args(*args), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             result.communicate()
 
-            return result.returncode > 0
-
-        return False
+            if result.returncode > 0:
+                raise Exception("Failed to set %s:%s to %s (return code %d)" % (user, group, path, result.returncode))
 
     def chmod(self, path, permissions):
         """
