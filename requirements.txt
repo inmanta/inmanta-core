@@ -22,3 +22,4 @@ tornado==4.5.1
 virtualenv==15.1.0
 inmanta-sphinx>=0.3
 typing==3.6.1
+netifaces==0.10.6

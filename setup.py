@@ -6,6 +6,7 @@ requires = [
         'execnet',
         'mongobox',
         'motor >= 1.1',
+        'netifaces',
         'ply',
         'pymongo',
         'python-dateutil',
