@@ -1402,7 +1402,7 @@ class ConfigurationModel(BaseDocument):
         resources = yield Resource.get_list(environment=self.environment, model=self.version)
         for res in resources:
             yield res.delete_cascade()
-        snaps = yield Snapshot.get_list(environment=self.id)
+        snaps = yield Snapshot.get_list(environment=self.environment, model=self.version)
         for snap in snaps:
             yield snap.delete_cascade()
         yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
