@@ -138,6 +138,17 @@ install this dependencies with ``pip install`` in an virtual environment dedicat
 or agent. By default this is in `.env` of the project for the compiler and in
 `/var/lib/inmanta/agent/env` for the agent.
 
+Inmanta uses a special format of requirements that was defined in a python PEP but never fully
+implemented in all python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
+requires. This format allows module developers to specify a python dependency in a repo on a
+dedicated branch. And it allows inmanta to resolve the requirements of all module to a
+single set of requirements, because the name of module is unambiguously defined in the requirement.
+The format for requires in requirements.txt is the folllowing:
+
+ * Either, the name of the module and an optional constraint
+ * Or a repository location such as  git+https://github.com/project/python-foo The correct syntax
+   to use is then: eggname@git+https://../repository#branch with branch being optional.
+
 .. _module-plugins:
 
 Plugins
