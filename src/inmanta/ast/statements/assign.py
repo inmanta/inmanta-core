@@ -114,7 +114,7 @@ class SetAttribute(AssignStatement):
                target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         var = instance.get_attribute(self.attribute_name)
-        reqs = self.value.requires_emit(resolver, queue)
+        reqs = self.value.requires_emit_gradual(resolver, queue, var)
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance)
 
     def __str__(self) -> str:

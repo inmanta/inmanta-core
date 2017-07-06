@@ -18,7 +18,8 @@
 
 import logging
 
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit, Instance, Resolver, QueueScheduler
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, HangUnit, Instance, Resolver, QueueScheduler,\
+    ResultCollector
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement, AssignStatement
 from inmanta.ast import RuntimeException, Locatable, Location
@@ -79,10 +80,11 @@ class AttributeReferenceHelper(Locatable):
         Helper class for AttributeReference, reschedules itself
     """
 
-    def __init__(self, target: ResultVariable, instance: Reference, attribute: str) -> None:
+    def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
         self.attribute = attribute
         self.target = target
         self.instance = instance
+        self.resultcollector = resultcollector
 
     def resume(self,
                requires: Dict[object, ResultVariable],
@@ -112,6 +114,8 @@ class AttributeReferenceHelper(Locatable):
             self.target.set_value(attr.get_value(), self.location)
         else:
             # reschedule on the attribute, XU will assign it to the target variable
+            if self.resultcollector is not None:
+                attr.listener(self.resultcollector, self.location)
             ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
 
     def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
@@ -186,6 +190,9 @@ class AttributeReference(Reference):
         return self.instance.requires()
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
+        return self.requires_emit_gradual(resolver, queue, None)
+
+    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         # The tricky one!
 
         # introduce temp variable to contain the eventual result of this stmt
@@ -193,7 +200,7 @@ class AttributeReference(Reference):
         temp.set_provider(self)
 
         # construct waiter
-        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute)
+        resumer = AttributeReferenceHelper(temp, self.instance, self.attribute, resultcollector)
         self.copy_location(resumer)
 
         # wait for the instance

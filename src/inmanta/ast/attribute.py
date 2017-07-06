@@ -108,6 +108,12 @@ class Attribute(object):
         out.set_provider(instance)
         return out
 
+    def is_optional(self):
+        return False
+
+    def is_multi(self):
+        return False
+
 
 class RelationAttribute(Attribute):
     """
@@ -140,3 +146,9 @@ class RelationAttribute(Attribute):
             out = ListVariable(self, instance, queue)  # type: ResultVariable
         out.set_type(self.get_type())
         return out
+
+    def is_optional(self):
+        return self.low == 0
+
+    def is_multi(self):
+        return self.high != 1

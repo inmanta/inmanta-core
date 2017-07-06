@@ -155,10 +155,15 @@ class Constructor(GeneratorStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
+        self._direct_attributes = {}
+        self._indirect_attributes = {}
+
     def normalize(self) -> None:
         self.type = self.namespace.get_type(self.class_type)
         for (k, v) in self.__attributes.items():
             v.normalize()
+
+        inindex = set()
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
@@ -166,6 +171,16 @@ class Constructor(GeneratorStatement):
             for attr in index:
                 if attr not in self.attributes:
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
+                inindex.add(attr)
+
+        for (k, v) in self.__attributes.items():
+            attribute = self.type.get_attribute(k)
+            if attribute is None:
+                raise TypingException(self, "no attribute %s on type %s" % (attr, self.type.get_full_name()))
+            if (attribute.is_multi() or attribute.is_optional()) and k not in inindex:
+                self._indirect_attributes[k] = v
+            else:
+                self._direct_attributes[k] = v
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
@@ -175,7 +190,7 @@ class Constructor(GeneratorStatement):
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        preout = [x for x in self.__attributes.items()]
+        preout = [x for x in self._direct_attributes.items()]
         preout.extend([x for x in self.type.get_entity().get_default_values().items()])
 
         out2 = {rk: rv for (k, v) in self.type.get_defaults().items()
@@ -183,6 +198,10 @@ class Constructor(GeneratorStatement):
 
         out = {rk: rv for (k, v) in preout for (rk, rv) in v.requires_emit(resolver, queue).items()}
         out.update(out2)
+        
+        for k,v in self._indirect_attributes.items():
+            
+        
         return out
 
     def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler):
