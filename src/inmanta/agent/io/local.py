@@ -80,7 +80,7 @@ class BashIO(IOBase):
         super(BashIO, self).__init__(uri, config)
         self.run_as = run_as
 
-    def _run_as_args(self, *args):
+    def _run_as_args(self, *args, preserve_env=False):
         """
             Build the arguments to run the command as the `run_as` user
         """
@@ -89,7 +89,10 @@ class BashIO(IOBase):
 
         else:
             arg_str = subprocess.list2cmdline(args)
-            ret = ["sudo", "-u", self.run_as, "sh", "-c", arg_str]
+            sudo_cmd = ["sudo"]
+            if preserve_env:
+                sudo_cmd.append("-E")
+            ret = sudo_cmd + ["-u", self.run_as, "sh", "-c", arg_str]
             return ret
 
     def is_remote(self):
@@ -146,8 +149,9 @@ class BashIO(IOBase):
         if env is not None:
             current_env.update(env)
         cmds = [command] + arguments
-        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env,
-                                  cwd=cwd)
+        preserve_env = env is not None
+        result = subprocess.Popen(self._run_as_args(preserve_env=preserve_env, *cmds),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
         if sys.version_info < (3, 0, 0):
             # TODO timeout is not supported
