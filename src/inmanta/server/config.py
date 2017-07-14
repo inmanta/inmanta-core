@@ -82,7 +82,7 @@ server_fact_expire = \
 
 def default_fact_renew():
     """ server.fact-expire/3 """
-    return str(int(server_fact_expire.get() / 3))
+    return int(server_fact_expire.get() / 3)
 
 
 def validate_fact_renew(value):
