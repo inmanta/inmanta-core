@@ -1,5 +1,5 @@
 click==6.7
-colorlog==2.10.0
+colorlog==3.0.0
 execnet==1.4.1
 mongobox==0.1.6
 motor==1.1
