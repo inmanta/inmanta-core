@@ -20,7 +20,7 @@
 
 from . import ReferenceStatement
 from inmanta.ast.type import List, Dict
-from inmanta.ast.statements import AssignStatement, ExpressionStatement
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException
@@ -129,7 +129,7 @@ class SetAttributeHelper(ExecutionUnit):
                  result: ResultVariable,
                  requires: typing.Dict[object, ResultVariable],
                  expression: ExpressionStatement,
-                 stmt: SetAttribute,
+                 stmt: Statement,
                  instance: Instance) -> None:
         ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
         self.stmt = stmt

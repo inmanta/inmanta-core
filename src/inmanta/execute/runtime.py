@@ -240,6 +240,9 @@ class ListVariable(DelayedResultVariable):
             self.type.validate(value)
 
         if value in self.value:
+            # any set_value may fulfill a promise, allowing this object to be queued
+            if self.can_get():
+                    self.queue()
             return
 
         self.value.append(value)
