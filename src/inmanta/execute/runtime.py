@@ -24,7 +24,17 @@ from inmanta.ast.type import Type
 from typing import Dict, Any
 
 
-class ResultVariable(object):
+class ResultCollector(object):
+    """
+        Helper interface for gradual execution
+    """
+
+    def receive_result(self, value, location):
+        """ receive a possibly partial result"""
+        raise Exception("Not Implemented" + str(type(self)))
+
+
+class ResultVariable(ResultCollector):
     """
         A ResultVariable is like a future
          - it has a list of waiters
@@ -87,6 +97,13 @@ class ResultVariable(object):
         return self.hasValue
 
     def freeze(self):
+        pass
+
+    def receive_result(self, value, location):
+        pass
+
+    def listener(self, resulcollector, location):
+        """ add a listener to report new values to, only for lists"""
         pass
 
 
@@ -182,6 +199,7 @@ class ListVariable(DelayedResultVariable):
         self.myself = instance
         self.promisses = []
         self.done_promisses = []
+        self.listeners = []
         DelayedResultVariable.__init__(self, queue, [])
 
     def get_promise(self, provider):
@@ -202,7 +220,10 @@ class ListVariable(DelayedResultVariable):
 
     def set_value(self, value, location, recur=True):
         if self.hasValue:
-            raise RuntimeException(None, "List modified after freeze")
+            if value in self.value:
+                return
+            else:
+                raise RuntimeException(None, "List modified after freeze")
 
         if isinstance(value, list):
             if len(value) == 0:
@@ -219,9 +240,15 @@ class ListVariable(DelayedResultVariable):
             self.type.validate(value)
 
         if value in self.value:
+            # any set_value may fulfill a promise, allowing this object to be queued
+            if self.can_get():
+                    self.queue()
             return
 
         self.value.append(value)
+
+        for l in self.listeners:
+            l.receive_result(value, location)
 
         # set counterpart
         if self.attribute.end and recur:
@@ -243,6 +270,14 @@ class ListVariable(DelayedResultVariable):
 
     def __str__(self):
         return "ListVariable %s %s = %s" % (self.myself, self.attribute, self.value)
+
+    def receive_result(self, value, location):
+        self.set_value(value, location)
+
+    def listener(self, resultcollector, location):
+        for value in self.value:
+            resultcollector.receive_result(value, location)
+        self.listeners.append(resultcollector)
 
 
 class OptionVariable(DelayedResultVariable):

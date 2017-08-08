@@ -100,6 +100,9 @@ class ExpressionStatement(DynamicStatement):
         """
         raise Exception("Not Implemented" + str(type(self)))
 
+    def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
+        return self.requires_emit(resolver, queue)
+
 
 class ReferenceStatement(ExpressionStatement):
     """
