@@ -89,7 +89,7 @@ class BashIO(IOBase):
 
         else:
             arg_str = subprocess.list2cmdline(args)
-            ret = ["sudo","-E", "-u", self.run_as, "sh", "-c", arg_str]
+            ret = ["sudo", "-u", self.run_as, "sh", "-c", arg_str]
             return ret
 
     def is_remote(self):
@@ -145,8 +145,7 @@ class BashIO(IOBase):
         current_env = os.environ.copy()
         if env is not None:
             current_env.update(env)
-        with open("/tmp/inm.log", "a") as f:
-            f.write("Env: %s" % current_env)
+
         cmds = [command] + arguments
         result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env,
                                   cwd=cwd)
@@ -395,8 +394,6 @@ class LocalIO(IOBase):
             current_env = {k.encode(): str(v)   .encode() for k, v in current_env.items()}
 
         cmds = [command] + arguments
-        with open("/tmp/inm.log", "a") as f:
-            f.write("Env: %s" % current_env)
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
         if sys.version_info < (3, 0, 0):

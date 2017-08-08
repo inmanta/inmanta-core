@@ -32,7 +32,7 @@ from inmanta import config
 from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException,\
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
     OptionalValueException
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
@@ -1630,7 +1630,7 @@ end
 implement Volume using create
 
 entity KafkaNode:
-    
+
 end
 
 
@@ -1647,5 +1647,5 @@ kafka-user = std::Entity()
 kafka-volume = Volume(requires=kafka-user)
 KafkaNode(requires=kafka-volume)
 """, autostd=False)
-   
+
     compiler.do_compile()

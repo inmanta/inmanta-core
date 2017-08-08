@@ -18,7 +18,7 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException,\
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException, \
     Locatable, Location
 from inmanta.ast.type import Type
 from typing import Dict, Any
@@ -30,7 +30,9 @@ class ResultCollector(object):
     """
 
     def receive_result(self, value, location):
-        """ receive a possibly partial result"""
+        """
+            receive a possibly partial result
+        """
         raise Exception("Not Implemented" + str(type(self)))
 
 
@@ -103,7 +105,9 @@ class ResultVariable(ResultCollector):
         pass
 
     def listener(self, resulcollector, location):
-        """ add a listener to report new values to, only for lists"""
+        """
+            add a listener to report new values to, only for lists
+        """
         pass
 
 
