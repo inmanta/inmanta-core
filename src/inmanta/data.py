@@ -1106,7 +1106,7 @@ class Resource(BaseDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        yield ResourceAction.delete_all(resource_version_ids=self.resource_version_id)
+        yield ResourceAction.delete_all(environment=self.environment, resource_version_ids=self.resource_version_id)
         yield self.delete()
 
     @classmethod
