@@ -170,7 +170,7 @@ class ResourceAction(object):
             else:
                 if result.receive_events:
                     received_events = {x.resource_id: dict(status=x.status, change=x.change,
-                                                           changes=x.changes.get(x.resource_id, {}))
+                                                           changes=x.changes.get(str(x.resource_id), {}))
                                        for x in self.dependencies}
                 else:
                     received_events = {}
@@ -179,12 +179,13 @@ class ResourceAction(object):
             LOGGER.info("end run %s", self.resource)
 
             end = datetime.datetime.now()
+            changes = {str(self.resource.id): ctx.changes}
             result = yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
                                                                               resource_ids=[str(self.resource.id)],
                                                                               action_id=ctx.action_id,
                                                                               action=const.ResourceAction.deploy,
                                                                               started=start, finished=end, status=ctx.status,
-                                                                              changes={str(self.resource.id): ctx.changes},
+                                                                              changes=changes,
                                                                               messages=ctx.logs, change=ctx.change,
                                                                               send_events=send_event)
             if result.code != 200:
@@ -192,7 +193,7 @@ class ResourceAction(object):
 
             self.status = ctx.status
             self.change = ctx.change
-            self.changes = ctx.changes
+            self.changes = changes
             self.future.set_result(ResourceActionResult(success, send_event, False))
             self.running = False
 
@@ -330,7 +331,7 @@ class AgentInstance(object):
         self.dryrunlock = locks.Semaphore(1)
 
         self._env_id = process._env_id
-        self.thread_pool = process.thread_pool
+        self.thread_pool = self.process.thread_pool
         self.sessionid = process.sessionid
 
         # init
