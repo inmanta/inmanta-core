@@ -523,8 +523,7 @@ class ResourceHandler(object):
                 return
 
             changes = self.list_changes(ctx, resource)
-            for field, values in changes.items():
-                ctx.add_change(field, desired=values["desired"], current=values["current"])
+            ctx.update_changes(changes)
 
             if not dry_run:
                 self.do_changes(ctx, resource, changes)
