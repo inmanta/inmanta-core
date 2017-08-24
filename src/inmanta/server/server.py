@@ -1536,4 +1536,5 @@ class Server(protocol.ServerEndpoint):
         """
         yield self.agentmanager.stop_agents(env)
         yield env.delete_cascade(only_content=True)
+        yield env.update_fields(settings={})
         return 200
