@@ -391,7 +391,9 @@ class LocalIO(IOBase):
         if env is not None:
             current_env.update(env)
         if sys.version_info < (3, 0, 0):
-            current_env = {k.encode(): str(v)   .encode() for k, v in current_env.items()}
+            current_env = {}
+            for k, v in current_env.items():
+                current_env[k.encode()] = str(v).encode()
 
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
