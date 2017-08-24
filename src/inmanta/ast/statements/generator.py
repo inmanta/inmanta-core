@@ -205,7 +205,7 @@ class Constructor(GeneratorStatement):
         for (k, v) in self.__attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
-                raise TypingException(self, "no attribute %s on type %s" % (attr, self.type.get_full_name()))
+                raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
             if (attribute.is_multi() or attribute.is_optional()) and k not in inindex:
                 self._indirect_attributes[k] = v
             else:
