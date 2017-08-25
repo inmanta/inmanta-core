@@ -226,6 +226,10 @@ class RemoteResourceAction(ResourceAction):
             result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
                                                                     logs=True, log_action=const.ResourceAction.deploy,
                                                                     log_limit=1)
+            if result.code != 200:
+                LOGGER.error("Failed to get the status for remote resource %s (%s)", str(self.resource_id),
+                             result.result)
+
             status = const.ResourceState[result.result["resource"]["status"]]
             if status == const.ResourceState.available or self.future.done():
                 # wait for event
