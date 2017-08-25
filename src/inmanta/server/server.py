@@ -756,10 +756,12 @@ class Server(protocol.ServerEndpoint):
             res_obj = rv_dict[res_id]
             for require in requires:
                 req_id = Id.parse_id(require)
-                req_res = rv_dict[req_id.resource_str()]
 
-                req_res.attributes["requires"].append(res_obj.resource_version_id)
-                res_obj.provides.append(req_res.resource_version_id)
+                if req_id.resource_str() in rv_dict:
+                    req_res = rv_dict[req_id.resource_str()]
+
+                    req_res.attributes["requires"].append(res_obj.resource_version_id)
+                    res_obj.provides.append(req_res.resource_version_id)
 
         yield data.Resource.insert_many(resource_objects)
         yield cm.update_fields(total=cm.total + len(resources_to_purge))
@@ -1536,5 +1538,4 @@ class Server(protocol.ServerEndpoint):
         """
         yield self.agentmanager.stop_agents(env)
         yield env.delete_cascade(only_content=True)
-        yield env.update_fields(settings={})
         return 200
