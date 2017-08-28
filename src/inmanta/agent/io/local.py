@@ -148,8 +148,7 @@ class BashIO(IOBase):
             current_env.update(env)
 
         cmds = [command] + arguments
-        preserve_env = env is not None
-        result = subprocess.Popen(self._run_as_args(preserve_env=preserve_env, *cmds),
+        result = subprocess.Popen(self._run_as_args(*cmds),
                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
         if sys.version_info < (3, 0, 0):
