@@ -392,7 +392,8 @@ class ResourceHandler(object):
         """
         if self.can_reload():
             reload = False
-            for result in events.values():
+            for res, result in events.items():
+                ctx.debug("Processing changes of %(res)s", res=res, result=result)
                 if result["status"] == const.ResourceState.deployed and len(result["changes"]) > 0:
                     reload = True
                     break

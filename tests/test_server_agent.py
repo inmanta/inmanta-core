@@ -194,7 +194,7 @@ def resource_container():
             return current
 
         def do_changes(self, ctx, resource, changes):
-            logger.info("Haning waiter %s", self.traceid)
+            logger.info("Hanging waiter %s", self.traceid)
             waiter.acquire()
             waiter.wait()
             waiter.release()
@@ -1057,7 +1057,7 @@ def test_fail(resource_container, client, server, io_loop):
 def test_wait(resource_container, client, server, io_loop):
     """
         If this test fail due to timeout,
-        this is probably due to the mechanism in the agent that prevents pulling resources in very rapp\id succession.
+        this is probably due to the mechanism in the agent that prevents pulling resources in very rapid succession.
 
         If the test server is slow, a get_resources call takes a long time,
         this makes the back-off longer

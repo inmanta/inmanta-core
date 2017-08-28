@@ -20,12 +20,13 @@
 
 from . import GeneratorStatement
 from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable
+from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace
 from inmanta.execute.tracking import ImplementsTracker
 from typing import List, Dict, Tuple
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements.assign import SetAttributeHelper
 
 try:
     from typing import TYPE_CHECKING
@@ -83,6 +84,27 @@ class SubConstructor(GeneratorStatement):
         return "SubConstructor(%s)" % self.type
 
 
+class GradualFor(ResultCollector):
+    # this class might be unnecessary if receive-result is always called and exactly once
+
+    def __init__(self, stmt: "For", resolver: Resolver, queue: QueueScheduler):
+        self.resolver = resolver
+        self.queue = queue
+        self.stmt = stmt
+        self.seen = set()
+
+    def receive_result(self, value, location):
+        if value in self.seen:
+            return
+        self.seen.add(value)
+
+        xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
+        loopvar = xc.lookup(self.stmt.loop_var)
+        loopvar.set_provider(self.stmt)
+        loopvar.set_value(value, self.stmt.location)
+        xc.emit(self.queue)
+
+
 class For(GeneratorStatement):
     """
         A for loop
@@ -110,9 +132,18 @@ class For(GeneratorStatement):
         return list(set(base).union(ext) - set(var))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        return self.base.requires_emit(resolver, queue)
+        # pass context!
+        helper = GradualFor(self, resolver, queue)
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+        helperwrapped = ResultVariable()
+        helperwrapped.set_value(helper, self.location)
+
+        basereq = self.base.requires_emit_gradual(resolver, queue, helper)
+        basereq[self] = helperwrapped
+
+        return basereq
+
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Evaluate this statement.
         """
@@ -121,13 +152,11 @@ class For(GeneratorStatement):
         if isinstance(var, Unknown):
             return None
 
+        helper = requires[self]
+
         for loop_var in var:
             # generate a subscope/namespace for each loop
-            xc = ExecutionContext(self.module, resolver.for_namespace(self.module.namespace))
-            loopvar = xc.lookup(self.loop_var)
-            loopvar.set_provider(self)
-            loopvar.set_value(loop_var, self.location)
-            xc.emit(queue)
+            helper.receive_result(loop_var, self.location)
 
         return None
 
@@ -155,10 +184,15 @@ class Constructor(GeneratorStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
+        self._direct_attributes = {}
+        self._indirect_attributes = {}
+
     def normalize(self) -> None:
         self.type = self.namespace.get_type(self.class_type)
         for (k, v) in self.__attributes.items():
             v.normalize()
+
+        inindex = set()
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
@@ -166,6 +200,16 @@ class Constructor(GeneratorStatement):
             for attr in index:
                 if attr not in self.attributes:
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
+                inindex.add(attr)
+
+        for (k, v) in self.__attributes.items():
+            attribute = self.type.get_entity().get_attribute(k)
+            if attribute is None:
+                raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
+            if (attribute.is_multi() or attribute.is_optional()) and k not in inindex:
+                self._indirect_attributes[k] = v
+            else:
+                self._direct_attributes[k] = v
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
@@ -175,7 +219,8 @@ class Constructor(GeneratorStatement):
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        preout = [x for x in self.__attributes.items()]
+        # direct
+        preout = [x for x in self._direct_attributes.items()]
         preout.extend([x for x in self.type.get_entity().get_default_values().items()])
 
         out2 = {rk: rv for (k, v) in self.type.get_defaults().items()
@@ -183,6 +228,7 @@ class Constructor(GeneratorStatement):
 
         out = {rk: rv for (k, v) in preout for (rk, rv) in v.requires_emit(resolver, queue).items()}
         out.update(out2)
+
         return out
 
     def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler):
@@ -193,7 +239,7 @@ class Constructor(GeneratorStatement):
         type_class = self.type.get_entity()
 
         # the attributes
-        attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self.__attributes.items()}
+        attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
 
         for (k, v) in self.type.get_defaults().items():
             if(k not in attributes):
@@ -229,6 +275,12 @@ class Constructor(GeneratorStatement):
             # create the instance
             object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
             self.copy_location(object_instance)
+
+        # deferred execution for indirect attributes
+        for attributename, valueexpression in self._indirect_attributes.items():
+            var = object_instance.get_attribute(attributename)
+            reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
+            SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance)
 
         # add anonymous implementations
         if self.implemented:

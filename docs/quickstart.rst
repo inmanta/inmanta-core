@@ -66,7 +66,7 @@ Here we will get a project from github.
 
 .. code-block:: sh
 
-    git clone -b seed https://github.com/inmanta/quickstart.git
+    git clone https://github.com/inmanta/quickstart.git
     cd quickstart
 
 

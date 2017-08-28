@@ -148,6 +148,7 @@ class BashIO(IOBase):
         current_env = os.environ.copy()
         if env is not None:
             current_env.update(env)
+
         cmds = [command] + arguments
         preserve_env = env is not None
         result = subprocess.Popen(self._run_as_args(preserve_env=preserve_env, *cmds),
@@ -394,7 +395,9 @@ class LocalIO(IOBase):
         if env is not None:
             current_env.update(env)
         if sys.version_info < (3, 0, 0):
-            current_env = {k.encode(): str(v)   .encode() for k, v in current_env.items()}
+            current_env = {}
+            for k, v in current_env.items():
+                current_env[k.encode()] = str(v).encode()
 
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)

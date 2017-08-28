@@ -32,7 +32,7 @@ from inmanta import config
 from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException,\
+from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
     OptionalValueException
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
@@ -430,28 +430,6 @@ end
 implementation test for std::Entity:
 end""")
         with pytest.raises(DuplicateException):
-            compiler.do_compile()
-
-    def test_issue_126_hanging_statements(self):
-        self.setup_for_snippet("""entity LogFile:
-string name
-end
-
-implement LogFile using std::none
-
-entity LogCollector:
-string name
-end
-
-implement LogCollector using std::none
-
-LogCollector collectors [0:] -- [0:] LogFile logfiles
-
-    lf1 = LogFile(name="lf1", collectors = c2)
-
-c2 = LogCollector(name="c2", logfiles=lf1)
-""")
-        with pytest.raises(RuntimeException):
             compiler.do_compile()
 
     def test_issue_139_scheduler(self):
@@ -1629,3 +1607,45 @@ Host(name="bar")
 """, autostd=False)
     with pytest.raises(NotFoundException):
         compiler.do_compile()
+
+
+def test_veryhardsequencing(snippetcompiler):
+
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+
+end
+
+implement std::Entity using none
+
+#Volumes
+entity Volume:
+end
+
+implementation create for Volume:
+    backing = std::Entity(requires=self.requires)
+    backing.provides = self.provides
+end
+
+implement Volume using create
+
+entity KafkaNode:
+
+end
+
+
+implementation fromtarball for KafkaNode:
+    install = std::Entity()
+    install.requires = self.requires
+end
+
+implement KafkaNode using fromtarball
+
+
+
+kafka-user = std::Entity()
+kafka-volume = Volume(requires=kafka-user)
+KafkaNode(requires=kafka-volume)
+""", autostd=False)
+
+    compiler.do_compile()

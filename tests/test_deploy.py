@@ -23,6 +23,7 @@ from tornado import process
 import pytest
 
 
+@pytest.mark.skip(reason="very unstable test")
 @pytest.mark.gen_test(timeout=60)
 def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
     file_name = tmpdir.join("test_file")

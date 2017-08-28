@@ -82,7 +82,7 @@ server_fact_expire = \
 
 def default_fact_renew():
     """ server.fact-expire/3 """
-    return str(int(server_fact_expire.get() / 3))
+    return int(server_fact_expire.get() / 3)
 
 
 def validate_fact_renew(value):
@@ -114,9 +114,9 @@ server_purge_version_interval = \
 see :inmanta.config:option:`server.available-versions-to-keep`""", is_time)
 
 server_version_to_keep = \
-    Option("server", "available-versions-to-keep", 2,
-           """On boot and at regular intervals the server will purge versions that have not been deployed.
-This is the number of most recent undeployed versions to keep available.""", is_int)
+    Option("server", "available-versions-to-keep", 10,
+           """On boot and at regular intervals the server will purge older versions.
+This is the number of most recent versions to keep available.""", is_int)
 
 server_address = \
     Option("server", "server_address", "localhost",

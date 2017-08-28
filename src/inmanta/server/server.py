@@ -141,7 +141,7 @@ class Server(protocol.ServerEndpoint):
         for env_item in envs:
             # get available versions
             n_versions = opt.server_version_to_keep.get()
-            versions = yield data.ConfigurationModel.get_list(released=False, environment=env_item.id)
+            versions = yield data.ConfigurationModel.get_list(environment=env_item.id)
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                 version_dict = {x.version: x for x in versions}
@@ -231,9 +231,11 @@ class Server(protocol.ServerEndpoint):
         else:
             params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
-        if len(params) == 0 and resource_id is not None:
-            out = yield self.agentmanager._request_parameter(env.id, resource_id)
-            return out
+        if len(params) == 0:
+            if resource_id is not None:
+                out = yield self.agentmanager._request_parameter(env.id, resource_id)
+                return out
+            return 404
 
         param = params[0]
 
@@ -754,10 +756,12 @@ class Server(protocol.ServerEndpoint):
             res_obj = rv_dict[res_id]
             for require in requires:
                 req_id = Id.parse_id(require)
-                req_res = rv_dict[req_id.resource_str()]
 
-                req_res.attributes["requires"].append(res_obj.resource_version_id)
-                res_obj.provides.append(req_res.resource_version_id)
+                if req_id.resource_str() in rv_dict:
+                    req_res = rv_dict[req_id.resource_str()]
+
+                    req_res.attributes["requires"].append(res_obj.resource_version_id)
+                    res_obj.provides.append(req_res.resource_version_id)
 
         yield data.Resource.insert_many(resource_objects)
         yield cm.update_fields(total=cm.total + len(resources_to_purge))
