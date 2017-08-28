@@ -5,7 +5,7 @@ mongobox==0.1.6
 motor==1.1
 ply==3.10
 pymongo==3.4.0
-pytest==3.2.0
+pytest==3.2.1
 pytest-catchlog==1.2.2
 pytest-cover==3.0.0
 pytest-tornado==0.4.5
