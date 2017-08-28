@@ -80,7 +80,7 @@ class BashIO(IOBase):
         super(BashIO, self).__init__(uri, config)
         self.run_as = run_as
 
-    def _run_as_args(self, *args, preserve_env=False):
+    def _run_as_args(self, *args):
         """
             Build the arguments to run the command as the `run_as` user
         """
@@ -89,9 +89,7 @@ class BashIO(IOBase):
 
         else:
             arg_str = subprocess.list2cmdline(args)
-            sudo_cmd = ["sudo"]
-            if preserve_env:
-                sudo_cmd.append("-E")
+            sudo_cmd = ["sudo", "-E"]
             ret = sudo_cmd + ["-u", self.run_as, "sh", "-c", arg_str]
             return ret
 
