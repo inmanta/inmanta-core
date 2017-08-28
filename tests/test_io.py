@@ -85,6 +85,14 @@ def test_check_run(io, testdir):
 
 
 @pytest.mark.parametrize("io", io_list)
+def test_check_run_env(io, testdir):
+    value = "testenvmagicstring"
+    result = io.run("env", env={"TEST_ENV": value})
+
+    assert value in result[0]
+
+
+@pytest.mark.parametrize("io", io_list)
 def test_check_file_exists(io, testdir):
     assert io.file_exists(testdir)
     assert not io.file_exists("/blablablablablalbla")

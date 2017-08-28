@@ -89,7 +89,8 @@ class BashIO(IOBase):
 
         else:
             arg_str = subprocess.list2cmdline(args)
-            ret = ["sudo", "-u", self.run_as, "sh", "-c", arg_str]
+            sudo_cmd = ["sudo", "-E"]
+            ret = sudo_cmd + ["-u", self.run_as, "sh", "-c", arg_str]
             return ret
 
     def is_remote(self):
@@ -147,8 +148,9 @@ class BashIO(IOBase):
             current_env.update(env)
 
         cmds = [command] + arguments
-        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env,
-                                  cwd=cwd)
+        preserve_env = env is not None
+        result = subprocess.Popen(self._run_as_args(preserve_env=preserve_env, *cmds),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
         if sys.version_info < (3, 0, 0):
             # TODO timeout is not supported
