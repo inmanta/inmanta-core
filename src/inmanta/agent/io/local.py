@@ -108,7 +108,7 @@ class BashIO(IOBase):
         if result.returncode > 0 or len(data[1]) > 0:
             raise FileNotFoundError()
 
-        return data[0].decode().strip().split(" ")[0]
+        return data[0].decode("utf-8").strip().split(" ")[0]
 
     def read(self, path):
         """
@@ -125,7 +125,7 @@ class BashIO(IOBase):
         if result.returncode > 0 or len(data[1]) > 0:
             raise FileNotFoundError()
 
-        return data[0].decode()
+        return data[0].decode("utf-8")
 
     def read_binary(self, path):
         """
@@ -181,7 +181,7 @@ class BashIO(IOBase):
         if result.returncode > 0:
             raise FileNotFoundError()
 
-        return data[0].decode().strip()
+        return data[0].decode("utf-8").strip()
 
     def symlink(self, source, target):
         """
@@ -205,7 +205,7 @@ class BashIO(IOBase):
         if result.returncode > 0:
             raise FileNotFoundError()
 
-        if "symbolic link" in data[0].decode().strip():
+        if "symbolic link" in data[0].decode("utf-8").strip():
             return True
 
         return False
@@ -221,7 +221,7 @@ class BashIO(IOBase):
         if result.returncode > 0:
             raise FileNotFoundError()
 
-        parts = data[0].decode().strip().split(" ")
+        parts = data[0].decode("utf-8").strip().split(" ")
         if len(parts) != 3:
             raise IOError()
 
@@ -362,7 +362,7 @@ class LocalIO(IOBase):
             :rtype: string
         """
         with open(path, "rb") as fd:
-            return fd.read().decode()
+            return fd.read().decode("utf-8")
 
     def read_binary(self, path):
         """
