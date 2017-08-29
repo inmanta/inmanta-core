@@ -32,14 +32,33 @@ For Fedora use dnf:
 
 .. code-block:: sh
 
-  sudo dnf copr enable bartvanbrabant/inmanta
+  cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+  [inmanta-oss-stable]
+  name=Inmanta OSS stable
+  baseurl=https://pkg.inmanta.com/inmanta-oss-stable/f$releasever/
+  gpgcheck=1
+  gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
+  repo_gpgcheck=1
+  enabled=1
+  enabled_metadata=1
+  EOF
   sudo dnf install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
 
 For CentOS use yum and install epel-release:
 
 .. code-block:: sh
 
-  wget -O /etc/yum.repos.d/inmanta.repo https://copr.fedorainfracloud.org/coprs/bartvanbrabant/inmanta/repo/epel-7/bartvanbrabant-inmanta-epel-7.repo
+  cat > /etc/yum.repos.d/inmanta_oss_dev.repo <<EOF
+  [inmanta-oss-stable]
+  name=Inmanta OSS stable
+  baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
+  gpgcheck=1
+  gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
+  repo_gpgcheck=1
+  enabled=1
+  enabled_metadata=1
+  EOF
+
   sudo yum install -y epel-release
   sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
 
