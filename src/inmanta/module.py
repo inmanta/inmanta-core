@@ -790,7 +790,7 @@ class Module(ModuleLike):
             path = os.path.join(project.downloadpath, modulename)
             result = project.externalResolver.clone(modulename, project.downloadpath)
             if not result:
-                raise InvalidModuleException("could not locate module with name: %s", modulename)
+                raise InvalidModuleException("could not locate module with name: %s" % modulename)
 
         return cls.update(project, modulename, requirements, path, False, install_mode=install_mode)
 
