@@ -27,6 +27,7 @@ from typing import List, Dict, Tuple
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.assign import SetAttributeHelper
+from inmanta.ast.attribute import RelationAttribute
 
 try:
     from typing import TYPE_CHECKING
@@ -206,7 +207,7 @@ class Constructor(GeneratorStatement):
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
-            if (attribute.is_multi() or attribute.is_optional()) and k not in inindex:
+            if isinstance(attribute, RelationAttribute) and k not in inindex:
                 self._indirect_attributes[k] = v
             else:
                 self._direct_attributes[k] = v
