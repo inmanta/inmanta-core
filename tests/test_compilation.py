@@ -1649,7 +1649,7 @@ KafkaNode(requires=kafka-volume)
 """, autostd=False)
 
     compiler.do_compile()
-    
+
 def test_lazy_constructor(snippetcompiler):
 
     snippetcompiler.setup_for_snippet("""
