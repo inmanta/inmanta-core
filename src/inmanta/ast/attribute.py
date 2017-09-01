@@ -16,9 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
+from inmanta.ast import Locatable
 from inmanta.ast.type import TypedList, NullableType
+from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
+from inmanta.execute.util import Unknown
+
 
 try:
     from typing import TYPE_CHECKING
@@ -31,7 +33,7 @@ if TYPE_CHECKING:
     from inmanta.ast.entity import Entity  # noqa: F401
 
 
-class Attribute(object):
+class Attribute(Locatable):
     """
         The attribute base class for entity attributes.
 
