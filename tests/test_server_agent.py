@@ -34,6 +34,7 @@ from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from _pytest.fixtures import fixture
+from itertools import groupby
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -66,6 +67,7 @@ def resource_container():
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
+
         def check_resource(self, ctx, resource):
             current = resource.clone()
             current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
@@ -1204,6 +1206,141 @@ def test_wait(resource_container, client, server, io_loop):
     assert states['test::Resource[agent1,key=key3],v=%d' % version1] == const.ResourceState.deployed.name
     assert states['test::Resource[agent1,key=key4],v=%d' % version1] == const.ResourceState.deployed.name
     assert states['test::Resource[agent1,key=key5],v=%d' % version1] == const.ResourceState.available.name
+
+
+@pytest.mark.gen_test(timeout=15)
+def test_multi_instance(resource_container, client, server, io_loop):
+    """
+       Test for multi threaded deploy
+    """
+    resource_container.Provider.reset()
+
+    # setup project
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    # setup env
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    # setup agent
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
+                  code_loader=False, poolsize=1)
+    agent.add_end_point_name("agent1")
+    agent.add_end_point_name("agent2")
+    agent.add_end_point_name("agent3")
+
+    agent.start()
+
+    # wait for agent
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+
+    # set the deploy environment
+    resource_container.Provider.set("agent1", "key", "value")
+    resource_container.Provider.set("agent2", "key", "value")
+    resource_container.Provider.set("agent3", "key", "value")
+
+    def make_version(offset=0):
+        version = int(time.time() + offset)
+        resources = []
+        for agent in ["agent1", "agent2", "agent3"]:
+
+            resources.extend([{'key': 'key',
+                               'value': 'value',
+                               'id': 'test::Wait[%s,key=key],v=%d' % (agent, version),
+                               'requires': ['test::Resource[%s,key=key3],v=%d' % (agent, version)],
+                               'purged': False,
+                               'send_event': False,
+                               'state_id': '',
+                               'allow_restore': True,
+                               'allow_snapshot': True,
+                               },
+                              {'key': 'key2',
+                               'value': 'value',
+                               'id': 'test::Resource[%s,key=key2],v=%d' % (agent, version),
+                               'requires': ['test::Wait[%s,key=key],v=%d' % (agent, version)],
+                               'purged': False,
+                               'send_event': False,
+                               'state_id': '',
+                               'allow_restore': True,
+                               'allow_snapshot': True,
+                               },
+                              {'key': 'key3',
+                               'value': 'value',
+                               'id': 'test::Resource[%s,key=key3],v=%d' % (agent, version),
+                               'requires': [],
+                               'purged': False,
+                               'send_event': False,
+                               'state_id': '',
+                               'allow_restore': True,
+                               'allow_snapshot': True,
+                               },
+                              {'key': 'key4',
+                               'value': 'value',
+                               'id': 'test::Resource[%s,key=key4],v=%d' % (agent, version),
+                               'requires': ['test::Resource[%s,key=key3],v=%d' % (agent, version)],
+                               'purged': False,
+                               'send_event': False,
+                               'state_id': '',
+                               'allow_restore': True,
+                               'allow_snapshot': True,
+                               },
+                              {'key': 'key5',
+                               'value': 'value',
+                               'id': 'test::Resource[%s,key=key5],v=%d' % (agent, version),
+                               'requires': ['test::Resource[%s,key=key4],v=%d' % (agent, version),
+                                            'test::Wait[%s,key=key],v=%d' % (agent, version)],
+                               'purged': False,
+                               'send_event': False,
+                               'state_id': '',
+                               'allow_restore': True,
+                               'allow_snapshot': True,
+                               }])
+        return version, resources
+
+    @gen.coroutine
+    def wait_for_resources(version, n):
+        result = yield client.get_version(env_id, version)
+        assert result.code == 200
+        
+        def done_per_agent(result):
+            done = [x for x in result.result["resources"] if x["status"]=="deployed"]
+            peragent = groupby(done,lambda x: x["agent"])
+            return {agent:len([x for x in grp]) for agent,grp in peragent}
+        
+        def mindone(result):
+            all = done_per_agent(result).values()
+            if(len(all)==0):
+                return 0
+            return min(all)
+        
+        while mindone(result) < n:
+            yield gen.sleep(0.1)
+            result = yield client.get_version(env_id, version)
+        assert mindone(result) >= n
+
+    logger.info("setup done")
+
+    version1, resources = make_version()
+    result = yield client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    logger.info("first version pushed")
+
+    # deploy and wait until one is ready
+    result = yield client.release_version(env_id, version1, True)
+    assert result.code == 200
+
+    logger.info("first version released")
+    #timeout on single thread!
+    yield wait_for_resources(version1, 1)
+
+   
+    yield resource_container.wait_for_done_with_waiters(client, env_id, version1)
+
+    logger.info("first version complete")
+
+   
 
 
 @pytest.mark.gen_test
