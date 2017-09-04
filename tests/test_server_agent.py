@@ -1224,7 +1224,8 @@ def test_multi_instance(resource_container, client, server, io_loop):
     env_id = result.result["environment"]["id"]
 
     # setup agent
-    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id,
+                  agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
                   code_loader=False, poolsize=1)
     agent.add_end_point_name("agent1")
     agent.add_end_point_name("agent2")
@@ -1244,7 +1245,6 @@ def test_multi_instance(resource_container, client, server, io_loop):
         version = int(time.time() + offset)
         resources = []
         for agent in ["agent1", "agent2", "agent3"]:
-
             resources.extend([{'key': 'key',
                                'value': 'value',
                                'id': 'test::Wait[%s,key=key],v=%d' % (agent, version),
@@ -1302,18 +1302,18 @@ def test_multi_instance(resource_container, client, server, io_loop):
     def wait_for_resources(version, n):
         result = yield client.get_version(env_id, version)
         assert result.code == 200
-        
+
         def done_per_agent(result):
-            done = [x for x in result.result["resources"] if x["status"]=="deployed"]
-            peragent = groupby(done,lambda x: x["agent"])
-            return {agent:len([x for x in grp]) for agent,grp in peragent}
-        
+            done = [x for x in result.result["resources"] if x["status"] == "deployed"]
+            peragent = groupby(done, lambda x: x["agent"])
+            return {agent: len([x for x in grp]) for agent, grp in peragent}
+
         def mindone(result):
             all = done_per_agent(result).values()
-            if(len(all)==0):
+            if(len(all) == 0):
                 return 0
             return min(all)
-        
+
         while mindone(result) < n:
             yield gen.sleep(0.1)
             result = yield client.get_version(env_id, version)
@@ -1332,15 +1332,12 @@ def test_multi_instance(resource_container, client, server, io_loop):
     assert result.code == 200
 
     logger.info("first version released")
-    #timeout on single thread!
+    # timeout on single thread!
     yield wait_for_resources(version1, 1)
 
-   
     yield resource_container.wait_for_done_with_waiters(client, env_id, version1)
 
     logger.info("first version complete")
-
-   
 
 
 @pytest.mark.gen_test
