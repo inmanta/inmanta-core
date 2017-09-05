@@ -1649,3 +1649,27 @@ KafkaNode(requires=kafka-volume)
 """, autostd=False)
 
     compiler.do_compile()
+
+
+def test_lazy_constructor(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity One:
+end
+
+entity Two:
+end
+
+One.two [1] -- Two.one [1]
+
+one = One(two=two)
+two = Two(one=one)
+
+implementation none for std::Entity:
+
+end
+
+implement One using none
+implement Two using none
+""", autostd=False)
+
+    compiler.do_compile()

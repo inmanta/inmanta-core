@@ -25,6 +25,7 @@ import pytest
 from inmanta.agent.agent import Agent
 from inmanta import data
 from inmanta import const
+from inmanta.server import config as opt
 from datetime import datetime
 
 LOGGER = logging.getLogger(__name__)
@@ -162,7 +163,7 @@ def test_version_removal(client, server):
         result = yield client.get_project(id=project_id)
 
         versions = yield client.list_versions(tid=env_id)
-        assert versions.result["count"] <= 3
+        assert versions.result["count"] <= opt.server_version_to_keep.get() + 1
 
 
 @pytest.mark.gen_test(timeout=30)

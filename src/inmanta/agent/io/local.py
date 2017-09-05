@@ -89,7 +89,8 @@ class BashIO(IOBase):
 
         else:
             arg_str = subprocess.list2cmdline(args)
-            ret = ["sudo", "-u", self.run_as, "sh", "-c", arg_str]
+            sudo_cmd = ["sudo", "-E"]
+            ret = sudo_cmd + ["-u", self.run_as, "sh", "-c", arg_str]
             return ret
 
     def is_remote(self):
@@ -107,7 +108,7 @@ class BashIO(IOBase):
         if result.returncode > 0 or len(data[1]) > 0:
             raise FileNotFoundError()
 
-        return data[0].decode().strip().split(" ")[0]
+        return data[0].decode("utf-8").strip().split(" ")[0]
 
     def read(self, path):
         """
@@ -124,7 +125,7 @@ class BashIO(IOBase):
         if result.returncode > 0 or len(data[1]) > 0:
             raise FileNotFoundError()
 
-        return data[0].decode()
+        return data[0].decode("utf-8")
 
     def read_binary(self, path):
         """
@@ -147,8 +148,8 @@ class BashIO(IOBase):
             current_env.update(env)
 
         cmds = [command] + arguments
-        result = subprocess.Popen(self._run_as_args(*cmds), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env,
-                                  cwd=cwd)
+        result = subprocess.Popen(self._run_as_args(*cmds),
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
 
         if sys.version_info < (3, 0, 0):
             # TODO timeout is not supported
@@ -180,7 +181,7 @@ class BashIO(IOBase):
         if result.returncode > 0:
             raise FileNotFoundError()
 
-        return data[0].decode().strip()
+        return data[0].decode("utf-8").strip()
 
     def symlink(self, source, target):
         """
@@ -204,7 +205,7 @@ class BashIO(IOBase):
         if result.returncode > 0:
             raise FileNotFoundError()
 
-        if "symbolic link" in data[0].decode().strip():
+        if "symbolic link" in data[0].decode("utf-8").strip():
             return True
 
         return False
@@ -220,7 +221,7 @@ class BashIO(IOBase):
         if result.returncode > 0:
             raise FileNotFoundError()
 
-        parts = data[0].decode().strip().split(" ")
+        parts = data[0].decode("utf-8").strip().split(" ")
         if len(parts) != 3:
             raise IOError()
 
@@ -361,7 +362,7 @@ class LocalIO(IOBase):
             :rtype: string
         """
         with open(path, "rb") as fd:
-            return fd.read().decode()
+            return fd.read().decode("utf-8")
 
     def read_binary(self, path):
         """
@@ -391,7 +392,9 @@ class LocalIO(IOBase):
         if env is not None:
             current_env.update(env)
         if sys.version_info < (3, 0, 0):
-            current_env = {k.encode(): str(v)   .encode() for k, v in current_env.items()}
+            current_env = {}
+            for k, v in current_env.items():
+                current_env[k.encode()] = str(v).encode()
 
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)

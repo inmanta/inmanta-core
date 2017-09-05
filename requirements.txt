@@ -5,7 +5,7 @@ mongobox==0.1.6
 motor==1.1
 ply==3.10
 pymongo==3.5.1
-pytest==3.2.0
+pytest==3.2.1
 pytest-catchlog==1.2.2
 pytest-cover==3.0.0
 pytest-tornado==0.4.5
@@ -18,7 +18,7 @@ sphinx-argparse==0.2.1
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.2.4
 texttable==0.9.1
-tornado==4.5.1
+tornado==4.5.2
 virtualenv==15.1.0
 inmanta-sphinx>=0.3
 typing==3.6.2

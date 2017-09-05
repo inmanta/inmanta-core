@@ -21,7 +21,7 @@
 import ply.yacc as yacc
 
 # Get the token map from the lexer. This is required.
-from inmanta.parser.plyInmantaLex import tokens
+from inmanta.parser.plyInmantaLex import tokens, reserved
 from inmanta.ast.statements import Literal
 from inmanta.ast import Location
 from inmanta.ast.statements.generator import For, Constructor
@@ -53,15 +53,38 @@ precedence = (
 )
 
 
+class LocatableString:
+
+    def __init__(self, value, location, lexpos, namespace):
+        self.value = value
+        self.location = location
+        self.lexpos = lexpos
+        self.namespace = namespace
+
+    def get_value(self):
+        return self.value
+
+    def __str__(self):
+        return self.value
+
+
 def attach_lnr(p, token=1):
     v = p[0]
     v.location = Location(file, p.lineno(token))
     v.namespace = namespace
+    v.lexpos = p.lexpos(token)
 
 
-# def attach_lnr_for_parser(p, token=1):
-#     v = p[0]
-#     v.lineno = p.lineno(token)
+def attach_lnr_for_parser(p, token=1):
+    v = p[0]
+    p[0] = LocatableString(v, Location(file, p.lineno(token)), p.lexpos(token), namespace)
+
+
+def attach_from_string(p, token=1):
+    v = p[0]
+    v.location = p[token].location
+    v.lexpos = p[token].lexpos
+    v.namespace = p[token].namespace
 
 
 def p_main_collect(p):
@@ -95,13 +118,13 @@ def p_top_stmt(p):
 
 def p_import(p):
     '''import : IMPORT ns_ref'''
-    p[0] = DefineImport(p[2], p[2])
+    p[0] = DefineImport(str(p[2]), str(p[2]))
     attach_lnr(p, 1)
 
 
 def p_import_1(p):
     '''import : IMPORT ns_ref AS ID'''
-    p[0] = DefineImport(p[2], p[4])
+    p[0] = DefineImport(str(p[2]), p[4])
     attach_lnr(p, 1)
 #######################
 # STMTS
@@ -158,10 +181,22 @@ def p_entity(p):
     attach_lnr(p)
 
 
+def p_entity_err_1(p):
+    "entity_def : ENTITY ID ':' entity_body_outer "
+    raise ParserException(
+        file, p.lineno(2), p.lexpos(2), p[2], "Invalid identifier: Entity names must start with a capital")
+
+
 def p_entity_extends(p):
     "entity_def : ENTITY CID EXTENDS class_ref_list ':' entity_body_outer "
     p[0] = DefineEntity(namespace, p[2], p[6][0], p[4], p[6][1])
     attach_lnr(p)
+
+
+def p_entity_extends_err(p):
+    "entity_def : ENTITY ID EXTENDS class_ref_list ':' entity_body_outer "
+    raise ParserException(
+        file, p.lineno(2), p.lexpos(2), p[2], "Invalid identifier: Entity names must start with a capital")
 
 
 def p_entity_body_outer(p):
@@ -197,12 +232,12 @@ def p_entity_body(p):
 
 def p_attribute_type(p):
     '''attr_type : ns_ref'''
-    p[0] = (p[1], False)
+    p[0] = (str(p[1]), False)
 
 
 def p_attribute_type_opt(p):
     "attr_type : ns_ref '?'"
-    p[0] = (p[1], True)
+    p[0] = (str(p[1]), True)
 
 
 def p_attr(p):
@@ -228,12 +263,12 @@ def p_attr_undef(p):
 
 def p_attribute_type_multi(p):
     "attr_type_multi : ns_ref '[' ']'"
-    p[0] = (p[1], False, Location(file, p.lineno(1)))
+    p[0] = (str(p[1]), False, Location(file, p.lineno(1)))
 
 
 def p_attribute_type_multi_opt(p):
     "attr_type_multi : ns_ref '[' ']' '?'"
-    p[0] = (p[1], True, Location(file, p.lineno(1)))
+    p[0] = (str(p[1]), True, Location(file, p.lineno(1)))
 
 
 def p_attr_list(p):
@@ -275,6 +310,12 @@ def p_attr_list_dict(p):
     "attr : DICT ID '=' map_def"
     p[0] = DefineAttribute("dict", p[2], p[4])
     attach_lnr(p, 1)
+
+
+def p_attr_list_dict_null_err(p):
+    "attr : DICT ID '=' NULL"
+    raise ParserException(
+        file, p.lineno(1), p.lexpos(1), p[2], "null can not be assigned to dict, did you mean \"dict? %s = null\"" % p[2])
 
 
 def p_attr_dict_nullable(p):
@@ -451,7 +492,7 @@ def p_typedef_outer_comment(p):
 def p_typedef_1(p):
     """typedef_inner : TYPEDEF ID AS ns_ref MATCHING REGEX
                 | TYPEDEF ID AS ns_ref MATCHING condition"""
-    p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
+    p[0] = DefineTypeConstraint(namespace, p[2], str(p[4]), p[6])
     attach_lnr(p)
 
 
@@ -545,13 +586,13 @@ def p_constructor_empty(p):
 
 def p_function_call_empty(p):
     " function_call : ns_ref '(' ')'"
-    p[0] = FunctionCall(p[1], [])
+    p[0] = FunctionCall(str(p[1]), [])
     attach_lnr(p, 2)
 
 
 def p_function_call(p):
     " function_call : ns_ref '(' operand_list ')'"
-    p[0] = FunctionCall(p[1], p[3])
+    p[0] = FunctionCall(str(p[1]), p[3])
     attach_lnr(p, 2)
 
 
@@ -727,13 +768,13 @@ def p_operand_list_term(p):
 
 def p_ns_list_collect(p):
     """ns_list : ns_ref ',' ns_list"""
-    p[3].insert(0, p[1])
+    p[3].insert(0, str(p[1]))
     p[0] = p[3]
 
 
 def p_ns_list_term(p):
     'ns_list : ns_ref'
-    p[0] = [p[1]]
+    p[0] = [str(p[1])]
 
 
 def p_var_ref(p):
@@ -749,8 +790,8 @@ def p_attr_ref(p):
 
 def p_var_ref_2(p):
     "var_ref : ns_ref"
-    p[0] = Reference(p[1])
-    attach_lnr(p)
+    p[0] = Reference(str(p[1]))
+    attach_from_string(p, 1)
 
 
 def p_class_ref_direct(p):
@@ -758,9 +799,21 @@ def p_class_ref_direct(p):
     p[0] = p[1]
 
 
+# def p_class_ref_direct_err(p):
+#     "class_ref : ID"
+#     raise ParserException(
+#         file, p.lineno(1), p.lexpos(1), p[1], "Invalid identifier: Entity names must start with a capital")
+
+
 def p_class_ref(p):
     "class_ref : ns_ref SEP CID"
-    p[0] = "%s::%s" % (p[1], p[3])
+    p[0] = "%s::%s" % (str(p[1]), p[3])
+
+
+# def p_class_ref_err(p):
+#     "class_ref : ns_ref SEP ID"
+#     raise ParserException(
+#         file, p.lineno(3), p.lexpos(3), p[3], "Invalid identifier: Entity names must start with a capital")
 
 
 def p_class_ref_list_collect(p):
@@ -769,21 +822,33 @@ def p_class_ref_list_collect(p):
     p[0] = p[3]
 
 
+def p_class_ref_list_collect_err(p):
+    """class_ref_list : var_ref ',' class_ref_list"""
+    raise ParserException(
+        file, p.lineno(1), p.lexpos(1), p[1], "Invalid identifier: Entity names must start with a capital")
+
+
 def p_class_ref_list_term(p):
     'class_ref_list : class_ref'
     p[0] = [p[1]]
 
 
+def p_class_ref_list_term_err(p):
+    'class_ref_list : var_ref'
+    raise ParserException(
+        file, p[1].location.lnr, p[1].lexpos, p[1], "Invalid identifier: Entity names must start with a capital")
+
+
 def p_ns_ref(p):
     "ns_ref : ns_ref SEP ID"
     p[0] = "%s::%s" % (p[1], p[3])
-    # attach_lnr_for_parser(p, 2)
+    attach_lnr_for_parser(p, 2)
 
 
 def p_ns_ref_term(p):
     "ns_ref : ID"
     p[0] = p[1]
-    # attach_lnr_for_parser(p, 1)
+    attach_lnr_for_parser(p, 1)
 
 
 def p_id_list_collect(p):
@@ -811,10 +876,20 @@ def p_mls_collect(p):
 
 # Error rule for syntax errors
 def p_error(p):
-    if p is not None:
-        raise ParserException(file, p.lineno, p.lexpos, p.value)
-    # at end of file
-    raise ParserException(file, lexer.lineno, lexer.lexpos, "")
+    if p is None:
+        # at end of file
+        raise ParserException(file, lexer.lineno, lexer.lexpos, "Unexpected end of file")
+
+    # keyword instead of ID
+    if p.type in reserved.values():
+        raise ParserException(
+            file, p.lineno, p.lexpos, p.value, "invalid identifier, %s is a reserved keyword" % p.value)
+
+    if parser.symstack[-1].type in reserved.values():
+        raise ParserException(
+            file, p.lineno, p.lexpos, p.value, "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value)
+
+    raise ParserException(file, p.lineno, p.lexpos, p.value)
 
 
 # Build the parser

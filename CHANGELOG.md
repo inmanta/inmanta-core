@@ -1,3 +1,37 @@
+v 2017.2 (2017-08-28)
+Changes in this releases:
+- Various bugfixes and performance enhancements
+- Dependencies updates
+- Preserve env variables when using sudo in the agent
+- Prune all versions instead of only the ones that have not been released.
+- Use python 2.6 compatible syntax for the remote io in the agent
+- Gradual execution for for-loops and constructors
+- Stop agents and expire session on clear environment
+- Improve purge_on_delete semantics
+- New autostart mechanism  (#437)
+- Add settings mechanism to environment. More settings will become environment specific in later
+  releases.
+- Do not create index in background to prevent race conditions
+- Add support for exception to the json serializer
+- Invert requires for purged resources (purge_on_delete)
+- Add autodeploy_splay option
+- Remove ruaml yaml dependency (#292)
+- Handle modified_count is None for mongodb < 2.6
+- Add python3.6 support
+- Add nulable types
+- Various documentation updates
+- Added monitor command to inmanta-cli (#418)
+- Generate inmanta entrypoint with setuptools
+- Update quickstart to use centos
+- Improve event mechanism (#416)
+- Added auto newline at end of file (#413)
+- Improved type annotations for plugins and improved object unwrapping (#412)
+- Inline index lookup syntax (#411)
+- Added cycle detection (#401)
+- Fixed handling of newlines in MLS lexer mode (#392)
+- Added docstring to relations, typedef, implementation and implement (#386)
+- Fix agent-map propagation from deploy
+
 v 2017.1 (2017-03-29)
 New release with many improvements and bug fixes. Most noteable features include:
 - Port CLI tool to click and improve it. This removes cliff and other openstack deps from core

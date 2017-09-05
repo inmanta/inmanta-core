@@ -36,6 +36,6 @@ class ParserException(CompilerException):
 
     def __str__(self, *args, **kwargs):
         if self.msg is None:
-            return "Syntax error: %s:%d, at token %s" % (self.location, self.column, self.value)
+            return "Syntax error at token %s (%s:%d)" % (self.value, self.location, self.column)
         else:
-            return "Syntax error: %s %s:%d, at token %s" % (self.msg, self.location, self.column, self.value)
+            return "Syntax error %s (%s:%d)" % (self.msg, self.location, self.column)
