@@ -78,5 +78,3 @@ To start mongodb and the server:
 On machine that run the compiler or agent may require to install python packages with pip. Some
 libraries, such as OpenStack clients have dependencies that require gcc and python3-devel to be
 availabe as well.
-
-More information on is availabe at: https://copr.fedorainfracloud.org/coprs/bartvanbrabant/inmanta/
