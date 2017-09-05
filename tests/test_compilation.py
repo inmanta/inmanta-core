@@ -1652,7 +1652,6 @@ KafkaNode(requires=kafka-volume)
 
 
 def test_lazy_constructor(snippetcompiler):
-
     snippetcompiler.setup_for_snippet("""
 entity One:
 end
