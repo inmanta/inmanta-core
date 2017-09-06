@@ -60,6 +60,25 @@ class FunctionCall(ReferenceStatement):
     def execute(self, requires, resolver, queue):
         return requires[self]
 
+    def execute_direct(self, requires):
+        function = self.function
+        arguments = [a.execute_direct(requires) for a in self.arguments]
+        no_unknows = function.check_args(arguments)
+
+        if not no_unknows:
+            raise RuntimeException("Received unknown value during direct execution")
+
+        if function._context is not -1:
+            raise RuntimeException("Context Aware functions are not allowed in direct execution")
+
+        if function.opts["emits_statements"]:
+            raise RuntimeException("emits_statements functions are not allowed in direct execution")
+        else:
+            try:
+                return function(*arguments)
+            except Exception as e:
+                raise WrappingRuntimeException(self, "Exception in direct execution for plugin %s" % self.name, e)
+
     def resume(self, requires, resolver, queue, result):
         """
             Evaluate this statement.
