@@ -28,6 +28,55 @@ def test_plugin_excn(snippetcompiler):
     )
 
 
+def test_keyword_excn(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       index = ""
+""",
+        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:15)"
+    )
+
+
+def test_keyword_excn2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       implementation index for std::Entity:
+       end
+""",
+        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:24)"
+    )
+
+
+def test_keyword_excn3(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       implementation aaa for index::Entity:
+       end
+""",
+        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:32)"
+    )
+
+
+def test_cid_excn(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       entity test:
+       end
+""",
+        "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:16)"
+    )
+
+
+def test_cid_excn2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       entity Test extends test:
+       end
+""",
+        "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:29)"
+    )
+
+
 def test_bad_var(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
@@ -188,4 +237,4 @@ def test_null_on_dict(snippetcompiler):
         end
         implement A using std::none
         a = A()
-    """, "Syntax error: {dir}/main.cf:3:23, at token null")
+    """, "Syntax error null can not be assigned to dict, did you mean \"dict? a = null\" ({dir}/main.cf:3:14)")

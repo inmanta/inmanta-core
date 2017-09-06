@@ -335,7 +335,7 @@ class AgentInstance(object):
         self.dryrunlock = locks.Semaphore(1)
 
         self._env_id = process._env_id
-        self.thread_pool = self.process.thread_pool
+        self.thread_pool = ThreadPoolExecutor(process.poolsize)
         self.sessionid = process.sessionid
 
         # init
