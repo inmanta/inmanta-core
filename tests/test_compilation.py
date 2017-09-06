@@ -1435,11 +1435,12 @@ entity A:
     uniquechars uc
 end
 
-A(ne="aa", uc="") 
-    
+A(ne="aa", uc="")
+
 implement A using std::none
 """)
     (types, _) = compiler.do_compile()
+
 
 def test_doc_string_on_typedef(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
