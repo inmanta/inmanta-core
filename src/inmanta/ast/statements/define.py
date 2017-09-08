@@ -24,7 +24,7 @@ from inmanta.ast.type import ConstraintType, Type
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
-from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement
+from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException
 from typing import List
 
@@ -269,7 +269,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
 
         if hasattr(expression, "arguments"):
             # some sort of function call
-            expression = Equals(expression, True)
+            expression = Equals(expression, Literal(True))
 
         for var in expression.requires():
             if var == self.name or var == "self":
@@ -299,6 +299,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         constraint_type.comment = self.comment
         constraint_type.basetype = basetype
         constraint_type.constraint = self.expression
+        self.expression.normalize()
 
 
 class DefineTypeDefault(TypeDefinitionStatement):

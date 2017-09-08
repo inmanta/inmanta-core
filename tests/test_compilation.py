@@ -1424,6 +1424,24 @@ Each file needs to be associated with a host
     assert types["__config__::Host"].get_attribute("file").comment.strip() == "Each file needs to be associated with a host"
 
 
+def test_function_in_typedef(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+import tests
+typedef notempty as string matching tests::length(self) > 0
+typedef uniquechars as string matching tests::empty(self)
+
+entity A:
+    notempty ne
+    uniquechars uc
+end
+
+A(ne="aa", uc="")
+
+implement A using std::none
+""")
+    (types, _) = compiler.do_compile()
+
+
 def test_doc_string_on_typedef(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 typedef foo as string matching /^a+$/
