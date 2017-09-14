@@ -69,4 +69,3 @@ class LogLevel(Enum):
 
 
 INMANTA_URN = "urn:inmanta:"
-
