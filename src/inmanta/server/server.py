@@ -1184,7 +1184,7 @@ class Server(protocol.ServerEndpoint):
     @gen.coroutine
     def notify_change(self, environment_id, update):
         LOGGER.info("Received change notification for environment %s", environment_id)
-        self._async_recompile(environment_id, update > 0)
+        self._async_recompile(environment_id, update)
 
         return 200
 
@@ -1539,3 +1539,11 @@ class Server(protocol.ServerEndpoint):
         yield self.agentmanager.stop_agents(env)
         yield env.delete_cascade(only_content=True)
         return 200
+
+    @protocol.handle(methods.EnvironmentAuth.create_token, env="tid")
+    @gen.coroutine
+    def create_token(self, env, client_types, idempotent):
+        """
+            Create a new auth token for this environment
+        """
+        return 200, {"token": protocol.encode_token(client_types, str(env.id), idempotent)}

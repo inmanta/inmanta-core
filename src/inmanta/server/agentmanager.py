@@ -22,8 +22,9 @@ from tornado import locks
 
 from inmanta.config import Config
 from inmanta import data
-from inmanta.protocol import Session
+from inmanta import protocol
 from inmanta.asyncutil import retry_limited
+from . import config as server_config
 
 import logging
 import os
@@ -92,10 +93,10 @@ class AgentManager(object):
         self.closesessionsonstart = closesessionsonstart
 
     # From server
-    def new_session(self, session: Session):
+    def new_session(self, session: protocol.Session):
         self.add_future(self.register_session(session, datetime.now()))
 
-    def expire(self, session: Session):
+    def expire(self, session: protocol.Session):
         self.add_future(self.expire_session(session, datetime.now()))
 
     def get_agent_client(self, tid: uuid.UUID, endpoint):
@@ -147,7 +148,7 @@ class AgentManager(object):
         return saved
 
     @gen.coroutine
-    def register_session(self, session: Session, now):
+    def register_session(self, session: protocol.Session, now):
         with (yield self.session_lock.acquire()):
             tid = session.tid
             sid = session.id
@@ -175,7 +176,7 @@ class AgentManager(object):
                 yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
-    def expire_session(self, session: Session, now):
+    def expire_session(self, session: protocol.Session, now):
         with (yield self.session_lock.acquire()):
             tid = session.tid
             sid = session.id
@@ -221,7 +222,7 @@ class AgentManager(object):
         return session_list
 
     @gen.coroutine
-    def flush_agent_presence(self, session: Session, now):
+    def flush_agent_presence(self, session: protocol.Session, now):
         tid = session.tid
         sid = session.id
 
@@ -270,7 +271,7 @@ class AgentManager(object):
         yield agent.update_fields(primary=None, last_failover=datetime.now())
 
     @gen.coroutine
-    def _set_primary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: Session):
+    def _set_primary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: protocol.Session):
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
         yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
@@ -470,13 +471,11 @@ host=localhost
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
             "statedir": privatestatedir, "agent_splay": agent_splay}
 
-        user = Config.get("server", "username", None)
-        passwd = Config.get("server", "password", None)
-        if user is not None and passwd is not None:
+        if server_config.server_enable_auth:
+            token = protocol.encode_token(["agent"], environment_id)
             config += """
-username=%s
-password=%s
-    """ % (user, passwd)
+token=%s
+    """ % (token)
 
         ssl_cert = Config.get("server", "ssl_key_file", None)
         ssl_ca = Config.get("server", "ssl_cert_file", None)

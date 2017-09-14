@@ -66,3 +66,7 @@ class LogLevel(Enum):
     DEBUG = 10
     TRACE = 3
     NOTSET = 0
+
+
+INMANTA_URN = "urn:inmanta:"
+

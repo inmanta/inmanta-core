@@ -15,7 +15,8 @@ requires = [
         'tornado',
         'typing',
         'virtualenv',
-        'typing'
+        'typing',
+        'PyJWT'
     ]
 
 setup(

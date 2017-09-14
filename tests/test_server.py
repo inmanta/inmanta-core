@@ -748,3 +748,29 @@ def test_purge_on_delete_ignore(io_loop, client, server, environment):
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
+
+
+@pytest.mark.gen_test
+def test_tokens(server_multi, client, environment):
+    # Test using API tokens
+    test_token = client._transport_instance.token
+    token = yield client.create_token(environment, ["api"], idempotent=True)
+    jot = token.result["token"]
+
+    assert jot != test_token
+
+    client._transport_instance.token = jot
+
+    # try to access a non environment call (global)
+    result = yield client.list_environments()
+    assert result.code == 403
+
+    result = yield client.list_versions(environment)
+    assert result.code == 200
+
+    token = yield client.create_token(environment, ["agent"], idempotent=True)
+    agent_jot = token.result["token"]
+
+    client._transport_instance.token = agent_jot
+    result = yield client.list_versions(environment)
+    assert result.code == 403
