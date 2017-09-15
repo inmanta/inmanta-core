@@ -179,8 +179,7 @@ def export_parser_config(parser):
                         action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
-    parser.add_argument("--username", dest="user", help="The username of the server")
-    parser.add_argument("--password", dest="password", help="The password of the server")
+    parser.add_argument("--token", dest="token", help="The token to auth to the server")
     parser.add_argument("--ssl", help="Enable SSL", action="store_true", default=False)
     parser.add_argument("--ssl-ca-cert", dest="ca_cert", help="Certificate authority for SSL")
     parser.add_argument("-X", "--extended-errors", dest="errors",
@@ -199,11 +198,8 @@ def export(options):
     if options.server is not None:
         Config.set("compiler_rest_transport", "port", options.port)
 
-    if options.user is not None:
-        Config.set("compiler_rest_transport", "username", options.user)
-
-    if options.password is not None:
-        Config.set("compiler_rest_transport", "password", options.password)
+    if options.token is not None:
+        Config.set("compiler_rest_transport", "token", options.token)
 
     if options.ssl:
         Config.set("compiler_rest_transport", "ssl", "true")

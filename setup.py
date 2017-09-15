@@ -16,7 +16,8 @@ requires = [
         'typing',
         'virtualenv',
         'typing',
-        'PyJWT'
+        'PyJWT',
+        'cryptography'
     ]
 
 setup(

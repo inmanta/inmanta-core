@@ -13,8 +13,8 @@ Inmanta uses inmanta specific claims:
 prefix: urn:inmanta:
 
 claims:
-    - ct: A list of client types for which this client is authenticated. Each API call has a role associated with it. The list of
-             valid client types (ct) are:
+    - ct: A comma delimited list of client types for which this client is authenticated. Each API call has a role associated 
+          with it. The list of valid client types (ct) are:
                 - agent
                 - compiler
                 - api (cli, dashboard, 3rd party service)
@@ -35,7 +35,7 @@ JWT auth configuration
 The server searches for configuration sections that start with ``auth_jwt_``, after the last _ an id has to be present. This
 section expects the following keys:
 
-- algorithm: The algorithm used for this key. Currently only HS265 is supported.
+- algorithm: The algorithm used for this key. Currently only HS256 and RS256 is supported.
 - sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true.
 - client_types: The client types from the urn:inmanta:ct claim that can be valided and/or signed with this key
 - key: The secret key used by symmetric algorithms such as HS256. Generate the key with a secure prng with minimal length equal
@@ -45,6 +45,8 @@ section expects the following keys:
           https://localhost:8888/
           This value is used to match auth_jwt_* sections configuration with JWT tokens. Make sure this is unique.
 - audience: The audience for tokens, as per RFC this should match or the token is rejected.
+- jwks_uri: The uri to the public key information. This is required for algorithm RS256. The keys are loaded the first time
+            a token needs to be verified after a server restart. There is not key refresh mechanism.
 
 An example configuration is:
 

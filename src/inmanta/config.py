@@ -19,11 +19,18 @@
 import base64
 from collections import defaultdict
 from configparser import ConfigParser, Interpolation
+import json
 import logging
 import os
 import re
+import struct
 import sys
 import uuid
+
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
+from tornado import httpclient
 
 from inmanta import methods
 
@@ -390,6 +397,8 @@ class AuthJWTConfig(object):
 
         if self.algo.lower() == "hs256":
             self.validate_hs265()
+        elif self.algo.lower() == "rs256":
+            self.validate_rs265()
         else:
             raise ValueError("Algorithm %s in %s is not support " % (self.algo, self.section))
 
@@ -433,7 +442,47 @@ class AuthJWTConfig(object):
             raise ValueError("key is required in %s for algorithm %s" % (self.section, self.algo))
 
         self.key = base64.urlsafe_b64decode((self._config["key"] + "==").encode("ascii"))
-
         if len(self.key) < 32:
             raise ValueError("HS256 requires a key of 32 bytes (256 bits) or longer in " + self.section)
 
+    def _load_public_key(self, e, n):
+        def to_int(x):
+            bs = base64.urlsafe_b64decode(x + "==")
+            return int.from_bytes(bs, byteorder="big")
+
+        ei = to_int(e)
+        ni = to_int(n)
+        numbers = RSAPublicNumbers(ei, ni)
+        public_key = numbers.public_key(backend=default_backend())
+        pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        return pem
+
+    def validate_rs265(self):
+        """
+            Validate and parse RS256 algorithm configuration
+        """
+        if "jwks_uri" not in self._config:
+            raise ValueError("jwks_uri is required for RS256 based providers in section %s" % self.section)
+
+        self.jwks_uri = self._config["jwks_uri"]
+
+        http_client = httpclient.HTTPClient()
+        try:
+            response = http_client.fetch(self.jwks_uri)
+            key_data = json.loads(response.body)
+        except httpclient.HTTPError as e:
+            # HTTPError is raised for non-200 responses; the response
+            # can be found in e.response.
+            raise ValueError("Unable to load key data for %s using the provided jwks_uri. Got error: %s" %
+                             (self.section, e.response))
+        except Exception as e:
+            # Other errors are possible, such as IOError.
+            raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))
+        http_client.close()
+
+        self.keys = {}
+        for key in key_data["keys"]:
+            self.keys[key["kid"]] = self._load_public_key(key["e"], key["n"])

@@ -242,7 +242,7 @@ def encode_token(client_types, environment=None, idempotent=False):
     payload = {
         "iss": cfg.issuer,
         "aud": [cfg.audience],
-        const.INMANTA_URN + "ct": client_types,
+        const.INMANTA_URN + "ct": ",".join(client_types),
     }
 
     if not idempotent:
@@ -258,8 +258,12 @@ def encode_token(client_types, environment=None, idempotent=False):
 
 
 def decode_token(token):
-    # First decode the token without verification
-    payload = jwt.decode(token, verify=False)
+    try:
+        # First decode the token without verification
+        header = jwt.get_unverified_header(token)
+        payload = jwt.decode(token, verify=False)
+    except Exception as e:
+        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
 
     if "iss" not in payload:
         raise UnauhorizedError("Issuer is required in token to validate.")
@@ -268,8 +272,25 @@ def decode_token(token):
     if cfg is None:
         raise UnauhorizedError("Unknown issuer for token")
 
+    alg = header["alg"].lower()
+    if alg == "hs256":
+        key = cfg.key
+    elif alg == "rs256":
+        if "kid" not in header:
+            raise UnauhorizedError("A kid is required for RS256")
+        kid = header["kid"]
+        if kid not in cfg.keys:
+            raise UnauhorizedError("The kid provided in the token does not match a known key. Check the jwks_uri or try "
+                                   "restarting the server to load any new keys.")
+
+        key = cfg.keys[kid]
+    else:
+        raise UnauhorizedError("Algorithm %s is not supported." % alg)
+
     try:
-        payload = jwt.decode(token, cfg.key, audience=cfg.audience)
+        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
+        ct_key = const.INMANTA_URN + "ct"
+        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
     except Exception as e:
         raise UnauhorizedError(*e.args)
 
@@ -299,13 +320,13 @@ class RESTHandler(tornado.web.RequestHandler):
         """
             Get the auth token provided by the caller. The token is provided as a bearer token.
         """
-        if "Authentication" not in headers:
+        if "Authorization" not in headers:
             return None
 
-        parts = headers["Authentication"].split(" ")
+        parts = headers["Authorization"].split(" ")
         if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
             LOGGER.warning("Invalid authentication header, Inmanta expects a bearer token. (%s was provided)",
-                           headers["Authentication"])
+                           headers["Authorization"])
             return None
 
         return decode_token(parts[1])
@@ -345,8 +366,9 @@ class RESTHandler(tornado.web.RequestHandler):
 
             try:
                 auth_token = self.get_auth_token(request_headers)
-            except UnauhorizedError:
-                self.respond(*self._transport.return_error_msg(403, "Access denied."))
+            except UnauhorizedError as e:
+                self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
+                return
 
             auth_enabled = config.Config.get("server", "auth", False)
             if not auth_enabled or auth_token is not None:
@@ -354,7 +376,7 @@ class RESTHandler(tornado.web.RequestHandler):
                                                              message, request_headers, auth_token)
                 self.respond(*result)
             else:
-                self.respond(*self._transport.return_error_msg(403, "Access denied."))
+                self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))
         except ValueError:
             LOGGER.exception("An exception occured")
             self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
@@ -482,7 +504,7 @@ class RESTTransport(Transport):
             url = self._create_base_url(properties)
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
-        headers.add("Authentication")
+        headers.add("Authorization")
         self.headers = headers
         return url_map
 
@@ -777,7 +799,7 @@ class RESTTransport(Transport):
         url = url_host + url
 
         if self.token is not None:
-            headers["Authentication"] = "Bearer " + self.token
+            headers["Authorization"] = "Bearer " + self.token
 
         ca_certs = config.Config.get(self.id, "ssl_ca_cert_file", None)
 

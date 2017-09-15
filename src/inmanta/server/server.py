@@ -1296,8 +1296,9 @@ class Server(protocol.ServerEndpoint):
 
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()
+            token = protocol.encode_token(["compiler"], str(environment_id))
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
-                                  "--server_port", opt.transport_port.get()]
+                                  "--server_port", opt.transport_port.get(), "--token", token]
 
             result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 
