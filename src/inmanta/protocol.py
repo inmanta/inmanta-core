@@ -418,6 +418,18 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_status(200)
 
 
+class StaticContentHandler(tornado.web.RequestHandler):
+    def initialize(self, transport: Transport, content, content_type):
+        self._transport = transport
+        self._content = content
+        self._content_type = content_type
+
+    def get(self, *args, **kwargs):
+        self.set_header("Content-Type", self._content_type)
+        self.write(self._content)
+        self.set_status(200)
+
+
 def sh(msg, max_len=10):
     if len(msg) < max_len:
         return msg
@@ -689,6 +701,10 @@ class RESTTransport(Transport):
 
         if start:
             self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
+
+    def add_static_content(self, path, content, content_type="application/javascript"):
+        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
+                                                                        "content_type": content_type}))
 
     def start_endpoint(self):
         """

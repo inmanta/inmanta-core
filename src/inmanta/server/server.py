@@ -129,7 +129,22 @@ class Server(protocol.ServerEndpoint):
             LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
             return
 
-        self._transport_instance.add_static_handler("dashboard", dashboard_path, start=True)
+        if not opt.server_enable_auth:
+            auth = ""
+        else:
+            auth = """,
+    'auth': {
+        'realm': '%s',
+        'url': '%s',
+        'clientId': '%s'
+    }""" % (opt.dash_realm.get(), opt.dash_auth_url.get(), opt.dash_client_id.get())
+        content = """
+angular.module('inmantaApi.config', []).constant('inmantaConfig', {
+    'backend': window.location.origin+'/'%s
+});
+        """ % auth
+        self._transport_instance.add_static_content("/dashboard/config.js", content=content)
+        self._transport_instance.add_static_handler("/dashboard", dashboard_path, start=True)
 
     @gen.coroutine
     def _purge_versions(self):

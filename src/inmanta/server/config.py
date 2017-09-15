@@ -98,6 +98,9 @@ server_wait_after_param = Option("server", "wait-after-param", 5,
 server_no_recompile = Option("server", "no-recompile", False,
                              "Prevent all server side compiles", is_bool)
 
+agent_timeout = Option("server", "agent-timeout", 30,
+                       "Time before an agent is considered to be offline", is_time)
+
 #############################
 # Dashboard
 #############################
@@ -107,8 +110,9 @@ dash_enable = Option("dashboard", "enabled", True, "Determines whether the serve
 dash_path = Option("dashboard", "path", "/usr/share/inmanta/dashboard",
                    "The path on the local file system where the dashboard can be found")
 
-agent_timeout = Option("server", "agent-timeout", 30,
-                       "Time before an agent is considered to be offline", is_time)
+dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.")
+dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.")
+dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.")
 
 
 def default_hangtime():
