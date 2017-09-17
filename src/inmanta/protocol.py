@@ -449,7 +449,7 @@ def authorize_request(auth_data, metadata, message, config):
         if env_key not in metadata:
             raise UnauhorizedError("The authorization token is scoped to a specific environment.")
 
-        if auth_data[env_key] != metadata[env_key]:
+        if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
             raise UnauhorizedError("The authorization token is not valid for the requested environment.")
 
     # Enforce client_types restrictions

@@ -173,23 +173,22 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
 
     if auth:
         config.Config.set("server", "auth", "true")
-
-        # get an "all purpose" token
         from inmanta import protocol
-        token = protocol.encode_token(["compiler", "agent", "api"])
 
-    for x in ["server",
-              "server_rest_transport",
-              "agent_rest_transport",
-              "compiler_rest_transport",
-              "client_rest_transport",
-              "cmdline_rest_transport"]:
+
+    for x, ct in [("server", None),
+              ("server_rest_transport", None),
+              ("agent_rest_transport", ["agent"]),
+              ("compiler_rest_transport", ["compiler"]),
+              ("client_rest_transport", ["api", "compiler"]),
+              ("cmdline_rest_transport", ["api"])]:
         if ssl:
             config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
             config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl", "True")
-        if auth:
+        if auth and ct is not None:
+            token = protocol.encode_token(ct)
             config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()

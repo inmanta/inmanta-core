@@ -123,6 +123,15 @@ def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
     return env
 
 
+@gen.coroutine
+def ignore_env(obj: object, metadata: dict) -> object:
+    """
+        This mapper only adds an env all for authz
+    """
+    metadata[const.INMANTA_URN + "env"] = "all"
+    return obj
+
+
 ENV_ARG = {"header": "X-Inmanta-tid", "getter": get_environment, "reply_header": True}
 ENV_OPTS = {"tid": ENV_ARG}
 AGENT_ENV_ARG = {"header": "X-Inmanta-tid", "reply_header": True, "getter": add_env}
@@ -328,7 +337,8 @@ class FileMethod(Method):
     """
     __method_name__ = "file"
 
-    @protocol(operation="PUT", id=True, agent_server=True, api=True, client_types=["api", "agent", "compiler"])
+    @protocol(operation="PUT", id=True, agent_server=True, api=True, client_types=["api", "agent", "compiler"],
+              arg_options={"id": {"getter": ignore_env}})
     def upload_file(self, id: str, content: str):
         """
             Upload a new file
@@ -337,7 +347,8 @@ class FileMethod(Method):
             :param content The base64 encoded content of the file
         """
 
-    @protocol(operation="HEAD", id=True, agent_server=True, api=True, client_types=["api", "agent", "compiler"])
+    @protocol(operation="HEAD", id=True, agent_server=True, api=True, client_types=["api", "agent", "compiler"],
+              arg_options={"id": {"getter": ignore_env}})
     def stat_file(self, id: str):
         """
             Does the file exist
@@ -345,7 +356,8 @@ class FileMethod(Method):
             :param id The id of the file to check
         """
 
-    @protocol(operation="GET", id=True, agent_server=True, api=True, client_types=["api", "agent", "compiler"])
+    @protocol(operation="GET", id=True, agent_server=True, api=True, client_types=["api", "agent", "compiler"],
+              arg_options={"id": {"getter": ignore_env}})
     def get_file(self, id: str):
         """
             Retrieve a file
@@ -353,7 +365,7 @@ class FileMethod(Method):
             :param id: The id of the file to retrieve
         """
 
-    @protocol(api=True, client_types=["api", "agent", "compiler"])
+    @protocol(api=True, client_types=["api", "agent", "compiler"], arg_options={"files": {"getter": ignore_env}})
     def stat_files(self, files: list):
         """
             Check which files exist in the given list
