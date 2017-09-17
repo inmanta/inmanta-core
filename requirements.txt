@@ -12,7 +12,7 @@ pytest-tornado==0.4.5
 pytest-randomly==1.2.1
 python-dateutil==2.6.1
 pyyaml==3.12
-six==1.10.0
+six==1.11.0
 sphinx==1.6.3
 sphinx-argparse==0.2.1
 sphinx-autodoc-annotation==1.0-1
