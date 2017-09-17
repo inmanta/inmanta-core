@@ -175,13 +175,12 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
         config.Config.set("server", "auth", "true")
         from inmanta import protocol
 
-
     for x, ct in [("server", None),
-              ("server_rest_transport", None),
-              ("agent_rest_transport", ["agent"]),
-              ("compiler_rest_transport", ["compiler"]),
-              ("client_rest_transport", ["api", "compiler"]),
-              ("cmdline_rest_transport", ["api"])]:
+                  ("server_rest_transport", None),
+                  ("agent_rest_transport", ["agent"]),
+                  ("compiler_rest_transport", ["compiler"]),
+                  ("client_rest_transport", ["api", "compiler"]),
+                  ("cmdline_rest_transport", ["api"])]:
         if ssl:
             config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
