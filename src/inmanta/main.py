@@ -827,6 +827,45 @@ def monitor_deploy(client, environment):
     click.echo("Complete: %s/%s" % (done, total))
 
 
+@cmd.group("token")
+@click.pass_context
+def token(ctx):
+    pass
+
+
+@token.command(name="create")
+@click.option("--environment", "-e", help="The environment to use.", required=True)
+@click.option("--api", is_flag=True, help="Add client_type api to the token.")
+@click.option("--compiler", is_flag=True, help="Add client_type compiler to the token.")
+@click.option("--agent", is_flag=True, help="Add client_type agent to the token.")
+@click.pass_obj
+def create_token(client, environment, api, compiler, agent):
+    tid = client.to_environment_id(environment)
+
+    client_types = []
+    if api:
+        client_types.append("api")
+
+    if compiler:
+        client_types.append("compiler")
+
+    if agent:
+        client_types.append("agent")
+
+    token = client.do_request("create_token", key_name="token", arguments=dict(tid=tid, client_types=client_types))
+
+    click.echo("Token: " + token)
+
+
+@token.command(name="bootstrap")
+@click.pass_obj
+def bootstrap_token(client):
+    """
+        Generate a bootstrap token that provides access to everything. This token is only valid for 3600 seconds.
+    """
+    click.echo("Token: " + protocol.encode_token(["api", "compiler", "agent"], expire=3600))
+
+
 def main():
     Config.load_config()
     cmd()

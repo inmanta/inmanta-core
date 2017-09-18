@@ -236,7 +236,7 @@ class UnauhorizedError(Exception):
     pass
 
 
-def encode_token(client_types, environment=None, idempotent=False):
+def encode_token(client_types, environment=None, idempotent=False, expire=None):
     cfg = config.AuthJWTConfig.get_sign_config()
 
     payload = {
@@ -250,6 +250,8 @@ def encode_token(client_types, environment=None, idempotent=False):
 
         if cfg.expire > 0:
             payload["exp"] = int(time.time() + cfg.expire)
+        elif expire is not None:
+            payload["exp"] = int(time.time() + expire)
 
     if environment is not None:
         payload[const.INMANTA_URN + "env"] = environment

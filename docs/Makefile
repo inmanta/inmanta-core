@@ -172,9 +172,9 @@ doctest:
 	$(SVG2PDF) -f $< -e $@
 
 # Build a list of SVG files to convert to PDFs
-#PDFs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.pdf,$(wildcard $(SOURCEDIR)/$(dir)/*.svg)))
+PDFs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.pdf,$(wildcard $(SOURCEDIR)/$(dir)/*.svg)))
 PNGs := $(foreach dir, $(IMAGEDIRS), $(patsubst %.svg,%.png,$(wildcard $(SOURCEDIR)/$(dir)/*.svg)))
 
 # Make a rule to build the PDFs
-images: $(PNGs)
+images: $(PNGs) $(PDFs)
 

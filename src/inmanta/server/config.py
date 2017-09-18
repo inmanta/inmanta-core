@@ -45,7 +45,7 @@ transport_port = Option("server_rest_transport", "port", 8888, "The port on whic
 server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 
 server_ssl_key = Option("server", "ssl_key_file", None,
-                        "Server private key to use for this server Leave blank to disable SSl", is_str_opt)
+                        "Server private key to use for this server Leave blank to disable SSL", is_str_opt)
 
 server_ssl_cert = Option("server", "ssl_cert_file", None,
                          "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt)

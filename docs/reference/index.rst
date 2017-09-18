@@ -10,7 +10,6 @@ Inmanta, please check out the :doc:`../quickstart` guide.
 
 .. toctree::
 
-    language
     commands
     config
     api
