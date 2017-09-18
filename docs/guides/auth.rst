@@ -6,34 +6,35 @@ This guide explains how to enable ssl and setup authentication.
 SSL
 ---
 SSL is not strictly required for authentication but higly recommended. Inmanta uses bearer tokens
-for authorizing users and services. These tokens should be kept private and are visible in plain-text
+for authorizing users and services. These tokens should be kept private and are visible in plain-text in the request headers
 without SSL.
 
 Setting a private key and a public key in the server configuration enables SSL on the server. The two
 options to set are :inmanta.config:option:`server.ssl-cert-file` and :inmanta.config:option:`server.ssl-key-file`.
 
-For each of the transport configurations ``ssl`` has to be enabled: :inmanta.config:group:`agent_rest_transport`,
-:inmanta.config:group:`cmdline_rest_transport` and :inmanta.config:group:`compiler_rest_transport`.
+For each of the transport configurations (compiler, agent, rpc client, ...) ``ssl`` has to be 
+enabled: :inmanta.config:group:`agent_rest_transport`, :inmanta.config:group:`cmdline_rest_transport` and 
+:inmanta.config:group:`compiler_rest_transport`.
 
-The client needs to trust the SSL certificate of the server. When a self-signed SSL cert is used on the server
-either add the CA cert to the trusted certificates of the system running the agent or configure the ``ssl-ca-cert-file``.
+The client needs to trust the SSL certificate of the server. When a self-signed SSL cert is used on the server,
+either add the CA cert to the trusted certificates of the system running the agent or configure the ``ssl-ca-cert-file`` option
+in the transport configuration.
 
 For example for an agent this is :inmanta.config:option:`agent_rest_transport.ssl` and 
 :inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file`
 
 Authentication
 --------------
-
 Inmanta authentication uses JSON Web Tokens for authentication (bearer token). Inmanta issues tokens for service to service
 interaction (agent to server, compiler to server, cli to server and 3rd party API interactions). For user interaction through 
 the dashboard Inmanta uses 3rd party auth brokers. Currently the dashboard only supports redirecting users to keycloak for 
 authentication.
 
-Inmanta expects a token of which it can validate the signature. Currently Inmanta can verify both symmetric signatures using 
-HS256 and asymmetric signatures using RSA (RS256). Tokens it signs itself for other processes are always signed using HS256 
-because the server is both the signing and the validating party.
+Inmanta expects a token of which it can validate the signature. Inmanta can verify both symmetric signatures with 
+HS256 and asymmetric signatures with RSA (RS256). Tokens it signs itself for other processes are always signed using HS256.
+There are no key distribution issues because the server is both the signing and the validating party.
 
-The server provides limited authorization as well by checking for inmanta specific claims inside the token. All inmanta claims
+The server also provides limited authorization by checking for inmanta specific claims inside the token. All inmanta claims
 are prefixed with ``urn:inmanta:``. These claims are:
 
  * ``urn:inmanta:ct`` A *required* comma delimited list of client types for which this client is authenticated. Each API call 
@@ -48,15 +49,15 @@ are prefixed with ``urn:inmanta:``. These claims are:
 
 Setup server auth
 *****************
-
 The server requests authentication for all API calls when :inmanta.config:option:`server.auth` is set to true. When 
 authentication is enabled all other components require a valid token. 
 
-.. warning:: When multiple servers are used in a HA setup, each server requires the same configuration!
+.. warning:: When multiple servers are used in a HA setup, each server requires the same configuration (SSL enabled and 
+    private keys).
 
 In the server configuration multiple token providers (issuers) can be configured (See :ref:`auth-config`). Inmanta requires at 
-least one issuer for the server itself with the HS256 algorithm. This provider is indicated with sign set to true. Inmanta 
-issues tokens for compilers the servers runs itself and for autostarted agents.
+least one issuer with the HS256 algorithm. The server uses this to sign tokens it issues itself. This provider is indicated with
+sign set to true. Inmanta issues tokens for compilers the servers runs itself and for autostarted agents.
 
 Compilers, cli and agents that are not started by the server itself, require a token in their transport configuration. This
 token is configured with the ``token`` option in the groups :inmanta.config:group:`agent_rest_transport`,
@@ -86,11 +87,12 @@ JWT auth configuration
 The server searches for configuration sections that start with ``auth_jwt_``, after the last _ an id has to be present. This
 section expects the following keys:
 
-* algorithm: The algorithm used for this key. Currently only HS256 and RS256 is supported.
+* algorithm: The algorithm used for this key. Only HS256 and RS256 are supported.
 * sign: Whether the server can use this key to sign JWT it issues. Only one section may have this set to true.
-* client_types: The client types from the urn:inmanta:ct claim that can be valided and/or signed with this key
+* client_types: The client types from the urn:inmanta:ct claim that can be valided and/or signed with this key.
 * key: The secret key used by symmetric algorithms such as HS256. Generate the key with a secure prng with minimal length equal
   to the length of the HMAC (For HS256 == 256). The key should be a urlsafe base64 encoded bytestring without padding. 
+  (see below of a command to generate such a key)
 * expire: The default expire for tokens issued with this key (when sign = true). Use 0 for tokens that do not expire.
 * issuer: The url of the issuer that should match for tokens to be valid (also used to sign this). The default value is
   https://localhost:8888/ This value is used to match auth_jwt_* sections configuration with JWT tokens. Make sure this is 
@@ -124,16 +126,15 @@ External authentication providers
 ---------------------------------
 
 Inmanta supports all external authentication providers that support JWT tokens with RS256 or HS256. These providers need to 
-add a claims that indicates the allowed client type (urn:inmanta:ct). Currently, the dashboard only has support for keycloak.
+add a claims that indicate the allowed client type (urn:inmanta:ct). Currently, the dashboard only has support for keycloak.
 However, each provider that can insert custom (private) claims should work. The dashboard now relies on the keycloak js library
 to implement the OAuth2 implicit flow, required to obtain a JWT.
 
-.. tip:: All patches to support additional providers such as Auth0 are welcome, Or contact Inmanta NV for custom integration
-    services.
+.. tip:: All patches to support additional providers such as Auth0 are welcome. Alternativelyr contact Inmanta NV for custom 
+    integration services.
 
 Keycloak configuration
 **********************
-
 The dashboard has out of the box support for authentication with `Keycloak <http://www.keycloak.org>`_. Install keycloak and
 create an initial login as decribed in the Keycloak documentation and login with admin credentials.
 
@@ -164,7 +165,7 @@ For example call the realm inmanta
 Step 2: Add a new client to keycloak
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Make sure you are in the realm (the name is shown in the title of the left sidebar) you would like to add a new client.
+Make sure the correct realm is active (the name is shown in the title of the left sidebar) to which you want to add a new client.
 
 .. figure:: /guides/images/kc_start.png
    :width: 100%
@@ -262,9 +263,10 @@ Configure a ``auth_jwt_`` block (for example ``auth_jwt_keycloak``) and configur
     jwks_uri=http://localhost:8080/auth/realms/master/protocol/openid-connect/certs
 
 Set the algorithm to RS256, sign should be false and client_types should be limited to api only. Next set the issuer to the
-correct value (watch out for the realm). The audience to the value of the resource key in the json file. Finally, set the 
+correct value (watch out for the realm). Set the audience to the value of the resource key in the json file. Finally, set the 
 jwks_uri so the server knows how to fetch the public keys to verify the signature on the tokens. (inmanta server needs to be 
 able to access this url).
 
 Both the correct url for the issuer and the jwks_uri is also defined in the openid-configuration endpoint of keycloack. For 
-the examples above this url is http://localhost:8080/auth/realms/master/.well-known/openid-configuration (http://www.keycloak.org/docs/3.3/securing_apps/topics/oidc/oidc-generic.html)
+the examples above this url is http://localhost:8080/auth/realms/master/.well-known/openid-configuration 
+(http://www.keycloak.org/docs/3.3/securing_apps/topics/oidc/oidc-generic.html)
