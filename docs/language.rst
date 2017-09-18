@@ -84,7 +84,7 @@ Variables from other modules can be referenced by prefixing them with the module
 
 
 Literals values
-==============================
+===============
 Literal values can be assigned to variables
 
 .. code-block:: inmanta
@@ -322,7 +322,7 @@ Entities define what should be deployed.
 Entities can either be deployed directly (such as files and packages) or they can be refined.
 Refinement expands an abstract entity into one or more more concrete entities.
 
-For example, ``apache.Server`` is refined as follows
+For example, :inmanta:entity:`apache::Server` is refined as follows
 
 .. code-block:: inmanta
 
@@ -346,7 +346,7 @@ Implementation are connected to entities using the ``implement`` statement.
 
 When an instance of an entity is constructed, the runtime searches for refinements.
 One or more refinements are selected based on the associated conditions. When no implementation is found, an exception is raised.
-Entities for which no implementation is required are implemented using ``std::none``.
+Entities for which no implementation is required are implemented using :inmanta:entity:`std::none`.
 
 In the implementation block, the entity instance itself can be accessed through the variable self.
 

@@ -499,6 +499,7 @@ PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
+AGENT_AUTH = "agent_auth"
 
 
 class Setting(object):
@@ -562,7 +563,7 @@ class Environment(BaseDocument):
         AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={"internal": "local:"}, typ="dict",
                                      validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
-                                     "is either an empty string or an agent map string.", agent_restart=True)
+                                     "is either an empty string or an agent map string.", agent_restart=True),
     }
 
     __indexes__ = [

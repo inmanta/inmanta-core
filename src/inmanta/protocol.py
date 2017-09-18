@@ -24,25 +24,21 @@ import urllib
 import uuid
 import json
 import re
-import base64
-import os
 from datetime import datetime
 from collections import defaultdict
 import enum
 
 import tornado.web
-from tornado import gen, queues, locks
-from inmanta import methods
-from inmanta.config import Config, nodename
+from tornado import gen, queues
+from inmanta import methods, config, const
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
-from tornado.web import decode_signed_value, create_signed_value
 import ssl
+import jwt
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-INMANTA_AUTH_HEADER = "X-Inmanta-user"
 
 
 class Result(object):
@@ -116,7 +112,7 @@ class Transport(object):
     """
         This class implements a transport for the Inmanta protocol.
 
-        :param end_point_name The name of the endpoint to which this transport belongs. This is used
+        :param end_point_name: The name of the endpoint to which this transport belongs. This is used
             for logging and configuration purposes
     """
     @classmethod
@@ -236,111 +232,71 @@ def json_encode(value):
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
 
-class LoginHandler(tornado.web.RequestHandler):
-
-    def initialize(self, aa, transport):
-        self._aa = aa
-        self._transport = transport
-
-    def respond(self, body, headers, status):
-        if body is not None:
-            self.write(json_encode(body))
-
-        for header, value in headers.items():
-            self.set_header(header, value)
-
-        self.set_status(status)
-
-    def post(self):
-
-        self.set_header("Access-Control-Allow-Origin", "*")
-        try:
-            message = self._transport._decode(self.request.body)
-            if message is None:
-                message = {}
-        except ValueError:
-            LOGGER.exception("An exception occured")
-            self._transport.return_error_msg(500, "Unable to decode request body")
-
-        if "user" not in message:
-            self.respond(*self._transport.return_error_msg(400, "Field user is missing"))
-            return
-
-        if "password" not in message:
-            self.respond(*self._transport.return_error_msg(400, "Field password is missing"))
-            return
-
-        if self._aa.get_authn().is_valid(message["user"], message["password"]):
-            self.write(
-                json_encode({"token": create_signed_value(self._aa.secret, "user", message["user"]).decode("utf8")}))
-        else:
-            self.respond(*self._transport.return_error_msg(401, "bad password username combination"))
-
-    @gen.coroutine
-    def options(self, *args, **kwargs):
-        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
-        if len(self._transport.headers):
-            allow_headers += ", " + ", ".join(self._transport.headers)
-
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", allow_headers)
-
-        self.set_status(200)
+class UnauhorizedError(Exception):
+    pass
 
 
-class AuthManager(object):
+def encode_token(client_types, environment=None, idempotent=False, expire=None):
+    cfg = config.AuthJWTConfig.get_sign_config()
 
-    def auth(self, user, method, request_headers, config):
-        raise NotImplementedError()
+    payload = {
+        "iss": cfg.issuer,
+        "aud": [cfg.audience],
+        const.INMANTA_URN + "ct": ",".join(client_types),
+    }
 
+    if not idempotent:
+        payload["iat"] = int(time.time())
 
-class NullAuthManager(AuthManager):
+        if cfg.expire > 0:
+            payload["exp"] = int(time.time() + cfg.expire)
+        elif expire is not None:
+            payload["exp"] = int(time.time() + expire)
 
-    def auth(self, user, method, request_headers, config):
-        return True
+    if environment is not None:
+        payload[const.INMANTA_URN + "env"] = environment
 
-
-class HasUserAuthManager(AuthManager):
-
-    def auth(self, user, method, request_headers, config):
-        return user is not None
-
-
-class AuthNManager(object):
-
-    def is_valid(self, user, credential):
-        raise NotImplementedError()
-
-
-class SingleUserAuthManager(AuthNManager):
-
-    def __init__(self, user, credential):
-        self.user = user
-        self.crediation = credential
-
-    def is_valid(self, user, credential):
-        return user == self.user and self.crediation == credential
+    return jwt.encode(payload, cfg.key, cfg.algo).decode()
 
 
-class NoAuthManager(AuthNManager):
+def decode_token(token):
+    try:
+        # First decode the token without verification
+        header = jwt.get_unverified_header(token)
+        payload = jwt.decode(token, verify=False)
+    except Exception as e:
+        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
 
-    def is_valid(self, user, credential):
-        return False
+    if "iss" not in payload:
+        raise UnauhorizedError("Issuer is required in token to validate.")
 
+    cfg = config.AuthJWTConfig.get_issuer(payload["iss"])
+    if cfg is None:
+        raise UnauhorizedError("Unknown issuer for token")
 
-class AandA(object):
+    alg = header["alg"].lower()
+    if alg == "hs256":
+        key = cfg.key
+    elif alg == "rs256":
+        if "kid" not in header:
+            raise UnauhorizedError("A kid is required for RS256")
+        kid = header["kid"]
+        if kid not in cfg.keys:
+            raise UnauhorizedError("The kid provided in the token does not match a known key. Check the jwks_uri or try "
+                                   "restarting the server to load any new keys.")
 
-    def __init__(self, authorization, authentication, secret):
-        self.authorization = authorization
-        self.authentication = authentication
-        self.secret = secret
+        key = cfg.keys[kid]
+    else:
+        raise UnauhorizedError("Algorithm %s is not supported." % alg)
 
-    def get_authz(self):
-        return self.authorization
+    try:
+        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
+        ct_key = const.INMANTA_URN + "ct"
+        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
+    except Exception as e:
+        raise UnauhorizedError(*e.args)
 
-    def get_authn(self):
-        return self.authentication
+    return payload
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -348,10 +304,9 @@ class RESTHandler(tornado.web.RequestHandler):
         A generic class use by the transport
     """
 
-    def initialize(self, transport, config, aa):
+    def initialize(self, transport: Transport, config):
         self._transport = transport
         self._config = config
-        self._aa = aa
 
     def _get_config(self, http_method):
         if http_method.upper() not in self._config:
@@ -363,11 +318,20 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return self._config[http_method]
 
-    def get_current_user(self, headers):
-        if "X-inmanta-user" not in headers:
+    def get_auth_token(self, headers: dict):
+        """
+            Get the auth token provided by the caller. The token is provided as a bearer token.
+        """
+        if "Authorization" not in headers:
             return None
-        pre = headers["X-inmanta-user"]
-        return decode_signed_value(self._aa.secret, "user", pre)
+
+        parts = headers["Authorization"].split(" ")
+        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
+            LOGGER.warning("Invalid authentication header, Inmanta expects a bearer token. (%s was provided)",
+                           headers["Authorization"])
+            return None
+
+        return decode_token(parts[1])
 
     def respond(self, body, headers, status):
         if body is not None:
@@ -379,11 +343,11 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_status(status)
 
     @gen.coroutine
-    def _call(self, kwargs, http_method, config):
+    def _call(self, kwargs, http_method, call_config):
         """
             An rpc like call
         """
-        if config is None:
+        if call_config is None:
             body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
             self.respond(body, headers, status)
             return
@@ -402,38 +366,46 @@ class RESTHandler(tornado.web.RequestHandler):
 
             request_headers = self.request.headers
 
-            if self._aa.authorization.auth(self.get_current_user(request_headers), http_method, request_headers, config):
-                result = yield self._transport._execute_call(kwargs, http_method, config, message, request_headers)
+            try:
+                auth_token = self.get_auth_token(request_headers)
+            except UnauhorizedError as e:
+                self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
+                return
+
+            auth_enabled = config.Config.get("server", "auth", False)
+            if not auth_enabled or auth_token is not None:
+                result = yield self._transport._execute_call(kwargs, http_method, call_config,
+                                                             message, request_headers, auth_token)
                 self.respond(*result)
             else:
-                self.respond(*self._transport.return_error_msg(403, "Access denied."))
+                self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))
         except ValueError:
             LOGGER.exception("An exception occured")
             self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
 
     @gen.coroutine
     def head(self, *args, **kwargs):
-        yield self._call(http_method="HEAD", config=self._get_config("HEAD"), kwargs=kwargs)
+        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
 
     @gen.coroutine
     def get(self, *args, **kwargs):
-        yield self._call(http_method="GET", config=self._get_config("GET"), kwargs=kwargs)
+        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
 
     @gen.coroutine
     def post(self, *args, **kwargs):
-        yield self._call(http_method="POST", config=self._get_config("POST"), kwargs=kwargs)
+        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
 
     @gen.coroutine
     def delete(self, *args, **kwargs):
-        yield self._call(http_method="DELETE", config=self._get_config("DELETE"), kwargs=kwargs)
+        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
 
     @gen.coroutine
     def patch(self, *args, **kwargs):
-        yield self._call(http_method="PATCH", config=self._get_config("PATCH"), kwargs=kwargs)
+        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
 
     @gen.coroutine
     def put(self, *args, **kwargs):
-        yield self._call(http_method="PUT", config=self._get_config("PUT"), kwargs=kwargs)
+        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
 
     @gen.coroutine
     def options(self, *args, **kwargs):
@@ -448,10 +420,51 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_status(200)
 
 
+class StaticContentHandler(tornado.web.RequestHandler):
+    def initialize(self, transport: Transport, content, content_type):
+        self._transport = transport
+        self._content = content
+        self._content_type = content_type
+
+    def get(self, *args, **kwargs):
+        self.set_header("Content-Type", self._content_type)
+        self.write(self._content)
+        self.set_status(200)
+
+
 def sh(msg, max_len=10):
     if len(msg) < max_len:
         return msg
     return msg[0:max_len - 3] + "..."
+
+
+def authorize_request(auth_data, metadata, message, config):
+    """
+        Authorize a request based on the given data
+    """
+    if auth_data is None:
+        return
+
+    # Enforce environment restrictions
+    env_key = const.INMANTA_URN + "env"
+    if env_key in auth_data:
+        if env_key not in metadata:
+            raise UnauhorizedError("The authorization token is scoped to a specific environment.")
+
+        if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
+            raise UnauhorizedError("The authorization token is not valid for the requested environment.")
+
+    # Enforce client_types restrictions
+    ok = False
+    ct_key = const.INMANTA_URN + "ct"
+    for ct in auth_data[ct_key]:
+        if ct in config[0]["client_types"]:
+            ok = True
+
+    if not ok:
+        raise UnauhorizedError("The authorization token does not have a valid client type for this call.")
+
+    return
 
 
 class RESTTransport(Transport):
@@ -465,8 +478,7 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
-        self.token = None
-        self.token_lock = locks.Lock()
+        self.token = config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.headers = set()
 
@@ -506,7 +518,7 @@ class RESTTransport(Transport):
             url = self._create_base_url(properties)
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
-        headers.add(INMANTA_AUTH_HEADER)
+        headers.add("Authorization")
         self.headers = headers
         return url_map
 
@@ -531,7 +543,7 @@ class RESTTransport(Transport):
         return body, headers, status
 
     @gen.coroutine
-    def _execute_call(self, kwargs, http_method, config, message, request_headers):
+    def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
@@ -566,6 +578,7 @@ class RESTTransport(Transport):
             else:
                 defaults_start = -1
 
+            metadata = {}
             for i in range(len(args)):
                 arg = args[i]
 
@@ -612,7 +625,7 @@ class RESTTransport(Transport):
                 # execute any getters that are defined
                 if "getter" in opts:
                     try:
-                        result = yield opts["getter"](message[arg])
+                        result = yield opts["getter"](message[arg], metadata)
                         message[arg] = result
                     except methods.HTTPException as e:
                         LOGGER.exception("Failed to use getter for arg %s", arg)
@@ -636,6 +649,11 @@ class RESTTransport(Transport):
                     if v in message:
                         message[k] = message[v]
                         del message[v]
+
+            try:
+                authorize_request(auth, metadata, message, config)
+            except UnauhorizedError as e:
+                return self.return_error_msg(403, e.args[0], headers)
 
             result = yield method_call(**message)
 
@@ -686,31 +704,32 @@ class RESTTransport(Transport):
         if start:
             self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
 
+    def add_static_content(self, path, content, content_type="application/javascript"):
+        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
+                                                                        "content_type": content_type}))
+
     def start_endpoint(self):
         """
             Start the transport
         """
         url_map = self.create_op_mapping()
 
-        aa = self.endpoint.get_security_policy()
         for url, configs in url_map.items():
             handler_config = {}
             for op, cfg in configs.items():
                 handler_config[op] = cfg
 
-            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config, "aa": aa}))
+            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
 
-        self._handlers.append((r"/login", LoginHandler, {"aa": aa, "transport": self}))
-
         port = 8888
-        if self.id in Config.get() and "port" in Config.get()[self.id]:
-            port = Config.get()[self.id]["port"]
+        if self.id in config.Config.get() and "port" in config.Config.get()[self.id]:
+            port = config.Config.get()[self.id]["port"]
 
         application = tornado.web.Application(self._handlers)
 
-        crt = Config.get("server", "ssl_cert_file", None)
-        key = Config.get("server", "ssl_key_file", None)
+        crt = config.Config.get("server", "ssl_cert_file", None)
+        key = config.Config.get("server", "ssl_key_file", None)
 
         if(crt is not None and key is not None):
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -736,11 +755,11 @@ class RESTTransport(Transport):
         """
         LOGGER.debug("Getting config in section %s", self.id)
 
-        port = Config.get(self.id, "port", 8888)
+        port = config.Config.get(self.id, "port", 8888)
 
-        host = Config.get(self.id, "host", "localhost")
+        host = config.Config.get(self.id, "host", "localhost")
 
-        if Config.getboolean(self.id, "ssl", False):
+        if config.Config.getboolean(self.id, "ssl", False):
             protocol = "https"
         else:
             protocol = "http"
@@ -791,20 +810,16 @@ class RESTTransport(Transport):
         return url, method, headers, body
 
     @gen.coroutine
-    def call(self, properties, args, kwargs={}, reauth=True):
+    def call(self, properties, args, kwargs={}):
         url, method, headers, body = self.build_call(properties, args, kwargs)
 
         url_host = self._get_client_config()
         url = url_host + url
 
-        if self.token is None:
-            yield self.get_token()
-            reauth = False
-
         if self.token is not None:
-            headers[INMANTA_AUTH_HEADER] = self.token
+            headers["Authorization"] = "Bearer " + self.token
 
-        ca_certs = Config.get(self.id, "ssl_ca_cert_file", None)
+        ca_certs = config.Config.get(self.id, "ssl_ca_cert_file", None)
 
         LOGGER.debug("Calling server %s %s", method, url)
 
@@ -823,48 +838,11 @@ class RESTTransport(Transport):
                     result = {}
                 return Result(code=e.code, result=result)
 
-            if e.code == 403:
-                self.token = None and reauth
-                val = yield self.call(properties, args, kwargs, True)
-                return val
-
             return Result(code=e.code, result={"message": str(e)})
         except Exception as e:
             return Result(code=500, result={"message": str(e)})
 
         return Result(code=response.code, result=self._decode(response.body))
-
-    @gen.coroutine
-    def get_token(self):
-        with (yield self.token_lock.acquire()):
-            if self.token is not None:
-                return
-
-            username = Config.get(self.id, "username", None)
-            password = Config.get(self.id, "password", None)
-            ca_certs = Config.get(self.id, "ssl_ca_cert_file", None)
-
-            if username is not None:
-                LOGGER.debug("agent got username %s and password %s for id %s", username, password is not None, self.id)
-
-            if username is not None and password is not None:
-                body = {"user": username, "password": password}
-                body = json_encode(body)
-
-                url_host = self._get_client_config()
-                url = url_host + "/login"
-
-                try:
-                    request = HTTPRequest(url=url, method="POST", body=body, connect_timeout=120, request_timeout=120,
-                                          ca_certs=ca_certs)
-                    client = AsyncHTTPClient()
-                    response = yield client.fetch(request)
-                    response = self._decode(response.body)
-                    self.token = response["token"]
-                except HTTPError as e:
-                    LOGGER.error("Login failed: %s %s", e.code, str(e))
-                except Exception as e:
-                    LOGGER.error("Login failed: %s", str(e))
 
     def validate_sid(self, sid):
         return self.endpoint.validate_sid(sid)
@@ -977,7 +955,7 @@ class Endpoint(object):
 
     def __init__(self, io_loop, name):
         self._name = name
-        self._node_name = nodename.get()
+        self._node_name = config.nodename.get()
         self._end_point_names = []
         self._io_loop = io_loop
 
@@ -1231,25 +1209,6 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
             return 200
         except Exception:
             LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
-
-    def get_security_policy(self):
-
-        secret = Config.get("server", "shared-secret", base64.b64encode(os.urandom(50)).decode('ascii'))
-        username = Config.get("server", "username", None)
-        password = Config.get("server", "password", None)
-
-        if username is None and password is None:
-            return AandA(NullAuthManager(), NoAuthManager(), secret)
-
-        if username is None:
-            LOGGER.warning("password not set, but username is")
-            return AandA(NullAuthManager(), NoAuthManager(), secret)
-
-        if password is None:
-            LOGGER.warning("username not set, but password is")
-            return AandA(NullAuthManager(), NoAuthManager(), secret)
-
-        return AandA(HasUserAuthManager(), SingleUserAuthManager(username, password), secret)
 
 
 class AgentEndPoint(Endpoint, metaclass=EndpointMeta):

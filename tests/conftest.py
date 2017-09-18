@@ -120,6 +120,14 @@ def free_port():
 @pytest.fixture(scope="function", autouse=True)
 def inmanta_config():
     config.Config.load_config()
+    config.Config.set("auth_jwt_default", "algorithm", "HS256")
+    config.Config.set("auth_jwt_default", "sign", "true")
+    config.Config.set("auth_jwt_default", "client_types", "agent,compiler")
+    config.Config.set("auth_jwt_default", "key", "rID3kG4OwGpajIsxnGDhat4UFcMkyFZQc1y3oKQTPRs")
+    config.Config.set("auth_jwt_default", "expire", "0")
+    config.Config.set("auth_jwt_default", "issuer", "https://localhost:8888/")
+    config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
+
     yield config.Config._get_instance()
     config.Config._reset()
 
@@ -162,23 +170,25 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     ssl, auth = request.param
 
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-    testuser = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
-    testpass = ''.join(random.choice(string.ascii_lowercase) for _ in range(5))
 
-    for x in ["server",
-              "server_rest_transport",
-              "agent_rest_transport",
-              "compiler_rest_transport",
-              "client_rest_transport",
-              "cmdline_rest_transport"]:
+    if auth:
+        config.Config.set("server", "auth", "true")
+        from inmanta import protocol
+
+    for x, ct in [("server", None),
+                  ("server_rest_transport", None),
+                  ("agent_rest_transport", ["agent"]),
+                  ("compiler_rest_transport", ["compiler"]),
+                  ("client_rest_transport", ["api", "compiler"]),
+                  ("cmdline_rest_transport", ["api"])]:
         if ssl:
             config.Config.set(x, "ssl_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl_key_file", os.path.join(path, "server.open.key"))
             config.Config.set(x, "ssl_ca_cert_file", os.path.join(path, "server.crt"))
             config.Config.set(x, "ssl", "True")
-        if auth:
-            config.Config.set(x, "username", testuser)
-            config.Config.set(x, "password", testpass)
+        if auth and ct is not None:
+            token = protocol.encode_token(ct)
+            config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()
     config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))

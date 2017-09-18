@@ -19,11 +19,13 @@
 import functools
 import logging
 
-import pkg_resources
 from pkg_resources import DistributionNotFound
+import pkg_resources
 
 
 LOGGER = logging.getLogger(__name__)
+SALT_SIZE = 16
+HASH_ROUNDS = 100000
 
 
 def memoize(obj):

@@ -29,55 +29,29 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
-db_host = \
-    Option("database", "host", "localhost",
-           "Hostname or IP of the mongo server")
-db_port = \
-    Option("database", "port", 27017,
-           "The port of the mongo server", is_int)
-db_name = \
-    Option("database", "name", "inmanta",
-           "The name of the database on the mongo server")
+db_host = Option("database", "host", "localhost", "Hostname or IP of the mongo server")
+db_port = Option("database", "port", 27017, "The port of the mongo server", is_int)
+db_name = Option("database", "name", "inmanta", "The name of the database on the mongo server")
 
 #############################
 # server_rest_transport
 #############################
-
-transport_port = \
-    Option("server_rest_transport", "port", 8888,
-           "The port on which the server listens for connections")
+transport_port = Option("server_rest_transport", "port", 8888, "The port on which the server listens for connections")
 
 
 #############################
 # server
 #############################
+server_enable_auth = Option("server", "auth", False, "Enable authentication on the server API", is_bool)
 
-server_username = \
-    Option("server", "username", None,
-           "Username required to connect to this server. Leave blank to disable auth", is_str_opt)
+server_ssl_key = Option("server", "ssl_key_file", None,
+                        "Server private key to use for this server Leave blank to disable SSL", is_str_opt)
 
-server_password = \
-    Option("server", "password", None,
-           "Password required to connect to this server. Leave blank to disable auth", is_str_opt)
+server_ssl_cert = Option("server", "ssl_cert_file", None,
+                         "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt)
 
-server_ssl_key = \
-    Option("server", "ssl_key_file", None,
-           "Server private key to use for this server Leave blank to disable SSl", is_str_opt)
-
-server_ssl_cert = \
-    Option("server", "ssl_cert_file", None,
-           "SSL certificate file for the server key. Leave blank to disable SSL", is_str_opt)
-
-
-server_fact_expire = \
-    Option("server", "fact-expire", 3600,
-           "After how many seconds will discovered facts/parameters expire", is_time)
-
-# server_ssl_key  = \
-#     Option("server", "fact-expire", 3600,
-#            "After how many seconds will discovered facts/parameters expire", is_time)
-#
-# ssl_cert_file
+server_fact_expire = Option("server", "fact-expire", 3600,
+                            "After how many seconds will discovered facts/parameters expire", is_time)
 
 
 def default_fact_renew():
@@ -94,64 +68,56 @@ def validate_fact_renew(value):
         out = default_fact_renew()
     return out
 
-server_fact_renew = \
-    Option("server", "fact-renew", default_fact_renew,
-           """After how many seconds will discovered facts/parameters be renewed?
-This value needs to be lower than fact-expire""", validate_fact_renew)
 
-server_fact_resource_block = \
-    Option("server", "fact-resource-block", 60,
-           "Minimal time between subsequent requests for the same fact", is_time)
+server_fact_renew = Option("server", "fact-renew", default_fact_renew,
+                           """After how many seconds will discovered facts/parameters be renewed?
+                              This value needs to be lower than fact-expire""", validate_fact_renew)
 
-server_autrecompile_wait = \
-    Option("server", "auto-recompile-wait ", 10,
-           """The number of seconds to wait before the server may attempt to do a new recompile.
-           Recompiles are triggered after facts updates for example.""", is_time)
+server_fact_resource_block = Option("server", "fact-resource-block", 60,
+                                    "Minimal time between subsequent requests for the same fact", is_time)
 
-server_purge_version_interval = \
-    Option("server", "purge-versions-interval", 3600,
-           """The number of seconds between version purging,
-see :inmanta.config:option:`server.available-versions-to-keep`""", is_time)
+server_autrecompile_wait = Option("server", "auto-recompile-wait ", 10,
+                                  """The number of seconds to wait before the server may attempt to do a new recompile.
+                                     Recompiles are triggered after facts updates for example.""", is_time)
 
-server_version_to_keep = \
-    Option("server", "available-versions-to-keep", 10,
-           """On boot and at regular intervals the server will purge older versions.
-This is the number of most recent versions to keep available.""", is_int)
+server_purge_version_interval = Option("server", "purge-versions-interval", 3600,
+                                       """The number of seconds between version purging,
+                                          see :inmanta.config:option:`server.available-versions-to-keep`""", is_time)
 
-server_address = \
-    Option("server", "server_address", "localhost",
-           """The public ip address of the server.
-This is required for example to inject the inmanta agent in virtual machines at boot time.""")
+server_version_to_keep = Option("server", "available-versions-to-keep", 10,
+                                """On boot and at regular intervals the server will purge older versions.
+                                   This is the number of most recent versions to keep available.""", is_int)
 
-server_wait_after_param = \
-    Option("server", "wait-after-param", 5,
-           """Time to wait before recompile after new paramters have been received""", is_time)
+server_address = Option("server", "server_address", "localhost",
+                        """The public ip address of the server.
+                           This is required for example to inject the inmanta agent in virtual machines at boot time.""")
 
-server_no_recompile = \
-    Option("server", "no-recompile", False,
-           """Prevent all server side compiles""", is_bool)
+server_wait_after_param = Option("server", "wait-after-param", 5,
+                                 "Time to wait before recompile after new paramters have been received", is_time)
+
+server_no_recompile = Option("server", "no-recompile", False,
+                             "Prevent all server side compiles", is_bool)
+
+agent_timeout = Option("server", "agent-timeout", 30,
+                       "Time before an agent is considered to be offline", is_time)
 
 #############################
 # Dashboard
 #############################
 
-dash_enable = \
-    Option("dashboard", "enabled", True,
-           "Determines whether the server should host the dashboard or not", is_bool)
+dash_enable = Option("dashboard", "enabled", True, "Determines whether the server should host the dashboard or not", is_bool)
 
-dash_path = \
-    Option("dashboard", "path", "/usr/share/inmanta/dashboard",
-           "The path on the local file system where the dashboard can be found")
+dash_path = Option("dashboard", "path", "/usr/share/inmanta/dashboard",
+                   "The path on the local file system where the dashboard can be found")
 
-agent_timeout = \
-    Option("server", "agent-timeout", 30,
-           "Time before an agent is considered to be offline", is_time)
+dash_realm = Option("dashboard", "realm", "inmanta", "The realm to use for keycloak authentication.")
+dash_auth_url = Option("dashboard", "auth_url", None, "The auth url of the keycloak server to use.")
+dash_client_id = Option("dashboard", "client_id", None, "The client id configured in keycloak for this application.")
 
 
 def default_hangtime():
     """ server.agent-timeout*3/4 """
     return str(int(agent_timeout.get() * 3 / 4))
 
-agent_hangtime = \
-    Option("server", "agent-hold", default_hangtime,
-           "Maximal time the server will hold an agent heartbeat call", is_time)
+agent_hangtime = Option("server", "agent-hold", default_hangtime,
+                        "Maximal time the server will hold an agent heartbeat call", is_time)

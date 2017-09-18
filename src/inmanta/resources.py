@@ -419,14 +419,14 @@ class Resource(metaclass=ResourceMeta):
 
 class PurgeableResource(Resource):
     """
-        :see std::PurgeableResource
+        See :inmanta:entity:`std::PurgeableResource` for more information.
     """
     fields = ("purged", "purge_on_delete")
 
 
 class ManagedResource(Resource):
     """
-        :see std::ManagedResource
+        See :inmanta:entity:`std::ManagedResource` for more information.
     """
     fields = ("managed",)
 

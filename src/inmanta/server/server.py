@@ -129,7 +129,22 @@ class Server(protocol.ServerEndpoint):
             LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
             return
 
-        self._transport_instance.add_static_handler("dashboard", dashboard_path, start=True)
+        if not opt.server_enable_auth:
+            auth = ""
+        else:
+            auth = """,
+    'auth': {
+        'realm': '%s',
+        'url': '%s',
+        'clientId': '%s'
+    }""" % (opt.dash_realm.get(), opt.dash_auth_url.get(), opt.dash_client_id.get())
+        content = """
+angular.module('inmantaApi.config', []).constant('inmantaConfig', {
+    'backend': window.location.origin+'/'%s
+});
+        """ % auth
+        self._transport_instance.add_static_content("/dashboard/config.js", content=content)
+        self._transport_instance.add_static_handler("/dashboard", dashboard_path, start=True)
 
     @gen.coroutine
     def _purge_versions(self):
@@ -1184,7 +1199,7 @@ class Server(protocol.ServerEndpoint):
     @gen.coroutine
     def notify_change(self, environment_id, update):
         LOGGER.info("Received change notification for environment %s", environment_id)
-        self._async_recompile(environment_id, update > 0)
+        self._async_recompile(environment_id, update)
 
         return 200
 
@@ -1296,8 +1311,9 @@ class Server(protocol.ServerEndpoint):
 
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()
+            token = protocol.encode_token(["compiler"], str(environment_id))
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
-                                  "--server_port", opt.transport_port.get()]
+                                  "--server_port", opt.transport_port.get(), "--token", token]
 
             result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 
@@ -1539,3 +1555,11 @@ class Server(protocol.ServerEndpoint):
         yield self.agentmanager.stop_agents(env)
         yield env.delete_cascade(only_content=True)
         return 200
+
+    @protocol.handle(methods.EnvironmentAuth.create_token, env="tid")
+    @gen.coroutine
+    def create_token(self, env, client_types, idempotent):
+        """
+            Create a new auth token for this environment
+        """
+        return 200, {"token": protocol.encode_token(client_types, str(env.id), idempotent)}
