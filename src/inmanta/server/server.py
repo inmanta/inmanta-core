@@ -971,6 +971,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 yield data.ConfigurationModel.set_ready(env.id, res.model, res.id, res.resource_id, status)
                 model_version = res.model
 
+                if res.attributes["purged"] and status == const.ResourceState.deployed:
+                    yield data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
+
             model = yield data.ConfigurationModel.get_version(env.id, model_version)
 
             if model.done == model.total:

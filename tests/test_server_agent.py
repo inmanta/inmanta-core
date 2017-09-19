@@ -886,6 +886,74 @@ def test_get_facts(resource_container, client, server, io_loop):
 
 
 @pytest.mark.gen_test
+def test_purged_facts(resource_container, client, server, io_loop, environment):
+    """
+        Test if facts are purged when the resource is purged.
+    """
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = 1
+    resource_id_wov = "test::Resource[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{'key': 'key',
+                  'value': 'value',
+                  'id': resource_id,
+                  'requires': [],
+                  'purged': False,
+                  'send_event': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_param(environment, "length", resource_id_wov)
+    assert result.code == 503
+
+    env_uuid = uuid.UUID(environment)
+    params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+    while len(params) < 3:
+        params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+        yield gen.sleep(0.1)
+
+    result = yield client.get_param(environment, "key1", resource_id_wov)
+    assert result.code == 200
+
+    # Purge the resource
+    version = 2
+    resources[0]["id"] = "%s,v=%d" % (resource_id_wov, version)
+    resources[0]["purged"] = True
+    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    # The resource facts should be purged
+    result = yield client.get_param(environment, "length", resource_id_wov)
+    assert result.code == 503
+
+
+@pytest.mark.gen_test
 def test_get_set_param(resource_container, client, server, io_loop):
     """
         Test getting and setting params
