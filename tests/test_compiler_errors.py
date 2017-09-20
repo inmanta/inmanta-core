@@ -238,3 +238,10 @@ def test_null_on_dict(snippetcompiler):
         implement A using std::none
         a = A()
     """, "Syntax error null can not be assigned to dict, did you mean \"dict? a = null\" ({dir}/main.cf:3:14)")
+
+
+def test_unknown_type_in_relation(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        foo::Entity.test [1] -- std::Entity
+        """, "could not find type foo::Entity in namespace __config__ (reported in None ({dir}/main.cf:2))")

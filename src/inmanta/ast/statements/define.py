@@ -363,7 +363,12 @@ class DefineRelation(DefinitionStatement):
         """
             Add this relation to the participating ends
         """
-        left = self.namespace.get_type(self.left[0])
+        try:
+            left = self.namespace.get_type(self.left[0])
+        except TypeNotFoundException as e:
+            e.set_location(self.location)
+            raise e
+
         if isinstance(left, Default):
             raise TypingException(
                 self,
@@ -376,7 +381,12 @@ class DefineRelation(DefinitionStatement):
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (self.right[1], left.name))
 
-        right = self.namespace.get_type(self.right[0])
+        try:
+            right = self.namespace.get_type(self.right[0])
+        except TypeNotFoundException as e:
+            e.set_location(self.location)
+            raise e
+
         if isinstance(right, Default):
             raise TypingException(
                 self,
