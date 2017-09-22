@@ -1146,6 +1146,42 @@ class ModuleTool(object):
         commit.add_argument("-v", "--version", help="Version to use on tag")
         commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
 
+        create = subparser.add_parser("create", help="Create a new module")
+        create.add_argument("name", help="The name of the module")
+
+    def create(self, name):
+        project = Project.get()
+        mod_root = project.modulepath[-1]
+        LOGGER.info("Creating new module %s in %s", name, mod_root)
+
+        mod_path = os.path.join(mod_root, name)
+
+        if os.path.exists(mod_path):
+            LOGGER.error("%s already exists.", mod_path)
+            return
+
+        os.mkdir(mod_path)
+        with open(os.path.join(mod_path, "module.yml"), "w+") as fd:
+            fd.write("""name: %(name)s
+license: ASL 2.0
+version: 0.0.1dev0""" % {"name": name})
+
+        os.mkdir(os.path.join(mod_path, "model"))
+        with open(os.path.join(mod_path, "model", "_init.cf"), "w+") as fd:
+            fd.write("\n")
+
+        with open(os.path.join(mod_path, ".gitignore"), "w+") as fd:
+            fd.write("""*.swp
+*.pyc
+*~
+.cache
+            """)
+
+        subprocess.check_output(["git", "init"], cwd=mod_path)
+        subprocess.check_output(["git", "add", ".gitignore", "module.yml", "model/_init.cf"], cwd=mod_path)
+
+        LOGGER.info("Module successfully created.")
+
     def execute(self, cmd, args):
         """
             Execute the given command
@@ -1280,8 +1316,7 @@ class ModuleTool(object):
         """
         project = Project.get()
         if os.path.exists(project.freeze_file) and create_file:
-            print(
-                "A module.version file already exists, overwrite this file? y/n")
+            print("A module.version file already exists, overwrite this file? y/n")
             while True:
                 value = sys.stdin.readline().strip()
                 if value != "y" and value != "n":
