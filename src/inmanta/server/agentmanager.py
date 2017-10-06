@@ -471,7 +471,7 @@ host=localhost
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
             "statedir": privatestatedir, "agent_splay": agent_splay}
 
-        if server_config.server_enable_auth:
+        if server_config.server_enable_auth.get():
             token = protocol.encode_token(["agent"], environment_id)
             config += """
 token=%s

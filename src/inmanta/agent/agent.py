@@ -329,13 +329,17 @@ class AgentInstance(object):
         self.name = name
         self._uri = uri
 
-        # inherit
-        self.ratelimiter = process.ratelimiter
-        self.critical_ratelimiter = process.critical_ratelimiter
+        # the lock for changing the current ongoing deployment
+        self.critical_ratelimiter = locks.Semaphore(1)
+        # lock for dryrun tasks
         self.dryrunlock = locks.Semaphore(1)
 
-        self._env_id = process._env_id
+        # multi threading control
         self.thread_pool = ThreadPoolExecutor(process.poolsize)
+        self.ratelimiter = locks.Semaphore(process.poolsize)
+
+        self._env_id = process._env_id
+
         self.sessionid = process.sessionid
 
         # init
