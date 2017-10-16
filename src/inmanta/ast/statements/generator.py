@@ -250,16 +250,17 @@ class Constructor(GeneratorStatement):
             if(k not in attributes):
                 attributes[k] = v.execute(requires, resolver, queue)
 
-        # check if the instance already exists in the index (if there is one)
+        # check if the instance already exists in the index (if there is one, in any super type)
         instances = []
-        for index in type_class._index_def:
+        for index, types in type_class.get_indices_and_type().items():
             params = []
             for attr in index:
                 params.append((attr, attributes[attr]))
 
-            obj = type_class.lookup_index(params, self)
-            if obj is not None:
-                instances.append(obj)
+            for typ in types:
+                obj = typ.lookup_index(params, self)
+                if obj is not None:
+                    instances.append(obj)
 
         if len(instances) > 0:
             # ensure that instances are all the same objects

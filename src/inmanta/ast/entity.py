@@ -72,6 +72,7 @@ class Entity(NamedType):
 
         self._index_def = []  # type: List[List[str]]
         self._index = {}  # type: Dict[str,Instance]
+        self._index_cache = None
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
 
         self._instance_list = []  # type: List[Instance]
@@ -378,6 +379,34 @@ class Entity(NamedType):
         base.extend(self._index_def)
         for parent in self.parent_entities:
             base.extend(parent.get_indices())
+        return base
+
+    def get_indices_and_type(self) -> "Dict[List[str], List[Entity]]":
+        # for every index, find position as high up as possible
+        if self._index_cache is not None:
+            return self._index_cache
+
+        def merge_for_most_generic(alist, blist):
+            worklist = list(set(alist + blist))
+            outlist = []
+            while len(worklist) > 0:
+                current = worklist.pop()
+                worklist = [k for k in worklist if not k.is_subclass(current)]
+                if any((not current.is_subclass(k) for k in worklist)):
+                    outlist.append(current)
+            return outlist
+
+        base = {tuple(indexdef): [self] for indexdef in self._index_def}
+
+        for parent in self.parent_entities:
+            for k, v in parent.get_indices_and_type().items():
+                if k not in base:
+                    base[k] = v
+                else:
+                    base[k] = merge_for_most_generic(v, base[k])
+
+        self._index_cache = base
+
         return base
 
     def add_to_index(self, instance: Instance) -> None:
