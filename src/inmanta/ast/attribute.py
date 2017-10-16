@@ -130,7 +130,7 @@ class RelationAttribute(Attribute):
         self.depends = False
 
     def __repr__(self) -> str:
-        return "[%d:%d] %s" % (self.low, self.high, self.name)
+        return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
 
     def set_multiplicity(self, values: "Tuple[int, int]") -> None:
         """
