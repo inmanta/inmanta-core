@@ -139,6 +139,7 @@ class DefineEntity(TypeDefinitionStatement):
 
                 entity_type.parent_entities.append(parent_type)
                 parent_type.child_entities.append(entity_type)
+            entity_type.init_caches()
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e

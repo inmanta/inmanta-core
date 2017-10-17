@@ -211,6 +211,7 @@ entity Repository extends std::File:
     string baseurl
     string gpgkey=""
     number metadata_expire=7200
+    bool send_event=true
 end
 
 implementation redhatRepo for Repository:
@@ -237,7 +238,7 @@ Repository(host=h1, name="flens-demo",
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except TypingException as e:
-            assert e.location.lnr == 24
+            assert e.location.lnr == 25
 
     def test_issue_110_resolution(self):
         self.setup_for_snippet("""
@@ -1712,55 +1713,58 @@ def test_index_on_subtype2(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         host = std::Host(name="a",os=std::linux)
         a=std::DefaultDirectory(host=host,path="/etc")
-        b=std::Directory(host=host,path="/etc")
+        b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
     """)
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
 
-    (_, scopes) = compiler.do_compile()
+diamond = """
+entity A:
+    string at = "a"
+end
+implement A using std::none
 
-    root = scopes.get_child("__config__")
-    a = root.lookup("a")
-    b = root.lookup("b")
+entity B:
+    string at = "a"
+end
+implement B using std::none
 
-    assert a.get_value() == b.get_value()
-    
+
+entity C extends A,B:
+end
+implement C using std::none
+"""    
     
 def test_index_on_subtype_diamond(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
-    entity A:
-        string at = "a"
-    end
-    implement A using std::none
+    snippetcompiler.setup_for_snippet(diamond+"""
     index A(at)
-
-    entity B:
-        string at = "a"
-    end
-    implement B using std::none
     index B(at)
 
-
-    entity C extends A,B:
-    end
-    implement C using std::none
-
-    entity D extends B,A:
-    end
-    implement D using std::none
-
-    a = A()
-    b = B()
-    c = C()
-    d = D()
+    a = A(at="a")
+    b = C(at="a")
     """)
 
-    (_, scopes) = compiler.do_compile()
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
 
-    root = scopes.get_child("__config__")
-    a = root.lookup("a")
-    assert a.get_value().get_attribute("at").get_value() is True
-    b = root.lookup("b")
-    assert b.get_value().get_attribute("at").get_value() is False
-    c = root.lookup("c")
-    assert c.get_value().get_attribute("at").get_value() is True
-    d = root.lookup("d")
-    assert d.get_value().get_attribute("at").get_value() is False
+def test_index_on_subtype_diamond_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond+"""
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = B(at="a")
+    """)
+    compiler.do_compile()
+        
+def test_index_on_subtype_diamond_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond+"""
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = B(at="ab")
+    """)
+    compiler.do_compile()
+  
+  

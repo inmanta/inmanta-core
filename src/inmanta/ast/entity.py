@@ -72,7 +72,7 @@ class Entity(NamedType):
 
         self._index_def = []  # type: List[List[str]]
         self._index = {}  # type: Dict[str,Instance]
-        self._index_cache = None
+        self._all_indices = None
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
 
         self._instance_list = []  # type: List[Instance]
@@ -81,6 +81,7 @@ class Entity(NamedType):
         self.location = None  # type: Location
 
     def normalize(self) -> None:
+        self._load_index_cache()
         for d in self.implementations:
             d.normalize()
 
@@ -90,6 +91,9 @@ class Entity(NamedType):
         self.subc = [SubConstructor(self, i) for i in self.implements]
         for sub in self.subc:
             sub.normalize()
+
+    def init_caches(self):
+        self._load_index_cache()
 
     def get_sub_constructor(self) -> List[SubConstructor]:
         return self.subc
@@ -374,40 +378,15 @@ class Entity(NamedType):
         """
         self._index_def.append(attributes)
 
-    def get_indices(self) -> List[List[str]]:
+    def _load_index_cache(self):
         base = []
         base.extend(self._index_def)
         for parent in self.parent_entities:
             base.extend(parent.get_indices())
-        return base
+        self._all_indices = base
 
-    def get_indices_and_type(self) -> "Dict[List[str], List[Entity]]":
-        # for every index, find position as high up as possible
-        if self._index_cache is not None:
-            return self._index_cache
-
-        def merge_for_most_generic(alist, blist):
-            worklist = list(set(alist + blist))
-            outlist = []
-            while len(worklist) > 0:
-                current = worklist.pop()
-                worklist = [k for k in worklist if not k.is_subclass(current)]
-                if any((not current.is_subclass(k) for k in worklist)):
-                    outlist.append(current)
-            return outlist
-
-        base = {tuple(indexdef): [self] for indexdef in self._index_def}
-
-        for parent in self.parent_entities:
-            for k, v in parent.get_indices_and_type().items():
-                if k not in base:
-                    base[k] = v
-                else:
-                    base[k] = merge_for_most_generic(v, base[k])
-
-        self._index_cache = base
-
-        return base
+    def get_indices(self) -> List[List[str]]:
+        return self._all_indices
 
     def add_to_index(self, instance: Instance) -> None:
         """
@@ -416,7 +395,7 @@ class Entity(NamedType):
         """
         attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
         # check if an index entry can be added
-        for index_attributes in self._index_def:
+        for index_attributes in self.get_indices():
             index_ok = True
             key = []
             for attribute in index_attributes:
@@ -448,7 +427,7 @@ class Entity(NamedType):
         attributes = set([x[0] for x in params])
 
         found_index = False
-        for index_attributes in self._index_def:
+        for index_attributes in self.get_indices():
             if set(index_attributes) == attributes:
                 found_index = True
 
