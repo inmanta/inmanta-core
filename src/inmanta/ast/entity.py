@@ -72,7 +72,6 @@ class Entity(NamedType):
 
         self._index_def = []  # type: List[List[str]]
         self._index = {}  # type: Dict[str,Instance]
-        self._all_indices = None
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
 
         self._instance_list = []  # type: List[Instance]
@@ -81,7 +80,6 @@ class Entity(NamedType):
         self.location = None  # type: Location
 
     def normalize(self) -> None:
-        self._load_index_cache()
         for d in self.implementations:
             d.normalize()
 
@@ -91,9 +89,6 @@ class Entity(NamedType):
         self.subc = [SubConstructor(self, i) for i in self.implements]
         for sub in self.subc:
             sub.normalize()
-
-    def init_caches(self):
-        self._load_index_cache()
 
     def get_sub_constructor(self) -> List[SubConstructor]:
         return self.subc
@@ -377,16 +372,11 @@ class Entity(NamedType):
             Add an index over the given attributes.
         """
         self._index_def.append(attributes)
-
-    def _load_index_cache(self):
-        base = []
-        base.extend(self._index_def)
-        for parent in self.parent_entities:
-            base.extend(parent.get_indices())
-        self._all_indices = base
+        for child in self.child_entities:
+            child.add_index(attributes)
 
     def get_indices(self) -> List[List[str]]:
-        return self._all_indices
+        return self._index_def
 
     def add_to_index(self, instance: Instance) -> None:
         """
