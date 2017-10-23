@@ -205,3 +205,9 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
 
     def get_full_name(self) -> str:
         return self.fullName
+
+
+class BiStatement(DefinitionStatement, DynamicStatement):
+
+    def __init__(self):
+        Statement.__init__(self)

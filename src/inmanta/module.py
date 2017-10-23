@@ -41,7 +41,7 @@ from inmanta import plugins
 import inmanta
 from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DefinitionStatement
+from inmanta.ast.statements import DefinitionStatement, BiStatement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
 from inmanta.parser.plyInmantaParser import parse
@@ -335,7 +335,10 @@ class ModuleLike(object):
         stmts = plyInmantaParser.parse(ns, file)
         block = BasicBlock(ns)
         for s in stmts:
-            if isinstance(s, DefinitionStatement):
+            if isinstance(s, BiStatement):
+                statements.append(s)
+                block.add(s)
+            elif isinstance(s, DefinitionStatement):
                 statements.append(s)
             elif isinstance(s, str):
                 pass

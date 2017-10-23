@@ -239,8 +239,8 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert rel.right[2] == (1, 1)
     assert statements[0].requires is None
     assert len(rel.annotations) == 2
-    assert rel.annotations[0] == "foo"
-    assert rel.annotations[1] == "bar"
+    assert rel.annotation_expression[0][1].name == "foo"
+    assert rel.annotation_expression[1][1].name == "bar"
 
 
 def test_new_relation_unidir():
@@ -290,8 +290,8 @@ Test.bar [1] foo,bar Foo
     assert rel.right[2] == (1, 1)
     assert statements[0].requires is None
     assert len(rel.annotations) == 2
-    assert rel.annotations[0] == "foo"
-    assert rel.annotations[1] == "bar"
+    assert rel.annotation_expression[0][1].name == "foo"
+    assert rel.annotation_expression[1][1].name == "bar"
 
 
 def test_implementation():

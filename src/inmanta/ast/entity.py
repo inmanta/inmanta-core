@@ -452,6 +452,8 @@ class Entity(NamedType):
             for _, stmt in indices:
                 excns.append(NotFoundException(stmt, key,
                                                "No match in index on type %s with key %s" % (self.get_full_name(), key)))
+        for _, attr in self.get_attributes().items():
+            attr.final(excns)
 
     def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         return DuplicateException(

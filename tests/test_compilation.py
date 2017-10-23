@@ -1790,3 +1790,74 @@ def test_index_on_subtype_diamond_3(snippetcompiler):
     b = B(at="ab")
     """)
     compiler.do_compile()
+
+
+def test_relation_attributes(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+end
+
+entity Foo:
+end
+
+foo = "a"
+bar = Test()
+bar.bar = Foo()
+
+implement Test using std::none
+implement Foo using std::none
+
+
+Test.bar [1] foo,bar Foo
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    bar = root.lookup("bar")
+    annotations = bar.value.get_attribute("bar").attribute.source_annotations
+    assert len(annotations) == 2
+    assert annotations[0].get_value() == "a"
+    assert annotations[1].get_value() == bar.value
+
+
+def test_relation_attributes_unresolved(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+end
+
+entity Foo:
+end
+
+foo = "a"
+
+implement Test using std::none
+implement Foo using std::none
+
+
+Test.bar [1] foo,bar Foo
+""")
+    with pytest.raises(NotFoundException):
+        compiler.do_compile()
+
+
+def test_relation_attributes_unknown(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+end
+
+entity Foo:
+end
+
+import tests
+
+foo = tests::unknown()
+bar = "a"
+
+implement Test using std::none
+implement Foo using std::none
+
+
+Test.bar [1] foo,bar Foo
+""")
+    with pytest.raises(TypingException):
+        compiler.do_compile()
