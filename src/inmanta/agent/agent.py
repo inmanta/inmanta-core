@@ -501,7 +501,8 @@ class AgentInstance(object):
                         if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
                             ctx.exception("Skipping %(resource_id)s because in undeployable state %(status)s",
                                           resource_id=res["id"], status=res["status"])
-                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"], changes={})
+                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                                  changes={})
                             continue
 
                         data = res["attributes"]
@@ -515,7 +516,8 @@ class AgentInstance(object):
                         except Exception as e:
                             ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
                                           resource_id=str(resource.id), exception=str(e))
-                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"], changes={})
+                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                                  changes={})
                         else:
                             yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
                             yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],

@@ -280,7 +280,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                   'allow_restore': True,
                   'allow_snapshot': True,
                   }
-                ]
+                 ]
 
     status = {'test::Resource[agent1,key=key4]': const.ResourceState.unknown}
     result = yield client.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
