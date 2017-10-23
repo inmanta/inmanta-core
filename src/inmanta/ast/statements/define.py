@@ -347,7 +347,7 @@ class DefineRelation(DefinitionStatement):
 
     def __init__(self, left, right, annotations=[]):
         DefinitionStatement.__init__(self)
-        self.annotations = annotations
+        self.annotations = [str(x) for x in annotations]
 
         self.left = left
         self.right = right
@@ -403,6 +403,7 @@ class DefineRelation(DefinitionStatement):
 
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, self.left[1])
+            left_end.target_annotations = self.annotations
             left_end.set_multiplicity(self.left[2])
             left_end.comment = self.comment
             self.copy_location(left_end)
@@ -411,6 +412,7 @@ class DefineRelation(DefinitionStatement):
 
         if self.right[1] is not None:
             right_end = RelationAttribute(left, right, self.right[1])
+            right_end.source_annotations = self.annotations
             right_end.set_multiplicity(self.right[2])
             right_end.comment = self.comment
             self.copy_location(right_end)

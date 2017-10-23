@@ -128,6 +128,8 @@ class RelationAttribute(Attribute):
         self.low = 1
         self.high = 1
         self.depends = False
+        self.source_annotations = []
+        self.target_annotations = []
 
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
