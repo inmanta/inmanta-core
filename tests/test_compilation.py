@@ -1693,7 +1693,8 @@ implement Two using none
 """, autostd=False)
 
     compiler.do_compile()
-    
+
+
 def test_index_on_subtype(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         host = std::Host(name="a",os=std::linux)
@@ -1708,7 +1709,8 @@ def test_index_on_subtype(snippetcompiler):
     b = root.lookup("b")
 
     assert a.get_value() == b.get_value()
-    
+
+
 def test_index_on_subtype2(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         host = std::Host(name="a",os=std::linux)
@@ -1733,10 +1735,11 @@ implement B using std::none
 entity C extends A,B:
 end
 implement C using std::none
-"""    
-    
+"""
+
+
 def test_index_on_subtype_diamond(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond+"""
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
@@ -1747,8 +1750,9 @@ def test_index_on_subtype_diamond(snippetcompiler):
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
+
 def test_index_on_subtype_diamond_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond+"""
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
@@ -1756,9 +1760,10 @@ def test_index_on_subtype_diamond_2(snippetcompiler):
     b = B(at="a")
     """)
     compiler.do_compile()
-        
+
+
 def test_index_on_subtype_diamond_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond+"""
+    snippetcompiler.setup_for_snippet(diamond + """
     index A(at)
     index B(at)
 
@@ -1766,5 +1771,3 @@ def test_index_on_subtype_diamond_3(snippetcompiler):
     b = B(at="ab")
     """)
     compiler.do_compile()
-  
-  
