@@ -1713,7 +1713,7 @@ end
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
-        
+
 def test_index_on_subtype(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         host = std::Host(name="a",os=std::linux)
