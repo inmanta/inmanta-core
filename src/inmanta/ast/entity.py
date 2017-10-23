@@ -372,13 +372,11 @@ class Entity(NamedType):
             Add an index over the given attributes.
         """
         self._index_def.append(attributes)
+        for child in self.child_entities:
+            child.add_index(attributes)
 
     def get_indices(self) -> List[List[str]]:
-        base = []
-        base.extend(self._index_def)
-        for parent in self.parent_entities:
-            base.extend(parent.get_indices())
-        return base
+        return self._index_def
 
     def add_to_index(self, instance: Instance) -> None:
         """
@@ -387,7 +385,7 @@ class Entity(NamedType):
         """
         attributes = {k: repr(v.get_value()) for (k, v) in instance.slots.items() if v.is_ready()}
         # check if an index entry can be added
-        for index_attributes in self._index_def:
+        for index_attributes in self.get_indices():
             index_ok = True
             key = []
             for attribute in index_attributes:
@@ -419,7 +417,7 @@ class Entity(NamedType):
         attributes = set([x[0] for x in params])
 
         found_index = False
-        for index_attributes in self._index_def:
+        for index_attributes in self.get_indices():
             if set(index_attributes) == attributes:
                 found_index = True
 
