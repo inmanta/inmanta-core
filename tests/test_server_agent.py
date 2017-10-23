@@ -25,7 +25,7 @@ import logging
 
 from tornado import gen
 
-from inmanta import agent, data, const
+from inmanta import agent, data, const, execute
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 import pytest
@@ -69,6 +69,7 @@ def resource_container():
     class Provider(ResourceHandler):
 
         def check_resource(self, ctx, resource):
+            assert resource.value != const.UKNOWN_STRING
             current = resource.clone()
             current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
 
@@ -268,10 +269,22 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
+                  },
+                 {'key': 'key4',
+                  'value': execute.util.Unknown(source=None),
+                  'id': 'test::Resource[agent1,key=key4],v=%d' % version,
+                  'send_event': False,
+                  'requires': [],
+                  'purged': True,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
                   }
-                 ]
+                ]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    status = {'test::Resource[agent1,key=key4]': const.ResourceState.unknown}
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
+                                      unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
@@ -310,7 +323,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 3
+    assert result.result["model"]["total"] == 4
     assert result.result["model"]["result"] == "deploying"
 
     result = yield client.get_version(env_id, version)
@@ -326,6 +339,9 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
+
+    actions = yield data.ResourceAction.get_list()
+    assert len([x for x in actions if x.status == const.ResourceState.unknown])
 
     agent.stop()
 
@@ -1377,10 +1393,10 @@ def test_multi_instance(resource_container, client, server, io_loop):
             return {agent: len([x for x in grp]) for agent, grp in peragent}
 
         def mindone(result):
-            all = done_per_agent(result).values()
-            if(len(all) == 0):
+            alllist = done_per_agent(result).values()
+            if(len(alllist) == 0):
                 return 0
-            return min(all)
+            return min(alllist)
 
         while mindone(result) < n:
             yield gen.sleep(0.1)

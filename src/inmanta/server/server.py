@@ -692,7 +692,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.VersionMethod.put_version, env="tid")
     @gen.coroutine
-    def put_version(self, env, version, resources, unknowns, version_info):
+    def put_version(self, env, version, resources, resource_state, unknowns, version_info):
         started = datetime.datetime.now()
         try:
             cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
@@ -711,6 +711,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         resource_version_ids = []
         for res_dict in resources:
             res_obj = data.Resource.new(env.id, res_dict["id"])
+            if res_obj.resource_id in resource_state:
+                res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
 
             # collect all agents
             agents.add(res_obj.agent)
@@ -1399,12 +1401,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         resource_states = yield data.Resource.get_with_state(environment=env.id, version=version.version)
 
         for rs in resource_states:
-            agent = rs.agent
-            resources_to_snapshot[agent].append(rs.to_dict())
-            resource_list.append(rs.resource_id)
-            r = data.ResourceSnapshot(environment=env.id, snapshot=snapshot.id, resource_id=rs.resource_id,
-                                      state_id=rs.attributes["state_id"])
-            yield r.insert()
+            if rs.status not in const.UNDEPLOYABLE_STATES:
+                agent = rs.agent
+                resources_to_snapshot[agent].append(rs.to_dict())
+                resource_list.append(rs.resource_id)
+                r = data.ResourceSnapshot(environment=env.id, snapshot=snapshot.id, resource_id=rs.resource_id,
+                                          state_id=rs.attributes["state_id"])
+                yield r.insert()
 
         if len(resource_list) == 0:
             yield snapshot.update_fields(finished=datetime.datetime.now(), total_size=0)
@@ -1546,7 +1549,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def decomission_environment(self, env):
         version = int(time.time())
-        result = yield self.put_version(env, version, [], [], {})
+        result = yield self.put_version(env, version, [], {}, [], {})
         return result, {"version": version}
 
     @protocol.handle(methods.Decommision.clear_environment, env="id")

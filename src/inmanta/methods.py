@@ -471,13 +471,15 @@ class VersionMethod(Method):
         """
 
     @protocol(operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
-    def put_version(self, tid: uuid.UUID, version: int, resources: list, unknowns: list=None, version_info: dict=None):
+    def put_version(self, tid: uuid.UUID, version: int, resources: list, resource_state: dict={}, unknowns: list=None,
+                    version_info: dict=None):
         """
             Store a new version of the configuration model
 
             :param tid: The id of the environment
             :param version: The version of the configuration model
             :param resources: A list of all resources in the configuration model (deployable)
+            :param resource_state: A dictionary with the initial const.ResourceState per resource id
             :param unknowns: A list of unknown parameters that caused the model to be incomplete
             :param version_info: Module version information
         """
