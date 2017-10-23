@@ -211,6 +211,7 @@ entity Repository extends std::File:
     string baseurl
     string gpgkey=""
     number metadata_expire=7200
+    bool send_event=true
 end
 
 implementation redhatRepo for Repository:
@@ -237,7 +238,7 @@ Repository(host=h1, name="flens-demo",
             compiler.do_compile()
             raise AssertionError("Should get exception")
         except TypingException as e:
-            assert e.location.lnr == 24
+            assert e.location.lnr == 25
 
     def test_issue_110_resolution(self):
         self.setup_for_snippet("""
@@ -1711,3 +1712,81 @@ end
 """, autostd=False)
     with pytest.raises(DuplicateException):
         compiler.do_compile()
+
+        
+def test_index_on_subtype(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        host = std::Host(name="a",os=std::linux)
+        a=std::DefaultDirectory(host=host,path="/etc")
+        b=std::DefaultDirectory(host=host,path="/etc")
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    b = root.lookup("b")
+
+    assert a.get_value() == b.get_value()
+
+
+def test_index_on_subtype2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        host = std::Host(name="a",os=std::linux)
+        a=std::DefaultDirectory(host=host,path="/etc")
+        b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
+    """)
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
+
+diamond = """
+entity A:
+    string at = "a"
+end
+implement A using std::none
+
+entity B:
+    string at = "a"
+end
+implement B using std::none
+
+
+entity C extends A,B:
+end
+implement C using std::none
+"""
+
+
+def test_index_on_subtype_diamond(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = C(at="a")
+    """)
+
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
+
+
+def test_index_on_subtype_diamond_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = B(at="a")
+    """)
+    compiler.do_compile()
+
+
+def test_index_on_subtype_diamond_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = B(at="ab")
+    """)
+    compiler.do_compile()

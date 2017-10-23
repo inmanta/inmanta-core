@@ -21,7 +21,7 @@
 from . import GeneratorStatement
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
-from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace
+from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException
 from inmanta.execute.tracking import ImplementsTracker
 from typing import List, Dict, Tuple
 from inmanta.ast.statements import ExpressionStatement
@@ -252,13 +252,16 @@ class Constructor(GeneratorStatement):
 
         # check if the instance already exists in the index (if there is one)
         instances = []
-        for index in type_class._index_def:
+        for index in type_class.get_indices():
             params = []
             for attr in index:
                 params.append((attr, attributes[attr]))
 
             obj = type_class.lookup_index(params, self)
+
             if obj is not None:
+                if obj.get_type().get_entity() != type_class:
+                    raise DuplicateException(self, object, "Type found in index is not an exact match")
                 instances.append(obj)
 
         if len(instances) > 0:

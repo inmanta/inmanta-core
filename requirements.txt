@@ -13,11 +13,11 @@ pytest-randomly==1.2.1
 python-dateutil==2.6.1
 pyyaml==3.12
 six==1.11.0
-sphinx==1.6.4
+sphinx==1.6.5
 sphinx-argparse==0.2.1
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.2.4
-texttable==1.0.0
+texttable==1.1.0
 tornado==4.5.2
 virtualenv==15.1.0
 inmanta-sphinx>=0.3
