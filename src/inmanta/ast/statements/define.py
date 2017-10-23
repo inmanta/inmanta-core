@@ -124,6 +124,10 @@ class DefineEntity(TypeDefinitionStatement):
                     raise TypingException(self, "Parents of an entity need to be entities. "
                                           "Default constructors are not supported. %s is not an entity" % parent)
 
+                entity_type.parent_entities.append(parent_type)
+                parent_type.child_entities.append(entity_type)
+
+            for parent_type in entity_type.get_all_parent_entities():
                 for attr_name, other_attr in parent_type.attributes.items():
                     if attr_name not in add_attributes:
                         add_attributes[attr_name] = other_attr
@@ -136,9 +140,7 @@ class DefineEntity(TypeDefinitionStatement):
                         else:
                             raise DuplicateException(
                                 my_attr, other_attr, "Incompatible attributes")
-
-                entity_type.parent_entities.append(parent_type)
-                parent_type.child_entities.append(entity_type)
+            # verify all attribute compatibility
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e

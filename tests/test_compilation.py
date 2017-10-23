@@ -1695,6 +1695,25 @@ implement Two using none
     compiler.do_compile()
 
 
+def test_484_attr_redef(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+typedef type as string matching self == "component" or self == "package" or self == "frame"
+
+entity Node:
+    type viz_type
+end
+
+entity Group extends Node:
+end
+
+entity Service extends Group:
+    string viz_type="package"
+end
+""", autostd=False)
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
+
+
 def test_index_on_subtype(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         host = std::Host(name="a",os=std::linux)
