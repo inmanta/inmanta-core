@@ -1,5 +1,4 @@
 # Inmanta
-[![Documentation Status](https://readthedocs.org/projects/inmanta/badge/?version=latest)](http://inmanta.readthedocs.io/en/latest/?badge=latest)
 [![Build Status](https://travis-ci.org/inmanta/inmanta.svg?branch=master)](https://travis-ci.org/inmanta/inmanta)
 [![pypi version](https://img.shields.io/pypi/v/inmanta.svg)](https://pypi.python.org/pypi/inmanta/)
 
@@ -29,11 +28,10 @@ Currently, the Inmanta project is mainly developed and maintained by Inmanta NV.
 
 ##Links
 
-* [Documentation](http://inmanta.readthedocs.io)
+* [Documentation](https://docs.inmanta.com/community/latest/)
 * [Quickstart](https://github.com/inmanta/quickstart-vagrant)
 
 ## Install
 
-* [Install Guide](http://inmanta.readthedocs.io/en/latest/install.html)
-* [Admin Guide](http://inmanta.readthedocs.io/en/latest/admin.html)
+* [Install Guide](https://docs.inmanta.com/community/latest/install.html)
 
