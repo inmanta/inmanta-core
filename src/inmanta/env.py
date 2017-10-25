@@ -177,6 +177,7 @@ class VirtualEnv(object):
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
             except Exception:
                 LOGGER.debug("%s: %s", cmd, output.decode())
+                LOGGER.debug("requirements: %s", requirements_file)
                 raise
             else:
                 LOGGER.debug("%s: %s", cmd, output.decode())
