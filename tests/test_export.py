@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import config
+from inmanta import config, const
 import pytest
 
 
@@ -136,24 +136,16 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
         c = exp::Test(name="c", agent="aa", requires=b)
         """)
     config.Config.set("unknown_handler", "default", "prune-resource")
-    _version, json_value = snippetcompiler.do_export()
+    _version, json_value, status = snippetcompiler.do_export(include_status=True)
 
-    assert(len(json_value) == 2)
-    assert_count = 0
-    for resource_id, resource in json_value.items():
-        if resource_id.attribute_value == "test_value_b":
-            assert(len(resource.requires) == 0)
-            assert_count += 1
-
-        elif resource_id.attribute_value == "test_value_c":
-            assert(len(resource.requires) == 1)
-            assert_count += 1
+    assert len(json_value) == 3
+    assert len([x for x in status.values() if x == const.ResourceState.available]) == 2
+    assert len([x for x in status.values() if x == const.ResourceState.unknown]) == 1
 
     warning = [x for x in caplog.records if x.msg ==
                "The resource %s had requirements before flattening, but not after flattening."
                " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
     assert len(warning) == 0
-    assert(assert_count == 2)
 
 
 @pytest.mark.gen_test

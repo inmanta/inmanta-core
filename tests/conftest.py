@@ -278,7 +278,7 @@ class SnippetCompilationTest(object):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self, deploy=False):
+    def do_export(self, deploy=False, include_status=False):
         templfile = mktemp("json", "dump", self.project_dir)
 
         from inmanta.export import Exporter
@@ -294,7 +294,7 @@ class SnippetCompilationTest(object):
         options.ssl = False
 
         export = Exporter(options=options)
-        return export.run(types, scopes)
+        return export.run(types, scopes, include_status=include_status)
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)

@@ -28,6 +28,11 @@ class ResourceState(Enum):
     queued = 6
     available = 7
     cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
+    unknown = 9  # The state of this resource is unknown at this moment in the orchestration process
+
+
+UNDEPLOYABLE_STATES = [ResourceState.unknown]
+UKNOWN_STRING = "<<unknown>>"
 
 
 class Change(Enum):

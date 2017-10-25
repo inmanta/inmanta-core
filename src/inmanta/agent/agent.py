@@ -76,6 +76,7 @@ class ResourceAction(object):
         self.status = None
         self.change = None
         self.changes = None
+        self.undeployable = None
 
     def is_running(self):
         return self.running
@@ -167,6 +168,10 @@ class ResourceAction(object):
                 ctx.set_status(const.ResourceState.skipped)
                 success = False
                 send_event = False
+            elif self.undeployable is not None:
+                ctx.set_status(self.undeployable)
+                success = False
+                send_event = False
             else:
                 if result.receive_events:
                     received_events = {x.resource_id: dict(status=x.status, change=x.change,
@@ -203,9 +208,9 @@ class ResourceAction(object):
 
         status = ""
         if self.is_done():
-            status = "Done"
+            status = " Done"
         elif self.is_running():
-            status = "Running"
+            status = " Running"
 
         return self.resource.id.resource_str() + status
 
@@ -282,7 +287,7 @@ class ResourceScheduler(object):
         self.ratelimiter = ratelimiter
         self.version = 0
 
-    def reload(self, resources):
+    def reload(self, resources, undeployable={}):
         version = resources[0].id.get_version
 
         self.version = version
@@ -292,6 +297,11 @@ class ResourceScheduler(object):
 
         gid = uuid.uuid4()
         self.generation = {r.id.resource_str(): ResourceAction(self, r, gid) for r in resources}
+
+        for key, res in self.generation.items():
+            vid = str(res.resource.id)
+            if vid in undeployable:
+                self.generation[key].undeployable = undeployable[vid]
 
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
@@ -440,7 +450,12 @@ class AgentInstance(object):
                 resources = []
                 yield self.process._ensure_code(self._env_id, result.result["version"], restypes)
                 try:
+                    undeployable = {}
                     for res in result.result["resources"]:
+                        state = const.ResourceState[res["status"]]
+                        if state in const.UNDEPLOYABLE_STATES:
+                            undeployable[res["id"]] = state
+
                         data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
@@ -450,7 +465,7 @@ class AgentInstance(object):
                     LOGGER.error("Failed to receive update", e)
 
                 if len(resources) > 0:
-                    self._nq.reload(resources)
+                    self._nq.reload(resources, undeployable)
 
     @gen.coroutine
     def dryrun(self, dry_run_id, version):
@@ -471,7 +486,6 @@ class AgentInstance(object):
                     return
 
                 resources = result.result["resources"]
-
                 restypes = set([res["resource_type"] for res in resources])
 
                 # TODO: handle different versions for dryrun and deploy!
@@ -484,6 +498,13 @@ class AgentInstance(object):
                     started = datetime.datetime.now()
                     provider = None
                     try:
+                        if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
+                            ctx.exception("Skipping %(resource_id)s because in undeployable state %(status)s",
+                                          resource_id=res["id"], status=res["status"])
+                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                                  changes={})
+                            continue
+
                         data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
@@ -495,7 +516,8 @@ class AgentInstance(object):
                         except Exception as e:
                             ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
                                           resource_id=str(resource.id), exception=str(e))
-                            self._client.dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"], changes={})
+                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                                  changes={})
                         else:
                             yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
                             yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
@@ -671,6 +693,10 @@ class AgentInstance(object):
 
                 version = resource_obj.id.version
                 try:
+                    if const.ResourceState[resource["status"]] in const.UNDEPLOYABLE_STATES:
+                        LOGGER.exception("Skipping %s because in undeployable state %s", resource["id"], resource["status"])
+                        return 200
+
                     self._cache.open_version(version)
                     provider = handler.Commander.get_provider(self._cache, self, resource_obj)
                     provider.set_cache(self._cache)

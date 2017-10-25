@@ -16,20 +16,17 @@
     Contact: code@inmanta.com
 """
 
-from collections import defaultdict
 import hashlib
-import json
 import logging
 import os
 import time
-import glob
 import base64
 
-from inmanta import protocol, config
+from inmanta import protocol, const
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
-from inmanta.config import Config, Option, is_uuid_opt, is_list, is_str
+from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException
 from tornado.ioloop import IOLoop
@@ -96,9 +93,8 @@ class Exporter(object):
 
         self._resources = {}
         self._resource_to_host = {}
-        self._unknown_hosts = set()
+        self._resource_state = {}
         self._unknown_objects = set()
-        self._unknown_per_host = defaultdict(set)
         self._version = 0
         self._scope = None
 
@@ -223,63 +219,7 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def _get_unkown_policy(self, agent_name):
-        """
-            Determine the unknown handling policy for the given agent
-        """
-        default_policy = cfg_unknown_handler.get()
-        agent_name = config._normalize_name(agent_name)
-
-        if "unknown_handler" not in Config._get_instance():
-            policy = {}
-        else:
-            policy = Config._get_instance()["unknown_handler"]
-
-        for agent_pattern, policy in policy.items():
-            if agent_pattern == "default":
-                continue
-
-            if glob.fnmatch.fnmatchcase(agent_name, agent_pattern):
-                return policy
-
-        if agent_name == "internal":
-            return "prune-resource"
-
-        return default_policy
-
-    def _filter_unknowns(self):
-        """
-            Filter unknown resources from the configuration model
-        """
-        pruned_all = set()
-        pruned_resources = set()
-        for res_id in list(self._resources.keys()):
-            res = self._resources[res_id]
-            host = self._resource_to_host[res_id]
-            policy = self._get_unkown_policy(host)
-            if host in self._unknown_hosts and policy == "prune-agent":
-                del self._resources[res_id]
-                pruned_all.add(host)
-
-            elif len(res.unknowns) > 0 and policy == "prune-resource":
-                # will not happen in current code, resource is never added to the model
-                del self._resources[res_id]
-                pruned_resources.add(host)
-
-        if len(self._unknown_hosts) > 0:
-            LOGGER.info("The configuration of the following hosts is not exported due to unknown " +
-                        "configuration parameters (prune-agent policy):")
-            hosts = sorted(list(pruned_all))
-            for host in hosts:
-                LOGGER.info(" - %s" % host)
-
-            LOGGER.info("Some resources of the following hosts is not exported due to unknown " +
-                        "configuration parameters (prune-resource policy):")
-            hosts = sorted(list(pruned_resources))
-            for host in hosts:
-                LOGGER.info(" - %s" % host)
-
-    def run(self, types, scopes, no_commit=False):
+    def run(self, types, scopes, no_commit=False, include_status=False):
         """
         Run the export functions
         """
@@ -297,9 +237,6 @@ class Exporter(object):
             # call dependency managers
             self._call_dep_manager(types)
 
-        # filter out any resource that belong to hosts that have unknown values
-        self._filter_unknowns()
-
         # validate the dependency graph
         self._validate_graph()
 
@@ -310,12 +247,14 @@ class Exporter(object):
 
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
-                fd.write(json.dumps(resources).encode("utf-8"))
+                fd.write(protocol.json_encode(resources).encode("utf-8"))
 
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
             self.commit_resources(self._version, resources)
             LOGGER.info("Committed resources with version %d" % self._version)
 
+        if include_status:
+            return self._version, self._resources, self._resource_state
         return self._version, self._resources
 
     def get_variable(self, name):
@@ -351,16 +290,19 @@ class Exporter(object):
         if resource.version > 0:
             raise Exception("Versions should not be added to resources during model compilation.")
 
+        is_unknown = False
         for unknown in resource.unknowns:
+            is_unknown = True
             value = getattr(resource, unknown)
-            self._unknown_hosts.add(resource.id.agent_name)
             if value.source is not None and hasattr(value.source, "_type"):
                 self._unknown_objects.add(to_id(value.source))
 
-            self._unknown_per_host[resource.id.agent_name].add(str(resource.id))
-            LOGGER.debug("Host %s has unknown values (in resource %s)" % (resource.id.agent_name, resource.id))
-
         resource.set_version(self._version)
+        if is_unknown:
+            self._resource_state[resource.id.resource_str()] = const.ResourceState.unknown
+        else:
+            self._resource_state[resource.id.resource_str()] = const.ResourceState.available
+
         self._resources[resource.id] = resource
         self._resource_to_host[resource.id] = resource.id.agent_name
 
@@ -474,7 +416,7 @@ class Exporter(object):
 
         def put_call():
             return conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
-                                    version_info=version_info)
+                                    resource_state=self._resource_state, version_info=version_info)
 
         res = self.run_sync(put_call)
 

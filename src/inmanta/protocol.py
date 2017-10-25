@@ -30,7 +30,7 @@ import enum
 
 import tornado.web
 from tornado import gen, queues
-from inmanta import methods, config, const
+from inmanta import methods, config, const, execute
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
@@ -222,6 +222,9 @@ def custom_json_encoder(o):
     if isinstance(o, Exception):
         # Logs can push exceptions through RPC. Return a string representation.
         return str(o)
+
+    if isinstance(o, execute.util.Unknown):
+        return const.UKNOWN_STRING
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
