@@ -1253,7 +1253,7 @@ version: 0.0.1dev0""" % {"name": name})
 
         if requires:
             print("requires:")
-            for name, version, reqv in table:
+            for name, version, reqv, _ in table:
                 print("    - %s==%s" % (name, version))
         else:
             t = texttable.Texttable()
