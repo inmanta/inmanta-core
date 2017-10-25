@@ -208,13 +208,13 @@ class Resource(metaclass=ResourceMeta):
             initial_requires = [x for x in res.requires]
 
             for r in initial_requires:
-                if r in resources and len(resources[r].unknowns) == 0:
+                if r in resources:
                     final_requires.add(resources[r])
 
             if len(final_requires) == 0 and not len(initial_requires) == 0:
                 for r in initial_requires:
                     # do not warn about resources that either contain unknowns or are ignored
-                    if r in ignored_resources or (r in resources and len(resources[r].unknowns) > 0):
+                    if r in ignored_resources:
                         initial_requires.remove(r)
 
                 if len(initial_requires) > 0:
