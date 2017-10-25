@@ -23,7 +23,6 @@ import json
 import logging
 import os
 import re
-import struct
 import sys
 import uuid
 
@@ -347,7 +346,7 @@ class AuthJWTConfig(object):
                 else:
                     sign = True
 
-        if not sign:
+        if len(cls.sections.keys()) > 0 and not sign:
             raise ValueError("One auth_jwt section should have sign set to true")
 
         return cls.sections.keys()

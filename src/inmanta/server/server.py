@@ -25,25 +25,25 @@ import os
 import re
 import subprocess
 import sys
-import time
-import uuid
-from uuid import UUID
 import tempfile
-
+import time
+from uuid import UUID
+import uuid
 
 import dateutil
+import pymongo
 from tornado import gen
 from tornado import locks
 from tornado import process
-from inmanta import data
+
+from inmanta import const
+from inmanta import data, config
 from inmanta import methods
 from inmanta import protocol
-from inmanta import const
 from inmanta.ast import type
 from inmanta.resources import Id
-from inmanta.server.agentmanager import AgentManager
 from inmanta.server import config as opt
-import pymongo
+from inmanta.server.agentmanager import AgentManager
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1316,9 +1316,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()
-            token = protocol.encode_token(["compiler"], str(environment_id))
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
-                                  "--server_port", opt.transport_port.get(), "--token", token]
+                                  "--server_port", opt.transport_port.get()]
+            if config.Config.get("server", "auth", False):
+                token = protocol.encode_token(["compiler"], str(environment_id))
+                cmd.append("--token")
+                cmd.append(token)
 
             result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 
