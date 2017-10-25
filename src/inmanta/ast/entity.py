@@ -371,7 +371,7 @@ class Entity(NamedType):
         """
             Add an index over the given attributes.
         """
-        self._index_def.append(attributes)
+        self._index_def.append(sorted(attributes))
         for child in self.child_entities:
             child.add_index(attributes)
 
@@ -408,7 +408,7 @@ class Entity(NamedType):
                     self.index_queue.pop(keys)
 
     def lookup_index(self,
-                     params: "Dict[str,object]",
+                     params: "List[str,object]",
                      stmt: "Statement",
                      target: "Optional[ResultVariable]"=None) -> "Optional[Instance]":
         """
@@ -425,7 +425,7 @@ class Entity(NamedType):
             raise NotFoundException(
                 stmt, self.get_full_name(), "No index defined on %s for this lookup: " % self.get_full_name() + str(params))
 
-        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in params])
+        key = ", ".join(["%s=%s" % (k, repr(v)) for (k, v) in sorted(params, key=lambda x:x[0])])
 
         if target is None:
             if key in self._index:
