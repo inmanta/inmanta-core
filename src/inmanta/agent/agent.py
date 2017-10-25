@@ -461,8 +461,8 @@ class AgentInstance(object):
                         resource = Resource.deserialize(data)
                         resources.append(resource)
                         LOGGER.debug("Received update for %s", resource.id)
-                except TypeError as e:
-                    LOGGER.error("Failed to receive update", e)
+                except TypeError:
+                    LOGGER.exception("Failed to receive update")
 
                 if len(resources) > 0:
                     self._nq.reload(resources, undeployable)
