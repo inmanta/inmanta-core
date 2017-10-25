@@ -1249,7 +1249,7 @@ version: 0.0.1dev0""" % {"name": name})
 
             version_length = max(len(version), len(reqv), version_length)
 
-            table.append((name, version, reqv))
+            table.append((name, version, reqv, version == reqv))
 
         if requires:
             print("requires:")
@@ -1258,7 +1258,7 @@ version: 0.0.1dev0""" % {"name": name})
         else:
             t = texttable.Texttable()
             t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
-            t.header(("Name", "Version", "Expected"))
+            t.header(("Name", "Installed version", "Expected in project", "Matches"))
             for row in table:
                 t.add_row(row)
             print(t.draw())
