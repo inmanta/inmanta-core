@@ -160,7 +160,7 @@ To track progress, you can go to the `dashboard <http://127.0.0.1:8888>`_.
 
 .. note::
 
-    The ``-vvv``option sets the output of the compiler to very verbose.
+    The ``-vvv`` option sets the output of the compiler to very verbose.
     The ``-d`` option instructs the server to immediately start the deploy.
 
 Accessing your new Drupal server
