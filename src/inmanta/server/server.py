@@ -822,6 +822,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         yield model.update_fields(released=True, result=const.VersionState.deploying)
 
+        # Already mark undeployable resources as deployed to create a better UX (change the version counters)
+        resources = yield data.Resource.get_undeployable(env.id, version_id)
+
+        now = datetime.datetime.now()
+        action_id = uuid.uuid4()
+        for res in resources:
+            yield self.resource_action_update(env, [res.resource_version_id], action_id=action_id, started=now,
+                                              finished=now, status=res.status, action=const.ResourceAction.deploy,
+                                              changes={}, messages=[], change=const.Change.nochange, send_events=False)
+
         if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
@@ -860,6 +870,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 self.add_future(future)
             else:
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
+
+        # Mark the resources in an undeployable state as done
+        resources = yield data.Resource.get_undeployable(env.id, version_id)
+        with (yield self.dryrun_lock.acquire()):
+            for res in resources:
+                payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
+                                                        "attribute": res.id_attribute_name,
+                                                        "attribute_value": res.id_attribute_value,
+                                                        "version": res.model}, "id": res.resource_version_id}
+                yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
         return 200, {"dryrun": dryrun}
 

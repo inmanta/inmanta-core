@@ -1112,6 +1112,20 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
+    def get_undeployable(cls, environment, version):
+        """
+            Returns a list of resources with an undeployable state
+        """
+        cursor = cls._coll.find({"environment": environment, "model": version,
+                                 "status": {"$in": [x.name for x in const.UNDEPLOYABLE_STATES]}})
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
+
+    @classmethod
+    @gen.coroutine
     def get_resources_report(cls, environment):
         """
             This method generates a report of all resources in the database, with their latest version, if they are deleted

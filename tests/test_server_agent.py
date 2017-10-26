@@ -221,6 +221,9 @@ def resource_container():
 def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     """
         dryrun and deploy a configuration model
+
+        There is a second agent with an undefined resource. The server will shortcut the dryrun and deploy for this resource
+        without an agent being present.
     """
     resource_container.Provider.reset()
     result = yield client.create_project("env-test")
@@ -272,7 +275,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                   },
                  {'key': 'key4',
                   'value': execute.util.Unknown(source=None),
-                  'id': 'test::Resource[agent1,key=key4],v=%d' % version,
+                  'id': 'test::Resource[agent2,key=key4],v=%d' % version,
                   'send_event': False,
                   'requires': [],
                   'purged': True,
@@ -282,7 +285,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                   }
                  ]
 
-    status = {'test::Resource[agent1,key=key4]': const.ResourceState.undefined}
+    status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined}
     result = yield client.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                       unknowns=[], version_info={})
     assert result.code == 200
