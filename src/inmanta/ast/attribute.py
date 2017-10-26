@@ -16,10 +16,11 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Locatable
+from inmanta.ast import Locatable, RuntimeException, TypingException
 from inmanta.ast.type import TypedList, NullableType
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.execute.util import Unknown
+from typing import List
 
 
 try:
@@ -116,6 +117,9 @@ class Attribute(Locatable):
     def is_multi(self):
         return False
 
+    def final(self, excns: List[Exception]) -> None:
+        pass
+
 
 class RelationAttribute(Attribute):
     """
@@ -128,6 +132,8 @@ class RelationAttribute(Attribute):
         self.low = 1
         self.high = 1
         self.depends = False
+        self.source_annotations = []
+        self.target_annotations = []
 
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
@@ -154,3 +160,17 @@ class RelationAttribute(Attribute):
 
     def is_multi(self):
         return self.high != 1
+
+    def final(self, excns: List[Exception]) -> None:
+        for rv in self.source_annotations:
+            try:
+                if isinstance(rv.get_value(), Unknown):
+                    excns.append(TypingException(self, "Relation annotation can not be Unknown"))
+            except RuntimeException as e:
+                excns.append(e)
+        for rv in self.target_annotations:
+            try:
+                if isinstance(rv.get_value(), Unknown):
+                    excns.append(TypingException(self, "Relation annotation can not be Unknown"))
+            except RuntimeException as e:
+                excns.append(e)

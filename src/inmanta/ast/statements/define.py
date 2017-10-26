@@ -24,9 +24,10 @@ from inmanta.ast.type import ConstraintType, Type
 from inmanta.ast.attribute import Attribute, RelationAttribute
 from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
-from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal
+from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException
 from typing import List
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit
 
 
 LOGGER = logging.getLogger(__name__)
@@ -340,14 +341,17 @@ class DefineTypeDefault(TypeDefinitionStatement):
             default.add_default(name, value)
 
 
-class DefineRelation(DefinitionStatement):
+class DefineRelation(BiStatement):
     """
         Define a relation
     """
 
     def __init__(self, left, right, annotations=[]):
         DefinitionStatement.__init__(self)
-        self.annotations = annotations
+        # for later evaluation
+        self.annotation_expression = [(ResultVariable(), exp) for exp in annotations]
+        # for access to results
+        self.annotations = [exp[0] for exp in self.annotation_expression]
 
         self.left = left
         self.right = right
@@ -403,6 +407,7 @@ class DefineRelation(DefinitionStatement):
 
         if self.left[1] is not None:
             left_end = RelationAttribute(right, left, self.left[1])
+            left_end.target_annotations = self.annotations
             left_end.set_multiplicity(self.left[2])
             left_end.comment = self.comment
             self.copy_location(left_end)
@@ -411,6 +416,7 @@ class DefineRelation(DefinitionStatement):
 
         if self.right[1] is not None:
             right_end = RelationAttribute(left, right, self.right[1])
+            right_end.source_annotations = self.annotations
             right_end.set_multiplicity(self.right[2])
             right_end.comment = self.comment
             self.copy_location(right_end)
@@ -420,6 +426,15 @@ class DefineRelation(DefinitionStatement):
         if left_end is not None and right_end is not None:
             left_end.end = right_end
             right_end.end = left_end
+
+    def emit(self, resolver, queue) -> None:
+        for rv, exp in self.annotation_expression:
+            reqs = exp.requires_emit(resolver, queue)
+            ExecutionUnit(queue, resolver, rv, reqs, exp)
+
+    def normalize(self) -> None:
+        for _, exp in self.annotation_expression:
+            exp.normalize()
 
 
 class DefineIndex(DefinitionStatement):

@@ -74,7 +74,7 @@ class Entity(NamedType):
         self._index = {}  # type: Dict[str,Instance]
         self.index_queue = {}  # type: Dict[str,List[Tuple[ResultVariable, Statement]]]
 
-        self._instance_list = []  # type: List[Instance]
+        self._instance_list = set()  # type: Set[Instance]
 
         self.comment = ""
         self.location = None  # type: Location
@@ -277,13 +277,13 @@ class Entity(NamedType):
         """
             Return all instances of this entity
         """
-        return self._instance_list
+        return list(self._instance_list)
 
     def add_instance(self, obj: "Instance") -> None:
         """
             Register a new instance
         """
-        self._instance_list.append(obj)
+        self._instance_list.add(obj)
         self.add_to_index(obj)
 
         for parent in self.parent_entities:
@@ -452,6 +452,8 @@ class Entity(NamedType):
             for _, stmt in indices:
                 excns.append(NotFoundException(stmt, key,
                                                "No match in index on type %s with key %s" % (self.get_full_name(), key)))
+        for _, attr in self.get_attributes().items():
+            attr.final(excns)
 
     def get_double_defined_exception(self, other: "Namespaced") -> "DuplicateException":
         return DuplicateException(
