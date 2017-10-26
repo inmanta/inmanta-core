@@ -468,10 +468,19 @@ class AuthJWTConfig(object):
 
         self.jwks_uri = self._config["jwks_uri"]
 
+        if "validate_cert" in self._config:
+            self.validate_cert = self._config.getboolean("validate_cert")
+        else:
+            self.validate_cert = True
+
         http_client = httpclient.HTTPClient()
         try:
-            response = http_client.fetch(self.jwks_uri)
-            key_data = json.loads(response.body)
+            response = http_client.fetch(self.jwks_uri, validate_cert=self.validate_cert)
+            if hasattr(response.body, "decode"):
+                body = response.body.decode()
+            else:
+                body = response.body
+            key_data = json.loads(body)
         except httpclient.HTTPError as e:
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
