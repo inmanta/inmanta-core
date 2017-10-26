@@ -1323,6 +1323,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 cmd.append("--token")
                 cmd.append(token)
 
+            if opt.server_ssl_cert.get() is not None:
+                cmd.append("--ssl")
+                cmd.append("--ssl-ca-cert")
+                cmd.append(opt.server_ssl_cert.get())
+
             result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 
             stages.append(result)
