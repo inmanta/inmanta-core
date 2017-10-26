@@ -140,7 +140,7 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
 
     assert len(json_value) == 3
     assert len([x for x in status.values() if x == const.ResourceState.available]) == 2
-    assert len([x for x in status.values() if x == const.ResourceState.unknown]) == 1
+    assert len([x for x in status.values() if x == const.ResourceState.undefined]) == 1
 
     warning = [x for x in caplog.records if x.msg ==
                "The resource %s had requirements before flattening, but not after flattening."

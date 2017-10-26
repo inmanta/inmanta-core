@@ -290,16 +290,16 @@ class Exporter(object):
         if resource.version > 0:
             raise Exception("Versions should not be added to resources during model compilation.")
 
-        is_unknown = False
+        is_undefined = False
         for unknown in resource.unknowns:
-            is_unknown = True
+            is_undefined = True
             value = getattr(resource, unknown)
             if value.source is not None and hasattr(value.source, "_type"):
                 self._unknown_objects.add(to_id(value.source))
 
         resource.set_version(self._version)
-        if is_unknown:
-            self._resource_state[resource.id.resource_str()] = const.ResourceState.unknown
+        if is_undefined:
+            self._resource_state[resource.id.resource_str()] = const.ResourceState.undefined
         else:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.available
 

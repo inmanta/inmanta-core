@@ -282,7 +282,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                   }
                  ]
 
-    status = {'test::Resource[agent1,key=key4]': const.ResourceState.unknown}
+    status = {'test::Resource[agent1,key=key4]': const.ResourceState.undefined}
     result = yield client.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                       unknowns=[], version_info={})
     assert result.code == 200
@@ -341,7 +341,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     actions = yield data.ResourceAction.get_list()
-    assert len([x for x in actions if x.status == const.ResourceState.unknown])
+    assert len([x for x in actions if x.status == const.ResourceState.undefined])
 
     agent.stop()
 
