@@ -1,7 +1,32 @@
-v 2017.2 (2017-08-28)
-Changes in this releases:
+v 2017.3 (2017-10-27)
+Changes in this release:
 - Various bugfixes and performance enhancements
-- Dependencies updates
+- Dependency updates
+- Add relation annotations to the relation attribute and resolve it for exporters to use
+- Documentation improvements
+- Add an undefined resource state to the server (#489)
+  Previously all unknown handling was done in the server. This resulted in strange reporting as the number of managed resource
+  could go up and down. Now, an additional resource state "undefined" is introduced. This  state is handled similar to skipped
+  during deploys. Undefined resources are undeployable.
+- Undeployable resources are now already marked as finished at the moment a version is released or a dryrun is requested.
+  Resources that depend on resources in an undeployable state will be skipped on the server as well.
+- Sort index attributes: This patch ensure that std::File(host, path) and std::File(path, host) are the same indexes.
+- Improved modules list ouput: rename columns and added a column to indicate matching rows
+- Improve attribute check. fixes (#487)
+- Fix index issues related with inheritance (#488)
+- When a resource is purged, its facts will be removed. (#3)
+- Add location to type not found exception in relation (#475. #294)
+- Add JWT authz and limitation to env and client type (#473)
+- Added fix for function execution in constraints (#470)
+- Each agent instance now has its own threadpool to execute handlers. (#461)
+- Allow agent instances to operate independently (#483)
+- Improved error reporting on parser errors (#468, #466)
+- Fixed selection of lazy arguments (#465)
+
+v 2017.2 (2017-08-28)
+Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
 - Preserve env variables when using sudo in the agent
 - Prune all versions instead of only the ones that have not been released.
 - Use python 2.6 compatible syntax for the remote io in the agent
