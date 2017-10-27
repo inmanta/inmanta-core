@@ -278,7 +278,17 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                   'id': 'test::Resource[agent2,key=key4],v=%d' % version,
                   'send_event': False,
                   'requires': [],
-                  'purged': True,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
+                 {'key': 'key5',
+                  'value': "val",
+                  'id': 'test::Resource[agent2,key=key5],v=%d' % version,
+                  'send_event': False,
+                  'requires': ['test::Resource[agent2,key=key4],v=%d' % version],
+                  'purged': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
@@ -326,7 +336,7 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 4
+    assert result.result["model"]["total"] == 5
     assert result.result["model"]["result"] == "deploying"
 
     result = yield client.get_version(env_id, version)
@@ -344,7 +354,8 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     actions = yield data.ResourceAction.get_list()
-    assert len([x for x in actions if x.status == const.ResourceState.undefined])
+    assert len([x for x in actions if x.status == const.ResourceState.undefined]) == 1
+    assert len([x for x in actions if x.status == const.ResourceState.skipped]) == 1
 
     agent.stop()
 

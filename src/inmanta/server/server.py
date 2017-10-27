@@ -826,11 +826,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         resources = yield data.Resource.get_undeployable(env.id, version_id)
 
         now = datetime.datetime.now()
-        action_id = uuid.uuid4()
         for res in resources:
-            yield self.resource_action_update(env, [res.resource_version_id], action_id=action_id, started=now,
+            yield self.resource_action_update(env, [res.resource_version_id], action_id=uuid.uuid4(), started=now,
                                               finished=now, status=res.status, action=const.ResourceAction.deploy,
                                               changes={}, messages=[], change=const.Change.nochange, send_events=False)
+
+            # Skip all resources that depend on this undepoyable resource
+            requires = yield data.Resource.get_requires(env.id, version_id, res.resource_version_id)
+            yield self.resource_action_update(env, [r.resource_version_id for r in requires], action_id=uuid.uuid4(),
+                                              started=now, finished=now, status=const.ResourceState.skipped,
+                                              action=const.ResourceAction.deploy, changes={}, messages=[],
+                                              change=const.Change.nochange, send_events=False)
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
@@ -880,6 +886,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                                         "attribute_value": res.id_attribute_value,
                                                         "version": res.model}, "id": res.resource_version_id}
                 yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
+
+                # Also skip all resources that depend on this undepoyable resource
+                requires = yield data.Resource.get_requires(env.id, version_id, res.resource_version_id)
+                for req in requires:
+                    payload = {"changes": {}, "id_fields": {"entity_type": req.resource_type, "agent_name": req.agent,
+                                                            "attribute": req.id_attribute_name,
+                                                            "attribute_value": req.id_attribute_value,
+                                                            "version": req.model}, "id": req.resource_version_id}
+                    yield data.DryRun.update_resource(dryrun.id, req.resource_version_id, payload)
 
         return 200, {"dryrun": dryrun}
 

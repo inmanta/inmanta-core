@@ -1126,6 +1126,20 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
+    def get_requires(cls, environment, version, resource_version_id):
+        """
+            Return all resource that have the given resource_verison_id as requires
+        """
+        cursor = cls._coll.find({"environment": environment, "model": version,
+                                 "attributes.requires": resource_version_id})
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
+
+    @classmethod
+    @gen.coroutine
     def get_resources_report(cls, environment):
         """
             This method generates a report of all resources in the database, with their latest version, if they are deleted
