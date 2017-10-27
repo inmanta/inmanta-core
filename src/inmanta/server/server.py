@@ -1354,7 +1354,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
                                   "--server_port", opt.transport_port.get()]
             if config.Config.get("server", "auth", False):
-                token = protocol.encode_token(["compiler"], str(environment_id))
+                token = protocol.encode_token(["compiler", "api"], str(environment_id))
                 cmd.append("--token")
                 cmd.append(token)
 

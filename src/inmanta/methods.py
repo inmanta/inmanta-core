@@ -215,7 +215,7 @@ class Environment(Method):
             Create a list of environments
         """
 
-    @protocol(operation="GET", id=True, client_types=["api"])
+    @protocol(operation="GET", id=True, client_types=["api"], arg_options={"id": {"getter": add_env}})
     def get_environment(self, id: uuid.UUID, versions: int=None, resources: int=None):
         """
             Get an environment and all versions associated
@@ -320,7 +320,7 @@ class HeartBeatMethod(Method):
             also registered as API method, because it is called with an invalid SID the first time
         """
 
-    @protocol(operation="PUT", agent_server=True, arg_options={"id": {"getter": ignore_env}}, client_types=["agent"])
+    @protocol(operation="PUT", agent_server=True, arg_options={"sid": {"getter": ignore_env}}, client_types=["agent"])
     def heartbeat_reply(self, sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
         """
             Send a reply back to the server
@@ -603,7 +603,7 @@ class ParameterMethod(Method):
                     503: The parameter is not found but its value is requested from an agent
         """
 
-    @protocol(operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+    @protocol(operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
     def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={}):
         """
             Set a parameter on the server
@@ -632,7 +632,7 @@ class ParametersMethod(Method):
     """
     __method_name__ = "parameters"
 
-    @protocol(operation="PUT", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+    @protocol(operation="PUT", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
     def set_parameters(self, tid: uuid.UUID, parameters: list):
         """
             Set a parameter on the server
