@@ -98,9 +98,8 @@ Glossary
         A user always provides a complete configuration model to the orchestrator. Depending on what
         is already deployed, Inmanta will determine the correct order of provisioning and
         configuration. Many configuration parameters, such a the IP address of a virtual machine at
-        a cloud provider will not be known upfront. Inmanta marks this parameters as **unknown** to
-        prune all resources that cannot be configured yet and to determine when the orchestrater can
-        proceed the orchestration process.
+        a cloud provider will not be known upfront. Inmanta marks this parameters as **unknown**.
+        The state of any resource that uses such an unknown parameter becomes undefined.
 
     entity
         Concepts in the infrastructure are modelled in the configuration with entities. An entity
