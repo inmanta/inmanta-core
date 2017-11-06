@@ -350,7 +350,8 @@ Entities for which no implementation is required are implemented using :inmanta:
 
 In the implementation block, the entity instance itself can be accessed through the variable self.
 
-``implement`` statements are not inherited.
+``implement`` statements are not inherited, unless a statement of the form ``implement Blah using parents`` is used.
+When it is used, all implementations of the direct parents will be inherited. 
 
 
 The syntax for implements and implementation is:
@@ -358,7 +359,8 @@ The syntax for implements and implementation is:
 .. code-block:: antlr
 
     implementation: 'implementation' ID 'for' class ':' statement* 'end';
-    implement: 'implement' class 'using' ID ('when' condition)?;
+    implement: 'implement' class 'using' ID ('when' condition)? 
+    		 | 'implement' class 'using' 'parents';
 
 
 Indexes and queries

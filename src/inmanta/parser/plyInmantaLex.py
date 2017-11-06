@@ -26,7 +26,7 @@ states = (
 
 keyworldlist = ['typedef', 'as', 'matching', 'entity', 'extends', 'end', 'in',
                 'implementation', 'for', 'index', 'implement', 'using', 'when', 'and', 'or', 'not', 'true', 'false', 'import',
-                'is', 'defined', 'dict', 'null', 'undef']
+                'is', 'defined', 'dict', 'null', 'undef', "parents"]
 literals = [':', '[', ']', '(', ')', '=', ',', '.', '{', '}', '?']
 reserved = {k: k.upper() for k in keyworldlist}
 

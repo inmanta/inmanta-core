@@ -22,7 +22,8 @@ from inmanta.ast import Namespace
 from inmanta.ast.statements import define, Literal
 from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
-from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineEntity
+from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineEntity,\
+    DefineImplementInherits
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
@@ -364,6 +365,16 @@ implement Test using test, blah when (self > 5)
     assert isinstance(stmt.select, GreaterThan)
     assert stmt.select.children[0].name == 'self'
     assert stmt.select.children[1].value == 5
+
+def test_implements_parent():
+    statements = parse_code("""
+implement Test using parents  \""" testc \"""
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineImplementInherits)
+    assert stmt.entity == "Test"
 
 
 def test_implements_selector():
