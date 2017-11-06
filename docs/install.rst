@@ -43,7 +43,7 @@ For Fedora use dnf:
   cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
   [inmanta-oss-stable]
   name=Inmanta OSS stable
-  baseurl=https://pkg.inmanta.com/inmanta-oss-stable/f$releasever/
+  baseurl=https://pkg.inmanta.com/inmanta-oss-stable/f\$releasever/
   gpgcheck=1
   gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
   repo_gpgcheck=1
