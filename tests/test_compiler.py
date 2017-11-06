@@ -495,9 +495,40 @@ file( )
     assert stmt.name == "file"
 
 
+def test_function_2():
+    statements = parse_code("""
+file(b)
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, FunctionCall)
+    assert stmt.name == "file"
+    
+def test_function_3():
+    statements = parse_code("""
+file(b,)
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, FunctionCall)
+    assert stmt.name == "file"
+
 def test_list_def():
     statements = parse_code("""
 a=["a]","b"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, CreateList)
+    assert [x.value for x in stmt.value.items] == ["a]", "b"]
+    
+def test_list_def_trailing_comma():
+    statements = parse_code("""
+a=["a]","b",]
 """)
 
     assert len(statements) == 1
