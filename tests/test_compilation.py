@@ -1861,8 +1861,8 @@ Test.bar [1] foo,bar Foo
 """)
     with pytest.raises(TypingException):
         compiler.do_compile()
-        
-        
+
+   
 def test_implements_inheritance(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Test:

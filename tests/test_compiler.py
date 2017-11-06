@@ -366,6 +366,7 @@ implement Test using test, blah when (self > 5)
     assert stmt.select.children[0].name == 'self'
     assert stmt.select.children[1].value == 5
 
+
 def test_implements_parent():
     statements = parse_code("""
 implement Test using parents  \""" testc \"""
