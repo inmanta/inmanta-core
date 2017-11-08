@@ -30,7 +30,8 @@ import enum
 
 import tornado.web
 from tornado import gen, queues
-from inmanta import methods, config, const, execute
+from inmanta import methods, const, execute
+from inmanta import config as inmanta_config
 from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
@@ -240,7 +241,7 @@ class UnauhorizedError(Exception):
 
 
 def encode_token(client_types, environment=None, idempotent=False, expire=None):
-    cfg = config.AuthJWTConfig.get_sign_config()
+    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
 
     payload = {
         "iss": cfg.issuer,
@@ -273,7 +274,7 @@ def decode_token(token):
     if "iss" not in payload:
         raise UnauhorizedError("Issuer is required in token to validate.")
 
-    cfg = config.AuthJWTConfig.get_issuer(payload["iss"])
+    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
     if cfg is None:
         raise UnauhorizedError("Unknown issuer for token")
 
@@ -375,7 +376,7 @@ class RESTHandler(tornado.web.RequestHandler):
                 self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
                 return
 
-            auth_enabled = config.Config.get("server", "auth", False)
+            auth_enabled = inmanta_config.Config.get("server", "auth", False)
             if not auth_enabled or auth_token is not None:
                 result = yield self._transport._execute_call(kwargs, http_method, call_config,
                                                              message, request_headers, auth_token)
@@ -481,7 +482,7 @@ class RESTTransport(Transport):
         super().__init__(endpoint)
         self.set_connected()
         self._handlers = []
-        self.token = config.Config.get(self.id, "token", None)
+        self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.headers = set()
 
@@ -616,6 +617,9 @@ class RESTTransport(Transport):
                             elif issubclass(arg_type, enum.Enum):
                                 message[arg] = arg_type[message[arg]]
 
+                            elif arg_type == bool:
+                                message[arg] = inmanta_config.is_bool(message[arg])
+
                             else:
                                 message[arg] = arg_type(message[arg])
 
@@ -726,13 +730,13 @@ class RESTTransport(Transport):
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
 
         port = 8888
-        if self.id in config.Config.get() and "port" in config.Config.get()[self.id]:
-            port = config.Config.get()[self.id]["port"]
+        if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
+            port = inmanta_config.Config.get()[self.id]["port"]
 
         application = tornado.web.Application(self._handlers)
 
-        crt = config.Config.get("server", "ssl_cert_file", None)
-        key = config.Config.get("server", "ssl_key_file", None)
+        crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
+        key = inmanta_config.Config.get("server", "ssl_key_file", None)
 
         if(crt is not None and key is not None):
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -758,11 +762,11 @@ class RESTTransport(Transport):
         """
         LOGGER.debug("Getting config in section %s", self.id)
 
-        port = config.Config.get(self.id, "port", 8888)
+        port = inmanta_config.Config.get(self.id, "port", 8888)
 
-        host = config.Config.get(self.id, "host", "localhost")
+        host = inmanta_config.Config.get(self.id, "host", "localhost")
 
-        if config.Config.getboolean(self.id, "ssl", False):
+        if inmanta_config.Config.getboolean(self.id, "ssl", False):
             protocol = "https"
         else:
             protocol = "http"
@@ -822,7 +826,7 @@ class RESTTransport(Transport):
         if self.token is not None:
             headers["Authorization"] = "Bearer " + self.token
 
-        ca_certs = config.Config.get(self.id, "ssl_ca_cert_file", None)
+        ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
 
         LOGGER.debug("Calling server %s %s", method, url)
 
@@ -958,7 +962,7 @@ class Endpoint(object):
 
     def __init__(self, io_loop, name):
         self._name = name
-        self._node_name = config.nodename.get()
+        self._node_name = inmanta_config.nodename.get()
         self._end_point_names = []
         self._io_loop = io_loop
 
