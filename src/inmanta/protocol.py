@@ -617,7 +617,6 @@ class RESTTransport(Transport):
                             elif issubclass(arg_type, enum.Enum):
                                 message[arg] = arg_type[message[arg]]
 
-
                             elif arg_type == bool:
                                 message[arg] = inmanta_config.is_bool(message[arg])
 
