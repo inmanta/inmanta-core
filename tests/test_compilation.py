@@ -1861,3 +1861,15 @@ Test.bar [1] foo,bar Foo
 """)
     with pytest.raises(TypingException):
         compiler.do_compile()
+
+
+def test_double_define(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string test
+    string? test
+    bool test
+end
+""")
+    with pytest.raises(TypingException):
+        compiler.do_compile()
