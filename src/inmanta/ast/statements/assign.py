@@ -256,6 +256,12 @@ vm.files[path="/etc/motd"]
                                [(k, v.execute(requires, resolver, queue))
                                 for (k, v) in self.querypart], self, target)
 
+    def __repr__(self) -> str:
+        """
+            The representation of this statement
+        """
+        return "%s.%s[%s]" % (self.rootobject, self.relation, self.querypart)
+
 
 class StringFormat(ReferenceStatement):
     """
