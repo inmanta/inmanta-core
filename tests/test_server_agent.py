@@ -998,6 +998,13 @@ def test_get_set_param(resource_container, client, server, io_loop):
     result = yield client.set_param(tid=env_id, id="key10", value="value10", source="user")
     assert result.code == 200
 
+    result = yield client.get_param(tid=env_id, id="key10")
+    assert result.code == 200
+    assert result.result["parameter"]["value"] == "value10"
+
+    result = yield client.delete_param(tid=env_id, id="key10")
+    assert result.code == 200
+
 
 @pytest.mark.gen_test
 def test_unkown_parameters(resource_container, client, server, io_loop):

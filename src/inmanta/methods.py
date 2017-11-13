@@ -616,6 +616,15 @@ class ParameterMethod(Method):
             :param metadata: metadata about the parameter
         """
 
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+    def delete_param(self, tid: uuid.UUID, id: str):
+        """
+            Delete a parameter on the server
+
+            :param tid: The id of the environment
+            :param id: The name of the parameter
+        """
+
     @protocol(operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
     def list_params(self, tid: uuid.UUID, query: dict={}):
         """

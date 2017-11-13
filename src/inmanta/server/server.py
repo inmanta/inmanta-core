@@ -334,6 +334,20 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
+    @protocol.handle(methods.ParameterMethod.delete_param, env="tid", parameter_name="id")
+    @gen.coroutine
+    def delete_param(self, env, parameter_name):
+        params = yield data.Parameter.get_list(environment=env.id, name=parameter_name)
+
+        if len(params) == 0:
+            return 404
+
+        param = params[0]
+        yield param.delete()
+        self._async_recompile(env.id, False, opt.server_wait_after_param.get())
+
+        return 200
+
     @protocol.handle(methods.ParameterMethod.list_params, env="tid")
     @gen.coroutine
     def list_param(self, env, query):
