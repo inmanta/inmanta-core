@@ -129,7 +129,7 @@ class Server(protocol.ServerEndpoint):
             LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
             return
 
-        if not opt.server_enable_auth:
+        if not opt.server_enable_auth.get():
             auth = ""
         else:
             auth = """,
