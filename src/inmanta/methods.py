@@ -564,7 +564,7 @@ class NotifyMethod(Method):
     """
     __method_name__ = "notify"
 
-    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api"])
+    @protocol(operation="GET", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
     def notify_change(self, id: uuid.UUID, update: bool=True):
         """
             Notify the server that the repository of the environment with the given id, has changed.

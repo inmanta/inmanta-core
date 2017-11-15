@@ -95,9 +95,6 @@ server_address = Option("server", "server_address", "localhost",
 server_wait_after_param = Option("server", "wait-after-param", 5,
                                  "Time to wait before recompile after new paramters have been received", is_time)
 
-server_no_recompile = Option("server", "no-recompile", False,
-                             "Prevent all server side compiles", is_bool)
-
 agent_timeout = Option("server", "agent-timeout", 30,
                        "Time before an agent is considered to be offline", is_time)
 
