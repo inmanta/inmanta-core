@@ -302,9 +302,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.ParameterMethod.set_param, param_id="id", env="tid")
     @gen.coroutine
-    def set_param(self, env, param_id, source, value, resource_id, metadata):
+    def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
         result = yield self._update_param(env, param_id, value, source, resource_id, metadata)
-        if result:
+        if result and recompile:
             yield self._async_recompile(env, False, opt.server_wait_after_param.get())
 
         if resource_id is None:

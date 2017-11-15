@@ -604,7 +604,8 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
-    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={}):
+    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={},
+                  recompile=True):
         """
             Set a parameter on the server
 
@@ -614,6 +615,7 @@ class ParameterMethod(Method):
             :param source: The source of the parameter, this can be the user, agent, plugin, compiler, ...
             :param value: The value of the parameter
             :param metadata: metadata about the parameter
+            :param recompile: Whether to trigger a recompile
         """
 
     @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
