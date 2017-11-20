@@ -490,6 +490,12 @@ class Id(object):
 
         return self.resource_str()
 
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        return str(self) == str(other) and type(self) == type(other)
+
     def resource_str(self):
         return "%(type)s[%(agent)s,%(attribute)s=%(value)s]" % {
             "type": self._entity_type,

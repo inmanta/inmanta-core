@@ -1,0 +1,7 @@
+entity Resource extends std::PurgeableResource, std::State:
+    string agent="internal"
+    string key
+    string value
+end
+
+implement Resource using std::none
