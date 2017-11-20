@@ -33,7 +33,7 @@ from inmanta.execute.tracking import ModuleTracker
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 500
+MAX_ITERATIONS = 2000
 
 
 class Scheduler(object):
