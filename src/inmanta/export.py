@@ -28,7 +28,7 @@ from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import RuntimeException
+from inmanta.ast import RuntimeException, CompilerException
 from tornado.ioloop import IOLoop
 from tornado import gen
 
@@ -290,6 +290,11 @@ class Exporter(object):
         if resource.version > 0:
             raise Exception("Versions should not be added to resources during model compilation.")
 
+        resource.set_version(self._version)
+
+        if resource.id in self._resources:
+            raise CompilerException("Resource %s exists more than once in the configuration model" % resource.id)
+
         is_undefined = False
         for unknown in resource.unknowns:
             is_undefined = True
@@ -297,7 +302,6 @@ class Exporter(object):
             if value.source is not None and hasattr(value.source, "_type"):
                 self._unknown_objects.add(to_id(value.source))
 
-        resource.set_version(self._version)
         if is_undefined:
             self._resource_state[resource.id.resource_str()] = const.ResourceState.undefined
         else:

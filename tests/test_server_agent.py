@@ -25,16 +25,18 @@ import logging
 
 from tornado import gen
 
+import pytest
+
 from inmanta import agent, data, const, execute
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
-import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from _pytest.fixtures import fixture
 from itertools import groupby
+from inmanta.ast import CompilerException
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -2125,3 +2127,21 @@ def test_autostart_clear_environment(io_loop, server, client, resource_container
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+
+
+@pytest.mark.gen_test
+def test_export_duplicate(resource_container, snippetcompiler):
+    """
+        The exported should provide a compilation error when a resource is defined twice in a model
+    """
+    snippetcompiler.setup_for_snippet("""
+        import test
+
+        test::Resource(key="test", value="foo")
+        test::Resource(key="test", value="bar")
+    """)
+
+    with pytest.raises(CompilerException) as exc:
+        snippetcompiler.do_export()
+
+    assert "exists more than once in the configuration model" in str(exc.value)
