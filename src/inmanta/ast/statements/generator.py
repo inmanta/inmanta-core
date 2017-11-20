@@ -195,11 +195,15 @@ class Constructor(GeneratorStatement):
 
         inindex = set()
 
+        all_attributes = set(self.attributes.keys()) | \
+            set(self.type.get_defaults().keys()) | \
+            set(self.type.get_entity().get_defaults().keys())
+
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
         for index in self.type.get_entity().get_indices():
             for attr in index:
-                if attr not in self.attributes:
+                if attr not in all_attributes:
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
                 inindex.add(attr)
 

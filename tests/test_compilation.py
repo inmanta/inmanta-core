@@ -1873,3 +1873,19 @@ end
 """)
     with pytest.raises(TypingException):
         compiler.do_compile()
+
+
+def test_511_index_on_default(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string a="a"
+    string b
+end
+
+index Test(a, b)
+
+implement Test using std::none
+
+Test(b="b")
+""")
+    compiler.do_compile()

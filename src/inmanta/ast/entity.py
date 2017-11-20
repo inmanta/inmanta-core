@@ -103,7 +103,7 @@ class Entity(NamedType):
         self.__default_value[name] = value
 
     def get_defaults(self) -> "Dict[str,ExpressionStatement]":
-        return {}
+        return self.get_default_values()
 
     def get_default_values(self) -> "Dict[str,ExpressionStatement]":
         """
