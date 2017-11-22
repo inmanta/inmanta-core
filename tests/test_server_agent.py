@@ -2148,7 +2148,7 @@ def test_export_duplicate(resource_container, snippetcompiler):
     assert "exists more than once in the configuration model" in str(exc.value)
 
 
-@pytest.mark.gen_test(timeout=25)
+@pytest.mark.gen_test(timeout=30)
 def test_server_recompile(server, client, environment):
     """
         Test a recompile on the server and verify recompile triggers
@@ -2179,7 +2179,7 @@ def test_server_recompile(server, client, environment):
     shutil.copytree(project_source, project_dir)
     subprocess.check_output(["git", "init"], cwd=project_dir)
     subprocess.check_output(["git", "add", "*"], cwd=project_dir)
-    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "--author", "Unit <test@example.com>", "-m", "unit test"], cwd=project_dir)
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w") as fd:
