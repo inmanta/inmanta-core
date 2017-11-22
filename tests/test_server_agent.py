@@ -2179,7 +2179,9 @@ def test_server_recompile(server, client, environment):
     shutil.copytree(project_source, project_dir)
     subprocess.check_output(["git", "init"], cwd=project_dir)
     subprocess.check_output(["git", "add", "*"], cwd=project_dir)
-    subprocess.check_output(["git", "commit", "--author", "Unit <test@example.com>", "-m", "unit test"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
 
     # add main.cf
     with open(os.path.join(project_dir, "main.cf"), "w") as fd:
