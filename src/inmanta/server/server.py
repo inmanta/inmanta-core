@@ -264,9 +264,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return out
 
     @gen.coroutine
-    def _update_param(self, env, name, value, source, resource_id, metadata):
+    def _update_param(self, env, name, value, source, resource_id, metadata, recompile=False):
         """
-            Update or set a parameter. This method returns true if this update resolves an unknown
+            Update or set a parameter.
+
+            This method returns true if:
+            - this update resolves an unknown
+            - recompile is true and the parameter updates an existing parameter to a new value
         """
         LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
         if not isinstance(value, str):
@@ -280,12 +284,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         params = yield data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
+        value_updated = True
         if len(params) == 0:
             param = data.Parameter(environment=env.id, name=name, resource_id=resource_id, value=value, source=source,
                                    updated=datetime.datetime.now(), metadata=metadata)
             yield param.insert()
         else:
             param = params[0]
+            value_updated = param.value != value
             yield param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
 
         # check if the parameter is an unknown
@@ -298,13 +304,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             return True
 
-        return False
+        return (recompile and value_updated)
 
     @protocol.handle(methods.ParameterMethod.set_param, param_id="id", env="tid")
     @gen.coroutine
     def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
-        result = yield self._update_param(env, param_id, value, source, resource_id, metadata)
-        if result and recompile:
+        result = yield self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
+        if result:
             yield self._async_recompile(env, False, opt.server_wait_after_param.get())
 
         if resource_id is None:

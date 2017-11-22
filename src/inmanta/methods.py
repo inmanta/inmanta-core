@@ -605,9 +605,10 @@ class ParameterMethod(Method):
 
     @protocol(operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
     def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={},
-                  recompile=True):
+                  recompile: bool=False):
         """
-            Set a parameter on the server
+            Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+            Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
 
             :param tid: The id of the environment
             :param id: The name of the parameter

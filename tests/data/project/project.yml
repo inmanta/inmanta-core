@@ -1,0 +1,7 @@
+name: test
+description: A sample project
+modulepath: libs
+downloadpath: libs
+install_mode: "release"
+repo:
+    - git@github.com:inmanta/

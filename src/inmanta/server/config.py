@@ -76,7 +76,7 @@ server_fact_renew = Option("server", "fact-renew", default_fact_renew,
 server_fact_resource_block = Option("server", "fact-resource-block", 60,
                                     "Minimal time between subsequent requests for the same fact", is_time)
 
-server_autrecompile_wait = Option("server", "auto-recompile-wait ", 10,
+server_autrecompile_wait = Option("server", "auto-recompile-wait", 10,
                                   """The number of seconds to wait before the server may attempt to do a new recompile.
                                      Recompiles are triggered after facts updates for example.""", is_time)
 
