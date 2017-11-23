@@ -26,7 +26,7 @@ from inmanta.ast.statements import Literal
 from inmanta.ast import Location
 from inmanta.ast.statements.generator import For, Constructor
 from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
-    DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport
+    DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport, DefineImplementInherits
 from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
@@ -335,7 +335,12 @@ def p_attr_list_dict_null(p):
     p[0] = DefineAttribute("dict", p[3], Literal(NoneValue()), nullable=True)
     attach_lnr(p, 1)
 
+
 # IMPLEMENT
+def p_implement_inh(p):
+    "implement_def : IMPLEMENT class_ref USING PARENTS"
+    p[0] = DefineImplementInherits(p[2])
+    attach_lnr(p)
 
 
 def p_implement(p):
@@ -353,6 +358,12 @@ def p_implement_when(p):
 def p_implement_comment(p):
     "implement_def : IMPLEMENT class_ref USING ns_list mls"
     p[0] = DefineImplement(p[2], p[4], Literal(True), comment=p[5])
+    attach_lnr(p)
+
+
+def p_implement_inh_comment(p):
+    "implement_def : IMPLEMENT class_ref USING PARENTS mls"
+    p[0] = DefineImplementInherits(p[2], comment=p[5])
     attach_lnr(p)
 
 

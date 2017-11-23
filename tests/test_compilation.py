@@ -1863,6 +1863,32 @@ Test.bar [1] foo,bar Foo
         compiler.do_compile()
 
 
+def test_implements_inheritance(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string a
+end
+
+entity TestC extends Test:
+end
+
+implementation test for Test:
+    self.a = "xx"
+end
+
+
+
+implement Test using test
+implement TestC using parents
+
+a = TestC()
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
+
+
 def test_double_define(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Test:

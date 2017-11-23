@@ -66,6 +66,7 @@ class Entity(NamedType):
 
         self.implementations = []  # type: List[Implementation]
         self.implements = []  # type: List[Implement]
+        self.implements_inherits = False
 
         # default values
         self.__default_value = {}  # type: Dict[str,object]
@@ -79,6 +80,8 @@ class Entity(NamedType):
         self.comment = ""
         self.location = None  # type: Location
 
+        self.normalized = False
+
     def normalize(self) -> None:
         for d in self.implementations:
             d.normalize()
@@ -86,7 +89,7 @@ class Entity(NamedType):
         for i in self.implements:
             i.normalize()
 
-        self.subc = [SubConstructor(self, i) for i in self.implements]
+        self.subc = [SubConstructor(self, i) for i in self.get_implements()]
         for sub in self.subc:
             sub.normalize()
 
@@ -94,7 +97,10 @@ class Entity(NamedType):
         return self.subc
 
     def get_implements(self) -> "List[Implement]":
-        return self.implements + [i for p in self.parent_entities for i in p.get_implements()]
+        if self.implements_inherits:
+            return self.implements + [i for p in self.parent_entities for i in p.get_implements()]
+        else:
+            return self.implements
 
     def add_default_value(self, name: str, value: object) -> None:
         """
@@ -516,8 +522,12 @@ class Implement(Locatable):
         self.constraint = None  # type: ExpressionStatement
         self.implementations = []  # type: List[Implementation]
         self.comment = None  # type: str
+        self.normalized = False
 
     def normalize(self) -> None:
+        if self.normalized:
+            return
+        self.normalized = True
         self.constraint.normalize()
 
 

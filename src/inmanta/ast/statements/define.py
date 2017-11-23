@@ -183,6 +183,34 @@ class DefineImplementation(TypeDefinitionStatement):
         self.copy_location(self.type)
 
 
+class DefineImplementInherits(DefinitionStatement):
+
+    def __init__(self, entity_name: str, comment: str=None):
+        DefinitionStatement.__init__(self)
+        self.entity = entity_name
+        self.comment = comment
+
+    def __repr__(self):
+        """
+            Returns a representation of this class
+        """
+        return "ImplementParent(%s)" % (self.entity)
+
+    def evaluate(self):
+        """
+            Evaluate this statement.
+        """
+        try:
+            entity_type = self.namespace.get_type(self.entity)
+
+            entity_type = entity_type.get_entity()
+
+            entity_type.implements_inherits = True
+        except TypeNotFoundException as e:
+            e.set_statement(self)
+            raise e
+
+
 class DefineImplement(DefinitionStatement):
     """
         Define a new implementation for a given entity
