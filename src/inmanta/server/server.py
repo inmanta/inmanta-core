@@ -129,7 +129,7 @@ class Server(protocol.ServerEndpoint):
             LOGGER.warning("The dashboard is enabled in the configuration but its path is not configured.")
             return
 
-        if not opt.server_enable_auth:
+        if not opt.server_enable_auth.get():
             auth = ""
         else:
             auth = """,
@@ -264,9 +264,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return out
 
     @gen.coroutine
-    def _update_param(self, env, name, value, source, resource_id, metadata):
+    def _update_param(self, env, name, value, source, resource_id, metadata, recompile=False):
         """
-            Update or set a parameter. This method returns true if this update resolves an unknown
+            Update or set a parameter.
+
+            This method returns true if:
+            - this update resolves an unknown
+            - recompile is true and the parameter updates an existing parameter to a new value
         """
         LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
         if not isinstance(value, str):
@@ -280,12 +284,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         params = yield data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
+        value_updated = True
         if len(params) == 0:
             param = data.Parameter(environment=env.id, name=name, resource_id=resource_id, value=value, source=source,
                                    updated=datetime.datetime.now(), metadata=metadata)
             yield param.insert()
         else:
             param = params[0]
+            value_updated = param.value != value
             yield param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
 
         # check if the parameter is an unknown
@@ -298,14 +304,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             return True
 
-        return False
+        return (recompile and value_updated)
 
     @protocol.handle(methods.ParameterMethod.set_param, param_id="id", env="tid")
     @gen.coroutine
-    def set_param(self, env, param_id, source, value, resource_id, metadata):
-        result = yield self._update_param(env, param_id, value, source, resource_id, metadata)
+    def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
+        result = yield self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
         if result:
-            self._async_recompile(env.id, False, opt.server_wait_after_param.get())
+            yield self._async_recompile(env, False, opt.server_wait_after_param.get())
 
         if resource_id is None:
             resource_id = ""
@@ -330,7 +336,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 recompile = True
 
         if recompile:
-            self._async_recompile(env.id, False, opt.server_wait_after_param.get())
+            yield self._async_recompile(env, False, opt.server_wait_after_param.get())
+
+        return 200
+
+    @protocol.handle(methods.ParameterMethod.delete_param, env="tid", parameter_name="id")
+    @gen.coroutine
+    def delete_param(self, env, parameter_name):
+        params = yield data.Parameter.get_list(environment=env.id, name=parameter_name)
+
+        if len(params) == 0:
+            return 404
+
+        param = params[0]
+        yield param.delete()
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get())
 
         return 200
 
@@ -428,7 +448,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         yield record.update()
 
-        self._async_recompile(env.id, False, opt.server_wait_after_param.get())
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get())
         return 200, {"record": record}
 
     @protocol.handle(methods.FormRecords.create_record, env="tid")
@@ -453,7 +473,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
         yield record.insert()
-        self._async_recompile(env.id, False, opt.server_wait_after_param.get())
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get())
 
         return 200, {"record": record}
 
@@ -1190,7 +1210,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         setting = env._settings[key]
         if setting.recompile:
             LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
-            self._async_recompile(env.id, setting.update)
+            yield self._async_recompile(env, setting.update)
 
         if setting.agent_restart:
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
@@ -1235,22 +1255,25 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 204
 
-    @protocol.handle(methods.NotifyMethod.notify_change, environment_id="id")
+    @protocol.handle(methods.NotifyMethod.notify_change, env="id")
     @gen.coroutine
-    def notify_change(self, environment_id, update):
-        LOGGER.info("Received change notification for environment %s", environment_id)
-        self._async_recompile(environment_id, update)
+    def notify_change(self, env, update):
+        LOGGER.info("Received change notification for environment %s", env.id)
+        yield self._async_recompile(env, update)
 
         return 200
 
-    def _async_recompile(self, environment_id, update_repo, wait=0):
+    @gen.coroutine
+    def _async_recompile(self, env, update_repo, wait=0):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        if opt.server_no_recompile.get():
-            LOGGER.info("Skipping compile due to no-recompile=True")
+        server_compile = yield env.get(data.SERVER_COMPILE)
+        if not server_compile:
+            LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return
-        last_recompile = self._recompiles[environment_id]
+
+        last_recompile = self._recompiles[env.id]
         wait_time = opt.server_autrecompile_wait.get()
         if last_recompile is self:
             LOGGER.info("Already recompiling")
@@ -1262,8 +1285,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             else:
                 LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
-            self._recompiles[environment_id] = self
-            self._io_loop.add_callback(self._recompile_environment, environment_id, update_repo, wait)
+            self._recompiles[env.id] = self
+            self._io_loop.add_callback(self._recompile_environment, env.id, update_repo, wait)
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
 

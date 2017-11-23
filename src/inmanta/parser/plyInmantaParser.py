@@ -590,17 +590,6 @@ def p_constructor(p):
     p[0] = Constructor(p[1], p[3], Location(file, p.lineno(2)), namespace)
 
 
-def p_constructor_empty(p):
-    " constructor : class_ref '(' ')' "
-    p[0] = Constructor(p[1], [], Location(file, p.lineno(2)), namespace)
-
-
-def p_function_call_empty(p):
-    " function_call : ns_ref '(' ')'"
-    p[0] = FunctionCall(str(p[1]), [])
-    attach_lnr(p, 2)
-
-
 def p_function_call(p):
     " function_call : ns_ref '(' operand_list ')'"
     p[0] = FunctionCall(str(p[1]), p[3])
@@ -613,12 +602,6 @@ def p_list_def(p):
     attach_lnr(p, 2)
 
 
-def p_list_def_empty(p):
-    " list_def : '[' ']'"
-    p[0] = CreateList([])
-    attach_lnr(p, 1)
-
-
 def p_pair_list_collect(p):
     """pair_list : STRING ':' operand ',' pair_list"""
     p[5].insert(0, (p[1], p[3]))
@@ -628,6 +611,11 @@ def p_pair_list_collect(p):
 def p_pair_list_term(p):
     "pair_list : STRING ':' operand"
     p[0] = [(p[1], p[3])]
+
+
+def p_pair_list_term_2(p):
+    "pair_list : "
+    p[0] = []
 
 
 def p_map_def(p):
@@ -731,13 +719,6 @@ def create_string_format(format_string, variables, location):
 
     return StringFormat(format_string, _vars)
 
-
-def p_constant_list_empty(p):
-    " constant_list : '[' ']' "
-    p[0] = CreateList([])
-    attach_lnr(p, 1)
-
-
 def p_constant_list(p):
     " constant_list : '[' constants ']' "
     p[0] = CreateList(p[2])
@@ -747,6 +728,11 @@ def p_constant_list(p):
 def p_constants_term(p):
     "constants : constant"
     p[0] = [p[1]]
+
+
+def p_constants_term_2(p):
+    "constants : "
+    p[0] = []
 
 
 def p_constants_collect(p):
@@ -766,15 +752,25 @@ def p_param_list_term(p):
     p[0] = [(p[1], p[3])]
 
 
+def p_param_list_term_2(p):
+    "param_list : "
+    p[0] = []
+
+
 def p_operand_list_collect(p):
     """operand_list : operand ',' operand_list"""
     p[3].insert(0, p[1])
     p[0] = p[3]
-
+    
 
 def p_operand_list_term(p):
     'operand_list : operand'
     p[0] = [p[1]]
+
+
+def p_operand_list_term_2(p):
+    "operand_list :"
+    p[0] = []
 
 
 def p_ns_list_collect(p):

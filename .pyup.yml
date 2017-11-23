@@ -1,0 +1,4 @@
+requirements:
+    - tests/data/project/libs/std/requirements.txt
+        update: False
+        pin: False

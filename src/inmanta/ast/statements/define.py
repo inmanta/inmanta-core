@@ -108,6 +108,12 @@ class DefineEntity(TypeDefinitionStatement):
                 attr_obj = Attribute(entity_type, attr_type, attribute.name, attribute.multi, attribute.nullable)
                 attribute.copy_location(attr_obj)
 
+                if attribute.name in add_attributes:
+                    raise DuplicateException(
+                        attr_obj,
+                        add_attributes[attribute.name],
+                        "Same attribute defined twice in one entity")
+
                 add_attributes[attribute.name] = attr_obj
 
                 if attribute.default is not None:

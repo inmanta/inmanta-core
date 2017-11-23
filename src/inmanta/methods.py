@@ -564,7 +564,7 @@ class NotifyMethod(Method):
     """
     __method_name__ = "notify"
 
-    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api"])
+    @protocol(operation="GET", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
     def notify_change(self, id: uuid.UUID, update: bool=True):
         """
             Notify the server that the repository of the environment with the given id, has changed.
@@ -604,9 +604,11 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
-    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={}):
+    def set_param(self, tid: uuid.UUID, id: str, source: str, value: str, resource_id: str=None, metadata: dict={},
+                  recompile: bool=False):
         """
-            Set a parameter on the server
+            Set a parameter on the server. If the parameter is an tracked unknown, it will trigger a recompile on the server.
+            Otherwise, if the value is changed and recompile is true, a recompile is also triggered.
 
             :param tid: The id of the environment
             :param id: The name of the parameter
@@ -614,6 +616,16 @@ class ParameterMethod(Method):
             :param source: The source of the parameter, this can be the user, agent, plugin, compiler, ...
             :param value: The value of the parameter
             :param metadata: metadata about the parameter
+            :param recompile: Whether to trigger a recompile
+        """
+
+    @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+    def delete_param(self, tid: uuid.UUID, id: str):
+        """
+            Delete a parameter on the server
+
+            :param tid: The id of the environment
+            :param id: The name of the parameter
         """
 
     @protocol(operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])

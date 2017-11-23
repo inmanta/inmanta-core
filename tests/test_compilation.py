@@ -1887,3 +1887,31 @@ a = TestC()
 
     root = scopes.get_child("__config__")
     assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
+
+
+def test_double_define(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string test
+    string? test
+    bool test
+end
+""")
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_511_index_on_default(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string a="a"
+    string b
+end
+
+index Test(a, b)
+
+implement Test using std::none
+
+Test(b="b")
+""")
+    compiler.do_compile()

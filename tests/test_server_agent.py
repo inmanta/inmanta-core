@@ -20,21 +20,24 @@ import time
 import json
 import uuid
 from threading import Condition
+from itertools import groupby
 import logging
-
+import os
+import shutil
+import subprocess
 
 from tornado import gen
+import pytest
+from _pytest.fixtures import fixture
 
-from inmanta import agent, data, const, execute
+from inmanta import agent, data, const, execute, config
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
-import pytest
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
-from _pytest.fixtures import fixture
-from itertools import groupby
+from inmanta.ast import CompilerException
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -996,6 +999,13 @@ def test_get_set_param(resource_container, client, server, io_loop):
     env_id = result.result["environment"]["id"]
 
     result = yield client.set_param(tid=env_id, id="key10", value="value10", source="user")
+    assert result.code == 200
+
+    result = yield client.get_param(tid=env_id, id="key10")
+    assert result.code == 200
+    assert result.result["parameter"]["value"] == "value10"
+
+    result = yield client.delete_param(tid=env_id, id="key10")
     assert result.code == 200
 
 
@@ -2118,3 +2128,94 @@ def test_autostart_clear_environment(io_loop, server, client, resource_container
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+
+
+@pytest.mark.gen_test
+def test_export_duplicate(resource_container, snippetcompiler):
+    """
+        The exported should provide a compilation error when a resource is defined twice in a model
+    """
+    snippetcompiler.setup_for_snippet("""
+        import test
+
+        test::Resource(key="test", value="foo")
+        test::Resource(key="test", value="bar")
+    """)
+
+    with pytest.raises(CompilerException) as exc:
+        snippetcompiler.do_export()
+
+    assert "exists more than once in the configuration model" in str(exc.value)
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_server_recompile(server, client, environment):
+    """
+        Test a recompile on the server and verify recompile triggers
+    """
+    config.Config.set("server", "auto-recompile-wait", "0")
+
+    @gen.coroutine
+    def wait_for_version(cnt):
+        # Wait until the server is no longer compiling
+        # wait for it to finish
+        code = 200
+        while code == 200:
+            compiling = yield client.is_compiling(environment)
+            code = compiling.code
+            yield gen.sleep(1)
+
+        # wait for it to appear
+        versions = yield client.list_versions(environment)
+
+        while versions.result["count"] < cnt:
+            versions = yield client.list_versions(environment)
+
+        return versions.result
+
+    project_dir = os.path.join(server._server_storage["environments"], str(environment))
+    project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
+
+    shutil.copytree(project_source, project_dir)
+    subprocess.check_output(["git", "init"], cwd=project_dir)
+    subprocess.check_output(["git", "add", "*"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.name", "Unit"], cwd=project_dir)
+    subprocess.check_output(["git", "config", "user.email", "unit@test.example"], cwd=project_dir)
+    subprocess.check_output(["git", "commit", "-m", "unit test"], cwd=project_dir)
+
+    # add main.cf
+    with open(os.path.join(project_dir, "main.cf"), "w") as fd:
+        fd.write("""
+        host = std::Host(name="test", os=std::linux)
+        std::ConfigFile(host=host, path="/etc/motd", content="1234")
+""")
+
+    # request a compile
+    yield client.notify_change(environment)
+
+    versions = yield wait_for_version(1)
+    assert versions["versions"][0]["total"] == 1
+
+    # get compile reports
+    reports = yield client.get_reports(environment)
+    assert len(reports.result["reports"]) == 1
+
+    # set a parameter without requesting a recompile
+    yield client.set_param(environment, id="param1", value="test", source="plugin")
+    versions = yield wait_for_version(1)
+    assert versions["count"] == 1
+
+    # set a new parameter and request a recompile
+    yield client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    versions = yield wait_for_version(2)
+    assert versions["count"] == 2
+
+    # update the parameter to the same value -> no compile
+    yield client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    versions = yield wait_for_version(2)
+    assert versions["count"] == 2
+
+    # update the parameter to a new value
+    yield client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
+    versions = yield wait_for_version(3)
+    assert versions["count"] == 3

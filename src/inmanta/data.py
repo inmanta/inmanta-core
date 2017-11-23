@@ -500,6 +500,7 @@ AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AGENT_AUTH = "agent_auth"
+SERVER_COMPILE = "server_compile"
 
 
 class Setting(object):
@@ -564,6 +565,8 @@ class Environment(BaseDocument):
                                      validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
                                      "is either an empty string or an agent map string.", agent_restart=True),
+        SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
+                                validator=convert_boolean, doc="Allow the server to compile the configuration model."),
     }
 
     __indexes__ = [

@@ -1,0 +1,5 @@
+author: Inmanta <code@inmanta.com>
+license: Apache 2.0
+name: std
+version: 0.18.0
+compiler_version: 2017.3

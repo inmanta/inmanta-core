@@ -1,0 +1,354 @@
+"""
+    Copyright 2017 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+"""
+typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
+
+implementation none for Entity:
+    """
+        An empty implementation that can be used as a safe default.
+    """
+end
+
+entity Resource:
+    """
+        A base entity for resources that can be exported. This type add specific attributes
+        that are common for most handlers.
+        It is not required to inherit from this entity at the moment but highly recommended for documentation purposes.
+
+        :attr send_event: This controls wether a resource should send its deploy state to the resources in its provides.
+    """
+    bool send_event=false
+end
+
+entity PurgeableResource extends Resource:
+    """
+        A base class for a resource that can be purged and can be purged by Inmanta whenever the resource is no
+        longer managed.
+
+        :attr purged: Set whether this resource should exist or not.
+        :attr purge_on_delete: Purge the resource when it is deleted from the configuration model.
+                               When this attribute is true, the server will include a resource with
+                               purged=true when this resource is no longer included in the
+                               configuration model.
+    """
+    bool purged=false
+    bool purge_on_delete=true
+end
+
+entity ManagedResource extends Resource:
+    """
+        A base class for a resource that can be ignored/unmanaged by Inmanta.
+
+        :attr managed: This determines whether this resource is managed by Inmanta or not.
+    """
+    bool managed=true
+end
+
+entity ManagedDevice:
+    """
+        This interface represents all devices that can be managed
+    """
+    hoststring  name
+end
+
+entity Host extends ManagedDevice:
+    """
+        A host models a server of computer in the managed infrastructure
+    """
+end
+
+implement Host using hostDefaults
+
+index Host(name)
+
+typedef hoststring as string matching /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/
+
+entity Reload extends Resource:
+    """
+        An entity to make the (old) reload mechanism compatible with the event mechanism
+
+        :attr reload: If a service requires this file, reload or restart the service when this file
+                      changes.
+    """
+    bool reload=false
+    bool send_event=undef
+end
+
+implementation reload for Reload:
+    self.send_event=self.reload
+end
+
+entity File extends Reload, PurgeableResource:
+    """
+        This represents a file on the filesystem
+
+        :attr path: The path of the file
+        :attr mode: The permissions of the file
+        :attr owner: The owner of the file
+        :attr group: The group of the file
+        :attr content: The file contents
+    """
+    string path
+    number mode
+    string owner
+    string group
+    string content
+    bool purge_on_delete=false
+    bool send_event=undef
+    string content_seperator="\n"
+end
+
+implement File using reload, fileHost
+
+entity Content:
+    """
+        A content block as a prefix or suffix to a file. This blocks are only merged with the content at export time. This
+        is an advanced pattern that can be used to speed up the compilation in very specific use cases.
+
+        :attr sorting_key: The key to use to sort the content blocks in the same list. When this attribute is not set
+                           value is used as sorting key.
+        :attr value: The value to prepend or append
+    """
+    string? sorting_key=null
+    string value
+end
+
+implement Content using std::none
+
+File.prefix_content [0:] -- Content
+File.suffix_content [0:] -- Content
+
+entity ConfigFile extends File:
+    """
+        A file with often used defaults for configuration files.
+    """
+    number mode=644
+    string owner="root"
+    string group="root"
+end
+
+implement ConfigFile using reload, fileHost
+
+File.host [1] -- Host.files [0:]
+
+index File(host, path)
+
+implementation fileHost for File:
+    self.requires = self.host.requires
+end
+
+# the state of a service
+typedef service_state as string matching self == "running" or self == "stopped"
+
+# a service that is managed
+entity Service extends Reload:
+    """
+        Manage a service on a host.
+
+        :attr name: The name of the service to manage
+        :attr state: The desired state of the service. Valid values are 'running' or 'stopped'
+        :attr onboot: Should the service start on boot.
+    """
+    string name
+    service_state state
+    bool onboot
+end
+
+implement Service using reload, serviceHost
+
+Service.host [1] -- Host.services [0:]
+
+index Service(host, name)
+
+implementation serviceHost for Service:
+    self.requires = self.host.requires
+end
+
+# the state of a package
+typedef package_state as string matching self == "installed" or self == "removed" or self == "latest"
+
+entity Package extends Reload:
+    """
+        A software package installed on a managed device.
+
+        :attr name: The name of the package to manage
+        :attr state: The state of the package. Valid values are 'installed', 'removed' or 'latest'.
+                     latest will upgrade the package when an update is available.
+    """
+    string name
+    package_state state
+end
+
+implement Package using reload, pkgHost
+
+Host host [1] -- [0:] Package packages
+
+index Package(host, name)
+
+implementation pkgHost for Package:
+    self.requires = self.host.requires
+end
+
+# a directory
+entity Directory extends Reload, PurgeableResource:
+    """
+        A directory on the filesystem
+    """
+    string path
+    number mode
+    string owner
+    string group
+    bool purge_on_delete=false
+end
+
+implement Directory using reload, dirHost
+
+entity DefaultDirectory extends Directory:
+    """
+        A directory that is world readable. It is also writable for its owner root.
+    """
+    number mode=755
+    string owner="root"
+    string group="root"
+end
+
+implement DefaultDirectory using reload, dirHost
+
+Host host [1] -- [0:] Directory directories
+
+index Directory(host, path)
+
+implementation dirHost for Directory:
+    self.requires = self.host.requires
+end
+
+# symlink
+entity Symlink extends Reload, PurgeableResource:
+    """
+        A symbolic link on the filesystem
+    """
+    string source
+    string target
+    bool purge_on_delete=false
+    bool send_event=undef
+end
+
+implement Symlink using std::reload, symHost
+
+Host host [1] -- [0:] Symlink symlinks
+
+implementation symHost for Symlink:
+    self.requires = self.host.requires
+end
+
+# define operating systems
+unix = OS(name = "unix")
+windows = OS(name = "windows")
+
+linux = OS(name = "linux", family = unix)
+solaris = OS(name = "solaris", family = unix)
+freebsd = OS(name = "freebsd", family = unix)
+openbsd = OS(name = "openbsd", family = unix)
+macos = OS(name = "macos", family = unix)
+
+entity OS:
+    """
+        Defines an operating system
+    """
+    string name
+    number version = 0
+end
+
+implement OS using std::none
+
+Host.os [1] -- OS
+"""
+    Each host has an OS defined. This values is mostly used to select implementation in the
+    where clause of an `implement` statement. The :py:func:`familyof` plugin can be used
+    for this.
+"""
+
+OS member [0:] -- [0:1] OS family
+
+entity HostConfig:
+    """
+        This represents generic configuration for a host. This entity is used
+        by other modules to include their host specific configuration. This
+        should be instantiated in the implementation of std::Host or subclasses.
+        This host specific configuration cannot be included by just implementing
+        std::Host because possibly subclasses of std::Host are instantiated and
+        implementations are not inherited.
+    """
+end
+
+Host host [1] -- [1] HostConfig host_config
+implement HostConfig using std::none
+
+implementation hostDefaults for std::Host:
+    HostConfig(host=self)
+end
+
+entity State:
+    """
+        Baseclass for entities that contain state
+
+        :attr allow_snapshot: Allow a snapshot of the state contained in this entity
+        :attr allow_restore: Allow a restore of the state containted in this entity
+        :attr state_id: The id to identify the state. If left empty, the resource id is used.
+                        (This can be used for cross environment/model restores)
+    """
+    bool allow_snapshot=true
+    bool allow_restore=true
+    string state_id=""
+end
+
+entity HostGroup:
+    """
+        This entity represents a group of hosts. For example a cluster of machines.
+    """
+    string name
+end
+
+std::Host hosts [0:] -- [0:] HostGroup host_groups
+
+implement HostGroup using std::none
+
+entity AgentConfig extends PurgeableResource:
+    """
+        Control agent settings. Currently these settings are only applied to autostarted agents
+
+        :attr autostart: When this flag is set to true, the resource will be exported and set the agent map
+                          on the orchestrator. When false (or not set), this instance is ignore but can be used to generate
+                          agent configuration files.
+        :attr agentname: The name of the agent to which this config applies.
+        :attr agent: If a resource is exported, agent manages the resource.
+        :attr uri: The uri that indicates how the agent should execute. Currently the following uri are supported:
+                   * "" An empty string. This is the same as running it locally
+                   * local: Manage resource locally
+                   * ssh://[user@]hostname[:port] Login using ssh. When user is left out, root is assumed. For port, the system
+                     default is used.
+                   * host The actual hostname or ip to use. Altough this is not a valid host in uri form it is supported.
+    """
+    bool? autostart
+    string agentname
+    string agent="internal"
+    string uri="local:"
+end
+
+implement AgentConfig using std::none
+
+index AgentConfig(agentname)
