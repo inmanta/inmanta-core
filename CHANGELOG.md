@@ -1,3 +1,17 @@
+v 2017.4 (2017-11-23)
+Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
+- added keyword parents, and implemented implementation inheritance (#504)
+- set_param recompile parameter
+- Raise an exception when duplicate resources are exported (#513)
+- Added fix for index issue (#512)
+- Allow to configure server compile per environment
+- Add remove parameter API call
+- Attributes and lists now accept trailing comma (#502)
+- Added check for attribute redefinition within one entity (#503)
+- Parse bool values in the rest api
+
 v 2017.3 (2017-10-27)
 Changes in this release:
 - Various bugfixes and performance enhancements
