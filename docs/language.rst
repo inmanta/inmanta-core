@@ -270,7 +270,7 @@ For example
 Relation multiplicities are enforced by the compiler. If they are violated a compilation error
 is issued.
 
-.. note:: 
+.. note::
 
     In previous version another relation syntax was used that was less natural to read and allowed only bidirectional relations. The relation above was defined as ``File file [1:] -- [1] Service service``
     This synax is deprecated but still widely used in many modules.
@@ -318,9 +318,8 @@ Values can be assigned to the remaining properties as if they are variables. To 
 Refinements
 ===========
 
-Entities define what should be deployed.
-Entities can either be deployed directly (such as files and packages) or they can be refined.
-Refinement expands an abstract entity into one or more more concrete entities.
+Entities define what should be deployed. Entities can either be deployed directly (such as files and packages) or they can be
+refined. Refinement expands an abstract entity into one or more more concrete entities.
 
 For example, :inmanta:entity:`apache::Server` is refined as follows
 
@@ -344,14 +343,14 @@ For example, :inmanta:entity:`apache::Server` is refined as follows
 For each entity one or more refinements can be defined with the ``implementation`` statement.
 Implementation are connected to entities using the ``implement`` statement.
 
-When an instance of an entity is constructed, the runtime searches for refinements.
-One or more refinements are selected based on the associated conditions. When no implementation is found, an exception is raised.
-Entities for which no implementation is required are implemented using :inmanta:entity:`std::none`.
+When an instance of an entity is constructed, the runtime searches for refinements. One or more refinements are selected based
+on the associated conditions. When no implementation is found, an exception is raised. Entities for which no implementation is
+required are implemented using :inmanta:entity:`std::none`.
 
 In the implementation block, the entity instance itself can be accessed through the variable self.
 
-``implement`` statements are not inherited, unless a statement of the form ``implement Blah using parents`` is used.
-When it is used, all implementations of the direct parents will be inherited. 
+``implement`` statements are not inherited, unless a statement of the form ``implement ServerX using parents`` is used.
+When it is used, all implementations of the direct parents will be inherited, including the once with a where clause.
 
 
 The syntax for implements and implementation is:
@@ -359,7 +358,7 @@ The syntax for implements and implementation is:
 .. code-block:: antlr
 
     implementation: 'implementation' ID 'for' class ':' statement* 'end';
-    implement: 'implement' class 'using' ID ('when' condition)? 
+    implement: 'implement' class 'using' ID ('when' condition)?
     		 | 'implement' class 'using' 'parents';
 
 
@@ -388,7 +387,7 @@ Explicit index lookup is performed with a query statement
 .. code-block:: inmanta
 
     testhost = Host[name="test"]
-    
+
 For indices on relations (instead of attributes) an alternative syntax can be used
 
 .. code-block:: inmanta
@@ -396,11 +395,11 @@ For indices on relations (instead of attributes) an alternative syntax can be us
     entity File:
         string path
     end
-	
+
     Host.files [0:] -- File.host [1]
 
     index File(host, path)
-	
+
     a = File[host=vm1, path="/etc/passwd"]  # normal index lookup
     b = vm1.files[path="/etc/passwd"]  # selector style index lookup
     # a == b
