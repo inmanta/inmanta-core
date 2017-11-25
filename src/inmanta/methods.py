@@ -528,7 +528,7 @@ class DryRunMethod(Method):
             :param id: The version dryrun to report
         """
 
-    @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["api"])
+    @protocol(operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
     def dryrun_update(self, tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
         """
             Store dryrun results at the server
