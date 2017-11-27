@@ -1,4 +1,4 @@
-v 2017.4 (2017-11-23)
+v 2017.4 (2017-11-27)
 Changes in this release:
 - Various bugfixes and performance enhancements
 - Dependency updates
@@ -11,6 +11,7 @@ Changes in this release:
 - Attributes and lists now accept trailing comma (#502)
 - Added check for attribute redefinition within one entity (#503)
 - Parse bool values in the rest api
+- Fix bug in dryrun reporting with auth enabled
 
 v 2017.3 (2017-10-27)
 Changes in this release:
