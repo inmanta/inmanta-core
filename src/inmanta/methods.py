@@ -588,7 +588,7 @@ class ParameterMethod(Method):
     """
     __method_name__ = "parameter"
 
-    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
     def get_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Get a parameter from the server.
