@@ -220,8 +220,8 @@ def resource_container():
     return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters, waiter=waiter)
 
 
-@pytest.mark.gen_test
-def test_dryrun_and_deploy(io_loop, server, client, resource_container):
+@pytest.mark.gen_test(timeout=15)
+def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_container):
     """
         dryrun and deploy a configuration model
 
@@ -229,17 +229,18 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
         without an agent being present.
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = yield client_multi.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = yield client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+
+    yield retry_limited(lambda: len(server_multi.agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -299,27 +300,27 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
                  ]
 
     status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined}
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
-                                      unknowns=[], version_info={})
+    result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
+                                            unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
-    result = yield client.dryrun_request(env_id, version)
+    result = yield client_multi.dryrun_request(env_id, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
 
     # get the dryrun results
-    result = yield client.dryrun_list(env_id, version)
+    result = yield client_multi.dryrun_list(env_id, version)
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
     while result.result["dryruns"][0]["todo"] > 0:
-        result = yield client.dryrun_list(env_id, version)
+        result = yield client_multi.dryrun_list(env_id, version)
         yield gen.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
-    result = yield client.dryrun_report(env_id, dry_run_id)
+    result = yield client_multi.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
@@ -335,18 +336,18 @@ def test_dryrun_and_deploy(io_loop, server, client, resource_container):
     assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
-    result = yield client.release_version(env_id, version, True)
+    result = yield client_multi.release_version(env_id, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 5
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_version(env_id, version)
+    result = yield client_multi.get_version(env_id, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
+        result = yield client_multi.get_version(env_id, version)
         yield gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
