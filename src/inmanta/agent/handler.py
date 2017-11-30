@@ -321,7 +321,7 @@ class ResourceHandler(object):
         self._agent = agent
 
         if io is None:
-            self._io = get_io(self._agent.remote)
+            raise Exception("Unsupported: no resource mgmt in RH")
         else:
             self._io = io
 

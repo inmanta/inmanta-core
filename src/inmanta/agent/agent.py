@@ -38,6 +38,7 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
+from execnet import multi
 
 
 LOGGER = logging.getLogger(__name__)
@@ -103,8 +104,7 @@ class ResourceAction(object):
         provider = None
 
         try:
-            provider = handler.Commander.get_provider(cache, self.scheduler.agent, self.resource)
-            provider.set_cache(cache)
+            provider = yield self.scheduler.agent.get_provider(self.resource)
         except Exception:
             if provider is not None:
                 provider.close()
@@ -345,6 +345,9 @@ class AgentInstance(object):
         self.dryrunlock = locks.Semaphore(1)
 
         # multi threading control
+        # threads to setup connections
+        self.provider_thread_pool = ThreadPoolExecutor(1)
+        # threads to work
         self.thread_pool = ThreadPoolExecutor(process.poolsize)
         self.ratelimiter = locks.Semaphore(process.poolsize)
 
@@ -364,6 +367,12 @@ class AgentInstance(object):
 
         self._getting_resources = False
         self._get_resource_timeout = 0
+
+        @gen.coroutine
+        def action():
+            LOGGER.warn(("Cache report %s: "% name  + self._cache.report()))
+
+        self.process._sched.add_action(action, 10, 0)
 
     @property
     def environment(self):
@@ -419,6 +428,12 @@ class AgentInstance(object):
                         self.name, self._get_resource_timeout - time.time(), self._get_resource_duration)
             return False
         return True
+
+    @gen.coroutine
+    def get_provider(self, resource):
+        provider = yield self.provider_thread_pool.submit(handler.Commander.get_provider, self._cache, self, resource)
+        provider.set_cache(self._cache)
+        return provider
 
     @gen.coroutine
     def get_latest_version_for_agent(self):
@@ -511,8 +526,7 @@ class AgentInstance(object):
                         LOGGER.debug("Running dryrun for %s", resource.id)
 
                         try:
-                            provider = handler.Commander.get_provider(self._cache, self, resource)
-                            provider.set_cache(self._cache)
+                            provider = yield self.get_provider(resource)
                         except Exception as e:
                             ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
                                           resource_id=str(resource.id), exception=str(e))
@@ -557,9 +571,7 @@ class AgentInstance(object):
                     data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
-                    provider = handler.Commander.get_provider(self._cache, self, resource_obj)
-                    provider.set_cache(self._cache)
-
+                    yield self.get_provider(resource_obj)
                     if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
                         yield self.get_client().update_restore(tid=self._env_id,
                                                                id=restore_id,
@@ -618,8 +630,7 @@ class AgentInstance(object):
                     data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
-                    provider = handler.Commander.get_provider(self._cache, self, resource_obj)
-                    provider.set_cache(self._cache)
+                    provider = yield self.get_provider(resource_obj)
 
                     if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
                         yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id,
@@ -698,8 +709,7 @@ class AgentInstance(object):
                         return 200
 
                     self._cache.open_version(version)
-                    provider = handler.Commander.get_provider(self._cache, self, resource_obj)
-                    provider.set_cache(self._cache)
+                    provider = yield self.get_provider(resource_obj)
                     result = yield self.thread_pool.submit(provider.check_facts, ctx, resource_obj)
                     parameters = [{"id": name, "value": value, "resource_id": resource_obj.id.resource_str(), "source": "fact"}
                                   for name, value in result.items()]
@@ -769,6 +779,11 @@ class Agent(AgentEndPoint):
                         name = name.replace("$node-name", self.node_name)
 
                     self.add_end_point_name(name)
+        @gen.coroutine
+        def action():
+            LOGGER.warn(("Connection report %d " % len(multi.default_group._gateways)))
+
+        self._sched.add_action(action, 10, 0)
 
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)
