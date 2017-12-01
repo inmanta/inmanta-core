@@ -225,7 +225,7 @@ class AgentCache(object):
                     self.addLocks[key] = lock
             with lock:
                 try:
-                    return self.find(key, **args)
+                    value = self.find(key, **args)
                 except KeyError:
                     value = function(**kwargs)
                     if cache_none or value is not None:

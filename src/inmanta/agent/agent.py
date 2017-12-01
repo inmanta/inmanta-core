@@ -571,7 +571,7 @@ class AgentInstance(object):
                     data = resource["attributes"]
                     data["id"] = resource["id"]
                     resource_obj = Resource.deserialize(data)
-                    yield self.get_provider(resource_obj)
+                    provider = yield self.get_provider(resource_obj)
                     if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
                         yield self.get_client().update_restore(tid=self._env_id,
                                                                id=restore_id,
