@@ -29,7 +29,6 @@ from tornado.ioloop import IOLoop
 from inmanta import protocol, module
 from inmanta.export import cfg_env
 from inmanta.ast import CompilerException
-from inmanta.trace import trace_start
 
 LOGGER = logging.getLogger()
 
@@ -56,7 +55,6 @@ def start_agent(options):
 
     a = agent.Agent(io_loop)
     a.start()
-    trace_start("/tmp/trace", 10)
 
     try:
         io_loop.start()

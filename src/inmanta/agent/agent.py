@@ -38,8 +38,6 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-from execnet import multi
-
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -367,12 +365,6 @@ class AgentInstance(object):
 
         self._getting_resources = False
         self._get_resource_timeout = 0
-
-        @gen.coroutine
-        def action():
-            LOGGER.warn(("Cache report %s: "% name  + self._cache.report()))
-
-        self.process._sched.add_action(action, 10, 0)
 
     @property
     def environment(self):
@@ -779,11 +771,6 @@ class Agent(AgentEndPoint):
                         name = name.replace("$node-name", self.node_name)
 
                     self.add_end_point_name(name)
-        @gen.coroutine
-        def action():
-            LOGGER.warn(("Connection report %d " % len(multi.default_group._gateways)))
-
-        self._sched.add_action(action, 10, 0)
 
     def add_end_point_name(self, name):
         AgentEndPoint.add_end_point_name(self, name)

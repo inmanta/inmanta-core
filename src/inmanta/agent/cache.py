@@ -192,7 +192,8 @@ class AgentCache(object):
         key = '__'.join(key)
         return self._get(key).value
 
-    def get_or_else(self, key, function, for_version=True, timeout=5000, ignore=set(), cache_none=True, call_on_delete=None, **kwargs):
+    def get_or_else(self, key, function, for_version=True, timeout=5000, ignore=set(),
+                    cache_none=True, call_on_delete=None, **kwargs):
         """
             Attempt to find a value in the cache.
 
@@ -235,4 +236,4 @@ class AgentCache(object):
             return value
 
     def report(self):
-        return "\n".join([str(k)+" " + str(v) for k,v in self.counterforVersion.items()])
+        return "\n".join([str(k) + " " + str(v) for k, v in self.counterforVersion.items()])

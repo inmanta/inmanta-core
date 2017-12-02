@@ -119,54 +119,52 @@ class CacheTests(unittest.TestCase):
             pass
 
     def test_multi_threaded(self):
-        class Spy:
-            
+        class Spy(object):
+
             def __init__(self):
                 self.created = 0
                 self.deleted = 0
                 self.lock = Lock()
-        
+
             def create(self):
                 with self.lock:
                     self.created += 1
                 return self
-                
-            
+
             def delete(self):
-                self.deleted +=1
-        
-            
-        
+                self.deleted += 1
+
         cache = AgentCache()
         version = 200
 
         cache.open_version(version)
-        
+
         alpha = Spy()
         beta = Spy()
         alpha.lock.acquire()
-        
-        t1 = Thread(target=lambda:cache.get_or_else("test", lambda version:alpha.create(), version=version, call_on_delete= lambda x: x.delete()))
-        t2 = Thread(target=lambda:cache.get_or_else("test", lambda version:beta.create(), version=version, call_on_delete= lambda x: x.delete()))
-        
+
+        t1 = Thread(target=lambda: cache.get_or_else(
+            "test", lambda version: alpha.create(), version=version, call_on_delete=lambda x: x.delete()))
+        t2 = Thread(target=lambda: cache.get_or_else(
+            "test", lambda version: beta.create(), version=version, call_on_delete=lambda x: x.delete()))
+
         t1.start()
         t2.start()
-        
+
         alpha.lock.release()
-        
+
         t1.join()
         t2.join()
-        
+
         assert alpha.created + beta.created == 1
         assert alpha.deleted == 0
         assert beta.deleted == 0
-        
+
         cache.close_version(version)
-        
+
         assert alpha.created + beta.created == 1
         assert alpha.deleted == alpha.created
         assert beta.deleted == beta.created
-        
 
     def test_timout_and_version(self):
         cache = AgentCache()

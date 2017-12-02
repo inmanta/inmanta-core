@@ -135,10 +135,10 @@ def inmanta_config():
 
 @pytest.fixture(scope="function")
 def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
-    #fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
-    #causes handler failure
-    IOLoop._instance=io_loop
-    
+    # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
+    # causes handler failure
+    IOLoop._instance = io_loop
+
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
