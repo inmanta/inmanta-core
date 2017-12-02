@@ -40,6 +40,7 @@ import inmanta.main
 from concurrent.futures.thread import ThreadPoolExecutor
 from tornado import gen
 import re
+from tornado.ioloop import IOLoop
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -134,6 +135,10 @@ def inmanta_config():
 
 @pytest.fixture(scope="function")
 def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
+    #fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
+    #causes handler failure
+    IOLoop._instance=io_loop
+    
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
@@ -156,6 +161,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 
     yield server
 
+    del IOLoop._instance
     server.stop()
     shutil.rmtree(state_dir)
 
