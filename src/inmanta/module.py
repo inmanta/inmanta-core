@@ -433,9 +433,6 @@ class Project(ModuleLike):
             if not os.path.exists(self.downloadpath):
                 os.mkdir(self.downloadpath)
 
-        self.freeze_file = os.path.join(path, "module.version")
-        self._freeze_versions = self._load_freeze(self.freeze_file)
-
         self.virtualenv = env.VirtualEnv(os.path.join(path, ".env"))
 
         self.loaded = False
@@ -486,16 +483,6 @@ class Project(ModuleLike):
         cls._project = project
         os.chdir(project._path)
         plugins.PluginMeta.clear()
-
-    def _load_freeze(self, freeze_file: str) -> dict:
-        """
-            Load the versions defined in the freeze file
-        """
-        if not os.path.exists(freeze_file):
-            return {}
-
-        with open(freeze_file, "r") as fd:
-            return yaml.load(fd)
 
     def load(self):
         if not self.loaded:
@@ -1127,7 +1114,6 @@ class ModuleTool(object):
         subparser.add_parser("status", help="Run a git status on all modules and report")
         subparser.add_parser("push", help="Run a git push on all modules and report")
         # not currently working
-        # subparser.add_parser("freeze", help="Freeze the version of all modules")
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
         validate = subparser.add_parser(
             "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model")
@@ -1312,49 +1298,6 @@ version: 0.0.1dev0""" % {"name": name})
         project.load()
         for mod in Project.get().sorted_modules():
             mod.push()
-
-    def freeze(self, create_file=True):
-        """
-            Freeze the version of all modules
-        """
-        project = Project.get()
-        if os.path.exists(project.freeze_file) and create_file:
-            print("A module.version file already exists, overwrite this file? y/n")
-            while True:
-                value = sys.stdin.readline().strip()
-                if value != "y" and value != "n":
-                    print("Please answer with y or n")
-                else:
-                    if value == "n":
-                        return
-
-                    break
-
-        file_content = {}
-
-        for mod in Project.get().sorted_modules():
-            version = str(mod.get_version())
-            modc = {'version': version}
-
-            repo = mod.get_scm_url()
-            tag = mod.get_scm_version()
-
-            if repo is not None:
-                modc["repo"] = repo
-                modc["hash"] = tag
-
-            branch = mod.get_scm_branch()
-
-            if branch is not None:
-                modc["branch"] = branch
-
-            file_content[mod._meta["name"]] = modc
-
-        if create_file:
-            with open(project.freeze_file, "w+") as fd:
-                fd.write(yaml.dump(file_content))
-
-        return file_content
 
     def verify(self):
         """
