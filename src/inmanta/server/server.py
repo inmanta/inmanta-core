@@ -1301,6 +1301,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 204
 
+    @protocol.handle(methods.NotifyMethod.notify_change_get, env="id")
+    @gen.coroutine
+    def notify_change_get(self, env, update):
+        result = yield self.notify_change(env, update, {})
+        return result
+
     @protocol.handle(methods.NotifyMethod.notify_change, env="id")
     @gen.coroutine
     def notify_change(self, env, update, metadata):
@@ -1665,9 +1671,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.Decommision.decomission_environment, env="id")
     @gen.coroutine
-    def decomission_environment(self, env):
+    def decomission_environment(self, env, metadata):
         version = int(time.time())
-        result = yield self.put_version(env, version, [], {}, [], {})
+        if metadata is None:
+            metadata = {
+                "message": "Decommission of environment",
+                "type": "api"
+            }
+        result = yield self.put_version(env, version, [], {}, [], {"export_metadata": metadata})
         return result, {"version": version}
 
     @protocol.handle(methods.Decommision.clear_environment, env="id")
