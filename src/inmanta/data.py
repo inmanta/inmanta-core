@@ -1328,12 +1328,15 @@ class ConfigurationModel(BaseDocument):
     """
         A specific version of the configuration model.
 
-        :param version The version of the configuration model, represented by a unix timestamp.
-        :param environment The environment this configuration model is defined in
-        :param date The date this configuration model was created
-        :param released Is this model released and available for deployment?
-        :param deployed Is this model deployed?
-        :param result The result of the deployment. Success or error.
+        :param version: The version of the configuration model, represented by a unix timestamp.
+        :param environment: The environment this configuration model is defined in
+        :param date: The date this configuration model was created
+        :param released: Is this model released and available for deployment?
+        :param deployed: Is this model deployed?
+        :param result: The result of the deployment. Success or error.
+        :param status: The deployment status of all included resources
+        :param version_info: Version metadata
+        :param total: The total number of resources
     """
     version = Field(field_type=int, required=True)
     environment = Field(field_type=uuid.UUID, required=True)

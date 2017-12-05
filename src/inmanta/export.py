@@ -21,6 +21,7 @@ import logging
 import os
 import time
 import base64
+from typing import Dict, List
 
 from inmanta import protocol, const
 from inmanta.agent.handler import Commander
@@ -219,7 +220,7 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def run(self, types, scopes, no_commit=False, include_status=False):
+    def run(self, types, scopes, metadata={}, no_commit=False, include_status=False):
         """
         Run the export functions
         """
@@ -250,7 +251,7 @@ class Exporter(object):
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
-            self.commit_resources(self._version, resources)
+            self.commit_resources(self._version, resources, metadata)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
@@ -310,7 +311,7 @@ class Exporter(object):
         self._resources[resource.id] = resource
         self._resource_to_host[resource.id] = resource.id.agent_name
 
-    def resources_to_list(self):
+    def resources_to_list(self) -> List[Dict[str, str]]:
         """
         Convert the resource list to a json representation
         @return: A json string
@@ -360,7 +361,8 @@ class Exporter(object):
 
         self.run_sync(call)
 
-    def commit_resources(self, version, resources):
+    def commit_resources(self, version: int, resources: List[Dict[str, str]],
+                         metadata: Dict[str, str]) -> None:
         """
             Commit the entire list of resource to the configurations server.
         """
@@ -403,15 +405,7 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {}
-        """
-        "modules": ModuleTool().freeze(create_file=False),
-                        "project": {"repo": project.get_scm_url(),
-                                    "branch": project.get_scm_branch(),
-                                    "hash": project.get_scm_version()
-                                    }
-                        }
-        """
+        version_info = {"export_metadata": metadata}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")

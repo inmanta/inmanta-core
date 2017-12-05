@@ -565,12 +565,13 @@ class NotifyMethod(Method):
     __method_name__ = "notify"
 
     @protocol(operation="GET", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
-    def notify_change(self, id: uuid.UUID, update: bool=True):
+    def notify_change(self, id: uuid.UUID, update: bool=True, metadata: dict={}):
         """
             Notify the server that the repository of the environment with the given id, has changed.
 
             :param id: The id of the environment
             :param update: Update the model code and modules. Default value is true
+            :param metadata: The metadata that indicates the source of the compilation trigger.
         """
 
     @protocol(operation="HEAD", id=True, client_types=["api"])
@@ -620,12 +621,13 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
-    def delete_param(self, tid: uuid.UUID, id: str):
+    def delete_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Delete a parameter on the server
 
             :param tid: The id of the environment
             :param id: The name of the parameter
+            :param resource_id: The resource id of the parameter
         """
 
     @protocol(operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
