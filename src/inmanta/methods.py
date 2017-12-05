@@ -621,12 +621,13 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
-    def delete_param(self, tid: uuid.UUID, id: str):
+    def delete_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Delete a parameter on the server
 
             :param tid: The id of the environment
             :param id: The name of the parameter
+            :param resource_id: The resource id of the parameter
         """
 
     @protocol(operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])

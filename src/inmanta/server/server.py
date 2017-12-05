@@ -354,9 +354,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.ParameterMethod.delete_param, env="tid", parameter_name="id")
     @gen.coroutine
-    def delete_param(self, env, parameter_name):
-        # TODO: add resource_id!!
-        params = yield data.Parameter.get_list(environment=env.id, name=parameter_name)
+    def delete_param(self, env, parameter_name, resource_id):
+        if resource_id is None:
+            params = yield data.Parameter.get_list(environment=env.id, name=parameter_name)
+        else:
+            params = yield data.Parameter.get_list(environment=env.id, name=parameter_name, resource_id=resource_id)
 
         if len(params) == 0:
             return 404
@@ -1303,6 +1305,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def notify_change(self, env, update, metadata):
         LOGGER.info("Received change notification for environment %s", env.id)
+        if "type" not in metadata:
+            metadata["type"] = "api"
+
+        if "message" not in metadata:
+            metadata["message"] = "Recompile trigger through API call"
+
         yield self._async_recompile(env, update, metadata=metadata)
 
         return 200

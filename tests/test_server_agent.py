@@ -2196,6 +2196,7 @@ def test_server_recompile(server, client, environment):
 
     versions = yield wait_for_version(1)
     assert versions["versions"][0]["total"] == 1
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
     # get compile reports
     reports = yield client.get_reports(environment)
@@ -2209,6 +2210,7 @@ def test_server_recompile(server, client, environment):
     # set a new parameter and request a recompile
     yield client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
     versions = yield wait_for_version(2)
+    assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 2
 
     # update the parameter to the same value -> no compile
