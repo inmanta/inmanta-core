@@ -522,7 +522,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         }
         yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
 
-
         return 200
 
     @protocol.handle(methods.FileMethod.upload_file, file_hash="id")
