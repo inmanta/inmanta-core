@@ -565,12 +565,13 @@ class NotifyMethod(Method):
     __method_name__ = "notify"
 
     @protocol(operation="GET", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
-    def notify_change(self, id: uuid.UUID, update: bool=True):
+    def notify_change(self, id: uuid.UUID, update: bool=True, metadata: dict={}):
         """
             Notify the server that the repository of the environment with the given id, has changed.
 
             :param id: The id of the environment
             :param update: Update the model code and modules. Default value is true
+            :param metadata: The metadata that indicates the source of the compilation trigger.
         """
 
     @protocol(operation="HEAD", id=True, client_types=["api"])

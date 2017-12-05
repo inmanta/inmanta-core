@@ -44,6 +44,7 @@ from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
+import json
 
 
 LOGGER = logging.getLogger(__name__)
@@ -311,7 +312,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
         result = yield self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
         if result:
-            yield self._async_recompile(env, False, opt.server_wait_after_param.get())
+            compile_metadata = {
+                "message": "Recompile model because one or more parameters were updated",
+                "type": "param",
+                "params": [(param_id, resource_id)],
+            }
+            yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=compile_metadata)
 
         if resource_id is None:
             resource_id = ""
@@ -324,6 +330,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def set_parameters(self, env, parameters):
         recompile = False
+        compile_metadata = {
+            "message": "Recompile model because one or more parameters were updated",
+            "type": "param",
+            "params": []
+        }
         for param in parameters:
             name = param["id"]
             source = param["source"]
@@ -334,15 +345,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             result = yield self._update_param(env, name, value, source, resource_id, metadata)
             if result:
                 recompile = True
+                compile_metadata["params"].append((name, resource_id))
 
         if recompile:
-            yield self._async_recompile(env, False, opt.server_wait_after_param.get())
+            yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=compile_metadata)
 
         return 200
 
     @protocol.handle(methods.ParameterMethod.delete_param, env="tid", parameter_name="id")
     @gen.coroutine
     def delete_param(self, env, parameter_name):
+        # TODO: add resource_id!!
         params = yield data.Parameter.get_list(environment=env.id, name=parameter_name)
 
         if len(params) == 0:
@@ -350,7 +363,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         param = params[0]
         yield param.delete()
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get())
+        metadata = {
+            "message": "Recompile model because one or more parameters were deleted",
+            "type": "param",
+            "params": [(param.name, param.resource_id)]
+        }
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
 
         return 200
 
@@ -448,7 +466,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         yield record.update()
 
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get())
+        metadata = {
+            "message": "Recompile model because a form record was updated",
+            "type": "form",
+            "records": [record_id],
+            "form": form
+        }
+
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
         return 200, {"record": record}
 
     @protocol.handle(methods.FormRecords.create_record, env="tid")
@@ -473,7 +498,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
         yield record.insert()
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get())
+        metadata = {
+            "message": "Recompile model because a form record was inserted",
+            "type": "form",
+            "records": [record.id],
+            "form": form
+        }
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
 
         return 200, {"record": record}
 
@@ -482,6 +513,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     def delete_record(self, env, record_id):
         record = yield data.FormRecord.get_by_id(record_id)
         yield record.delete()
+
+        metadata = {
+            "message": "Recompile model because a form record was removed",
+            "type": "form",
+            "records": [record.id],
+            "form": record.form
+        }
+        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
+
 
         return 200
 
@@ -1210,7 +1250,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         setting = env._settings[key]
         if setting.recompile:
             LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
-            yield self._async_recompile(env, setting.update)
+            metadata = {
+                "message": "Recompile for modified setting",
+                "type": "setting",
+                "setting": key
+            }
+            yield self._async_recompile(env, setting.update, metadata=metadata)
 
         if setting.agent_restart:
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
@@ -1257,14 +1302,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.NotifyMethod.notify_change, env="id")
     @gen.coroutine
-    def notify_change(self, env, update):
+    def notify_change(self, env, update, metadata):
         LOGGER.info("Received change notification for environment %s", env.id)
-        yield self._async_recompile(env, update)
+        yield self._async_recompile(env, update, metadata=metadata)
 
         return 200
 
     @gen.coroutine
-    def _async_recompile(self, env, update_repo, wait=0):
+    def _async_recompile(self, env, update_repo, wait=0, metadata={}):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
@@ -1286,7 +1331,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
             self._recompiles[env.id] = self
-            self._io_loop.add_callback(self._recompile_environment, env.id, update_repo, wait)
+            self._io_loop.add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
 
@@ -1314,7 +1359,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             err.close()
 
     @gen.coroutine
-    def _recompile_environment(self, environment_id, update_repo=False, wait=0):
+    def _recompile_environment(self, environment_id, update_repo=False, wait=0, metadata={}):
         """
             Recompile an environment
         """
@@ -1375,7 +1420,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
-                                  "--server_port", opt.transport_port.get()]
+                                  "--server_port", opt.transport_port.get(), "--metadata", json.dumps(metadata)]
             if config.Config.get("server", "auth", False):
                 token = protocol.encode_token(["compiler", "api"], str(environment_id))
                 cmd.append("--token")

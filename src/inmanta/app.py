@@ -20,6 +20,9 @@ from argparse import ArgumentParser
 import logging
 import sys
 import time
+import json
+import os
+import socket
 
 import colorlog
 from inmanta.command import command, Commander
@@ -185,6 +188,9 @@ def export_parser_config(parser):
     parser.add_argument("-X", "--extended-errors", dest="errors",
                         help="Show stack traces for compile errors", action="store_true", default=False)
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    parser.add_argument("--metadata", dest="metadata", help="JSON metadata why this compile happened. If a non-json string is "
+                        "passed it is used as the 'message' attribute in the metadata.",
+                        default=None)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -207,6 +213,24 @@ def export(options):
     if options.ca_cert is not None:
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
+    # try to parse the metadata as json. If a normal string, create json for it.
+    if options.metadata is not None and len(options.metadata) > 0:
+        try:
+            metadata = json.loads(options.metadata)
+        except json.decoder.JSONDecodeError:
+            metadata = {"message": options.metadata}
+    else:
+        metadata = {"message": "Manual compile on the CLI by user"}
+
+    if "cli-user" not in metadata:
+        metadata["cli-user"] = os.getlogin()
+
+    if "hostname" not in metadata:
+        metadata["hostname"] = socket.gethostname()
+
+    if "type" not in metadata:
+        metadata["type"] = "manual"
+
     module.Project.get(options.main_file)
 
     from inmanta.export import Exporter  # noqa: H307
@@ -219,7 +243,7 @@ def export(options):
         types, scopes = (None, None)
 
     export = Exporter(options)
-    version, _ = export.run(types, scopes)
+    version, _ = export.run(types, scopes, metadata=metadata)
 
     if exp is not None:
         if not options.errors:
