@@ -22,6 +22,7 @@ import sys
 import time
 import json
 import os
+import pwd
 import socket
 
 import colorlog
@@ -223,7 +224,7 @@ def export(options):
         metadata = {"message": "Manual compile on the CLI by user"}
 
     if "cli-user" not in metadata:
-        metadata["cli-user"] = os.getlogin()
+        metadata["cli-user"] = pwd.getpwuid(os.geteuid()).pw_name
 
     if "hostname" not in metadata:
         metadata["hostname"] = socket.gethostname()
