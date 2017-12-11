@@ -860,6 +860,10 @@ class Report(BaseDocument):
 
     compile = Field(field_type=uuid.UUID)
 
+    __indexes__ = [
+        dict(keys=[("compile", pymongo.ASCENDING)])
+    ]
+
 
 class Compile(BaseDocument):
     """
@@ -873,6 +877,10 @@ class Compile(BaseDocument):
     environment = Field(field_type=uuid.UUID, required=True)
     started = Field(field_type=datetime.datetime)
     completed = Field(field_type=datetime.datetime)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("started", pymongo.ASCENDING)])
+    ]
 
     @classmethod
     @gen.coroutine
@@ -1459,6 +1467,10 @@ class Code(BaseDocument):
     resource = Field(field_type=str, required=True)
     version = Field(field_type=int, required=True)
     sources = Field(field_type=dict)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING), ("resource", pymongo.ASCENDING)])
+    ]
 
     @classmethod
     @gen.coroutine
