@@ -471,7 +471,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         metadata = {
             "message": "Recompile model because a form record was updated",
             "type": "form",
-            "records": [record_id],
+            "records": [str(record_id)],
             "form": form
         }
 
@@ -503,7 +503,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         metadata = {
             "message": "Recompile model because a form record was inserted",
             "type": "form",
-            "records": [record.id],
+            "records": [str(record.id)],
             "form": form
         }
         yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
@@ -519,7 +519,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         metadata = {
             "message": "Recompile model because a form record was removed",
             "type": "form",
-            "records": [record.id],
+            "records": [str(record.id)],
             "form": record.form
         }
         yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
