@@ -632,7 +632,9 @@ class Environment(BaseDocument):
         for proc in procs:
             yield proc.delete_cascade()
 
-        yield Compile.delete_all(environment=self.id)
+        compile_list = yield Compile.get_list(environment=self.id)
+        for cl in compile_list:
+            yield cl.delete_cascade()
 
         models = yield ConfigurationModel.get_list(environment=self.id)
         for model in models:
@@ -927,6 +929,11 @@ class Compile(BaseDocument):
             dict_model["reports"].append(obj.to_dict())
 
         return dict_model
+
+    @gen.coroutine
+    def delete_cascade(self):
+        yield Report.delete_all(compile=self.id)
+        yield self.delete()
 
 
 class Form(BaseDocument):
