@@ -1461,21 +1461,19 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             yield data.Report.insert_many(stages)
             yield comp.insert()
 
-    @protocol.handle(methods.CompileReport.get_reports)
+    @protocol.handle(methods.CompileReport.get_reports, env="tid")
     @gen.coroutine
-    def get_reports(self, environment=None, start=None, end=None, limit=None):
+    def get_reports(self, env, start=None, end=None, limit=None):
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set together"}
 
         queryparts = {}
 
-        if environment is not None:
-            env = yield data.Environment.get_by_id(environment)
-            if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
+        if env is None:
+            return 404, {"message": "The given environment id does not exist!"}
 
-            queryparts["environment"] = env.id
+        queryparts["environment"] = env.id
 
         if start is not None:
             queryparts["started"] = {"$gt": dateutil.parser.parse(start)}
@@ -1486,6 +1484,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         models = yield data.Compile.get_reports(queryparts, limit, start, end)
 
         return 200, {"reports": models}
+
+    @protocol.handle(methods.CompileReport.get_report, compile_id="id")
+    @gen.coroutine
+    def get_report(self, compile_id):
+        report = yield data.Compile.get_report(compile_id)
+
+        if report is None:
+            return 404
+
+        return 200, {"report": report}
 
     @protocol.handle(methods.Snapshot.list_snapshots, env="tid")
     @gen.coroutine

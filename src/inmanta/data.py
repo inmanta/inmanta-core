@@ -393,7 +393,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Get a specific document based on its ID
 
-            :return An instance of this class with its fields filled from the database.
+            :return: An instance of this class with its fields filled from the database.
         """
         result = yield cls._coll.find_one({"_id": doc_id})
         if result is not None:
@@ -904,16 +904,29 @@ class Compile(BaseDocument):
         result = []
         for model in models:
             dict_model = model.to_dict()
-            cursor = Report._coll.find({"compile": model.id})
-
-            dict_model["reports"] = []
-            while (yield cursor.fetch_next):
-                obj = Report(from_mongo=True, **cursor.next_object())
-                dict_model["reports"].append(obj.to_dict())
-
             result.append(dict_model)
 
         return result
+
+    @classmethod
+    @gen.coroutine
+    def get_report(cls, compile_id: uuid.UUID) -> "Compile":
+        """
+            Get the compile and the associated reports from the database
+        """
+        result = yield cls.get_by_id(compile_id)
+        if result is None:
+            return None
+
+        dict_model = result.to_dict()
+        cursor = Report._coll.find({"compile": result.id})
+
+        dict_model["reports"] = []
+        while (yield cursor.fetch_next):
+            obj = Report(from_mongo=True, **cursor.next_object())
+            dict_model["reports"].append(obj.to_dict())
+
+        return dict_model
 
 
 class Form(BaseDocument):

@@ -809,15 +809,23 @@ class CompileReport(Method):
     """
     __method_name__ = "compilereport"
 
-    @protocol(operation="GET", index=True, client_types=["api"])
-    def get_reports(self, environment: uuid.UUID=None, start: str=None, end: str=None, limit: int=None):
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api"])
+    def get_reports(self, tid: uuid.UUID, start: str=None, end: str=None, limit: int=None):
         """
             Return compile reports newer then start
 
-            :param environment: The id of the environment to get a report from
+            :param tid: The id of the environment to get a report from
             :param start: Reports after start
             :param end: Reports before end
             :param limit: Maximum number of results
+        """
+
+    @protocol(operation="GET", id=True, client_types=["api"])
+    def get_report(self, id: uuid.UUID):
+        """
+            Get a compile report from the server
+
+            :param compile_id: The id of the compile and its reports to fetch.
         """
 
 
