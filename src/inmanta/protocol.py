@@ -466,7 +466,8 @@ def authorize_request(auth_data, metadata, message, config):
             ok = True
 
     if not ok:
-        raise UnauhorizedError("The authorization token does not have a valid client type for this call.")
+        raise UnauhorizedError("The authorization token does not have a valid client type for this call." +
+                               " (%s provided, %s expected" % (auth_data[ct_key], config[0]["client_types"]))
 
     return
 

@@ -48,6 +48,9 @@ class NoneValue(object):
     def __str__(self):
         return "null"
 
+    def __repr__(self):
+        return "null"
+
 
 def ensure_module(name):
     """

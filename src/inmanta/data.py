@@ -393,7 +393,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Get a specific document based on its ID
 
-            :return An instance of this class with its fields filled from the database.
+            :return: An instance of this class with its fields filled from the database.
         """
         result = yield cls._coll.find_one({"_id": doc_id})
         if result is not None:
@@ -632,7 +632,9 @@ class Environment(BaseDocument):
         for proc in procs:
             yield proc.delete_cascade()
 
-        yield Compile.delete_all(environment=self.id)
+        compile_list = yield Compile.get_list(environment=self.id)
+        for cl in compile_list:
+            yield cl.delete_cascade()
 
         models = yield ConfigurationModel.get_list(environment=self.id)
         for model in models:
@@ -860,6 +862,10 @@ class Report(BaseDocument):
 
     compile = Field(field_type=uuid.UUID)
 
+    __indexes__ = [
+        dict(keys=[("compile", pymongo.ASCENDING)])
+    ]
+
 
 class Compile(BaseDocument):
     """
@@ -873,6 +879,10 @@ class Compile(BaseDocument):
     environment = Field(field_type=uuid.UUID, required=True)
     started = Field(field_type=datetime.datetime)
     completed = Field(field_type=datetime.datetime)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("started", pymongo.ASCENDING)])
+    ]
 
     @classmethod
     @gen.coroutine
@@ -896,16 +906,34 @@ class Compile(BaseDocument):
         result = []
         for model in models:
             dict_model = model.to_dict()
-            cursor = Report._coll.find({"compile": model.id})
-
-            dict_model["reports"] = []
-            while (yield cursor.fetch_next):
-                obj = Report(from_mongo=True, **cursor.next_object())
-                dict_model["reports"].append(obj.to_dict())
-
             result.append(dict_model)
 
         return result
+
+    @classmethod
+    @gen.coroutine
+    def get_report(cls, compile_id: uuid.UUID) -> "Compile":
+        """
+            Get the compile and the associated reports from the database
+        """
+        result = yield cls.get_by_id(compile_id)
+        if result is None:
+            return None
+
+        dict_model = result.to_dict()
+        cursor = Report._coll.find({"compile": result.id})
+
+        dict_model["reports"] = []
+        while (yield cursor.fetch_next):
+            obj = Report(from_mongo=True, **cursor.next_object())
+            dict_model["reports"].append(obj.to_dict())
+
+        return dict_model
+
+    @gen.coroutine
+    def delete_cascade(self):
+        yield Report.delete_all(compile=self.id)
+        yield self.delete()
 
 
 class Form(BaseDocument):
@@ -1328,12 +1356,15 @@ class ConfigurationModel(BaseDocument):
     """
         A specific version of the configuration model.
 
-        :param version The version of the configuration model, represented by a unix timestamp.
-        :param environment The environment this configuration model is defined in
-        :param date The date this configuration model was created
-        :param released Is this model released and available for deployment?
-        :param deployed Is this model deployed?
-        :param result The result of the deployment. Success or error.
+        :param version: The version of the configuration model, represented by a unix timestamp.
+        :param environment: The environment this configuration model is defined in
+        :param date: The date this configuration model was created
+        :param released: Is this model released and available for deployment?
+        :param deployed: Is this model deployed?
+        :param result: The result of the deployment. Success or error.
+        :param status: The deployment status of all included resources
+        :param version_info: Version metadata
+        :param total: The total number of resources
     """
     version = Field(field_type=int, required=True)
     environment = Field(field_type=uuid.UUID, required=True)
@@ -1456,6 +1487,10 @@ class Code(BaseDocument):
     resource = Field(field_type=str, required=True)
     version = Field(field_type=int, required=True)
     sources = Field(field_type=dict)
+
+    __indexes__ = [
+        dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING), ("resource", pymongo.ASCENDING)])
+    ]
 
     @classmethod
     @gen.coroutine

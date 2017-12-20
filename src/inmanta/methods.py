@@ -288,7 +288,7 @@ class Decommision(Method):
     __method_name__ = "decommission"
 
     @protocol(operation="POST", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
-    def decomission_environment(self, id: uuid.UUID):
+    def decomission_environment(self, id: uuid.UUID, metadata: dict=None):
         """
             Decommision an environment. This is done by uploading an empty model to the server and let purge_on_delete handle
             removal.
@@ -565,12 +565,19 @@ class NotifyMethod(Method):
     __method_name__ = "notify"
 
     @protocol(operation="GET", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
-    def notify_change(self, id: uuid.UUID, update: bool=True):
+    def notify_change_get(self, id: uuid.UUID, update: bool=True):
+        """
+            Simplified GET version of the POST method
+        """
+
+    @protocol(operation="POST", id=True, arg_options={"id": {"getter": get_environment}}, client_types=["api"])
+    def notify_change(self, id: uuid.UUID, update: bool=True, metadata: dict={}):
         """
             Notify the server that the repository of the environment with the given id, has changed.
 
             :param id: The id of the environment
             :param update: Update the model code and modules. Default value is true
+            :param metadata: The metadata that indicates the source of the compilation trigger.
         """
 
     @protocol(operation="HEAD", id=True, client_types=["api"])
@@ -588,7 +595,7 @@ class ParameterMethod(Method):
     """
     __method_name__ = "parameter"
 
-    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+    @protocol(operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
     def get_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Get a parameter from the server.
@@ -620,12 +627,13 @@ class ParameterMethod(Method):
         """
 
     @protocol(operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
-    def delete_param(self, tid: uuid.UUID, id: str):
+    def delete_param(self, tid: uuid.UUID, id: str, resource_id: str=None):
         """
             Delete a parameter on the server
 
             :param tid: The id of the environment
             :param id: The name of the parameter
+            :param resource_id: The resource id of the parameter
         """
 
     @protocol(operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
@@ -801,15 +809,23 @@ class CompileReport(Method):
     """
     __method_name__ = "compilereport"
 
-    @protocol(operation="GET", index=True, client_types=["api"])
-    def get_reports(self, environment: uuid.UUID=None, start: str=None, end: str=None, limit: int=None):
+    @protocol(operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api"])
+    def get_reports(self, tid: uuid.UUID, start: str=None, end: str=None, limit: int=None):
         """
             Return compile reports newer then start
 
-            :param environment: The id of the environment to get a report from
+            :param tid: The id of the environment to get a report from
             :param start: Reports after start
             :param end: Reports before end
             :param limit: Maximum number of results
+        """
+
+    @protocol(operation="GET", id=True, client_types=["api"])
+    def get_report(self, id: uuid.UUID):
+        """
+            Get a compile report from the server
+
+            :param compile_id: The id of the compile and its reports to fetch.
         """
 
 

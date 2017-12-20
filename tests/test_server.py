@@ -168,7 +168,7 @@ def test_version_removal(client, server):
 
 @pytest.mark.gen_test(timeout=30)
 @pytest.mark.slowtest
-def test_get_resource_for_agent(io_loop, motor, server_multi, client, environment):
+def test_get_resource_for_agent(io_loop, motor, server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -215,17 +215,17 @@ def test_get_resource_for_agent(io_loop, motor, server_multi, client, environmen
                   'state': 'running',
                   'version': version}]
 
-    res = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    result = yield client.list_versions(environment)
+    result = yield client_multi.list_versions(environment)
     assert result.code == 200
     assert result.result["count"] == 1
 
-    result = yield client.release_version(environment, version, push=False)
+    result = yield client_multi.release_version(environment, version, push=False)
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = yield client_multi.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
@@ -244,7 +244,7 @@ def test_get_resource_for_agent(io_loop, motor, server_multi, client, environmen
 
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = yield client_multi.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 1
 
@@ -255,7 +255,7 @@ def test_get_resource_for_agent(io_loop, motor, server_multi, client, environmen
                                                   action_id, "deploy", now, now, "deployed", [], {})
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = yield client_multi.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
 
@@ -751,26 +751,26 @@ def test_purge_on_delete_ignore(io_loop, client, server, environment):
 
 
 @pytest.mark.gen_test
-def test_tokens(server_multi, client, environment):
+def test_tokens(server_multi, client_multi, environment):
     # Test using API tokens
-    test_token = client._transport_instance.token
-    token = yield client.create_token(environment, ["api"], idempotent=True)
+    test_token = client_multi._transport_instance.token
+    token = yield client_multi.create_token(environment, ["api"], idempotent=True)
     jot = token.result["token"]
 
     assert jot != test_token
 
-    client._transport_instance.token = jot
+    client_multi._transport_instance.token = jot
 
     # try to access a non environment call (global)
-    result = yield client.list_environments()
+    result = yield client_multi.list_environments()
     assert result.code == 403
 
-    result = yield client.list_versions(environment)
+    result = yield client_multi.list_versions(environment)
     assert result.code == 200
 
-    token = yield client.create_token(environment, ["agent"], idempotent=True)
+    token = yield client_multi.create_token(environment, ["agent"], idempotent=True)
     agent_jot = token.result["token"]
 
-    client._transport_instance.token = agent_jot
-    result = yield client.list_versions(environment)
+    client_multi._transport_instance.token = agent_jot
+    result = yield client_multi.list_versions(environment)
     assert result.code == 403
