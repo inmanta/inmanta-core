@@ -27,6 +27,7 @@ import re
 from datetime import datetime
 from collections import defaultdict
 import enum
+import warnings
 
 import tornado.web
 from tornado import gen, queues
@@ -487,21 +488,21 @@ class RESTTransport(Transport):
         self.connection_timout = connection_timout
         self.headers = set()
 
-    def _create_base_url(self, properties, msg=None):
+    def _create_base_url(self, properties, msg=None, versioned=True):
         """
             Create a url for the given protocol properties
         """
-        url = ""
+        url = "/api/v1" if versioned else ""
         if "id" in properties and properties["id"]:
             if msg is None:
-                url = "/%s/(?P<id>[^/]+)" % properties["method_name"]
+                url += "/%s/(?P<id>[^/]+)" % properties["method_name"]
             else:
-                url = "/%s/%s" % (properties["method_name"], urllib.parse.quote(str(msg["id"]), safe=""))
+                url += "/%s/%s" % (properties["method_name"], urllib.parse.quote(str(msg["id"]), safe=""))
 
         elif "index" in properties and properties["index"]:
-            url = "/%s" % properties["method_name"]
+            url += "/%s" % properties["method_name"]
         else:
-            url = "/%s" % properties["method_name"]
+            url += "/%s" % properties["method_name"]
 
         return url
 
@@ -521,6 +522,12 @@ class RESTTransport(Transport):
                         headers.add(opts["header"])
 
             url = self._create_base_url(properties)
+            properties["api_version"] = "1"
+            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+
+            url = self._create_base_url(properties, versioned=False)
+            properties = properties.copy()
+            properties["api_version"] = None
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
         headers.add("Authorization")
@@ -549,6 +556,10 @@ class RESTTransport(Transport):
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
+        if "api_version" in config[0] and config[0]["api_version"] is None:
+            warnings.warn("Using an unversioned API method will be removed in the next release", DeprecationWarning)
+            LOGGER.warning("Using an unversioned API method will be removed in the next release")
+
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
