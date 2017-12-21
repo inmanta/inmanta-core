@@ -87,10 +87,5 @@ def get_io(cache: AgentCache, uri: str, version: int):
     if cache is None:
         io = _get_io_instance(uri)
     else:
-        try:
-            io = cache.find(uri, version=version)
-        except KeyError:
-            io = _get_io_instance(uri)
-            cache.cache_value(uri, io, version=version, call_on_delete=lambda x: x.close())
-
+        io = cache.get_or_else(uri, lambda version: _get_io_instance(uri), call_on_delete=lambda x: x.close(), version=version)
     return io

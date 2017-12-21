@@ -20,6 +20,7 @@ import time
 import sys
 import bisect
 import logging
+from threading import Lock
 
 
 LOGGER = logging.getLogger()
@@ -70,6 +71,8 @@ class AgentCache(object):
         self.keysforVersion = {}
         self.timerqueue = []
         self.nextAction = sys.maxsize
+        self.addLock = Lock()
+        self.addLocks = {}
 
     def is_open(self, version: int) -> bool:
         """
@@ -189,7 +192,8 @@ class AgentCache(object):
         key = '__'.join(key)
         return self._get(key).value
 
-    def get_or_else(self, key, function, for_version=True, timeout=5000, ignore=set(), cache_none=True, **kwargs):
+    def get_or_else(self, key, function, for_version=True, timeout=5000, ignore=set(),
+                    cache_none=True, call_on_delete=None, **kwargs):
         """
             Attempt to find a value in the cache.
 
@@ -214,7 +218,22 @@ class AgentCache(object):
         try:
             return self.find(key, **args)
         except KeyError:
-            value = function(**kwargs)
-            if cache_none or value is not None:
-                self.cache_value(key, value, timeout=timeout, **args)
+            with self.addLock:
+                if key in self.addLocks:
+                    lock = self.addLocks[key]
+                else:
+                    lock = Lock()
+                    self.addLocks[key] = lock
+            with lock:
+                try:
+                    value = self.find(key, **args)
+                except KeyError:
+                    value = function(**kwargs)
+                    if cache_none or value is not None:
+                        self.cache_value(key, value, timeout=timeout, call_on_delete=call_on_delete, **args)
+            with self.addLock:
+                del self.addLocks[key]
             return value
+
+    def report(self):
+        return "\n".join([str(k) + " " + str(v) for k, v in self.counterforVersion.items()])
