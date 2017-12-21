@@ -1,3 +1,9 @@
+v 2017.5 (201x-xx-xx)
+Changes in this release:
+- Ubuntu 14.04 mongo (2.4) is no longer supported. Version 2.6 or higher is required.
+- The inmanta API endpoint is now versioned and available under /api/v1. The old API methods
+  still work, but are deprecated and will be removed in the next release.
+
 v 2017.4 (2017-11-27)
 Changes in this release:
 - Various bugfixes and performance enhancements
