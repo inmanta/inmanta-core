@@ -73,18 +73,20 @@ class SshIO(local.IOBase):
             self._retry_wait = 30
 
         self._lock = threading.Lock()
+        self._group = multi.Group()
         self._gw = None
         connect = self._build_connect_string()
-
+        LOGGER.info("Starting execnet connection group %s", id(self._group))
         try:
             attempts = self._retries + 1
             while attempts > 0:
                 try:
-                    self._gw = multi.makegateway(self._build_connect_string())
+                    self._gw = self._group.makegateway(self._build_connect_string())
                     attempts = 0
                 except gateway_bootstrap.HostNotFound as e:
                     attempts -= 1
                     if attempts == 0:
+                        self._group.terminate(0.1)
                         raise resources.HostNotFoundException(hostname=self._host, user=self._user, error=e)
 
                     LOGGER.info("Failed to login to %s, waiting %d seconds and %d attempts left.",
@@ -92,8 +94,10 @@ class SshIO(local.IOBase):
                     time.sleep(self._retry_wait)
 
         except BrokenPipeError as e:
+            self._group.terminate(0.1)
             raise resources.HostNotFoundException(hostname=self._host, user=self._user, error=e)
         except AssertionError:
+            self._group.terminate(0.1)
             raise CannotLoginException()
 
         assert self._gw is not None
@@ -145,5 +149,6 @@ class SshIO(local.IOBase):
         return call
 
     def close(self):
-        if self._gw is not None:
-            self._gw.exit()
+        LOGGER.info("Terminating execnet connection group %s", id(self._group))
+        if self._group is not None:
+            self._group.terminate(0.1)
