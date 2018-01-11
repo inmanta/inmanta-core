@@ -18,6 +18,7 @@
 
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException
 from inmanta.execute.util import AnyType, NoneValue
+import numbers
 
 
 class BasicResolver(object):
@@ -151,11 +152,7 @@ class Number(Type):
         if isinstance(value, AnyType):
             return True
 
-        try:
-            float(value)
-        except TypeError:
-            raise RuntimeException(None, "Invalid value '%s'expected Number" % value)
-        except ValueError:
+        if not isinstance(value, numbers.Number):
             raise RuntimeException(None, "Invalid value '%s'expected Number" % value)
 
         return True  # allow this function to be called from a lambda function
