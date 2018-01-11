@@ -454,6 +454,7 @@ class AgentManager(object):
 
         privatestatedir = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
         agent_splay = yield env.get(data.AUTOSTART_SPLAY)
+        agent_interval = yield env.get(data.AUTOSTART_AGENT_INTERVAL)
         # generate config file
         config = """[config]
 heartbeat-interval = 60
@@ -463,13 +464,14 @@ agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
 agent_splay=%(agent_splay)d
+agent_interval=%(agent_interval)d
 
 [agent_rest_transport]
 port=%(port)s
 host=localhost
 """ % {"agents": ",".join(agent_names), "env_id": environment_id, "port": port,
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
-            "statedir": privatestatedir, "agent_splay": agent_splay}
+            "statedir": privatestatedir, "agent_splay": agent_splay, "agent_interval": agent_interval}
 
         if server_config.server_enable_auth.get():
             token = protocol.encode_token(["agent"], environment_id)

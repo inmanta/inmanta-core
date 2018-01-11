@@ -499,6 +499,7 @@ PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
+AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
 
@@ -565,6 +566,9 @@ class Environment(BaseDocument):
                                      validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
                                      "is either an empty string or an agent map string.", agent_restart=True),
+        AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int",
+                                          validator=convert_int,
+                                          doc="Agent interval for autostarted agents in seconds", agent_restart=True),
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
     }
