@@ -1915,3 +1915,15 @@ implement Test using std::none
 Test(b="b")
 """)
     compiler.do_compile()
+
+
+def test_536_number_cast(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Network:
+    number segmentation_id
+end
+implement Network using std::none
+net1 = Network(segmentation_id="10")
+""")
+    with pytest.raises(AttributeException):
+        compiler.do_compile()
