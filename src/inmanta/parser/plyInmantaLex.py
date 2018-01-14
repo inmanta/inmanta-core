@@ -125,7 +125,7 @@ def t_STRING(t):  # noqa: N802
 
 
 def t_REGEX(t):  # noqa: N802
-    r'/([^/]|\/)*/'
+    r'/([^/]|\\/)*?[^\\]/'
     value = Reference("self")  # anonymous value
     expr = Regex(value, t.value[1:-1])
     t.value = expr

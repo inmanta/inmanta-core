@@ -418,6 +418,18 @@ a = /\/1/
     assert stmt.children[1].value == re.compile(r"\/1")
 
 
+def test_regex_twice():
+    statements = parse_code("""
+a = /\/1/
+b = "v"
+c = /\/1/
+""")
+
+    assert len(statements) == 3
+    stmt = statements[0].value
+    assert isinstance(stmt, Regex)
+    assert stmt.children[1].value == re.compile(r"\/1")
+
 def test_typedef():
     statements = parse_code("""
 typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}/
