@@ -502,7 +502,8 @@ AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
-
+AGENT_SSH_KEY = "agent_ssh_key"
+GIT_SSH_KEY = "git_ssh_key"
 
 class Setting(object):
     """
@@ -571,6 +572,9 @@ class Environment(BaseDocument):
                                           doc="Agent interval for autostarted agents in seconds", agent_restart=True),
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
+        AGENT_SSH_KEY: Setting(name=AGENT_SSH_KEY, default="", typ="string",
+                               doc="SSH key for autostart agent", agent_restart=True),
+        GIT_SSH_KEY: Setting(name=GIT_SSH_KEY, default="", typ="string", doc="SSH key for git checkout"),
     }
 
     __indexes__ = [

@@ -39,6 +39,11 @@ agent_names = \
     Option("config", "agent-names", "$node-name",
            "Names of the agents this instance should deploy configuration for", is_str)
 
+agent_ssh_key = \
+    Option("config", "agent-ssh-key", "",
+           "Ssh key for the agent", is_file)
+
+
 agent_interval = \
     Option("config", "agent-interval", 600, """The run interval of the agent.
 Every run-interval seconds, the agent will check the current state of its resources against to desired state model""", is_time)

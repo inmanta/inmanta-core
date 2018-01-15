@@ -46,6 +46,7 @@ class SshIO(local.IOBase):
          * retries: The number of retries before giving up. The default number of retries 10
          * retry_wait: The time to wait between retries for the remote target to become available. The default wait is 30s
     """
+
     def is_remote(self):
         return True
 
@@ -71,6 +72,11 @@ class SshIO(local.IOBase):
             self._retry_wait = int(config["retry_wait"])
         else:
             self._retry_wait = 30
+
+        if "agent-ssh-key" in config and config["agent-ssh-key"] is not None:
+            self._ssh_key = config["agent-ssh-key"]
+        else:
+            self._ssh_key = None
 
         self._lock = threading.Lock()
         self._group = multi.Group()
@@ -111,6 +117,9 @@ class SshIO(local.IOBase):
         """
         opts = "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PasswordAuthentication=no"
         opts += " -p %d" % self._port
+
+        if self._ssh_key is not None:
+            opts += " -i %s" % self._ssh_key
 
         if "python" in self.config:
             python = self.config["python"]

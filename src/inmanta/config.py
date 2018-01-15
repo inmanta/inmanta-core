@@ -185,6 +185,14 @@ def is_str(value):
     return str(value)
 
 
+def is_file(value):
+    """file"""
+    name = str(value)
+    if not os.path.exists(name):
+        raise Exception("File %s does not exist" % name)
+    return name
+
+
 def is_str_opt(value):
     """optional str"""
     if value is None:
