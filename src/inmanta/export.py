@@ -32,6 +32,8 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException, CompilerException
 from tornado.ioloop import IOLoop
 from tornado import gen
+from inmanta.execute.runtime import Instance
+import yaml
 
 LOGGER = logging.getLogger(__name__)
 
@@ -509,3 +511,29 @@ def export_dumpfiles(options, types):
     with open(path, "w+") as fd:
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
+
+
+class ModelExporter(object):
+
+    def __init__(self, root_type):
+        self.root_type = root_type
+
+    def export_model(self):
+        entities = self.root_type.get_all_instances()
+        print(entities)
+        entities_reverse = {k: {} for k in entities}
+
+        def convert(value):
+            if isinstance(value, Instance):
+                return entities_reverse[value]
+            return value
+
+        def populate(newmap, original):
+            for name, value in original.slots.items():
+                if name != "self":
+                    newmap[name] = convert(value.get_value())
+            return newmap
+
+        maps = [populate(v, k) for k, v in entities_reverse.items()]
+        
+        return yaml.dump(maps)
