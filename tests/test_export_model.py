@@ -12,7 +12,7 @@ end
 entity Two:
 end
 
-One.two [1] -- Two.one [1]
+One.two [1] -- Two.one [0:]
 
 one = One(two=two)
 two = Two(one=one)

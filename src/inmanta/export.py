@@ -32,9 +32,11 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException, CompilerException
 from tornado.ioloop import IOLoop
 from tornado import gen
-from inmanta.execute.runtime import Instance
+from inmanta.execute.runtime import Instance, AttributeVariable
 import yaml
-
+import itertools
+from inmanta.ast.entity import Entity
+from _pydev_runfiles.pydev_runfiles_nose import original
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
@@ -513,6 +515,10 @@ def export_dumpfiles(options, types):
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
 
 
+def groupby(list, f):
+    return itertools.groupby(sorted(list, key=f), f)
+
+
 class ModelExporter(object):
 
     def __init__(self, root_type):
@@ -520,20 +526,30 @@ class ModelExporter(object):
 
     def export_model(self):
         entities = self.root_type.get_all_instances()
-        print(entities)
-        entities_reverse = {k: {} for k in entities}
+
+        entities_per_type = {t: [e for e in g] for t, g in groupby(entities, lambda x: x.type.get_full_name())}
+
+        entity_ref = {e: t + "_" + str(i) for t, es in entities_per_type.items() for e, i in zip(es, itertools.count(1))}
 
         def convert(value):
             if isinstance(value, Instance):
-                return entities_reverse[value]
+                return entity_ref[value]
             return value
 
-        def populate(newmap, original):
+        def convert_entity(original):
+            attributes = {}
+            relations = {}
+            map = {"type": original.type.get_full_name(), "relations": relations, "attributes": attributes}
             for name, value in original.slots.items():
-                if name != "self":
-                    newmap[name] = convert(value.get_value())
+                if name == "self":
+                    pass
+                elif isinstance(value.type, Entity):
+                    attributes[name] = convert_attribute(value)
+                else:
+                    print("A", type(value), value)
+
             return newmap
 
-        maps = [populate(v, k) for k, v in entities_reverse.items()]
-        
+        maps = [convert_entity(k) for k in entities]
+
         return yaml.dump(maps)
