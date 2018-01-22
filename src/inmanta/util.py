@@ -21,6 +21,7 @@ import logging
 
 from pkg_resources import DistributionNotFound
 import pkg_resources
+import itertools
 
 
 LOGGER = logging.getLogger(__name__)
@@ -48,3 +49,6 @@ def get_compiler_version():
             "Could not find version number for the inmanta compiler." +
             "Is inmanta installed? Use stuptools install or setuptools dev to install.")
         return None
+
+def groupby(list, f):
+    return itertools.groupby(sorted(list, key=f), f)

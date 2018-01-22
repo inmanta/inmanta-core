@@ -32,11 +32,11 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException, CompilerException
 from tornado.ioloop import IOLoop
 from tornado import gen
-from inmanta.execute.runtime import Instance, AttributeVariable
+from inmanta.execute.runtime import Instance, AttributeVariable, ResultVariable
 import yaml
 import itertools
 from inmanta.ast.entity import Entity
-from _pydev_runfiles.pydev_runfiles_nose import original
+from inmanta.util import groupby
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
@@ -514,11 +514,6 @@ def export_dumpfiles(options, types):
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
 
-
-def groupby(list, f):
-    return itertools.groupby(sorted(list, key=f), f)
-
-
 class ModelExporter(object):
 
     def __init__(self, root_type):
@@ -536,6 +531,18 @@ class ModelExporter(object):
                 return entity_ref[value]
             return value
 
+        def convert_relation(value: ResultVariable):
+            rawvalue = value.get_value()
+            if not isinstance(rawvalue, list):
+                rawvalue = [rawvalue]
+            return {"values": [entity_ref[v] for v in rawvalue]}
+
+        def convert_attribute(value: ResultVariable):
+            rawvalue = value.get_value()
+            if not isinstance(rawvalue, list):
+                rawvalue = [rawvalue]
+            return {"values": rawvalue}
+
         def convert_entity(original):
             attributes = {}
             relations = {}
@@ -544,12 +551,11 @@ class ModelExporter(object):
                 if name == "self":
                     pass
                 elif isinstance(value.type, Entity):
-                    attributes[name] = convert_attribute(value)
+                    relations[name] = convert_relation(value)
                 else:
-                    print("A", type(value), value)
+                    attributes[name] = convert_attribute(value)
+            return map
 
-            return newmap
+        maps = {entity_ref[k]: convert_entity(k) for k in entities}
 
-        maps = [convert_entity(k) for k in entities]
-
-        return yaml.dump(maps)
+        return maps
