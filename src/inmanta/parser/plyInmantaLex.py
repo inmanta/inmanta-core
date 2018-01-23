@@ -125,15 +125,14 @@ def t_STRING(t):  # noqa: N802
 
 
 def t_REGEX(t):  # noqa: N802
-    r'/[^/]*/'
+    r'/([^/]|\\/)*?[^\\]/'
     value = Reference("self")  # anonymous value
     expr = Regex(value, t.value[1:-1])
     t.value = expr
     return t
 
+
 # Define a rule so we can track line numbers
-
-
 def t_newline(t):  # noqa: N802
     r'\n+'
     t.lexer.lineno += len(t.value)
