@@ -46,6 +46,7 @@ from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
+from logging import lastResort
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1056,6 +1057,48 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
+    @protocol.handle(methods.CodeBatchedMethod.upload_code_batched, code_id="id", env="tid")
+    @gen.coroutine
+    def upload_code_batched(self, env, code_id, resources):
+        # validate
+        for rtype, sources in resources.items():
+            if not isinstance(rtype, str):
+                return 400, {"message": "all keys in the resources map must be strings"}
+            if not isinstance(sources, dict):
+                return 400, {"message": "all values in the resources map must be dicts"}
+            for name, refs in sources.items():
+                if not isinstance(name, str):
+                    return 400, {"message": "all keys in the sources map must be strings"}
+                if not isinstance(refs, str):
+                    return 400, {"message": "all values in the sources map must be strings"}
+
+        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.values()]
+
+        ret, val = yield self.stat_files(allrefs)
+
+        if ret != 200:
+            return ret, val
+
+        if len(val["files"]) != 0:
+            return 400, {"message": "Not all file references provided are valid", "references": val["files"]}
+
+        code = yield data.Code.get_versions(environment=env.id, version=code_id)
+        oldmap = {c.resource: c for c in code}
+
+        new = {k: v for k, v in resources.items() if k not in oldmap}
+        conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]
+
+        if len(conflict) > 0:
+            return 500, {"message": "Some of these items already exists, but with different source files",
+                         "references": conflict}
+
+        newcodes = [data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
+                    for resource, hashes in new.items()]
+
+        yield data.Code.insert_many(newcodes)
+
+        return 200
+
     @protocol.handle(methods.CodeMethod.get_code, code_id="id", env="tid")
     @gen.coroutine
     def get_code(self, env, code_id, resource):
@@ -1063,7 +1106,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
-        sources = dict(code.sources)
+        if code.sources is not None:
+            sources = dict(code.sources)
+        else:
+            sources = {}
 
         if code.source_refs is not None and len(code.source_refs) > 0:
             for k, r in code.source_refs.items():

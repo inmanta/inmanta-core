@@ -28,6 +28,7 @@ from inmanta import const
 from inmanta.server import config as opt
 from datetime import datetime
 from uuid import UUID
+from inmanta.export import upload_code
 
 LOGGER = logging.getLogger(__name__)
 
@@ -808,6 +809,42 @@ def test_code_upload(io_loop, motor, server_multi, client_multi, environment):
     res = yield agent.get_code(tid=environment, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_batched_code_upload(io_loop, motor, server_multi, client_multi, environment):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    sources = {"std::File": {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"},
+               "std::Other": {"a.py": "ujeknceds", "c.py": "enhkahEUWLGBVFEHJ"},
+               "std:xxx": {"a.py": "ujekncedsiekvsd"}
+               }
+
+    yield upload_code(client_multi, environment, version, sources)
+
+    agent = protocol.Client("agent")
+
+    for name, sourcemap in sources.items():
+        res = yield agent.get_code(tid=environment, id=version, resource=name)
+        assert res.code == 200
+        assert res.result["sources"] == sourcemap
 
 
 @pytest.mark.gen_test(timeout=30)

@@ -1507,6 +1507,12 @@ class Code(BaseDocument):
 
         return codes[0]
 
+    @classmethod
+    @gen.coroutine
+    def get_versions(cls, environment, version):
+        codes = yield cls.get_list(environment=environment, version=version)
+        return codes
+
 
 class DryRun(BaseDocument):
     """

@@ -60,6 +60,29 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
+@gen.coroutine
+def upload_code(conn, tid, version, resource_to_sourcemap):
+    extendedmap = {resource: {sourcename: (content, hash_file(content.encode())) for sourcename, content in sourcemap.items()}
+                   for resource, sourcemap in resource_to_sourcemap.items()}
+    allfiles = {myhash: content for sourcemap in extendedmap.values() for (content, myhash) in sourcemap.values()}
+
+    res = yield conn.stat_files(list(allfiles.keys()))
+    if res is None or res.code != 200:
+        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+    for file in res.result["files"]:
+        res = yield conn.upload_file(id=file, content=base64.b64encode(allfiles[file].encode()).decode("ascii"))
+        if res is None or res.code != 200:
+            raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+    compactmap = {resource: {sourcename: myhash for sourcename,
+                             (content, myhash) in sourcemap.items()} for resource, sourcemap in extendedmap.items()}
+
+    res = yield conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
+    if res is None or res.code != 200:
+        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+
 class Exporter(object):
     """
         This class handles exporting the compiled configuration model
