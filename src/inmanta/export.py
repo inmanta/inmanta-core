@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import hashlib
 import logging
 import os
 import time
@@ -32,6 +31,7 @@ from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException, CompilerException
 from tornado.ioloop import IOLoop
 from tornado import gen
+from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -431,15 +431,6 @@ class Exporter(object):
 
         return set()
 
-    def _hash_file(self, content):
-        """
-            Create a hash from the given content
-        """
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(content)
-
-        return sha1sum.hexdigest()
-
     def upload_file(self, content=None):
         """
             Upload a file to the configuration server. This operation is not
@@ -448,7 +439,7 @@ class Exporter(object):
         if not isinstance(content, bytes):
             content = content.encode('utf-8')
 
-        hash_id = self._hash_file(content)
+        hash_id = hash_file(content)
         self._file_store[hash_id] = content
 
         return hash_id

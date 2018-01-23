@@ -19,34 +19,51 @@ import random
 import base64
 
 import pytest
+from inmanta.util import hash_file
+from inmanta.server import config as opt
+import os
+
+
+def make_random_file():
+    randomvalue = str(random.randint(0, 10000))
+
+    content = ("Hello world %s\n" % (randomvalue)).encode()
+    hash = hash_file(content)
+
+    body = base64.b64encode(content).decode("ascii")
+
+    return(hash, content, body)
 
 
 @pytest.mark.gen_test
 def test_client_files(client):
-    file_name = str(random.randint(0, 10000))
-    body = base64.b64encode(b"Hello world\n").decode("ascii")
+    (hash, content, body) = make_random_file()
 
     # Check if the file exists
-    result = yield client.stat_file(id="test" + file_name)
+    result = yield client.stat_file(id=hash)
     assert result.code == 404
 
     # Create the file
-    result = yield client.upload_file(id="test" + file_name, content=body)
+    result = yield client.upload_file(id=hash, content=body)
     assert result.code == 200
 
     # Get the file
-    result = yield client.get_file(id="test" + file_name)
+    result = yield client.get_file(id=hash)
     assert result.code == 200
     assert "content" in result.result
     assert result.result["content"] == body
 
+
+@pytest.mark.gen_test
+def test_client_files_stat(client):
+
     file_names = []
     i = 0
     while i < 10:
-        file_name = "test%d" % random.randint(0, 10000)
-        if file_name not in file_names:
-            file_names.append(file_name)
-            result = yield client.upload_file(id=file_name, content="")
+        (hash, content, body) = make_random_file()
+        if hash not in file_names:
+            file_names.append(hash)
+            result = yield client.upload_file(id=hash, content=body)
             assert result.code == 200
             i += 1
 
@@ -60,20 +77,63 @@ def test_client_files(client):
 
 @pytest.mark.gen_test
 def test_diff(client):
-    result = yield client.upload_file(id="a", content=base64.b64encode(b"Hello world\n").decode("ascii"))
+    ca = "Hello world\n".encode()
+    ha = hash_file(ca)
+    result = yield client.upload_file(id=ha, content=base64.b64encode(ca).decode("ascii"))
     assert(result.code == 200)
 
-    result = yield client.upload_file(id="b", content=base64.b64encode(b"Bye bye world\n").decode("ascii"))
+    cb = "Bye bye world\n".encode()
+    hb = hash_file(cb)
+    result = yield client.upload_file(id=hb, content=base64.b64encode(cb).decode("ascii"))
     assert(result.code == 200)
 
-    diff = yield client.diff("a", "b")
+    diff = yield client.diff(ha, hb)
     assert(diff.code == 200)
     assert(len(diff.result["diff"]) == 5)
 
-    diff = yield client.diff(0, "b")
+    diff = yield client.diff(0, hb)
     assert(diff.code == 200)
     assert(len(diff.result["diff"]) == 4)
 
-    diff = yield client.diff("a", 0)
+    diff = yield client.diff(ha, 0)
     assert(diff.code == 200)
     assert(len(diff.result["diff"]) == 4)
+
+
+@pytest.mark.gen_test
+def test_client_files_bad(client):
+    (hash, content, body) = make_random_file()
+    # Create the file
+    result = yield client.upload_file(id=hash + "a", content=body)
+    assert result.code == 400
+
+
+@pytest.mark.gen_test
+def test_client_files_corrupt(client):
+    (hash, content, body) = make_random_file()
+    # Create the file
+    result = yield client.upload_file(id=hash, content=body)
+    assert result.code == 200
+
+    state_dir = opt.state_dir.get()
+
+    file_dir = os.path.join(state_dir, "server", "files")
+
+    file_name = os.path.join(file_dir, hash)
+
+    with open(file_name, "wb+") as fd:
+        fd.write("Haha!".encode())
+
+    opt.server_delete_currupt_files.set("false")
+    result = yield client.get_file(id=hash)
+    assert result.code == 500
+
+    result = yield client.upload_file(id=hash, content=body)
+    assert result.code == 500
+
+    opt.server_delete_currupt_files.set("true")
+    result = yield client.get_file(id=hash)
+    assert result.code == 500
+
+    result = yield client.upload_file(id=hash, content=body)
+    assert result.code == 200

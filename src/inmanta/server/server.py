@@ -45,6 +45,7 @@ from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
+from inmanta.util import hash_file
 
 
 LOGGER = logging.getLogger(__name__)
@@ -534,8 +535,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if os.path.exists(file_name):
             return 500, {"message": "A file with this id already exists."}
 
+        content = base64.b64decode(content)
+
+        if hash_file(content) != file_hash:
+            return 400, {"message": "The hash does not match the content"}
+
         with open(file_name, "wb+") as fd:
-            fd.write(base64.b64decode(content))
+            fd.write(content)
 
         return 200
 
@@ -559,7 +565,27 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         else:
             with open(file_name, "rb") as fd:
-                return 200, {"content": base64.b64encode(fd.read()).decode("ascii")}
+                content = fd.read()
+                actualhash = hash_file(content)
+                if actualhash != file_hash:
+                    if opt.server_delete_currupt_files.get():
+                        LOGGER.error("File corrupt, expected hash %s but found %s at %s, Deleting file" %
+                                     (file_hash, actualhash, file_name))
+                        try:
+                            os.remove(file_name)
+                        except OSError:
+                            LOGGER.exception("Failed to delete file %s" % (file_name))
+                            return 500, {"message": ("File corrupt, expected hash %s but found %s,"
+                                                     " Failed to delete file, please contact the server administrator"
+                                                     ) % (file_hash, actualhash)}
+                        return 500, {"message": ("File corrupt, expected hash %s but found %s, "
+                                                 "Deleting file, please re-upload the corrupt file"
+                                                 ) % (file_hash, actualhash)}
+                    else:
+                        LOGGER.error("File corrupt, expected hash %s but found %s at %s" % (file_hash, actualhash, file_name))
+                        return 500, {"message": ("File corrupt, expected hash %s but found %s,"
+                                                 " please contact the server administrator") % (file_hash, actualhash)}
+                return 200, {"content": base64.b64encode(content).decode("ascii")}
 
     @protocol.handle(methods.FileMethod.stat_files)
     @gen.coroutine
