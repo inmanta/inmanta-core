@@ -1484,13 +1484,15 @@ class Code(BaseDocument):
 
         :param environment The environment this code belongs to
         :param version The version of configuration model it belongs to
-        :param sources The source code of plugins
+        :param sources The source code of plugins (phasing out)
         :param requires Python requires for the source code above
+        :param source_refs file hashes refering to files in the file store
     """
     environment = Field(field_type=uuid.UUID, required=True)
     resource = Field(field_type=str, required=True)
     version = Field(field_type=int, required=True)
     sources = Field(field_type=dict)
+    source_refs = Field(field_type=dict)
 
     __indexes__ = [
         dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING), ("resource", pymongo.ASCENDING)])

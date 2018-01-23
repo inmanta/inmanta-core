@@ -530,12 +530,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.FileMethod.upload_file, file_hash="id")
     @gen.coroutine
     def upload_file(self, file_hash, content):
+        content = base64.b64decode(content)
+        return self.upload_file_internal(file_hash, content)
+
+    def upload_file_internal(self, file_hash, content):
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if os.path.exists(file_name):
             return 500, {"message": "A file with this id already exists."}
-
-        content = base64.b64decode(content)
 
         if hash_file(content) != file_hash:
             return 400, {"message": "The hash does not match the content"}
@@ -558,6 +560,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.FileMethod.get_file, file_hash="id")
     @gen.coroutine
     def get_file(self, file_hash):
+        ret, c = self.get_file_internal(file_hash)
+        if ret == 200:
+            return 200, {"content": base64.b64encode(c).decode("ascii")}
+        else:
+            return ret, c
+
+    def get_file_internal(self, file_hash):
+        """get_file, but on return code 200, content is not encoded """
+
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if not os.path.exists(file_name):
@@ -585,7 +596,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                         LOGGER.error("File corrupt, expected hash %s but found %s at %s" % (file_hash, actualhash, file_name))
                         return 500, {"message": ("File corrupt, expected hash %s but found %s,"
                                                  " please contact the server administrator") % (file_hash, actualhash)}
-                return 200, {"content": base64.b64encode(content).decode("ascii")}
+                return 200, content
 
     @protocol.handle(methods.FileMethod.stat_files)
     @gen.coroutine
@@ -1027,7 +1038,20 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env.id, version=code_id, resource=resource, sources=sources)
+        hashes = {k: hash_file(content.encode()) for k, content in sources.items()}
+        reverse = {h: name for name, h in hashes.items()}
+
+        ret, to_upload = yield self.stat_files(hashes.values())
+
+        if ret != 200:
+            return ret, to_upload
+
+        for file_hash in to_upload["files"]:
+            ret = self.upload_file_internal(file_hash, sources[reverse[file_hash]].encode())
+            if ret != 200:
+                return ret
+
+        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes, sources={})
         yield code.insert()
 
         return 200
@@ -1039,7 +1063,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
-        return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": code.sources}
+        sources = dict(code.sources)
+
+        if code.source_refs is not None and len(code.source_refs) > 0:
+            for k, r in code.source_refs.items():
+                ret, c = self.get_file_internal(r)
+                if ret != 200:
+                    return ret, c
+                sources[k] = c.decode()
+
+        return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
     @protocol.handle(methods.ResourceMethod.resource_action_update, env="tid")
     @gen.coroutine

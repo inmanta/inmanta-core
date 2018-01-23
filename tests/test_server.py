@@ -23,10 +23,11 @@ import uuid
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data
+from inmanta import data, protocol
 from inmanta import const
 from inmanta.server import config as opt
 from datetime import datetime
+from uuid import UUID
 
 LOGGER = logging.getLogger(__name__)
 
@@ -774,3 +775,69 @@ def test_tokens(server_multi, client_multi, environment):
     client_multi._transport_instance.token = agent_jot
     result = yield client_multi.list_versions(environment)
     assert result.code == 403
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_code_upload(io_loop, motor, server_multi, client_multi, environment):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
+
+    res = yield client_multi.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
+    assert res.code == 200
+
+    agent = protocol.Client("agent")
+
+    res = yield agent.get_code(tid=environment, id=version, resource="std::File")
+    assert res.code == 200
+    assert res.result["sources"] == sources
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_legacy_code(io_loop, motor, server_multi, client_multi, environment):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    version = 2
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
+
+    code = data.Code(environment=UUID(environment), version=version, resource="std::File", sources=sources)
+    yield code.insert()
+
+    agent = protocol.Client("agent")
+
+    res = yield agent.get_code(tid=environment, id=version, resource="std::File")
+    assert res.code == 200
+    assert res.result["sources"] == sources
