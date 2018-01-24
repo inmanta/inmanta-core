@@ -75,7 +75,8 @@ def upload_code(conn, tid, version, resource_to_sourcemap):
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
     compactmap = {resource: {myhash: (file_name, module, req) for
-                             myhash, (file_name, module, source_code, req)in sourcemap.items()} for resource, sourcemap in resource_to_sourcemap.items()}
+                             myhash, (file_name, module, source_code, req)in sourcemap.items()}
+                  for resource, sourcemap in resource_to_sourcemap.items()}
 
     res = yield conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
     if res is None or res.code != 200:

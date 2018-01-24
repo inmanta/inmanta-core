@@ -46,8 +46,6 @@ from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
-from logging import lastResort
-
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -1035,7 +1033,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.CodeMethod.upload_code, code_id="id", env="tid")
     @gen.coroutine
     def upload_code(self, env, code_id, resource, sources):
-        #{code_hash:(file_name, provider.__module__, source_code, [req])}
         code = yield data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
@@ -1075,8 +1072,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     return 400, {"message": "all keys in the sources map must be strings"}
                 if not isinstance(refs, (list, tuple)):
                     return 400, {"message": "all values in the sources map must be lists or tuple"}
-                if len(refs) != 3 or not isinstance(refs[0], str) or not isinstance(refs[1], str) or not isinstance(refs[2], list):
-                    return 400, {"message": "The values in the source map should be of the form (filename, module, [requirements])"}
+                if len(refs) != 3 or\
+                        not isinstance(refs[0], str) or \
+                        not isinstance(refs[1], str) or \
+                        not isinstance(refs[2], list):
+                    return 400, {"message": "The values in the source map should be of the"
+                                 " form (filename, module, [requirements])"}
 
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
@@ -1117,7 +1118,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         else:
             sources = {}
 
-        #{code_hash:(file_name, provider.__module__, source_code, [req])}
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
                 ret, c = self.get_file_internal(code_hash)

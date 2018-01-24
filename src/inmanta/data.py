@@ -1484,9 +1484,11 @@ class Code(BaseDocument):
 
         :param environment The environment this code belongs to
         :param version The version of configuration model it belongs to
-        :param sources The source code of plugins (phasing out)  form: {code_hash:(file_name, provider.__module__, source_code, [req])}
+        :param sources The source code of plugins (phasing out)  form:
+            {code_hash:(file_name, provider.__module__, source_code, [req])}
         :param requires Python requires for the source code above
-        :param source_refs file hashes refering to files in the file store {code_hash:(file_name, provider.__module__, [req])}
+        :param source_refs file hashes refering to files in the file store
+            {code_hash:(file_name, provider.__module__, [req])}
     """
     environment = Field(field_type=uuid.UUID, required=True)
     resource = Field(field_type=str, required=True)
