@@ -29,6 +29,7 @@ from inmanta.server import config as opt
 from datetime import datetime
 from uuid import UUID
 from inmanta.export import upload_code
+from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -778,6 +779,12 @@ def test_tokens(server_multi, client_multi, environment):
     assert result.code == 403
 
 
+def make_source(collector, filename, module, source, req):
+    myhash = hash_file(source.encode())
+    collector[myhash] = [filename, module, source, req]
+    return collector
+
+
 @pytest.mark.gen_test(timeout=30)
 def test_code_upload(io_loop, motor, server_multi, client_multi, environment):
     """
@@ -799,7 +806,8 @@ def test_code_upload(io_loop, motor, server_multi, client_multi, environment):
     res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
+    sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
+    sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
 
     res = yield client_multi.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
     assert res.code == 200
@@ -832,9 +840,17 @@ def test_batched_code_upload(io_loop, motor, server_multi, client_multi, environ
     res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    sources = {"std::File": {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"},
-               "std::Other": {"a.py": "ujeknceds", "c.py": "enhkahEUWLGBVFEHJ"},
-               "std:xxx": {"a.py": "ujekncedsiekvsd"}
+    asources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
+    asources = make_source(asources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
+
+    bsources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
+    bsources = make_source(bsources, "c.py", "std.xxx", "enhkahEUWLGBVFEHJ UWEBVKW", ["pytest"])
+
+    csources = make_source({}, "a.py", "sss", "ujekncedsiekvsd", [])
+
+    sources = {"std::File": asources,
+               "std::Other": bsources,
+               "std:xxx": csources
                }
 
     yield upload_code(client_multi, environment, version, sources)

@@ -62,9 +62,8 @@ class DependencyCycleException(Exception):
 
 @gen.coroutine
 def upload_code(conn, tid, version, resource_to_sourcemap):
-    extendedmap = {resource: {sourcename: (content, hash_file(content.encode())) for sourcename, content in sourcemap.items()}
-                   for resource, sourcemap in resource_to_sourcemap.items()}
-    allfiles = {myhash: content for sourcemap in extendedmap.values() for (content, myhash) in sourcemap.values()}
+    allfiles = {myhash: source_code for sourcemap in resource_to_sourcemap.values()
+                for myhash, (file_name, module, source_code, req) in sourcemap.items()}
 
     res = yield conn.stat_files(list(allfiles.keys()))
     if res is None or res.code != 200:
@@ -75,8 +74,8 @@ def upload_code(conn, tid, version, resource_to_sourcemap):
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
-    compactmap = {resource: {sourcename: myhash for sourcename,
-                             (content, myhash) in sourcemap.items()} for resource, sourcemap in extendedmap.items()}
+    compactmap = {resource: {myhash: (file_name, module, req) for
+                             myhash, (file_name, module, source_code, req)in sourcemap.items()} for resource, sourcemap in resource_to_sourcemap.items()}
 
     res = yield conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
     if res is None or res.code != 200:
@@ -377,10 +376,7 @@ class Exporter(object):
 
         @gen.coroutine
         def call():
-            for myresource, mysources in sources.items():
-                res = yield conn.upload_code(tid=tid, id=version, resource=myresource, sources=mysources)
-                if res is None or res.code != 200:
-                    raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+            yield upload_code(conn, tid, version, sources)
 
         self.run_sync(call)
 

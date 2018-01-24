@@ -778,6 +778,7 @@ class CodeMethod(Method):
             :param tid: The environment the code belongs to
             :param id: The id (version) of the configuration model
             :param sources: The source files that contain handlers and inmanta plug-ins
+                {code_hash:(file_name, provider.__module__, source_code, [req])}
         """
 
     @protocol(operation="GET", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])

@@ -1035,24 +1035,28 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.CodeMethod.upload_code, code_id="id", env="tid")
     @gen.coroutine
     def upload_code(self, env, code_id, resource, sources):
+        #{code_hash:(file_name, provider.__module__, source_code, [req])}
         code = yield data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        hashes = {k: hash_file(content.encode()) for k, content in sources.items()}
-        reverse = {h: name for name, h in hashes.items()}
+        hasherrors = any((k != hash_file(content[2].encode()) for k, content in sources.items()))
+        if hasherrors:
+            return 400, {"message": "Hashes in source map do not match to source_code"}
 
-        ret, to_upload = yield self.stat_files(hashes.values())
+        ret, to_upload = yield self.stat_files(sources.keys())
 
         if ret != 200:
             return ret, to_upload
 
         for file_hash in to_upload["files"]:
-            ret = self.upload_file_internal(file_hash, sources[reverse[file_hash]].encode())
+            ret = self.upload_file_internal(file_hash, sources[file_hash][2].encode())
             if ret != 200:
                 return ret
 
-        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes, sources={})
+        compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
+
+        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact, sources={})
         yield code.insert()
 
         return 200
@@ -1069,10 +1073,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for name, refs in sources.items():
                 if not isinstance(name, str):
                     return 400, {"message": "all keys in the sources map must be strings"}
-                if not isinstance(refs, str):
-                    return 400, {"message": "all values in the sources map must be strings"}
+                if not isinstance(refs, (list, tuple)):
+                    return 400, {"message": "all values in the sources map must be lists or tuple"}
+                if len(refs) != 3 or not isinstance(refs[0], str) or not isinstance(refs[1], str) or not isinstance(refs[2], list):
+                    return 400, {"message": "The values in the source map should be of the form (filename, module, [requirements])"}
 
-        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.values()]
+        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
         ret, val = yield self.stat_files(allrefs)
 
@@ -1111,12 +1117,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         else:
             sources = {}
 
-        if code.source_refs is not None and len(code.source_refs) > 0:
-            for k, r in code.source_refs.items():
-                ret, c = self.get_file_internal(r)
+        #{code_hash:(file_name, provider.__module__, source_code, [req])}
+        if code.source_refs is not None:
+            for code_hash, (file_name, module, req) in code.source_refs.items():
+                ret, c = self.get_file_internal(code_hash)
                 if ret != 200:
                     return ret, c
-                sources[k] = c.decode()
+                sources[code_hash] = (file_name, module, c.decode(), req)
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
