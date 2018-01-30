@@ -23,7 +23,7 @@ import glob
 import imp
 
 from inmanta.execute import scheduler
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, Location
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
@@ -161,6 +161,7 @@ class Compiler(object):
 
         requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
                                       ("std::Entity", "provides", [0, None], False))
+        requires_rel.location = Location("internal", "0")
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
         statements.append(entity)

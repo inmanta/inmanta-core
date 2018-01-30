@@ -112,10 +112,10 @@ class Attribute(Locatable):
         return out
 
     def is_optional(self):
-        return False
+        return self.__nullallble
 
     def is_multi(self):
-        return False
+        return self.__multi
 
     def final(self, excns: List[Exception]) -> None:
         pass

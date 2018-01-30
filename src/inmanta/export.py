@@ -29,7 +29,7 @@ from inmanta.execute.util import Unknown
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import RuntimeException, CompilerException
+from inmanta.ast import RuntimeException, CompilerException, Locatable
 from tornado.ioloop import IOLoop
 from tornado import gen
 from inmanta.execute.runtime import Instance, AttributeVariable, ResultVariable
@@ -37,6 +37,7 @@ import yaml
 import itertools
 from inmanta.ast.entity import Entity
 from inmanta.util import groupby
+from inmanta.ast.attribute import Attribute, RelationAttribute
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
@@ -514,10 +515,59 @@ def export_dumpfiles(options, types):
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
 
+
+def location(obj: Locatable):
+    loc = obj.get_location()
+    return {
+        "file": loc.file,
+        "lnr": loc.lnr
+    }
+
+
+def relation_name(type: Entity, rel: RelationAttribute):
+    return type.get_full_name() + "." + rel.name
+
+
 class ModelExporter(object):
 
-    def __init__(self, root_type):
+    def __init__(self, root_type, types):
         self.root_type = root_type
+        self.types = types
+
+    def export_types(self):
+        """
+            Run after export_model!!
+        """
+
+        def convert_value_for_type(value):
+            if isinstance(value, Instance):
+                return {"reference": self.entity_ref[value]}
+            else:
+                return {"value": value}
+
+        def convert_attribute(attr):
+            return {"type": attr.type.__str__(),
+                    "multi": attr.is_multi(),
+                    "nullable": attr.is_optional(),
+                    "comment": attr.comment,
+                    "location": location(attr)}
+
+        def convert_relation(relation: RelationAttribute):
+            return {"type": relation.type.get_full_name(),
+                    "multi": [relation.low, relation.high],
+                    "reverse": relation_name(relation.type, relation.end),
+                    "comment": relation.comment,
+                    "location": location(relation),
+                    "source_annotations": [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
+                    "target_annotations": [convert_value_for_type(x.get_value()) for x in relation.target_annotations]}
+
+        def convert_type(mytype):
+
+            return {"parents": [x.get_full_name() for x in mytype.parent_entities],
+                    "attributes": {n: convert_attribute(attr) for n, attr in mytype.get_attributes().items() if not isinstance(attr, RelationAttribute)},
+                    "relations": {n: convert_relation(attr) for n, attr in mytype.get_attributes().items() if isinstance(attr, RelationAttribute)}
+                    }
+        return {k: convert_type(v) for k, v in self.types.items() if isinstance(v, Entity)}
 
     def export_model(self):
         entities = self.root_type.get_all_instances()
@@ -525,6 +575,7 @@ class ModelExporter(object):
         entities_per_type = {t: [e for e in g] for t, g in groupby(entities, lambda x: x.type.get_full_name())}
 
         entity_ref = {e: t + "_" + str(i) for t, es in entities_per_type.items() for e, i in zip(es, itertools.count(1))}
+        self.entity_ref = entity_ref
 
         def convert(value):
             if isinstance(value, Instance):

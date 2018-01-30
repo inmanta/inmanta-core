@@ -1,6 +1,7 @@
 import inmanta.compiler as compiler
 from inmanta.export import ModelExporter
 import yaml
+import logging
 
 
 class entity_builder:
@@ -30,17 +31,23 @@ class entity_builder:
         self._current["values"] += [value]
         return self
 
+LOGGER = logging.getLogger(__name__)
 
 def test_basic_model_export(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
+typedef hoststring as string matching /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/
+
 entity One:
     string name = "a"
+    hoststring hostname="bazz"
 end
 
 entity Two:
 end
 
-One.two [1] -- Two.one [0:]
+dinges = "a"
+
+One.two [1] dinges,one Two.one [0:]
 
 one = One(two=two)
 two = Two(one=one)
@@ -56,12 +63,18 @@ implement Two using none
     (types, scopes) = compiler.do_compile()
 
     rootType = types["std::Entity"]
-    exporter = ModelExporter(rootType)
+    exporter = ModelExporter(rootType, types)
 
     model = exporter.export_model()
+    types = exporter.export_types()
+    
+    LOGGER.debug(yaml.dump(model))
+    LOGGER.debug(yaml.dump(types))
+
 
     result = entity_builder().entity("__config__::One", 1).\
         attribute("name").value("a").\
+        attribute("hostname").value("bazz").\
         relation("provides").\
         relation("requires").\
         relation("two").value("__config__::Two_1").\
@@ -71,7 +84,6 @@ implement Two using none
         relation("one").value("__config__::One_1").\
         get_model()
 
-    print(result)
-    print(model)
+
 
     assert model == result
