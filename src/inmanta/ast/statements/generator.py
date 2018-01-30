@@ -20,7 +20,7 @@
 
 from . import GeneratorStatement
 from inmanta.execute.util import Unknown
-from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
+from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector, Instance
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException
 from inmanta.execute.tracking import ImplementsTracker
 from typing import List, Dict, Tuple
@@ -152,6 +152,9 @@ class For(GeneratorStatement):
 
         if isinstance(var, Unknown):
             return None
+
+        if not isinstance(var, list):
+            raise TypingException(self, "A for loop can only be applied to lists and relations")
 
         helper = requires[self]
 
