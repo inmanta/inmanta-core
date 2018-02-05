@@ -18,7 +18,7 @@
 
 import re
 
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, LocatableString
 from inmanta.ast.statements import define, Literal
 from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
@@ -87,13 +87,13 @@ end""")
     assert stmt.comment is None
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, str)
-        assert isinstance(ad.name, str)
+        assert isinstance(ad.type, LocatableString)
+        assert isinstance(ad.name, LocatableString)
         assert ad.default is None
         assert ad.remove_default
 
-    assert stmt.attributes[0].name == "hello"
-    assert stmt.attributes[1].name == "dinges"
+    assert str(stmt.attributes[0].name) == "hello"
+    assert str(stmt.attributes[1].name) == "dinges"
 
 
 def test_extend_entity():
@@ -133,12 +133,12 @@ end
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
-        assert isinstance(ad.type, str)
-        assert isinstance(ad.name, str)
+        assert isinstance(ad.type, LocatableString)
+        assert isinstance(ad.name, LocatableString)
 
-    assert stmt.attributes[0].name == "hello"
-    assert stmt.attributes[1].name == "bar"
-    assert stmt.attributes[2].name == "ten"
+    assert str(stmt.attributes[0].name) == "hello"
+    assert str(stmt.attributes[1].name) == "bar"
+    assert str(stmt.attributes[2].name) == "ten"
 
     assert stmt.attributes[1].default.execute(None, None, None)
 
@@ -158,11 +158,11 @@ Test tests [0:] -- [5:10] Foo bars
     assert len(rel.left) == 3
     assert len(rel.right) == 3
 
-    assert rel.left[0] == "Test"
-    assert rel.right[0] == "Foo"
+    assert str(rel.left[0]) == "Test"
+    assert str(rel.right[0]) == "Foo"
 
-    assert rel.left[1] == "tests"
-    assert rel.right[1] == "bars"
+    assert str(rel.left[1]) == "tests"
+    assert str(rel.right[1]) == "bars"
 
     assert rel.left[2] == (0, None)
     assert rel.right[2] == (5, 10)
@@ -182,11 +182,11 @@ Test tests [3] -- [:10] Foo bars
     assert len(rel.left) == 3
     assert len(rel.right) == 3
 
-    assert rel.left[0] == "Test"
-    assert rel.right[0] == "Foo"
+    assert str(rel.left[0]) == "Test"
+    assert str(rel.right[0]) == "Foo"
 
-    assert rel.left[1] == "tests"
-    assert rel.right[1] == "bars"
+    assert str(rel.left[1]) == "tests"
+    assert str(rel.right[1]) == "bars"
 
     assert rel.left[2] == (3, 3)
     assert rel.right[2] == (None, 10)
@@ -206,11 +206,11 @@ Test.bar [1] -- Foo.tests [5:10]
     assert len(rel.left) == 3
     assert len(rel.right) == 3
 
-    assert rel.left[0] == "Test"
-    assert rel.right[0] == "Foo"
+    assert str(rel.left[0]) == "Test"
+    assert str(rel.right[0]) == "Foo"
 
-    assert rel.left[1] == "tests"
-    assert rel.right[1] == "bar"
+    assert str(rel.left[1]) == "tests"
+    assert str(rel.right[1]) == "bar"
 
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
@@ -230,11 +230,11 @@ Test.bar [1] foo,bar Foo.tests [5:10]
     assert len(rel.left) == 3
     assert len(rel.right) == 3
 
-    assert rel.left[0] == "Test"
-    assert rel.right[0] == "Foo"
+    assert str(rel.left[0]) == "Test"
+    assert str(rel.right[0]) == "Foo"
 
-    assert rel.left[1] == "tests"
-    assert rel.right[1] == "bar"
+    assert str(rel.left[1]) == "tests"
+    assert str(rel.right[1]) == "bar"
 
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
@@ -257,11 +257,11 @@ Test.bar [1] -- Foo
     assert len(rel.left) == 3
     assert len(rel.right) == 3
 
-    assert rel.left[0] == "Test"
-    assert rel.right[0] == "Foo"
+    assert str(rel.left[0]) == "Test"
+    assert str(rel.right[0]) == "Foo"
 
-    assert rel.left[1] is None
-    assert rel.right[1] == "bar"
+    assert (rel.left[1]) is None
+    assert str(rel.right[1]) == "bar"
 
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
@@ -281,11 +281,11 @@ Test.bar [1] foo,bar Foo
     assert len(rel.left) == 3
     assert len(rel.right) == 3
 
-    assert rel.left[0] == "Test"
-    assert rel.right[0] == "Foo"
+    assert str(rel.left[0]) == "Test"
+    assert str(rel.right[0]) == "Foo"
 
     assert rel.left[1] is None
-    assert rel.right[1] == "bar"
+    assert str(rel.right[1]) == "bar"
 
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
@@ -345,7 +345,7 @@ implement Test using test
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
-    assert stmt.entity == "Test"
+    assert str(stmt.entity) == "Test"
     assert stmt.implementations == ["test"]
     assert str(stmt.select) == "True"
 
@@ -360,7 +360,7 @@ implement Test using test, blah when (self > 5)
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineImplement)
-    assert stmt.entity == "Test"
+    assert str(stmt.entity) == "Test"
     assert stmt.implementations == ["test", "blah"]
     assert isinstance(stmt.select, GreaterThan)
     assert stmt.select.children[0].name == 'self'
@@ -439,7 +439,7 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, DefineTypeConstraint)
-    assert stmt.name == "uuid"
+    assert str(stmt.name) == "uuid"
     assert stmt.basetype == "string"
     assert isinstance(stmt.get_expression(), Regex)
     assert (stmt.get_expression().children[1].value ==
@@ -478,7 +478,7 @@ File(host = 5, path = "Jos")
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Constructor)
-    assert stmt.class_type == "File"
+    assert str(stmt.class_type) == "File"
     assert {k: v.value for k, v in stmt.attributes.items()} == {"host": 5, "path": "Jos"}
 
 
@@ -516,7 +516,7 @@ File( )
     assert len(statements) == 1
     stmt = statements[0]
     assert isinstance(stmt, Constructor)
-    assert stmt.class_type == "File"
+    assert str(stmt.class_type) == "File"
     assert {k: v.value for k, v in stmt.attributes.items()} == {}
 
 
@@ -745,10 +745,10 @@ def assert_is_non_value(x):
 
 
 def compare_attr(attr, name, mytype, defs, multi=False, opt=False):
-    assert attr.name == name
+    assert str(attr.name) == name
     defs(attr.default)
     assert attr.multi == multi
-    assert attr.type == mytype
+    assert str(attr.type) == mytype
     assert attr.nullable == opt
 
 
@@ -965,3 +965,18 @@ implement Host using test
 
     stmt = statements[0]
     assert stmt.comment.strip() == "Always use test!"
+
+
+def test_precise_lexer_positions():
+    statements = parse_code("""
+implement Test1 using tt when self.other is defined
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineImplement)
+    assert isinstance(stmt.select, IsDefined)
+    assert stmt.select.attr.name == 'self'
+    assert str(stmt.select.name) == 'other'
+
+    

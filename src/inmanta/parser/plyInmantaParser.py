@@ -23,7 +23,7 @@ import ply.yacc as yacc
 # Get the token map from the lexer. This is required.
 from inmanta.parser.plyInmantaLex import tokens, reserved
 from inmanta.ast.statements import Literal
-from inmanta.ast import Location
+from inmanta.ast import Location, LocatableString, Range
 from inmanta.ast.statements.generator import For, Constructor
 from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
     DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport, DefineImplementInherits
@@ -53,21 +53,6 @@ precedence = (
 )
 
 
-class LocatableString:
-
-    def __init__(self, value, location, lexpos, namespace):
-        self.value = value
-        self.location = location
-        self.lexpos = lexpos
-        self.namespace = namespace
-
-    def get_value(self):
-        return self.value
-
-    def __str__(self):
-        return self.value
-
-
 def attach_lnr(p, token=1):
     v = p[0]
     v.location = Location(file, p.lineno(token))
@@ -75,9 +60,17 @@ def attach_lnr(p, token=1):
     v.lexpos = p.lexpos(token)
 
 
-def attach_lnr_for_parser(p, token=1):
+def merge_lnr_to_string(p, starttoken=1, endtoken=2):
     v = p[0]
-    p[0] = LocatableString(v, Location(file, p.lineno(token)), p.lexpos(token), namespace)
+
+    st = p[starttoken]
+    startline = st.lnr
+    startchar = st.start
+    et = p[endtoken]
+    endline = et.elnr
+    endchar = et.end
+
+    p[0] = LocatableString(v, Range(file, startline, startchar, endline, endchar), endchar, namespace)
 
 
 def attach_from_string(p, token=1):
@@ -232,12 +225,12 @@ def p_entity_body(p):
 
 def p_attribute_type(p):
     '''attr_type : ns_ref'''
-    p[0] = (str(p[1]), False)
+    p[0] = (p[1], False)
 
 
 def p_attribute_type_opt(p):
     "attr_type : ns_ref '?'"
-    p[0] = (str(p[1]), True)
+    p[0] = (p[1], True)
 
 
 def p_attr(p):
@@ -263,12 +256,12 @@ def p_attr_undef(p):
 
 def p_attribute_type_multi(p):
     "attr_type_multi : ns_ref '[' ']'"
-    p[0] = (str(p[1]), False, Location(file, p.lineno(1)))
+    p[0] = (p[1], False, Location(file, p.lineno(1)))
 
 
 def p_attribute_type_multi_opt(p):
     "attr_type_multi : ns_ref '[' ']' '?'"
-    p[0] = (str(p[1]), True, Location(file, p.lineno(1)))
+    p[0] = (p[1], True, Location(file, p.lineno(1)))
 
 
 def p_attr_list(p):
@@ -302,13 +295,13 @@ def p_attr_list_null(p):
 
 def p_attr_dict(p):
     "attr : DICT ID"
-    p[0] = DefineAttribute("dict", p[2], None)
+    p[0] = DefineAttribute(p[1], p[2], None)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict(p):
     "attr : DICT ID '=' map_def"
-    p[0] = DefineAttribute("dict", p[2], p[4])
+    p[0] = DefineAttribute(p[1], p[2], p[4])
     attach_lnr(p, 1)
 
 
@@ -320,19 +313,19 @@ def p_attr_list_dict_null_err(p):
 
 def p_attr_dict_nullable(p):
     "attr : DICT '?' ID"
-    p[0] = DefineAttribute("dict", p[3], None, nullable=True)
+    p[0] = DefineAttribute(p[1], p[3], None, nullable=True)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_nullable(p):
     "attr : DICT '?'  ID '=' map_def"
-    p[0] = DefineAttribute("dict", p[3], p[5], nullable=True)
+    p[0] = DefineAttribute(p[1], p[3], p[5], nullable=True)
     attach_lnr(p, 1)
 
 
 def p_attr_list_dict_null(p):
     "attr : DICT '?'  ID '=' NULL"
-    p[0] = DefineAttribute("dict", p[3], Literal(NoneValue()), nullable=True)
+    p[0] = DefineAttribute(p[1], p[3], Literal(NoneValue()), nullable=True)
     attach_lnr(p, 1)
 
 
@@ -503,21 +496,21 @@ def p_typedef_outer_comment(p):
 def p_typedef_1(p):
     """typedef_inner : TYPEDEF ID AS ns_ref MATCHING REGEX
                 | TYPEDEF ID AS ns_ref MATCHING condition"""
-    p[0] = DefineTypeConstraint(namespace, p[2], str(p[4]), p[6])
-    attach_lnr(p)
+    p[0] = DefineTypeConstraint(namespace, p[2], p[4], p[6])
+    attach_lnr(p, 2)
 
 
 def p_typedef_cls(p):
     """typedef_inner : TYPEDEF CID AS constructor"""
     p[0] = DefineTypeDefault(namespace, p[2], p[4])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 # index
 
 
 def p_index(p):
     """index : INDEX class_ref '(' id_list ')' """
     p[0] = DefineIndex(p[2], p[4])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 #######################
 # CONDITIONALS
@@ -559,7 +552,9 @@ def p_condition_is_defined(p):
 
 def p_condition_is_defined_short(p):
     """condition : ID IS DEFINED"""
-    p[0] = IsDefined(Reference('self'), p[1])
+    ref = Reference('self')
+    ref.location = p[1].get_location()
+    p[0] = IsDefined(ref, p[1])
     attach_lnr(p)
 
 
@@ -706,7 +701,7 @@ def create_string_format(format_string, variables, location):
         var_parts = var_str[1].split(".")
         ref = Reference(var_parts[0])
         ref.namespace = namespace
-        ref.location = location
+        ref.location = var_parts[0].get_location()
 
         if len(var_parts) > 1:
             for attr in var_parts[1:]:
@@ -775,13 +770,13 @@ def p_operand_list_term_2(p):
 
 def p_ns_list_collect(p):
     """ns_list : ns_ref ',' ns_list"""
-    p[3].insert(0, str(p[1]))
+    p[3].insert(0, p[1])
     p[0] = p[3]
 
 
 def p_ns_list_term(p):
     'ns_list : ns_ref'
-    p[0] = [str(p[1])]
+    p[0] = [p[1]]
 
 
 def p_var_ref(p):
@@ -797,7 +792,7 @@ def p_attr_ref(p):
 
 def p_var_ref_2(p):
     "var_ref : ns_ref"
-    p[0] = Reference(str(p[1]))
+    p[0] = Reference(p[1])
     attach_from_string(p, 1)
 
 
@@ -815,6 +810,7 @@ def p_class_ref_direct(p):
 def p_class_ref(p):
     "class_ref : ns_ref SEP CID"
     p[0] = "%s::%s" % (str(p[1]), p[3])
+    merge_lnr_to_string(p, 1, 3)
 
 
 # def p_class_ref_err(p):
@@ -849,14 +845,12 @@ def p_class_ref_list_term_err(p):
 def p_ns_ref(p):
     "ns_ref : ns_ref SEP ID"
     p[0] = "%s::%s" % (p[1], p[3])
-    attach_lnr_for_parser(p, 2)
+    merge_lnr_to_string(p, 1, 3)
 
 
 def p_ns_ref_term(p):
     "ns_ref : ID"
     p[0] = p[1]
-    attach_lnr_for_parser(p, 1)
-
 
 def p_id_list_collect(p):
     """id_list : ID "," id_list"""
@@ -907,8 +901,10 @@ parser = yacc.yacc()
 def myparse(ns, tfile, content):
     global file
     file = tfile
+    lexer.inmfile = tfile
     global namespace
     namespace = ns
+    lexer.namespace = ns
     lexer.begin('INITIAL')
     try:
         if content is None:
@@ -919,6 +915,7 @@ def myparse(ns, tfile, content):
                 # prevent problems with EOF
                 data = data + "\n"
                 lexer.lineno = 1
+                lexer.linestart = 0
                 return parser.parse(data, lexer=lexer, debug=False)
         else:
             data = content
@@ -927,6 +924,7 @@ def myparse(ns, tfile, content):
             # prevent problems with EOF
             data = data + "\n"
             lexer.lineno = 1
+            lexer.linestart = 0
             return parser.parse(data, lexer=lexer, debug=False)
     except ParserException as e:
         e.findCollumn(data)

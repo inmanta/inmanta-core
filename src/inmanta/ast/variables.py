@@ -22,7 +22,7 @@ from inmanta.execute.runtime import ResultVariable, ExecutionUnit, RawUnit, Hang
     ResultCollector
 from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement, AssignStatement
-from inmanta.ast import RuntimeException, Locatable, Location
+from inmanta.ast import RuntimeException, Locatable, Location, LocatableString
 from typing import List, Dict
 
 LOGGER = logging.getLogger(__name__)
@@ -33,10 +33,10 @@ class Reference(ExpressionStatement):
         This class represents a reference to a value
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: LocatableString) -> None:
         super().__init__()
-        self.name = name
-        self.full_name = name
+        self.name = str(name)
+        self.full_name = str(name)
 
     def normalize(self) -> None:
         pass
