@@ -1,6 +1,6 @@
 """
     Objects defining the serialization format for type information.
-    
+
     Types are exported as a Dict[str, :class:`.Entity` ]
 """
 '''
@@ -65,7 +65,7 @@ class Attribute(object):
         :param bool nullable: can this attribute be null
         :param bool multi: is this attribute a list
         :param str comment: docstring for this attribute
-        :param Location location: source location where this attribute is defined 
+        :param Location location: source location where this attribute is defined
     """
 
     def __init__(self, mytype: str, nullable: bool, multi: bool, comment: str, location: Location):
@@ -113,7 +113,7 @@ class Attribute(object):
 
 
 class Value(object):
-    """ A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
+    """A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
 
     @staticmethod
     def from_list(l):
@@ -128,7 +128,7 @@ class Value(object):
 
 
 class DirectValue(Value):
-    """ A primitive value, directly represented in the serialized form.
+    """A primitive value, directly represented in the serialized form.
 
         :param value: the value itself, as string or number
     """
@@ -182,16 +182,23 @@ class Relation(object):
     A relation between two entities.
 
     :param str mytype: the type this relation refers to
-    :param Tuple[int, int] multi: the multiplicity of this relation in the form (lower,upper)
+    :param Tuple[int, int] multi: the multiplicity of this relation in the form (lower,upper), -1 for unbounded
     :param str reverse: the fully qualified name of the inverse relation
     :param Location location: source location this relation was defined at
     :param List[Value] source_annotations: annotations on this relation on the source side
     :param List[Value] target_annotations: annotations on this relation on the target side
     """
 
-    def __init__(self, mytype: str, multi: Tuple[int, int], reverse: str, comment: str, location: Location, source_annotations: List[Value], target_annotations: List[Value]):
+    def __init__(self, mytype: str, multi: Tuple[int, int], reverse: str, comment: str, location: Location,
+                 source_annotations: List[Value], target_annotations: List[Value]):
         self.type = mytype
-        self.multi = multi
+        lower = multi[0]
+        if lower is None:
+            lower = -1
+        upper = multi[1]
+        if upper is None:
+            upper = -1
+        self.multi = (lower, upper)
         self.reverse = reverse
         self.comment = comment
         self.location = location
@@ -250,7 +257,8 @@ class Entity(object):
         :param Location location: source location this entity was defined at
     """
 
-    def __init__(self, parents: List[str], attributes: Dict[str, Attribute], relations: Dict[str, Relation], location: Location):
+    def __init__(self, parents: List[str], attributes: Dict[str, Attribute],
+                 relations: Dict[str, Relation], location: Location):
         self.parents = parents
         self.attributes = attributes
         self.relations = relations
@@ -277,4 +285,7 @@ class Entity(object):
 
     @staticmethod
     def from_dict(ctx):
-        return Entity(ctx["parents"], Attribute.from_list(ctx["attributes"]), Relation.from_list(ctx["relations"]), Location.from_dict(ctx["location"]))
+        return Entity(ctx["parents"],
+                      Attribute.from_list(ctx["attributes"]),
+                      Relation.from_list(ctx["relations"]),
+                      Location.from_dict(ctx["location"]))

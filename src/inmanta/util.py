@@ -50,5 +50,6 @@ def get_compiler_version():
             "Is inmanta installed? Use stuptools install or setuptools dev to install.")
         return None
 
-def groupby(list, f):
-    return itertools.groupby(sorted(list, key=f), f)
+
+def groupby(mylist, f):
+    return itertools.groupby(sorted(mylist, key=f), f)

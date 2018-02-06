@@ -1,11 +1,27 @@
+'''
+  Copyright 2018 Inmanta
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+    Contact: code@inmanta.com
+'''
 import inmanta.compiler as compiler
 from inmanta.export import ModelExporter
-import yaml
 import logging
 import inmanta.model
 
 
-class entity_builder(object):
+class EntityBuilder(object):
 
     def __init__(self):
         self._model = {}
@@ -32,8 +48,19 @@ class entity_builder(object):
         self._current["values"] += [value]
         return self
 
+    def unknown(self, unknowns):
+        if "unknowns" not in self._current:
+            self._current["unknowns"] = []
+        self._current["unknowns"] += [unknowns]
+        return self
 
-class type_builder(object):
+    def null(self):
+        del self._current["values"]
+        self._current["nones"] = [0]
+        return self
+
+
+class TypeBuilder(object):
 
     def __init__(self):
         self._model = {}
@@ -109,12 +136,11 @@ end
 
 implement One using none
 implement Two using none
-    """,  autostd=False)
+    """, autostd=False)
 
     (types, scopes) = compiler.do_compile()
 
-    rootType = types["std::Entity"]
-    exporter = ModelExporter(rootType, types)
+    exporter = ModelExporter(types)
 
     model = exporter.export_model()
     types = exporter.export_types()
@@ -122,7 +148,7 @@ implement Two using none
 #     LOGGER.debug(yaml.dump(model))
 #     LOGGER.debug(yaml.dump(types))
 
-    result = entity_builder().entity("__config__::One", 1).\
+    result = EntityBuilder().entity("__config__::One", 1).\
         attribute("name").value("a").\
         attribute("hostname").value("bazz").\
         relation("provides").\
@@ -141,11 +167,11 @@ implement Two using none
     annota = {"value": "a"}
     annotb = {"reference": "__config__::One_1"}
 
-    result = type_builder().entity("std::Entity", "internal", 0).\
-        relation("requires", "std::Entity", "internal", 0, [0, None], "std::Entity.provides").\
-        relation("provides", "std::Entity", "internal", 0, [0, None], "std::Entity.requires").\
+    result = TypeBuilder().entity("std::Entity", "internal", 0).\
+        relation("requires", "std::Entity", "internal", 0, [0, -1], "std::Entity.provides").\
+        relation("provides", "std::Entity", "internal", 0, [0, -1], "std::Entity.requires").\
         entity("__config__::Two", main, 9, 'std::Entity').\
-        relation("one", "__config__::One", main, 14, [0, None], "__config__::One.two").\
+        relation("one", "__config__::One", main, 14, [0, -1], "__config__::One.two").\
         target_annotate(annota).target_annotate(annotb).\
         entity("__config__::One", main, 4, 'std::Entity').\
         relation("two", "__config__::Two", main, 14, [1, 1], "__config__::Two.one").\
@@ -158,3 +184,99 @@ implement Two using none
     for mytype in types.values():
         round = inmanta.model.Entity.from_dict(mytype).to_dict()
         assert round == mytype
+
+
+def test_null_relation_model_export(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity One:
+end
+
+One.one [0:] -- One
+
+a = One()
+implementation none for std::Entity:
+
+end
+implement One using none
+""", autostd=False)
+    (types, scopes) = compiler.do_compile()
+    exporter = ModelExporter(types)
+
+    model = exporter.export_model()
+    types = exporter.export_types()
+
+    result = EntityBuilder().entity("__config__::One", 1).\
+        relation("provides").\
+        relation("requires").\
+        relation("one").\
+        get_model()
+
+    assert model == result
+
+
+def test_unknown_relation_model_export(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+import tests
+entity One:
+end
+
+One.one [0:] -- One
+
+a = One(one=tests::unknown())
+implementation none for std::Entity:
+
+end
+implement One using none
+""", autostd=False)
+    (types, scopes) = compiler.do_compile()
+    exporter = ModelExporter(types)
+
+    model = exporter.export_model()
+    types = exporter.export_types()
+
+    result = EntityBuilder().entity("__config__::One", 1).\
+        relation("provides").\
+        relation("requires").\
+        relation("one").\
+        value("_UNKNOWN_").\
+        get_model()
+
+    assert model == result
+
+
+def test_complex_attributes_model_export(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+import tests
+entity Two:
+    string[] odds
+    string? b = null
+end
+
+
+Two(odds=["a",tests::unknown(), tests::unknown(),"d"])
+
+implementation none for std::Entity:
+
+end
+implement Two using none
+
+""", autostd=False)
+    (types, scopes) = compiler.do_compile()
+    exporter = ModelExporter(types)
+
+    model = exporter.export_model()
+    types = exporter.export_types()
+
+    result = EntityBuilder().entity("__config__::Two", 1).\
+        relation("provides").\
+        relation("requires").\
+        attribute("odds").\
+        value("a").\
+        value("d").\
+        unknown(1).\
+        unknown(2).\
+        attribute("b").\
+        null().\
+        get_model()
+
+    assert model == result

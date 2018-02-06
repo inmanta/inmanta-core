@@ -31,8 +31,9 @@ from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
 from inmanta import protocol, module
-from inmanta.export import cfg_env
+from inmanta.export import cfg_env, ModelExporter
 from inmanta.ast import CompilerException
+import yaml
 
 LOGGER = logging.getLogger()
 
@@ -181,6 +182,8 @@ def export_parser_config(parser):
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
     parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version",
                         action="store_true", default=False)
+    parser.add_argument("-m", dest="model", help="Also export the complete model",
+                        action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
@@ -252,6 +255,12 @@ def export(options):
             sys.exit(1)
         else:
             raise exp
+
+    if options.model:
+        modelexporter = ModelExporter(types)
+        with open("testdump.json", "w") as fh:
+            print(yaml.dump(modelexporter.export_all()))
+            json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
         conn = protocol.Client("compiler")
@@ -380,6 +389,7 @@ def app():
         return
 
     options.func(options)
+
 
 if __name__ == "__main__":
     app()
