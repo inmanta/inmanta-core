@@ -2,6 +2,7 @@ import inmanta.compiler as compiler
 from inmanta.export import ModelExporter
 import yaml
 import logging
+import inmanta.model
 
 
 class entity_builder(object):
@@ -118,8 +119,8 @@ implement Two using none
     model = exporter.export_model()
     types = exporter.export_types()
 
-    LOGGER.debug(yaml.dump(model))
-    LOGGER.debug(yaml.dump(types))
+#     LOGGER.debug(yaml.dump(model))
+#     LOGGER.debug(yaml.dump(types))
 
     result = entity_builder().entity("__config__::One", 1).\
         attribute("name").value("a").\
@@ -153,3 +154,7 @@ implement Two using none
         attribute("name", "string", main, 5).get_model()
 
     assert result == types
+
+    for mytype in types.values():
+        round = inmanta.model.Entity.from_dict(mytype).to_dict()
+        assert round == mytype

@@ -38,6 +38,7 @@ import itertools
 from inmanta.ast.entity import Entity
 from inmanta.util import groupby
 from inmanta.ast.attribute import Attribute, RelationAttribute
+import inmanta.model as model
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
@@ -518,10 +519,7 @@ def export_dumpfiles(options, types):
 
 def location(obj: Locatable):
     loc = obj.get_location()
-    return {
-        "file": loc.file,
-        "lnr": loc.lnr
-    }
+    return model.Location(loc.file, loc.lnr)
 
 
 def relation_name(type: Entity, rel: RelationAttribute):
@@ -541,40 +539,29 @@ class ModelExporter(object):
 
         def convert_value_for_type(value):
             if isinstance(value, Instance):
-                return {"reference": self.entity_ref[value]}
+                return model.ReferenceValue(self.entity_ref[value])
             else:
-                return {"value": value}
+                return model.DirectValue(value)
 
         def convert_attribute(attr):
-            comment = attr.comment
-            if comment is None:
-                comment = ""
-            return {"type": attr.type.__str__(),
-                    "multi": attr.is_multi(),
-                    "nullable": attr.is_optional(),
-                    "comment": comment,
-                    "location": location(attr)}
+            return model.Attribute(attr.type.__str__(), attr.is_optional(), attr.is_multi(), attr.comment, location(attr))
 
         def convert_relation(relation: RelationAttribute):
-            comment = relation.comment
-            if comment is None:
-                comment = ""
-            return {"type": relation.type.get_full_name(),
-                    "multi": [relation.low, relation.high],
-                    "reverse": relation_name(relation.type, relation.end),
-                    "comment": comment,
-                    "location": location(relation),
-                    "source_annotations": [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
-                    "target_annotations": [convert_value_for_type(x.get_value()) for x in relation.target_annotations]}
+            return model.Relation(relation.type.get_full_name(),
+                                  [relation.low, relation.high],
+                                  relation_name(relation.type, relation.end),
+                                  relation.comment, location(relation),
+                                  [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
+                                  [convert_value_for_type(x.get_value()) for x in relation.target_annotations])
 
         def convert_type(mytype):
-
-            return {"parents": [x.get_full_name() for x in mytype.parent_entities],
-                    "attributes": {n: convert_attribute(attr) for n, attr in mytype.get_attributes().items() if not isinstance(attr, RelationAttribute)},
-                    "relations": {n: convert_relation(attr) for n, attr in mytype.get_attributes().items() if isinstance(attr, RelationAttribute)},
-                    "location": location(mytype),
-                    }
-        return {k: convert_type(v) for k, v in self.types.items() if isinstance(v, Entity)}
+            return model.Entity([x.get_full_name() for x in mytype.parent_entities],
+                                {n: convert_attribute(attr) for n, attr in mytype.get_attributes().items()
+                                 if not isinstance(attr, RelationAttribute)},
+                                {n: convert_relation(attr) for n, attr in mytype.get_attributes().items()
+                                 if isinstance(attr, RelationAttribute)},
+                                location(mytype))
+        return {k: convert_type(v).to_dict() for k, v in self.types.items() if isinstance(v, Entity)}
 
     def export_model(self):
         entities = self.root_type.get_all_instances()
