@@ -546,17 +546,23 @@ class ModelExporter(object):
                 return {"value": value}
 
         def convert_attribute(attr):
+            comment = attr.comment
+            if comment is None:
+                comment = ""
             return {"type": attr.type.__str__(),
                     "multi": attr.is_multi(),
                     "nullable": attr.is_optional(),
-                    "comment": attr.comment,
+                    "comment": comment,
                     "location": location(attr)}
 
         def convert_relation(relation: RelationAttribute):
+            comment = relation.comment
+            if comment is None:
+                comment = ""
             return {"type": relation.type.get_full_name(),
                     "multi": [relation.low, relation.high],
                     "reverse": relation_name(relation.type, relation.end),
-                    "comment": relation.comment,
+                    "comment": comment,
                     "location": location(relation),
                     "source_annotations": [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
                     "target_annotations": [convert_value_for_type(x.get_value()) for x in relation.target_annotations]}
@@ -565,7 +571,8 @@ class ModelExporter(object):
 
             return {"parents": [x.get_full_name() for x in mytype.parent_entities],
                     "attributes": {n: convert_attribute(attr) for n, attr in mytype.get_attributes().items() if not isinstance(attr, RelationAttribute)},
-                    "relations": {n: convert_relation(attr) for n, attr in mytype.get_attributes().items() if isinstance(attr, RelationAttribute)}
+                    "relations": {n: convert_relation(attr) for n, attr in mytype.get_attributes().items() if isinstance(attr, RelationAttribute)},
+                    "location": location(mytype),
                     }
         return {k: convert_type(v) for k, v in self.types.items() if isinstance(v, Entity)}
 
