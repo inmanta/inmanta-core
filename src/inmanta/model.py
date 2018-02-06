@@ -1,3 +1,8 @@
+"""
+    Objects defining the serialization format for type information.
+    
+    Types are exported as a Dict[str, :class:`.Entity` ]
+"""
 '''
   Copyright 2018 Inmanta
 
@@ -16,15 +21,32 @@
     Contact: code@inmanta.com
 '''
 from builtins import str
+from typing import List, Dict, Tuple
 
 
 class Location(object):
+    """
+        Position in the source
+
+        :param str file:  source file name
+        :param int lnr: line in the source file
+    """
 
     def __init__(self, file: str, lnr: int):
         self.file = file
         self.lnr = lnr
 
     def to_dict(self):
+        """
+            Convert to serialized form:
+
+            .. code-block:: python
+
+                {
+                    "file": self.file,
+                    "lnr": self.lnr
+                }
+        """
         return {
             "file": self.file,
             "lnr": self.lnr
@@ -36,6 +58,15 @@ class Location(object):
 
 
 class Attribute(object):
+    """
+        Attribute defined on an entity
+
+        :param str mytype: fully qualified name of the type of this attribute
+        :param bool nullable: can this attribute be null
+        :param bool multi: is this attribute a list
+        :param str comment: docstring for this attribute
+        :param Location location: source location where this attribute is defined 
+    """
 
     def __init__(self, mytype: str, nullable: bool, multi: bool, comment: str, location: Location):
         self.type = mytype
@@ -48,6 +79,19 @@ class Attribute(object):
             self.comment = ""
 
     def to_dict(self):
+        """
+            Convert to serialized form:
+
+            .. code-block:: python
+
+                {
+                    "type": self.type,
+                    "multi": self.multi,
+                    "nullable": self.nullable,
+                    "comment": self.comment,
+                    "location": self.location.to_dict()
+                }
+        """
         return {"type": self.type,
                 "multi": self.multi,
                 "nullable": self.nullable,
@@ -69,6 +113,7 @@ class Attribute(object):
 
 
 class Value(object):
+    """ A value reference from a type either :class:`.DirectValue` or :class:`.ReferenceValue` """
 
     @staticmethod
     def from_list(l):
@@ -83,11 +128,22 @@ class Value(object):
 
 
 class DirectValue(Value):
+    """ A primitive value, directly represented in the serialized form.
+
+        :param value: the value itself, as string or number
+    """
 
     def __init__(self, value):
         self.value = value
 
     def to_dict(self):
+        """
+            Convert to serialized form:
+
+            .. code-block:: python
+
+                {"value": self.value}
+        """
         return {"value": self.value}
 
     @staticmethod
@@ -96,11 +152,24 @@ class DirectValue(Value):
 
 
 class ReferenceValue(Value):
+    """
+    A reference to an instance of an entity.
+
+    :param str reference: the handle for the entity this value refers to
+    """
 
     def __init__(self, reference):
+
         self.reference = reference
 
     def to_dict(self):
+        """
+            Convert to serialized form:
+
+            .. code-block:: python
+
+                {"reference": self.reference}
+        """
         return {"reference": self.reference}
 
     @staticmethod
@@ -109,8 +178,18 @@ class ReferenceValue(Value):
 
 
 class Relation(object):
+    """
+    A relation between two entities.
 
-    def __init__(self, mytype: str, multi: "tuple[int, int]", reverse: str, comment: str, location: Location, source_annotations: "list[Value]", target_annotations: "list[Value]"):
+    :param str mytype: the type this relation refers to
+    :param Tuple[int, int] multi: the multiplicity of this relation in the form (lower,upper)
+    :param str reverse: the fully qualified name of the inverse relation
+    :param Location location: source location this relation was defined at
+    :param List[Value] source_annotations: annotations on this relation on the source side
+    :param List[Value] target_annotations: annotations on this relation on the target side
+    """
+
+    def __init__(self, mytype: str, multi: Tuple[int, int], reverse: str, comment: str, location: Location, source_annotations: List[Value], target_annotations: List[Value]):
         self.type = mytype
         self.multi = multi
         self.reverse = reverse
@@ -122,6 +201,21 @@ class Relation(object):
             self.comment = ""
 
     def to_dict(self):
+        """
+            Convert to serialized form:
+
+            .. code-block:: python
+
+               {
+                "type": self.type,
+                "multi": [self.multi[0], self.multi[1]],
+                "reverse": self.reverse,
+                "comment": self.comment,
+                "location": self.location.to_dict(),
+                "source_annotations": [x.to_dict() for x in self.source_annotations],
+                "target_annotations": [x.to_dict() for x in self.target_annotations]
+                }
+        """
         return {"type": self.type,
                 "multi": [self.multi[0], self.multi[1]],
                 "reverse": self.reverse,
@@ -147,15 +241,34 @@ class Relation(object):
 
 
 class Entity(object):
+    """
+        An entity type
 
-    def __init__(self, parents: "list[str]", attributes: "dict[str,Attribute]", relations: "dict[str,Relation]", location: Location):
+        :param List[str] parents: parent types
+        :param  Dict[str, Attribute]: all attributes declared on this entity directly, by name
+        :param  Dict[str, Relation]: all relations declared on this entity directly, by name
+        :param Location location: source location this entity was defined at
+    """
+
+    def __init__(self, parents: List[str], attributes: Dict[str, Attribute], relations: Dict[str, Relation], location: Location):
         self.parents = parents
         self.attributes = attributes
         self.relations = relations
         self.location = location
 
     def to_dict(self):
+        """
+            Convert to serialized form:
 
+            .. code-block:: python
+
+                {
+                "parents": self.parents,
+                "attributes": {n: a.to_dict() for n, a in self.attributes.items()},
+                "relations": {n: r.to_dict() for n, r in self.relations.items()},
+                "location": self.location.to_dict(),
+                }
+        """
         return {"parents": self.parents,
                 "attributes": {n: a.to_dict() for n, a in self.attributes.items()},
                 "relations": {n: r.to_dict() for n, r in self.relations.items()},
