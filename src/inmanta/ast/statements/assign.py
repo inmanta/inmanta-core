@@ -23,7 +23,8 @@ from inmanta.ast.type import List, Dict
 from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException
+from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
+    TypeReferenceAnchor
 from inmanta.ast.attribute import RelationAttribute
 import typing
 
@@ -179,10 +180,11 @@ class IndexLookup(ReferenceStatement):
         Lookup a value in a dictionary
     """
 
-    def __init__(self, index_type: str, query: typing.List[typing.Tuple[str, ExpressionStatement]]) -> None:
+    def __init__(self, index_type: LocatableString, query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]]) -> None:
         ReferenceStatement.__init__(self, [v for (k, v) in query])
-        self.index_type = index_type
-        self.query = query
+        self.index_type = str(index_type)
+        self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, index_type))
+        self.query = [(str(n), e) for n, e in query]
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
@@ -222,12 +224,12 @@ vm.files[path="/etc/motd"]
     """
 
     def __init__(self, rootobject: ExpressionStatement,
-                 relation: str, query:
-                 typing.List[typing.Tuple[str, ExpressionStatement]]):
+                 relation: LocatableString, query:
+                 typing.List[typing.Tuple[LocatableString, ExpressionStatement]]):
         ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
         self.rootobject = rootobject
-        self.relation = relation
-        self.querypart = query
+        self.relation = str(relation)
+        self.querypart = [(str(n), e) for n, e in query]
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)

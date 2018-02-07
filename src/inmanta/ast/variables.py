@@ -179,9 +179,9 @@ class AttributeReference(Reference):
         attributes of a class or class instance.
     """
 
-    def __init__(self, instance: Reference, attribute: str) -> None:
+    def __init__(self, instance: Reference, attribute: LocatableString) -> None:
         Reference.__init__(self, "%s.%s" % (instance.full_name, attribute))
-        self.attribute = attribute
+        self.attribute = str(attribute)
 
         # a reference to the instance
         self.instance = instance

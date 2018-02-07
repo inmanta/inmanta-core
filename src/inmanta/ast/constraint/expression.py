@@ -24,6 +24,7 @@ from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, Raw
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
 from typing import Dict
+from inmanta.ast import LocatableString, AttributeReferenceAnchor
 
 
 class InvalidNumberOfArgumentsException(Exception):
@@ -62,10 +63,10 @@ class OpMetaClass(ABCMeta):
 
 class IsDefined(ReferenceStatement):
 
-    def __init__(self, attr: Reference, name: str) -> None:
+    def __init__(self, attr: Reference, name: LocatableString) -> None:
         super(IsDefined, self).__init__([attr])
         self.attr = attr.root_in_self()
-        self.name = name
+        self.name = str(name)
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # introduce temp variable to contain the eventual result of this stmt

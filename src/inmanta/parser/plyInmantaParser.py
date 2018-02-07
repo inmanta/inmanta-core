@@ -701,7 +701,7 @@ def create_string_format(format_string, variables, location):
         var_parts = var_str[1].split(".")
         ref = Reference(var_parts[0])
         ref.namespace = namespace
-        ref.location = var_parts[0].get_location()
+        ref.location = var_str[1].get_location()
 
         if len(var_parts) > 1:
             for attr in var_parts[1:]:
