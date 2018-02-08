@@ -70,7 +70,19 @@ class Locatable(object):
         return self.location
 
 
-class LocatableString:
+class LocatableString(object):
+    """
+        A string with an attached source location.
+
+        It is not a subtype of str, as str is not a normal class
+        As such, it is very important to unwrap strings ad this object is not an actual string.
+
+        All identifiers produced by the parser are of this type. 
+
+        The unwrapping should be done in 
+        1. anywhere in DefinitionStatements
+        2. in the constructors of other statements
+    """
 
     def __init__(self, value, location: Range, lexpos, namespace):
         self.value = value

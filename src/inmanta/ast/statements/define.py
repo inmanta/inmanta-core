@@ -115,7 +115,7 @@ class DefineEntity(TypeDefinitionStatement):
 
                 name = str(attribute.name)
                 attr_obj = Attribute(entity_type, attr_type, name, attribute.multi, attribute.nullable)
-                attribute.copy_location(attribute.name)
+                attr_obj.location = attribute.get_location()
                 attribute.anchors.append(TypeReferenceAnchor(
                     attribute.type.get_location(), self.namespace, str(attribute.type)))
 
@@ -204,6 +204,7 @@ class DefineImplementInherits(DefinitionStatement):
         self.entity = str(entity_name)
         self.comment = comment
         self.location = entity_name.get_location()
+        self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
 
     def __repr__(self):
         """
@@ -375,7 +376,7 @@ class DefineTypeDefault(TypeDefinitionStatement):
         self.ctor = class_ctor
         self.comment = None
         self.type.location = name.get_location()
-        self.anchors = class_ctor.get_anchors()
+        self.anchors.extend(class_ctor.get_anchors())
 
     def __repr__(self):
         """
@@ -445,9 +446,9 @@ class DefineRelation(BiStatement):
             )
 
         if left.get_attribute_from_related(str(self.right[1])) is not None:
-            raise DuplicateException(self, left.get_attribute_from_related(self.right[1]),
+            raise DuplicateException(self, left.get_attribute_from_related(str(self.right[1])),
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
-                                     % (self.right[1], left.name))
+                                     % (str(self.right[1]), left.name))
 
         try:
             right = self.namespace.get_type(str(self.right[0]))
@@ -462,8 +463,8 @@ class DefineRelation(BiStatement):
                     right.name, right.get_entity().get_full_name())
             )
 
-        if right.get_attribute_from_related(self.left[1]) is not None:
-            raise DuplicateException(self, right.get_attribute_from_related(self.left[1]),
+        if right.get_attribute_from_related(str(self.left[1])) is not None:
+            raise DuplicateException(self, right.get_attribute_from_related(str(self.left[1])),
                                      ("Attribute name %s is already defined in %s, unable to define relationship")
                                      % (str(self.left[1]), right.name))
 
