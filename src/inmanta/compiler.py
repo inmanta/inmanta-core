@@ -23,7 +23,7 @@ import glob
 import imp
 
 from inmanta.execute import scheduler
-from inmanta.ast import Namespace
+from inmanta.ast import Namespace, LocatableString, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
@@ -156,11 +156,13 @@ class Compiler(object):
             statements.append(statement)
 
         # add the entity type (hack?)
-        entity = DefineEntity(self.__root_ns.get_child_or_create("std"),
-                              "Entity", "The entity all other entities inherit from.", [], [])
+        ns = self.__root_ns.get_child_or_create("std")
+        nullrange = Range("internal", 0, 0, 0, 0)
+        entity = DefineEntity(ns, LocatableString("Entity", nullrange, 0, ns),
+                              "The entity all other entities inherit from.", [], [])
 
-        requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
-                                      ("std::Entity", "provides", [0, None], False))
+        requires_rel = DefineRelation((LocatableString("std::Entity", nullrange, 0, ns), LocatableString("requires", nullrange, 0, ns), [0, None], False),
+                                      (LocatableString("std::Entity", nullrange, 0, ns), LocatableString("provides", nullrange, 0, ns), [0, None], False))
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
         statements.append(entity)

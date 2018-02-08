@@ -527,7 +527,7 @@ def p_condition_2(p):
                 | operand IN var_ref
                 | condition AND condition
                 | condition OR condition """
-    operator = Operator.get_operator_class(p[2])
+    operator = Operator.get_operator_class(str(p[2]))
     p[0] = operator(p[1], p[3])
     attach_lnr(p, 2)
 
@@ -599,13 +599,13 @@ def p_list_def(p):
 
 def p_pair_list_collect(p):
     """pair_list : STRING ':' operand ',' pair_list"""
-    p[5].insert(0, (p[1], p[3]))
+    p[5].insert(0, (str(p[1]), p[3]))
     p[0] = p[5]
 
 
 def p_pair_list_term(p):
     "pair_list : STRING ':' operand"
-    p[0] = [(p[1], p[3])]
+    p[0] = [(str(p[1]), p[3])]
 
 
 def p_pair_list_term_2(p):
@@ -676,6 +676,7 @@ def p_constant_f(p):
     p[0] = Literal(False)
     attach_lnr(p)
 
+
 formatRegex = r"""({{\s*([\.A-Za-z0-9_-]+)\s*}})"""
 format_regex_compiled = re.compile(formatRegex, re.MULTILINE | re.DOTALL)
 
@@ -683,12 +684,12 @@ format_regex_compiled = re.compile(formatRegex, re.MULTILINE | re.DOTALL)
 def p_string(p):
     " constant : STRING "
     value = p[1]
-    match_obj = format_regex_compiled.findall(value)
+    match_obj = format_regex_compiled.findall(str(value))
 
     if len(match_obj) > 0:
         p[0] = create_string_format(value, match_obj, Location(file, p.lineno(1)))
     else:
-        p[0] = Literal(value)
+        p[0] = Literal(str(value))
     attach_lnr(p)
 
 
@@ -697,11 +698,11 @@ def create_string_format(format_string, variables, location):
         Create a string interpolation statement
     """
     _vars = []
+
     for var_str in variables:
         var_parts = var_str[1].split(".")
         ref = Reference(var_parts[0])
         ref.namespace = namespace
-        ref.location = var_str[1].get_location()
 
         if len(var_parts) > 1:
             for attr in var_parts[1:]:
@@ -712,7 +713,8 @@ def create_string_format(format_string, variables, location):
         else:
             _vars.append((ref, var_str[0]))
 
-    return StringFormat(format_string, _vars)
+    return StringFormat(str(format_string), _vars)
+
 
 def p_constant_list(p):
     " constant_list : '[' constants ']' "
@@ -756,7 +758,7 @@ def p_operand_list_collect(p):
     """operand_list : operand ',' operand_list"""
     p[3].insert(0, p[1])
     p[0] = p[3]
-    
+
 
 def p_operand_list_term(p):
     'operand_list : operand'
@@ -851,6 +853,7 @@ def p_ns_ref(p):
 def p_ns_ref_term(p):
     "ns_ref : ID"
     p[0] = p[1]
+
 
 def p_id_list_collect(p):
     """id_list : ID "," id_list"""

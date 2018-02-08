@@ -29,6 +29,8 @@ from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotF
     LocatableString, TypeReferenceAnchor, statements, AttributeReferenceAnchor
 from typing import List
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit
+from inmanta.ast.blocks import BasicBlock
+from os.path import stat
 
 
 LOGGER = logging.getLogger(__name__)
@@ -41,6 +43,7 @@ class DefineAttribute(Statement):
         """
             if default_value is None, this is an explicit removal of a default value
         """
+        super(DefineAttribute, self).__init__()
         self.type = attr_type
         self.name = name
         self.default = default_value
@@ -77,7 +80,7 @@ class DefineEntity(TypeDefinitionStatement):
         self.type = Entity(self.name, namespace)
         self.type.location = lname.location
 
-    def add_attribute(self, attr_type: str, name: str, default_value: ExpressionStatement=None):
+    def add_attribute(self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement=None):
         """
             Add an attribute to this entity
         """
@@ -168,7 +171,7 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
-    def __init__(self, namespace: Namespace, name: LocatableString, target_type: LocatableString, statements: List[Statement], comment: str):
+    def __init__(self, namespace: Namespace, name: LocatableString, target_type: LocatableString, statements: BasicBlock, comment: str):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
         self.block = statements
@@ -176,7 +179,7 @@ class DefineImplementation(TypeDefinitionStatement):
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), comment)
         self.type.location = name.get_location()
         self.anchors = [TypeReferenceAnchor(target_type.get_location(), namespace, str(target_type))]
-        self.anchors.extend([x for y in statements.get_anchors() for x in y])
+        self.anchors.extend(statements.get_anchors())
         self.comment = comment
 
     def __repr__(self) -> str:
@@ -238,9 +241,11 @@ class DefineImplement(DefinitionStatement):
                  select: ExpressionStatement=None,
                  comment: str=None) -> None:
         DefinitionStatement.__init__(self)
-        self.entity = entity_name
+        self.entity = str(entity_name)
+        self.entity_location = entity_name.get_location()
         self.implementations = [str(x) for x in implementations]
         self.anchors = [TypeReferenceAnchor(x.get_location(), x.namespace, str(x)) for x in implementations]
+        self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
         self.anchors.extend(select.get_anchors())
         self.select = select
         self.comment = comment
@@ -263,7 +268,7 @@ class DefineImplement(DefinitionStatement):
             implement = Implement()
             implement.comment = self.comment
             implement.constraint = self.select
-            implement.location = self.entity.get_location()
+            implement.location = self.entity_location
 
             i = 0
             for _impl in self.implementations:
@@ -297,7 +302,7 @@ class DefineTypeConstraint(TypeDefinitionStatement):
     """
 
     def __init__(self, namespace, name: LocatableString, basetype: LocatableString, expression):
-        TypeDefinitionStatement.__init__(self, namespace, name)
+        TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.basetype = str(basetype)
         self.anchors.append(TypeReferenceAnchor(basetype.get_location(), namespace, str(basetype)))
         self.anchors.extend(expression.get_anchors())

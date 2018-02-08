@@ -112,10 +112,11 @@ class For(GeneratorStatement):
         A for loop
     """
 
-    def __init__(self, variable: ExpressionStatement, loop_var: str, module: BasicBlock) -> None:
+    def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
         GeneratorStatement.__init__(self)
         self.base = variable
-        self.loop_var = loop_var
+        self.loop_var = str(loop_var)
+        self.loop_var_loc = loop_var.get_location()
         self.module = module
 
     def __repr__(self) -> str:
@@ -177,7 +178,7 @@ class Constructor(GeneratorStatement):
                  location: Location,
                  namespace: Namespace) -> None:
         GeneratorStatement.__init__(self)
-        self.class_type = class_type
+        self.class_type = str(class_type)
         self.__attributes = {}
         self.implemented = False
         self.register = False
@@ -316,7 +317,7 @@ class Constructor(GeneratorStatement):
         name = str(lname)
         if name not in self.__attributes:
             self.__attributes[name] = value
-            self.anchors.append(AttributeReferenceAnchor(range, namespace, type, attribute))
+            self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, type, name))
         else:
             raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
                                    % (name, self.class_type))

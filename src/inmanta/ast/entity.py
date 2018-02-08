@@ -216,7 +216,7 @@ class Entity(NamedType):
             Add an attribute to this entity. The attribute should not exist yet.
         """
         if attribute not in self._attributes:
-            self._attributes[attribute.name] = attribute
+            self._attributes[str(attribute.name)] = attribute
         else:
             raise Exception("attribute already exists")
 

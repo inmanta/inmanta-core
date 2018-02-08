@@ -47,8 +47,6 @@ tokens = [
 ] + sorted(list(reserved.values()))
 
 
-
-
 def t_ID(t):  # noqa: N802
     r'[a-zA-Z_][a-zA-Z_0-9-]*'
     t.type = reserved.get(t.value, 'ID')  # Check for reserved words
@@ -60,7 +58,8 @@ def t_ID(t):  # noqa: N802
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString(t.value, Range(lexer.inmfile,  lexer.lineno, start,  lexer.lineno, end), lexer.lexpos, lexer.namespace)
+    t.value = LocatableString(t.value, Range(lexer.inmfile,  lexer.lineno, start,
+                                             lexer.lineno, end), lexer.lexpos, lexer.namespace)
     return t
 
 
@@ -133,6 +132,15 @@ def t_STRING_EMPTY(t):  # noqa: N802
 def t_STRING(t):  # noqa: N802
     r'\".*?[^\\]\"'
     t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(t.value, Range(lexer.inmfile,  lexer.lineno, start,
+                                             lexer.lineno, end), lexer.lexpos, lexer.namespace)
+
     return t
 
 
