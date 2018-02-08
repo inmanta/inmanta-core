@@ -66,7 +66,7 @@ class DefineEntity(TypeDefinitionStatement):
         name = str(lname)
         TypeDefinitionStatement.__init__(self, namespace, name)
 
-        self.anchors = [TypeReferenceAnchor(x.get_location(), namespace, x) for x in parents]
+        self.anchors = [TypeReferenceAnchor(x.get_location(), namespace, str(x)) for x in parents]
 
         self.name = name
         self.attributes = attributes
@@ -116,7 +116,7 @@ class DefineEntity(TypeDefinitionStatement):
                 name = str(attribute.name)
                 attr_obj = Attribute(entity_type, attr_type, name, attribute.multi, attribute.nullable)
                 attr_obj.location = attribute.get_location()
-                attribute.anchors.append(TypeReferenceAnchor(
+                self.anchors.append(TypeReferenceAnchor(
                     attribute.type.get_location(), self.namespace, str(attribute.type)))
 
                 if name in add_attributes:

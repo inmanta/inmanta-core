@@ -183,7 +183,7 @@ class IndexLookup(ReferenceStatement):
     def __init__(self, index_type: LocatableString, query: typing.List[typing.Tuple[LocatableString, ExpressionStatement]]) -> None:
         ReferenceStatement.__init__(self, [v for (k, v) in query])
         self.index_type = str(index_type)
-        self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, index_type))
+        self.anchors.append(TypeReferenceAnchor(index_type.get_location(), index_type.namespace, str(index_type)))
         self.query = [(str(n), e) for n, e in query]
 
     def normalize(self) -> None:

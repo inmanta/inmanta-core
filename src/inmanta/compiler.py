@@ -51,6 +51,19 @@ def do_compile(refs={}):
     return (sched.get_types(), compiler.get_ns())
 
 
+def anchormap(refs={}):
+    """
+        Run run run
+    """
+    project = Project.get()
+    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
+
+    LOGGER.debug("Starting compile")
+
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    return  sched.anchormap(compiler, statements, blocks)
+
 class Compiler(object):
     """
         An inmanta compiler

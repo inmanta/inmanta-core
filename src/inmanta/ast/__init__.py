@@ -60,6 +60,9 @@ class Range(Location):
         self.end_lnr = end_lnr
         self.end_char = end_char
 
+    def __str__(self) -> str:
+        return "%s[%d.%d:%d.%d]" % (self.file, self.lnr, self.start_char, self.end_lnr, self.end_char)
+
 
 class Locatable(object):
 
@@ -114,6 +117,13 @@ class Anchor(object):
     def get_range(self) -> Range:
         return self.range
 
+    def get_location(self) -> Range:
+        return self.range
+
+    @abstractmethod
+    def resolve(self):
+        raise NotImplementedError()
+
 
 class TypeReferenceAnchor(Anchor):
 
@@ -122,6 +132,10 @@ class TypeReferenceAnchor(Anchor):
         self.namespace = namespace
         self.type = type
 
+    def resolve(self):
+        t = self.namespace.get_type(self.type)
+        return t.get_location()
+
 
 class AttributeReferenceAnchor(Anchor):
 
@@ -129,6 +143,10 @@ class AttributeReferenceAnchor(Anchor):
         self.range = range
         self.namespace = namespace
         self.type = type
+        self.attribute = attribute
+
+    def resolve(self):
+        return self.namespace.get_type(self.type).get_attribute(self.attribute).get_location()
 
 
 class Namespaced(Locatable):

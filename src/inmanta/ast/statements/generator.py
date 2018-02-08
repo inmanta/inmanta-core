@@ -118,6 +118,8 @@ class For(GeneratorStatement):
         self.loop_var = str(loop_var)
         self.loop_var_loc = loop_var.get_location()
         self.module = module
+        self.anchors.extend(module.get_anchors())
+        self.anchors.extend(variable.get_anchors())
 
     def __repr__(self) -> str:
         return "For(%s)" % self.loop_var
@@ -317,7 +319,8 @@ class Constructor(GeneratorStatement):
         name = str(lname)
         if name not in self.__attributes:
             self.__attributes[name] = value
-            self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, type, name))
+            self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
+            self.anchors.extend(value.get_anchors())
         else:
             raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
                                    % (name, self.class_type))

@@ -116,6 +116,7 @@ class ReferenceStatement(ExpressionStatement):
     def __init__(self, children: List[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children = children
+        self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
     def normalize(self) -> None:
         for c in self.children:
@@ -137,6 +138,9 @@ class AssignStatement(DynamicStatement):
         DynamicStatement.__init__(self)
         self.lhs = lhs
         self.rhs = rhs
+        if lhs is not None:
+            self.anchors.extend(lhs.get_anchors())
+        self.anchors.extend(rhs.get_anchors())
 
     def normalize(self) -> None:
         self.rhs.normalize()

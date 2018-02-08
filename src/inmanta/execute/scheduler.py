@@ -24,11 +24,12 @@ from inmanta.execute.proxy import UnsetException
 from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
 
-from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex
+from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex, DefineRelation
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
 from inmanta.ast import RuntimeException, MultiException, CycleExcpetion
 from inmanta.execute.tracking import ModuleTracker
+import itertools
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -167,6 +168,21 @@ class Scheduler(object):
             block.normalize()
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
+
+    def anchormap(self, compiler, statements, blocks):
+        prev = time.time()
+
+        # first evaluate all definitions, this should be done in one iteration
+        self.define_types(compiler, statements, blocks)
+
+        #relations are also in blocks
+        statements = (s for s in statements if not isinstance(s, DefineRelation))
+        anchors = (anchor for container in itertools.chain(statements, blocks)
+                   for anchor in container.get_anchors() if anchor is not None)
+
+        rangetorange = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
+        rangetorange = [(f,t) for f,t in rangetorange if t is not None]
+        return rangetorange
 
     def run(self, compiler, statements, blocks):
         """
