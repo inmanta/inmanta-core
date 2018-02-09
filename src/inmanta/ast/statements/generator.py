@@ -153,6 +153,9 @@ class For(GeneratorStatement):
         if isinstance(var, Unknown):
             return None
 
+        if not isinstance(var, list):
+            raise TypingException(self, "A for loop can only be applied to lists and relations")
+
         helper = requires[self]
 
         for loop_var in var:

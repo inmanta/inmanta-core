@@ -245,3 +245,26 @@ def test_unknown_type_in_relation(snippetcompiler):
         """
         foo::Entity.test [1] -- std::Entity
         """, "could not find type foo::Entity in namespace __config__ (reported in None ({dir}/main.cf:2))")
+
+
+def test_for_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string a = ""
+        end
+        implement A using std::none
+        a = A()
+        for i in a:
+        end
+    """,
+        "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:7))")
+
+
+def test_for_error_2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        for i in "foo":
+        end
+    """,
+        "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:2))")
