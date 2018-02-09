@@ -24,7 +24,7 @@ setup(
     name="inmanta",
     package_dir={"" : "src"},
     packages=find_packages("src"),
-    version="2017.5",
+    version="2018.1",
     description="Inmanta deployment tool",
     author="Inmanta",
     author_email="code@inmanta.com",
