@@ -1,9 +1,32 @@
-v 2017.5 (201x-xx-xx)
+v 2018.2 (2018-04-xx)
+Change in this release:
+- Internal storage format for code is optimized, this release support both storage versions, but old version will be removed in the next release  
+
+v 2018.1 (2018-02-09)
 Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
 - Ubuntu 14.04 mongo (2.4) is no longer supported. Version 2.6 or higher is required.
 - The inmanta API endpoint is now versioned and available under /api/v1. The old API methods
   still work, but are deprecated and will be removed in the next release.
-- Internal storage format for code is optimized, this release support both storage versions, but old version will be removed in the next release  
+- Added support for escapes in regex (#540)
+- Added per env config for agent_interval (#542): This adds an per environment setting that controls
+  the agent interval for the agents started by the server.
+- Removed implicit string to number conversion (#539)
+- Fix dockerfile (#538)
+- Fixed execnet resource leak (#534)
+- Solution for resource leak issue in agent (#518): Numerous stability fixes for the agent related
+  to resource leaks and races
+- Remove compile reports on env clean
+- Refactor report API: The report list no longer contains the output of the processes. This
+  reduces the size of the response.
+- Fix recompile triggered from a form change
+- Add missing mongo indexes to improve performance
+- Remove catchlog from tox run
+- Create a post method for notify: only the post method allows to pass metadata
+- Fix trigger metadata (#520): Add compile metadata to each version. Fixes #519 and add delete with
+  resource_id for parameters
+- Add representation for null value
 
 v 2017.4 (2017-11-27)
 Changes in this release:
