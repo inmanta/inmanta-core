@@ -99,7 +99,9 @@ agent_timeout = Option("server", "agent-timeout", 30,
                        "Time before an agent is considered to be offline", is_time)
 
 server_delete_currupt_files = Option("server", "delete_currupt_files", True,
-                                     """ When the server finds corrupt files, delete them automatically""", is_bool)
+                                     "The server logs an error when it detects a file got corrupted. When set to true, the "
+                                     "server will also delete the file, so on subsequent compiles the missing file will be "
+                                     "recreated.", is_bool)
 
 #############################
 # Dashboard

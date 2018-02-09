@@ -1,6 +1,7 @@
 v 2018.2 (2018-04-xx)
 Change in this release:
-- Internal storage format for code is optimized, this release support both storage versions, but old version will be removed in the next release  
+- The internal storage format for code is optimized. This introduces API and schema changes. 
+  This release supports both storage versions. The old version will be removed in the next release.
 
 v 2018.1 (2018-02-09)
 Changes in this release:
