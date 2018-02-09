@@ -20,7 +20,7 @@ texttable==1.2.1
 tornado==4.5.3
 virtualenv==15.1.0
 inmanta-sphinx>=0.3
-typing==3.6.2
+typing==3.6.4
 netifaces==0.10.6
 PyJWT==1.5.3
 cryptography==2.1.4
