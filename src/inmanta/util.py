@@ -21,6 +21,7 @@ import logging
 
 from pkg_resources import DistributionNotFound
 import pkg_resources
+import hashlib
 
 
 LOGGER = logging.getLogger(__name__)
@@ -48,3 +49,13 @@ def get_compiler_version():
             "Could not find version number for the inmanta compiler." +
             "Is inmanta installed? Use stuptools install or setuptools dev to install.")
         return None
+
+
+def hash_file(content):
+    """
+        Create a hash from the given content
+    """
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content)
+
+    return sha1sum.hexdigest()

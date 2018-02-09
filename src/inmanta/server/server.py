@@ -45,7 +45,7 @@ from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
-
+from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -529,13 +529,20 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.FileMethod.upload_file, file_hash="id")
     @gen.coroutine
     def upload_file(self, file_hash, content):
+        content = base64.b64decode(content)
+        return self.upload_file_internal(file_hash, content)
+
+    def upload_file_internal(self, file_hash, content):
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if os.path.exists(file_name):
             return 500, {"message": "A file with this id already exists."}
 
+        if hash_file(content) != file_hash:
+            return 400, {"message": "The hash does not match the content"}
+
         with open(file_name, "wb+") as fd:
-            fd.write(base64.b64decode(content))
+            fd.write(content)
 
         return 200
 
@@ -552,6 +559,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.FileMethod.get_file, file_hash="id")
     @gen.coroutine
     def get_file(self, file_hash):
+        ret, c = self.get_file_internal(file_hash)
+        if ret == 200:
+            return 200, {"content": base64.b64encode(c).decode("ascii")}
+        else:
+            return ret, c
+
+    def get_file_internal(self, file_hash):
+        """get_file, but on return code 200, content is not encoded """
+
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if not os.path.exists(file_name):
@@ -559,7 +575,27 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         else:
             with open(file_name, "rb") as fd:
-                return 200, {"content": base64.b64encode(fd.read()).decode("ascii")}
+                content = fd.read()
+                actualhash = hash_file(content)
+                if actualhash != file_hash:
+                    if opt.server_delete_currupt_files.get():
+                        LOGGER.error("File corrupt, expected hash %s but found %s at %s, Deleting file" %
+                                     (file_hash, actualhash, file_name))
+                        try:
+                            os.remove(file_name)
+                        except OSError:
+                            LOGGER.exception("Failed to delete file %s" % (file_name))
+                            return 500, {"message": ("File corrupt, expected hash %s but found %s,"
+                                                     " Failed to delete file, please contact the server administrator"
+                                                     ) % (file_hash, actualhash)}
+                        return 500, {"message": ("File corrupt, expected hash %s but found %s, "
+                                                 "Deleting file, please re-upload the corrupt file"
+                                                 ) % (file_hash, actualhash)}
+                    else:
+                        LOGGER.error("File corrupt, expected hash %s but found %s at %s" % (file_hash, actualhash, file_name))
+                        return 500, {"message": ("File corrupt, expected hash %s but found %s,"
+                                                 " please contact the server administrator") % (file_hash, actualhash)}
+                return 200, content
 
     @protocol.handle(methods.FileMethod.stat_files)
     @gen.coroutine
@@ -1001,8 +1037,72 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
-        code = data.Code(environment=env.id, version=code_id, resource=resource, sources=sources)
+        hasherrors = any((k != hash_file(content[2].encode()) for k, content in sources.items()))
+        if hasherrors:
+            return 400, {"message": "Hashes in source map do not match to source_code"}
+
+        ret, to_upload = yield self.stat_files(sources.keys())
+
+        if ret != 200:
+            return ret, to_upload
+
+        for file_hash in to_upload["files"]:
+            ret = self.upload_file_internal(file_hash, sources[file_hash][2].encode())
+            if ret != 200:
+                return ret
+
+        compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
+
+        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact, sources={})
         yield code.insert()
+
+        return 200
+
+    @protocol.handle(methods.CodeBatchedMethod.upload_code_batched, code_id="id", env="tid")
+    @gen.coroutine
+    def upload_code_batched(self, env, code_id, resources):
+        # validate
+        for rtype, sources in resources.items():
+            if not isinstance(rtype, str):
+                return 400, {"message": "all keys in the resources map must be strings"}
+            if not isinstance(sources, dict):
+                return 400, {"message": "all values in the resources map must be dicts"}
+            for name, refs in sources.items():
+                if not isinstance(name, str):
+                    return 400, {"message": "all keys in the sources map must be strings"}
+                if not isinstance(refs, (list, tuple)):
+                    return 400, {"message": "all values in the sources map must be lists or tuple"}
+                if len(refs) != 3 or\
+                        not isinstance(refs[0], str) or \
+                        not isinstance(refs[1], str) or \
+                        not isinstance(refs[2], list):
+                    return 400, {"message": "The values in the source map should be of the"
+                                 " form (filename, module, [requirements])"}
+
+        allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
+
+        ret, val = yield self.stat_files(allrefs)
+
+        if ret != 200:
+            return ret, val
+
+        if len(val["files"]) != 0:
+            return 400, {"message": "Not all file references provided are valid", "references": val["files"]}
+
+        code = yield data.Code.get_versions(environment=env.id, version=code_id)
+        oldmap = {c.resource: c for c in code}
+
+        new = {k: v for k, v in resources.items() if k not in oldmap}
+        conflict = [k for k, v in resources.items() if k in oldmap and oldmap[k].source_refs != v]
+
+        if len(conflict) > 0:
+            return 500, {"message": "Some of these items already exists, but with different source files",
+                         "references": conflict}
+
+        newcodes = [data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
+                    for resource, hashes in new.items()]
+
+        yield data.Code.insert_many(newcodes)
 
         return 200
 
@@ -1013,7 +1113,19 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
-        return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": code.sources}
+        if code.sources is not None:
+            sources = dict(code.sources)
+        else:
+            sources = {}
+
+        if code.source_refs is not None:
+            for code_hash, (file_name, module, req) in code.source_refs.items():
+                ret, c = self.get_file_internal(code_hash)
+                if ret != 200:
+                    return ret, c
+                sources[code_hash] = (file_name, module, c.decode(), req)
+
+        return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
     @protocol.handle(methods.ResourceMethod.resource_action_update, env="tid")
     @gen.coroutine
