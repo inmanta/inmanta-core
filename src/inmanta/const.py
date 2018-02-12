@@ -32,7 +32,7 @@ class ResourceState(Enum):
 
 
 UNDEPLOYABLE_STATES = [ResourceState.undefined]
-UKNOWN_STRING = "<<undefined>>"
+UNKNOWN_STRING = "<<undefined>>"
 
 
 class Change(Enum):

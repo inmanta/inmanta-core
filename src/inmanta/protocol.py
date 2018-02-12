@@ -226,7 +226,7 @@ def custom_json_encoder(o):
         return str(o)
 
     if isinstance(o, execute.util.Unknown):
-        return const.UKNOWN_STRING
+        return const.UNKNOWN_STRING
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
