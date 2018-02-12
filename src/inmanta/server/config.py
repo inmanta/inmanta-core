@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -32,6 +32,10 @@ LOGGER = logging.getLogger(__name__)
 db_host = Option("database", "host", "localhost", "Hostname or IP of the mongo server")
 db_port = Option("database", "port", 27017, "The port of the mongo server", is_int)
 db_name = Option("database", "name", "inmanta", "The name of the database on the mongo server")
+db_username = Option("database", "username", None, "The username to authenticate with", is_str_opt)
+db_password = Option("database", "password", None, "The password to authenticate with", is_str_opt)
+db_ssl = Option("database", "ssl", False, "Use SSL or not for connecting to the database", is_bool)
+
 
 #############################
 # server_rest_transport

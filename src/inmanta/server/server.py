@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -72,7 +72,8 @@ class Server(protocol.ServerEndpoint):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        data.connect(database_host, database_port, opt.db_name.get(), self._io_loop)
+        data.connect(database_host, database_port, opt.db_name.get(), self._io_loop, username=opt.db_username.get(),
+                     password=opt.db_password.get(), ssl=opt.db_ssl.get())
         LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
         self._io_loop.add_callback(data.create_indexes)

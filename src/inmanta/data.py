@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -1693,8 +1693,13 @@ def create_indexes():
         yield cls.create_indexes()
 
 
-def connect(host, port, database, io_loop):
-    client = motor_tornado.MotorClient(host, port, io_loop=io_loop)
+def connect(host, port, database, io_loop, username=None, password=None, ssl=False):
+    kwargs = {}
+    if username is not None and password is not None:
+        print("u: %s pw: %s", username, password, type(username))
+        kwargs["username"] = username
+        kwargs["password"] = password
+    client = motor_tornado.MotorClient(host, port, io_loop=io_loop, ssl=ssl, **kwargs)
     db = client[database]
 
     use_motor(db)
