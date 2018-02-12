@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -44,16 +44,23 @@ from tornado.ioloop import IOLoop
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
+MONGO_USER = "admin"
+MONGO_PW = "test"
+MONGO_DB = "inmanta"
 
 
 @pytest.fixture(scope="session", autouse=True)
 def mongo_db():
     db_path = tempfile.mkdtemp(dir="/dev/shm")
-    mongobox = MongoBox(db_path=db_path)
+    mongobox = MongoBox(db_path=db_path, log_path="/tmp/test.log")
     port_envvar = DEFAULT_PORT_ENVVAR
-
+    #mongobox.auth = True
     mongobox.start()
     os.environ[port_envvar] = str(mongobox.port)
+
+    client = pymongo.MongoClient(port=mongobox.port)
+    #db = client["admin"]
+    #db.command("createUser", MONGO_USER, pwd=MONGO_PW, roles=[{"role": "root", "db": "admin"}])
 
     yield mongobox
 
@@ -81,17 +88,17 @@ def clean_reset(mongo_client):
 
 @pytest.fixture(scope="session")
 def mongo_client(mongo_db):
-    '''Returns an instance of :class:`pymongo.MongoClient` connected
-    to MongoBox database instance.
-    '''
+    """
+        Returns an instance of :class:`pymongo.MongoClient` connected to MongoBox database instance.
+    """
     port = int(mongo_db.port)
     return pymongo.MongoClient(port=port)
 
 
 @pytest.fixture(scope="function")
-def motor(mongo_db, mongo_client, io_loop):
+def motor(mongo_db, io_loop):
     client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
-    db = client["inmanta"]
+    db = client[MONGO_DB]
     yield db
 
 
