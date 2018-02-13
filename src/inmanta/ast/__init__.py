@@ -61,7 +61,7 @@ class Range(Location):
         self.end_char = end_char
 
     def __str__(self) -> str:
-        return "%s[%d.%d:%d.%d]" % (self.file, self.lnr, self.start_char, self.end_lnr, self.end_char)
+        return "%s:%d:%d" % (self.file, self.lnr, self.start_char)
 
 
 class Locatable(object):
@@ -80,9 +80,9 @@ class LocatableString(object):
         It is not a subtype of str, as str is not a normal class
         As such, it is very important to unwrap strings ad this object is not an actual string.
 
-        All identifiers produced by the parser are of this type. 
+        All identifiers produced by the parser are of this type.
 
-        The unwrapping should be done in 
+        The unwrapping should be done in
         1. anywhere in DefinitionStatements
         2. in the constructors of other statements
     """

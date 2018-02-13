@@ -24,7 +24,7 @@ from inmanta.execute.runtime import ResultVariable, HangUnit, ExecutionUnit, Raw
 from inmanta.ast.type import Bool, create_function
 from inmanta.ast.variables import IsDefinedReferenceHelper, Reference
 from typing import Dict
-from inmanta.ast import LocatableString, AttributeReferenceAnchor
+from inmanta.ast import LocatableString
 
 
 class InvalidNumberOfArgumentsException(Exception):

@@ -978,5 +978,3 @@ implement Test1 using tt when self.other is defined
     assert isinstance(stmt.select, IsDefined)
     assert stmt.select.attr.name == 'self'
     assert str(stmt.select.name) == 'other'
-
-    

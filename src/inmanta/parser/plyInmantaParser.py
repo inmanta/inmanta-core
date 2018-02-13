@@ -176,8 +176,7 @@ def p_entity(p):
 
 def p_entity_err_1(p):
     "entity_def : ENTITY ID ':' entity_body_outer "
-    raise ParserException(
-        file, p.lineno(2), p.lexpos(2), p[2], "Invalid identifier: Entity names must start with a capital")
+    raise ParserException(p[2].location, str(p[2]), "Invalid identifier: Entity names must start with a capital")
 
 
 def p_entity_extends(p):
@@ -188,8 +187,7 @@ def p_entity_extends(p):
 
 def p_entity_extends_err(p):
     "entity_def : ENTITY ID EXTENDS class_ref_list ':' entity_body_outer "
-    raise ParserException(
-        file, p.lineno(2), p.lexpos(2), p[2], "Invalid identifier: Entity names must start with a capital")
+    raise ParserException(p[2].location, str(p[2]), "Invalid identifier: Entity names must start with a capital")
 
 
 def p_entity_body_outer(p):
@@ -307,8 +305,7 @@ def p_attr_list_dict(p):
 
 def p_attr_list_dict_null_err(p):
     "attr : DICT ID '=' NULL"
-    raise ParserException(
-        file, p.lineno(1), p.lexpos(1), p[2], "null can not be assigned to dict, did you mean \"dict? %s = null\"" % p[2])
+    raise ParserException(p[2].location, str(p[2]), "null can not be assigned to dict, did you mean \"dict? %s = null\"" % p[2])
 
 
 def p_attr_dict_nullable(p):
@@ -829,8 +826,7 @@ def p_class_ref_list_collect(p):
 
 def p_class_ref_list_collect_err(p):
     """class_ref_list : var_ref ',' class_ref_list"""
-    raise ParserException(
-        file, p.lineno(1), p.lexpos(1), p[1], "Invalid identifier: Entity names must start with a capital")
+    raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
 
 
 def p_class_ref_list_term(p):
@@ -840,8 +836,8 @@ def p_class_ref_list_term(p):
 
 def p_class_ref_list_term_err(p):
     'class_ref_list : var_ref'
-    raise ParserException(
-        file, p[1].location.lnr, p[1].lexpos, p[1], "Invalid identifier: Entity names must start with a capital")
+
+    raise ParserException(p[1].location, str(p[1]), "Invalid identifier: Entity names must start with a capital")
 
 
 def p_ns_ref(p):
@@ -880,20 +876,25 @@ def p_mls_collect(p):
 
 # Error rule for syntax errors
 def p_error(p):
+    pos = lexer.lexpos - lexer.linestart + 1
+    r = Range(file, lexer.lineno, pos, lexer.lineno, pos)
+
     if p is None:
         # at end of file
-        raise ParserException(file, lexer.lineno, lexer.lexpos, "Unexpected end of file")
+        raise ParserException(r, "Unexpected end of file")
 
     # keyword instead of ID
     if p.type in reserved.values():
-        raise ParserException(
-            file, p.lineno, p.lexpos, p.value, "invalid identifier, %s is a reserved keyword" % p.value)
+        if hasattr(p.value, "location"):
+            r = p.value.location
+        raise ParserException(r, str(p.value), "invalid identifier, %s is a reserved keyword" % p.value)
 
     if parser.symstack[-1].type in reserved.values():
-        raise ParserException(
-            file, p.lineno, p.lexpos, p.value, "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value)
+        if hasattr(parser.symstack[-1].value, "location"):
+            r = parser.symstack[-1].value.location
+        raise ParserException(r, str(parser.symstack[-1].value), "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value)
 
-    raise ParserException(file, p.lineno, p.lexpos, p.value)
+    raise ParserException(r, p.value)
 
 
 # Build the parser

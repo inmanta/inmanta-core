@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 from inmanta import compiler
-from inmanta.ast import Anchor
 
 
 def test_anchors_basic(snippetcompiler):
@@ -37,10 +36,16 @@ typedef foo as string matching /^a+$/
 a = Test(b="xx")
 z = a.relation
 u = a.b
+
+implementation a for Test:
+
+end
+
+implement Test using a
 """, autostd=False)
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 6
+    assert len(anchormap) == 9
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
 
@@ -48,11 +53,13 @@ u = a.b
         assert checkmap[(flnr, s, e)] == tolnr
 
     for f, t in anchormap:
-        print("%s -> %s" % (f, t))
-    verify_anchor(7, 21, 25, 2)
-    verify_anchor(8, 4, 7, 13)
-    verify_anchor(11, 0, 4, 2)
-    verify_anchor(11, 23, 28, 7)
-    verify_anchor(15, 4, 8, 2)
-    verify_anchor(15, 9, 10, 4)
-
+        print("%s:%d -> %s" % (f, f.end_char, t))
+    verify_anchor(7, 22, 26, 2)
+    verify_anchor(8, 5, 8, 13)
+    verify_anchor(11, 1, 5, 2)
+    verify_anchor(11, 24, 29, 7)
+    verify_anchor(15, 5, 9, 2)
+    verify_anchor(15, 10, 11, 4)
+    verify_anchor(19, 22, 26, 2)
+    verify_anchor(23, 11, 15, 2)
+    verify_anchor(23, 22, 23, 19)

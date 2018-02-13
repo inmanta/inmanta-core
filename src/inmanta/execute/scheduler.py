@@ -175,13 +175,17 @@ class Scheduler(object):
         # first evaluate all definitions, this should be done in one iteration
         self.define_types(compiler, statements, blocks)
 
-        #relations are also in blocks
+        # relations are also in blocks
         statements = (s for s in statements if not isinstance(s, DefineRelation))
         anchors = (anchor for container in itertools.chain(statements, blocks)
                    for anchor in container.get_anchors() if anchor is not None)
 
         rangetorange = [(anchor.get_location(), anchor.resolve()) for anchor in anchors]
-        rangetorange = [(f,t) for f,t in rangetorange if t is not None]
+        rangetorange = [(f, t) for f, t in rangetorange if t is not None]
+
+        now = time.time()
+        LOGGER.debug("Anchormap took %f seconds", now - prev)
+
         return rangetorange
 
     def run(self, compiler, statements, blocks):

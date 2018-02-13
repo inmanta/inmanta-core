@@ -62,7 +62,8 @@ def anchormap(refs={}):
 
     (statements, blocks) = compiler.compile()
     sched = scheduler.Scheduler()
-    return  sched.anchormap(compiler, statements, blocks)
+    return sched.anchormap(compiler, statements, blocks)
+
 
 class Compiler(object):
     """
@@ -174,8 +175,10 @@ class Compiler(object):
         entity = DefineEntity(ns, LocatableString("Entity", nullrange, 0, ns),
                               "The entity all other entities inherit from.", [], [])
 
-        requires_rel = DefineRelation((LocatableString("std::Entity", nullrange, 0, ns), LocatableString("requires", nullrange, 0, ns), [0, None], False),
-                                      (LocatableString("std::Entity", nullrange, 0, ns), LocatableString("provides", nullrange, 0, ns), [0, None], False))
+        str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)
+
+        requires_rel = DefineRelation((str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
+                                      (str_std_entity, LocatableString("provides", nullrange, 0, ns), [0, None], False))
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
         statements.append(entity)

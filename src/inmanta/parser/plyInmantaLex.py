@@ -54,11 +54,11 @@ def t_ID(t):  # noqa: N802
         t.type = "CID"
     lexer = t.lexer
 
-    end = lexer.lexpos - lexer.linestart
+    end = lexer.lexpos - lexer.linestart + 1
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString(t.value, Range(lexer.inmfile,  lexer.lineno, start,
+    t.value = LocatableString(t.value, Range(lexer.inmfile, lexer.lineno, start,
                                              lexer.lineno, end), lexer.lexpos, lexer.namespace)
     return t
 
@@ -134,11 +134,11 @@ def t_STRING(t):  # noqa: N802
     t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     lexer = t.lexer
 
-    end = lexer.lexpos - lexer.linestart
+    end = lexer.lexpos - lexer.linestart + 1
     (s, e) = lexer.lexmatch.span()
     start = end - (e - s)
 
-    t.value = LocatableString(t.value, Range(lexer.inmfile,  lexer.lineno, start,
+    t.value = LocatableString(t.value, Range(lexer.inmfile, lexer.lineno, start,
                                              lexer.lineno, end), lexer.lexpos, lexer.namespace)
 
     return t
@@ -178,7 +178,16 @@ def t_ANY_error(t):  # noqa: N802
     value = t.value
     if len(value) > 10:
         value = value[:10]
-    raise ParserException("", t.lineno, t.lexpos, value)
+
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    r = Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end)
+
+    raise ParserException("", r, value)
 
 
 # Build the lexer

@@ -26,11 +26,10 @@ from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException,\
-    LocatableString, TypeReferenceAnchor, statements, AttributeReferenceAnchor
+    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
 from typing import List
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit
 from inmanta.ast.blocks import BasicBlock
-from os.path import stat
 
 
 LOGGER = logging.getLogger(__name__)
@@ -171,7 +170,12 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
-    def __init__(self, namespace: Namespace, name: LocatableString, target_type: LocatableString, statements: BasicBlock, comment: str):
+    def __init__(self,
+                 namespace: Namespace,
+                 name: LocatableString,
+                 target_type: LocatableString,
+                 statements: BasicBlock,
+                 comment: str):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
         self.block = statements
