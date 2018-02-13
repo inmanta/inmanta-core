@@ -98,6 +98,11 @@ server_wait_after_param = Option("server", "wait-after-param", 5,
 agent_timeout = Option("server", "agent-timeout", 30,
                        "Time before an agent is considered to be offline", is_time)
 
+server_delete_currupt_files = Option("server", "delete_currupt_files", True,
+                                     "The server logs an error when it detects a file got corrupted. When set to true, the "
+                                     "server will also delete the file, so on subsequent compiles the missing file will be "
+                                     "recreated.", is_bool)
+
 #############################
 # Dashboard
 #############################
@@ -115,6 +120,7 @@ dash_client_id = Option("dashboard", "client_id", None, "The client id configure
 def default_hangtime():
     """ server.agent-timeout*3/4 """
     return str(int(agent_timeout.get() * 3 / 4))
+
 
 agent_hangtime = Option("server", "agent-hold", default_hangtime,
                         "Maximal time the server will hold an agent heartbeat call", is_time)

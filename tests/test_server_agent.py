@@ -72,7 +72,7 @@ def resource_container():
     class Provider(ResourceHandler):
 
         def check_resource(self, ctx, resource):
-            assert resource.value != const.UKNOWN_STRING
+            assert resource.value != const.UNKNOWN_STRING
             current = resource.clone()
             current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
 

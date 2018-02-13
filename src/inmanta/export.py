@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import hashlib
 import logging
 import os
 import time
@@ -33,6 +32,7 @@ from inmanta.ast import RuntimeException, CompilerException, Locatable
 from tornado.ioloop import IOLoop
 from tornado import gen
 from inmanta.execute.runtime import Instance, ResultVariable
+from inmanta.util import hash_file
 import itertools
 from inmanta.ast.entity import Entity
 from inmanta.util import groupby
@@ -63,6 +63,29 @@ class DependencyCycleException(Exception):
 
     def __str__(self, *args, **kwargs):
         return "Cycle in dependencies: %s" % self.cycle
+
+
+@gen.coroutine
+def upload_code(conn, tid, version, resource_to_sourcemap):
+    allfiles = {myhash: source_code for sourcemap in resource_to_sourcemap.values()
+                for myhash, (file_name, module, source_code, req) in sourcemap.items()}
+
+    res = yield conn.stat_files(list(allfiles.keys()))
+    if res is None or res.code != 200:
+        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+    for file in res.result["files"]:
+        res = yield conn.upload_file(id=file, content=base64.b64encode(allfiles[file].encode()).decode("ascii"))
+        if res is None or res.code != 200:
+            raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+
+    compactmap = {resource: {myhash: (file_name, module, req) for
+                             myhash, (file_name, module, source_code, req)in sourcemap.items()}
+                  for resource, sourcemap in resource_to_sourcemap.items()}
+
+    res = yield conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
+    if res is None or res.code != 200:
+        raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
 
 class Exporter(object):
@@ -361,10 +384,7 @@ class Exporter(object):
 
         @gen.coroutine
         def call():
-            for myresource, mysources in sources.items():
-                res = yield conn.upload_code(tid=tid, id=version, resource=myresource, sources=mysources)
-                if res is None or res.code != 200:
-                    raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
+            yield upload_code(conn, tid, version, sources)
 
         self.run_sync(call)
 
@@ -439,15 +459,6 @@ class Exporter(object):
 
         return set()
 
-    def _hash_file(self, content):
-        """
-            Create a hash from the given content
-        """
-        sha1sum = hashlib.new("sha1")
-        sha1sum.update(content)
-
-        return sha1sum.hexdigest()
-
     def upload_file(self, content=None):
         """
             Upload a file to the configuration server. This operation is not
@@ -456,7 +467,7 @@ class Exporter(object):
         if not isinstance(content, bytes):
             content = content.encode('utf-8')
 
-        hash_id = self._hash_file(content)
+        hash_id = hash_file(content)
         self._file_store[hash_id] = content
 
         return hash_id

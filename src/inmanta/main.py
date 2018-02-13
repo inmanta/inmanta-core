@@ -311,16 +311,16 @@ def environment_create(client, name, project, repo_url, branch, save):
 [config]
 heartbeat-interval = 60
 fact-expire = 1800
-environment=%s
-
+environment=%(env)s
 
 [compiler_rest_transport]
-host = %s
-port = %s
+host=%(host)s
+port=%(port)s
 
 [cmdline_rest_transport]
-host=%s
-port=%s""" % (env["id"], client.host, client.port, client.host, client.port)
+host=%(host)s
+port=%(port)s
+""" % {"env": env["id"], "host": client.host, "port": client.port}
         if os.path.exists(".inmanta"):
             click.echo(".inmanta exits, not writing config", err=True)
         else:

@@ -253,6 +253,11 @@ class Option(object):
         else:
             return defa
 
+    def set(self, value):
+        """ Only for tests"""
+        cfg = Config._get_instance()
+        cfg.set(self.section, self.name, value)
+
 #############################
 # Config
 #

@@ -53,3 +53,13 @@ def get_compiler_version():
 
 def groupby(mylist, f):
     return itertools.groupby(sorted(mylist, key=f), f)
+
+
+def hash_file(content):
+    """
+        Create a hash from the given content
+    """
+    sha1sum = hashlib.new("sha1")
+    sha1sum.update(content)
+
+    return sha1sum.hexdigest()

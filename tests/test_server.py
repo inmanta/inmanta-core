@@ -23,10 +23,13 @@ import uuid
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data
+from inmanta import data, protocol
 from inmanta import const
 from inmanta.server import config as opt
 from datetime import datetime
+from uuid import UUID
+from inmanta.export import upload_code
+from inmanta.util import hash_file
 
 LOGGER = logging.getLogger(__name__)
 
@@ -774,3 +777,120 @@ def test_tokens(server_multi, client_multi, environment):
     client_multi._transport_instance.token = agent_jot
     result = yield client_multi.list_versions(environment)
     assert result.code == 403
+
+
+def make_source(collector, filename, module, source, req):
+    myhash = hash_file(source.encode())
+    collector[myhash] = [filename, module, source, req]
+    return collector
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_code_upload(io_loop, motor, server_multi, client_multi, environment):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
+    sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
+
+    res = yield client_multi.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
+    assert res.code == 200
+
+    agent = protocol.Client("agent")
+
+    res = yield agent.get_code(tid=environment, id=version, resource="std::File")
+    assert res.code == 200
+    assert res.result["sources"] == sources
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_batched_code_upload(io_loop, motor, server_multi, client_multi, environment):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    version = 1
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    asources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
+    asources = make_source(asources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
+
+    bsources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
+    bsources = make_source(bsources, "c.py", "std.xxx", "enhkahEUWLGBVFEHJ UWEBVKW", ["pytest"])
+
+    csources = make_source({}, "a.py", "sss", "ujekncedsiekvsd", [])
+
+    sources = {"std::File": asources,
+               "std::Other": bsources,
+               "std:xxx": csources
+               }
+
+    yield upload_code(client_multi, environment, version, sources)
+
+    agent = protocol.Client("agent")
+
+    for name, sourcemap in sources.items():
+        res = yield agent.get_code(tid=environment, id=version, resource=name)
+        assert res.code == 200
+        assert res.result["sources"] == sourcemap
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_legacy_code(io_loop, motor, server_multi, client_multi, environment):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    version = 2
+
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+
+    res = yield client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+
+    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
+
+    code = data.Code(environment=UUID(environment), version=version, resource="std::File", sources=sources)
+    yield code.insert()
+
+    agent = protocol.Client("agent")
+
+    res = yield agent.get_code(tid=environment, id=version, resource="std::File")
+    assert res.code == 200
+    assert res.result["sources"] == sources
