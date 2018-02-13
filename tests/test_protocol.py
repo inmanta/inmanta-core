@@ -154,7 +154,7 @@ def test_gzip_encoding(server):
     """
         Test if the server accepts gzipped encoding and returns gzipped encoding.
     """
-    (hash, content, body) = make_random_file()
+    (hash, content, body) = make_random_file(size=1024)
 
     port = config.Config.get("server_rest_transport", "port")
     url = "http://localhost:%s/api/v1/file/%s" % (port, hash)
