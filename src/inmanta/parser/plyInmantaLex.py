@@ -19,6 +19,7 @@ import ply.lex as lex
 from inmanta.parser import ParserException
 from inmanta.ast.variables import Reference
 from inmanta.ast.constraint.expression import Regex
+from inmanta.ast import LocatableString, Range
 
 states = (
     ('mls', 'exclusive'),
@@ -51,6 +52,14 @@ def t_ID(t):  # noqa: N802
     t.type = reserved.get(t.value, 'ID')  # Check for reserved words
     if t.value[0].isupper():
         t.type = "CID"
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(t.value, Range(lexer.inmfile, lexer.lineno, start,
+                                             lexer.lineno, end), lexer.lexpos, lexer.namespace)
     return t
 
 
@@ -72,12 +81,14 @@ def t_CMP_OP(t):  # noqa: N802
 def t_COMMENT(t):  # noqa: N802
     r'\#.*?\n'
     t.lexer.lineno += 1
+    t.lexer.linestart = t.lexer.lexpos
     pass
 
 
 def t_JCOMMENT(t):  # noqa: N802
     r'\//.*?\n'
     t.lexer.lineno += 1
+    t.lexer.linestart = t.lexer.lexpos
     pass
 
 
@@ -121,6 +132,15 @@ def t_STRING_EMPTY(t):  # noqa: N802
 def t_STRING(t):  # noqa: N802
     r'\".*?[^\\]\"'
     t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(t.value, Range(lexer.inmfile, lexer.lineno, start,
+                                             lexer.lineno, end), lexer.lexpos, lexer.namespace)
+
     return t
 
 
@@ -136,11 +156,13 @@ def t_REGEX(t):  # noqa: N802
 def t_newline(t):  # noqa: N802
     r'\n+'
     t.lexer.lineno += len(t.value)
+    t.lexer.linestart = t.lexer.lexpos
 
 
 def t_mls_newline(t):  # noqa: N802
     r'\n+'
     t.lexer.lineno += len(t.value)
+    t.lexer.linestart = t.lexer.lexpos
     t.type = "MLS"
     return t
 
@@ -156,7 +178,16 @@ def t_ANY_error(t):  # noqa: N802
     value = t.value
     if len(value) > 10:
         value = value[:10]
-    raise ParserException("", t.lineno, t.lexpos, value)
+
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    r = Range(lexer.inmfile, lexer.lineno, start, lexer.lineno, end)
+
+    raise ParserException("", r, value)
 
 
 # Build the lexer

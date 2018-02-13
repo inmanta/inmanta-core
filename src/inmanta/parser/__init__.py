@@ -16,26 +16,23 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import CompilerException, Location
+from inmanta.ast import CompilerException, Range
 
 
 class ParserException(CompilerException):
 
-    def __init__(self, file, lnr, position, value, msg=None):
+    def __init__(self, location: Range, value, msg=None):
         CompilerException.__init__(self)
-        self.set_location(Location(file, lnr))
+        self.set_location(location)
         self.value = value
-        self.position = position
+        self.position = None
         self.msg = msg
 
     def findCollumn(self, content):  # noqa: N802
-        last_cr = content.rfind('\n', 0, self.position)
-        if last_cr < 0:
-            last_cr = 0
-        self.column = (self.position - last_cr) + 1
+        pass
 
     def __str__(self, *args, **kwargs):
         if self.msg is None:
-            return "Syntax error at token %s (%s:%d)" % (self.value, self.location, self.column)
+            return "Syntax error at token %s (%s)" % (self.value, self.location)
         else:
-            return "Syntax error %s (%s:%d)" % (self.msg, self.location, self.column)
+            return "Syntax error %s (%s)" % (self.msg, self.location)
