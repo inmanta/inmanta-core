@@ -22,6 +22,7 @@ import logging
 from pkg_resources import DistributionNotFound
 import pkg_resources
 import itertools
+import hashlib
 
 
 LOGGER = logging.getLogger(__name__)
