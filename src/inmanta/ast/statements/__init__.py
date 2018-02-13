@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
-from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named
+from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named, Anchor
 from typing import Any, Dict, List, Tuple  # noqa: F401
 
 try:
@@ -38,6 +38,7 @@ class Statement(Namespaced):
     def __init__(self) -> None:
         self.location = None  # type: Location
         self.namespace = None  # type: Namespace
+        self.anchors = []
 
     def copy_location(self, statement: Locatable) -> None:
         """
@@ -53,6 +54,9 @@ class Statement(Namespaced):
 
     def get_location(self) -> Location:
         return self.location
+
+    def get_anchors(self) -> List[Anchor]:
+        return self.anchors
 
 
 class DynamicStatement(Statement):
@@ -112,6 +116,7 @@ class ReferenceStatement(ExpressionStatement):
     def __init__(self, children: List[ExpressionStatement]) -> None:
         ExpressionStatement.__init__(self)
         self.children = children
+        self.anchors.extend((anchor for e in self.children for anchor in e.get_anchors()))
 
     def normalize(self) -> None:
         for c in self.children:
@@ -133,6 +138,9 @@ class AssignStatement(DynamicStatement):
         DynamicStatement.__init__(self)
         self.lhs = lhs
         self.rhs = rhs
+        if lhs is not None:
+            self.anchors.extend(lhs.get_anchors())
+        self.anchors.extend(rhs.get_anchors())
 
     def normalize(self) -> None:
         self.rhs.normalize()
@@ -192,7 +200,7 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
         DefinitionStatement.__init__(self)
         self.name = name
         self.namespace = namespace
-        self.fullName = namespace.get_full_name() + "::" + name
+        self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
 
     def register_types(self) -> Tuple[str, "NamedType"]:

@@ -21,7 +21,8 @@
 from . import GeneratorStatement
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
-from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException
+from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException,\
+    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
 from inmanta.execute.tracking import ImplementsTracker
 from typing import List, Dict, Tuple
 from inmanta.ast.statements import ExpressionStatement
@@ -111,11 +112,14 @@ class For(GeneratorStatement):
         A for loop
     """
 
-    def __init__(self, variable: ExpressionStatement, loop_var: str, module: BasicBlock) -> None:
+    def __init__(self, variable: ExpressionStatement, loop_var: LocatableString, module: BasicBlock) -> None:
         GeneratorStatement.__init__(self)
         self.base = variable
-        self.loop_var = loop_var
+        self.loop_var = str(loop_var)
+        self.loop_var_loc = loop_var.get_location()
         self.module = module
+        self.anchors.extend(module.get_anchors())
+        self.anchors.extend(variable.get_anchors())
 
     def __repr__(self) -> str:
         return "For(%s)" % self.loop_var
@@ -174,17 +178,18 @@ class Constructor(GeneratorStatement):
     """
 
     def __init__(self,
-                 class_type: str,
-                 attributes: List[Tuple[str, ExpressionStatement]],
+                 class_type: LocatableString,
+                 attributes: List[Tuple[LocatableString, ExpressionStatement]],
                  location: Location,
                  namespace: Namespace) -> None:
         GeneratorStatement.__init__(self)
-        self.class_type = class_type
+        self.class_type = str(class_type)
         self.__attributes = {}
         self.implemented = False
         self.register = False
         self.location = location
         self.namespace = namespace
+        self.anchors.append(TypeReferenceAnchor(class_type.get_location(), namespace, str(class_type)))
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
@@ -310,12 +315,15 @@ class Constructor(GeneratorStatement):
 
         return object_instance
 
-    def add_attribute(self, name: str, value: object):
+    def add_attribute(self, lname: LocatableString, value: object):
         """
             Add an attribute to this constructor call
         """
+        name = str(lname)
         if name not in self.__attributes:
             self.__attributes[name] = value
+            self.anchors.append(AttributeReferenceAnchor(lname.get_location(), lname.namespace, self.class_type, name))
+            self.anchors.extend(value.get_anchors())
         else:
             raise RuntimeException(self, "The attribute %s in the constructor call of %s is already set."
                                    % (name, self.class_type))

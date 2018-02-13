@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException
+from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException, Location
 from inmanta.execute.util import AnyType, NoneValue
 import numbers
 
@@ -97,6 +97,9 @@ class Type(Locatable):
 
     def normalize(self):
         pass
+
+    def is_primitive(self):
+        return False
 
 
 class NamedType(Type, Named):
@@ -185,6 +188,14 @@ class Number(Type):
     def __str__(cls):
         return "number"
 
+    @classmethod
+    def is_primitive(cls):
+        return True
+
+    @classmethod
+    def get_location(cls) -> Location:
+        return None
+
 
 class Bool(Type):
     """
@@ -225,6 +236,14 @@ class Bool(Type):
     def __str__(cls):
         return "bool"
 
+    @classmethod
+    def is_primitive(cls):
+        return True
+
+    @classmethod
+    def get_location(cls) -> Location:
+        return None
+
 
 class String(Type, str):
     """
@@ -260,6 +279,14 @@ class String(Type, str):
     @classmethod
     def __str__(cls):
         return "string"
+
+    @classmethod
+    def is_primitive(cls):
+        return True
+
+    @classmethod
+    def get_location(cls) -> Location:
+        return None
 
 
 class TypedList(Type):
@@ -452,5 +479,6 @@ def create_function(expression):
         return expression.execute_direct({'self': args[0]})
 
     return function
+
 
 TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict}

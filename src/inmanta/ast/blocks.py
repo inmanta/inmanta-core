@@ -18,7 +18,7 @@
 
 from inmanta.ast.statements import DynamicStatement
 from inmanta.ast.statements.assign import Assign
-from inmanta.ast import TypeNotFoundException, RuntimeException, Namespace
+from inmanta.ast import TypeNotFoundException, RuntimeException, Namespace, Anchor
 from typing import List
 from inmanta.execute.runtime import Resolver, QueueScheduler
 
@@ -35,6 +35,9 @@ class BasicBlock(object):
 
     def get_stmts(self) -> List[DynamicStatement]:
         return self.__stmts
+
+    def get_anchors(self) -> List[Anchor]:
+        return [a for s in self.__stmts for a in s.get_anchors()]
 
     def add(self, stmt: DynamicStatement) -> None:
         self.__stmts.append(stmt)
