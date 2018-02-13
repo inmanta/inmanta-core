@@ -72,6 +72,7 @@ class Locatable(object):
     def get_location(self) -> Location:
         return self.location
 
+
 class LocatableString(object):
     """
         A string with an attached source location.
