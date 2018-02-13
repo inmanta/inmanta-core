@@ -247,6 +247,8 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
+        
+        model = ModelExporter(types).export_all()
 
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
@@ -256,7 +258,7 @@ class Exporter(object):
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
-            self.commit_resources(self._version, resources, metadata)
+            self.commit_resources(self._version, resources, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
@@ -367,7 +369,7 @@ class Exporter(object):
         self.run_sync(call)
 
     def commit_resources(self, version: int, resources: List[Dict[str, str]],
-                         metadata: Dict[str, str]) -> None:
+                         metadata: Dict[str, str], model: Dict) -> None:
         """
             Commit the entire list of resource to the configurations server.
         """
@@ -410,7 +412,8 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {"export_metadata": metadata}
+        version_info = {"export_metadata": metadata,
+                        "model":model}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")

@@ -246,7 +246,7 @@ class ListVariable(DelayedResultVariable):
         if value in self.value:
             # any set_value may fulfill a promise, allowing this object to be queued
             if self.can_get():
-                    self.queue()
+                self.queue()
             return
 
         self.value.append(value)
@@ -503,6 +503,7 @@ class RawUnit(Waiter):
             e.set_statement(self.resumer)
             raise e
         self.done = True
+
 
 """
 Resolution
