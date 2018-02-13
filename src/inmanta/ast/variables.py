@@ -34,7 +34,7 @@ class Reference(ExpressionStatement):
     """
 
     def __init__(self, name: LocatableString) -> None:
-        super().__init__()
+        ExpressionStatement.__init__(self)
         self.name = str(name)
         self.full_name = str(name)
 
@@ -81,6 +81,7 @@ class AttributeReferenceHelper(Locatable):
     """
 
     def __init__(self, target: ResultVariable, instance: Reference, attribute: str, resultcollector: ResultCollector) -> None:
+        Locatable.__init__(self)
         self.attribute = attribute
         self.target = target
         self.instance = instance
@@ -135,6 +136,7 @@ class IsDefinedReferenceHelper(Locatable):
     """
 
     def __init__(self, target: ResultVariable, instance: Reference, attribute: str) -> None:
+        Locatable.__init__(self)
         self.attribute = attribute
         self.target = target
         self.instance = instance

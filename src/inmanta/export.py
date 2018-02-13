@@ -24,15 +24,20 @@ from typing import Dict, List
 
 from inmanta import protocol, const
 from inmanta.agent.handler import Commander
-from inmanta.execute.util import Unknown
+from inmanta.execute.util import Unknown, NoneValue
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import RuntimeException, CompilerException
+from inmanta.ast import RuntimeException, CompilerException, Locatable
 from tornado.ioloop import IOLoop
 from tornado import gen
+from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.util import hash_file
-
+import itertools
+from inmanta.ast.entity import Entity
+from inmanta.util import groupby
+from inmanta.ast.attribute import RelationAttribute
+import inmanta.model as model
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
@@ -266,6 +271,8 @@ class Exporter(object):
 
         resources = self.resources_to_list()
 
+        model = ModelExporter(types).export_all()
+
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
@@ -274,7 +281,7 @@ class Exporter(object):
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
-            self.commit_resources(self._version, resources, metadata)
+            self.commit_resources(self._version, resources, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
@@ -382,7 +389,7 @@ class Exporter(object):
         self.run_sync(call)
 
     def commit_resources(self, version: int, resources: List[Dict[str, str]],
-                         metadata: Dict[str, str]) -> None:
+                         metadata: Dict[str, str], model: Dict) -> None:
         """
             Commit the entire list of resource to the configurations server.
         """
@@ -425,7 +432,8 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {"export_metadata": metadata}
+        version_info = {"export_metadata": metadata,
+                        "model": model}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
@@ -520,3 +528,126 @@ def export_dumpfiles(options, types):
     with open(path, "w+") as fd:
         for pkg in types["std::Package"]:
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
+
+
+def location(obj: Locatable):
+    loc = obj.get_location()
+    return model.Location(loc.file, loc.lnr)
+
+
+def relation_name(type: Entity, rel: RelationAttribute):
+    if rel is None:
+        return ""
+    return type.get_full_name() + "." + rel.name
+
+
+class ModelExporter(object):
+
+    def __init__(self, types):
+        self.root_type = types["std::Entity"]
+        self.types = types
+
+    def export_types(self):
+        """
+            Run after export_model!!
+        """
+
+        def convert_value_for_type(value):
+            if isinstance(value, Unknown):
+                raise Exception("annotations should not be unknown")
+            if isinstance(value, Instance):
+                return model.ReferenceValue(self.entity_ref[value])
+            else:
+                return model.DirectValue(value)
+
+        def convert_attribute(attr):
+            return model.Attribute(attr.type.__str__(), attr.is_optional(), attr.is_multi(), attr.comment, location(attr))
+
+        def convert_relation(relation: RelationAttribute):
+
+            return model.Relation(relation.type.get_full_name(),
+                                  [relation.low, relation.high],
+                                  relation_name(relation.type, relation.end),
+                                  relation.comment, location(relation),
+                                  [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
+                                  [convert_value_for_type(x.get_value()) for x in relation.target_annotations])
+
+        def convert_type(mytype):
+            return model.Entity([x.get_full_name() for x in mytype.parent_entities],
+                                {n: convert_attribute(attr) for n, attr in mytype.get_attributes().items()
+                                 if not isinstance(attr, RelationAttribute)},
+                                {n: convert_relation(attr) for n, attr in mytype.get_attributes().items()
+                                 if isinstance(attr, RelationAttribute)},
+                                location(mytype))
+        return {k: convert_type(v).to_dict() for k, v in self.types.items() if isinstance(v, Entity)}
+
+    def export_model(self):
+        entities = self.root_type.get_all_instances()
+
+        entities_per_type = {t: [e for e in g] for t, g in groupby(entities, lambda x: x.type.get_full_name())}
+
+        entity_ref = {e: t + "_" + str(i) for t, es in entities_per_type.items() for e, i in zip(es, itertools.count(1))}
+        self.entity_ref = entity_ref
+
+        def convert(value):
+            if isinstance(value, Unknown):
+                return "_UNKNOWN_"
+            if isinstance(value, Instance):
+                return entity_ref[value]
+            return value
+
+        def convert_relation(value: ResultVariable):
+            if value.is_ready() and value.value is not None:
+                rawvalue = value.get_value()
+            else:
+                # no value present
+                return {"values": []}
+            if not isinstance(rawvalue, list):
+                rawvalue = [rawvalue]
+            return {"values": [convert(v) for v in rawvalue]}
+
+        def convert_attribute(value: ResultVariable):
+            rawvalue = value.get_value()
+            if isinstance(rawvalue, Unknown):
+                return {"unknowns": [0]}
+            if isinstance(rawvalue, NoneValue):
+                return {"nones": [0]}
+            if not isinstance(rawvalue, list):
+                rawvalue = [rawvalue]
+                return {"values": rawvalue}
+            else:
+                unknowns = []
+                offset = 0
+                for i in range(0, len(rawvalue)):
+                    value = rawvalue[i - offset]
+                    if isinstance(value, Unknown):
+                        unknowns.append(i)
+                        del rawvalue[i - offset]
+                        offset += 1
+                if len(unknowns) > 0:
+                    return {"values": rawvalue, "unknowns": unknowns}
+                else:
+                    return {"values": rawvalue}
+
+        def convert_entity(original):
+            attributes = {}
+            relations = {}
+            map = {"type": original.type.get_full_name(), "relations": relations, "attributes": attributes}
+            for name, value in original.slots.items():
+                if name == "self":
+                    pass
+                elif isinstance(value.type, Entity):
+                    relations[name] = convert_relation(value)
+                else:
+                    attributes[name] = convert_attribute(value)
+            return map
+
+        maps = {entity_ref[k]: convert_entity(k) for k in entities}
+
+        return maps
+
+    def export_all(self):
+        return {
+            "instances": self.export_model(),
+            "types": self.export_types()
+        }

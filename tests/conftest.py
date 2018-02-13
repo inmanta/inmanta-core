@@ -288,7 +288,8 @@ class SnippetCompilationTest(object):
                     os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
                     self.__class__.libs))
 
-        with open(os.path.join(self.project_dir, "main.cf"), "w") as x:
+        self.main = os.path.join(self.project_dir, "main.cf")
+        with open(self.main, "w") as x:
             x.write(snippet)
 
         Project.set(Project(self.project_dir, autostd=autostd))

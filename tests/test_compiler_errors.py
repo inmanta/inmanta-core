@@ -156,7 +156,7 @@ end
 entity File:
 end
 """,
-        "Entity __config__::File is already defined (reported at ({dir}/main.cf:5)) (duplicate at ({dir}/main.cf:2))"
+        "Entity __config__::File is already defined (reported at ({dir}/main.cf:5:8)) (duplicate at ({dir}/main.cf:2:8))"
     )
 
 
@@ -172,8 +172,8 @@ end
 implementation file for File:
 end
 """,
-        "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8))" +
-        " (duplicate at ({dir}/main.cf:5))"
+        "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8:16))" +
+        " (duplicate at ({dir}/main.cf:5:16))"
     )
 
 

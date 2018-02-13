@@ -42,6 +42,7 @@ class Attribute(Locatable):
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable=False) -> None:
+        Locatable.__init__(self)
         self.__name = name
         entity.add_attribute(self)
         self.__entity = entity
@@ -112,10 +113,10 @@ class Attribute(Locatable):
         return out
 
     def is_optional(self):
-        return False
+        return self.__nullallble
 
     def is_multi(self):
-        return False
+        return self.__multi
 
     def final(self, excns: List[Exception]) -> None:
         pass

@@ -246,7 +246,7 @@ class ListVariable(DelayedResultVariable):
         if value in self.value:
             # any set_value may fulfill a promise, allowing this object to be queued
             if self.can_get():
-                    self.queue()
+                self.queue()
             return
 
         self.value.append(value)
@@ -504,6 +504,7 @@ class RawUnit(Waiter):
             raise e
         self.done = True
 
+
 """
 Resolution
 
@@ -593,6 +594,8 @@ class ExecutionContext(object):
 class Instance(ExecutionContext, Locatable, Resolver):
 
     def __init__(self, mytype, resolver, queue):
+        Locatable.__init__(self)
+        # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
         self.slots = {n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()}

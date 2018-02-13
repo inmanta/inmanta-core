@@ -21,6 +21,7 @@ import logging
 
 from pkg_resources import DistributionNotFound
 import pkg_resources
+import itertools
 import hashlib
 
 
@@ -49,6 +50,10 @@ def get_compiler_version():
             "Could not find version number for the inmanta compiler." +
             "Is inmanta installed? Use stuptools install or setuptools dev to install.")
         return None
+
+
+def groupby(mylist, f):
+    return itertools.groupby(sorted(mylist, key=f), f)
 
 
 def hash_file(content):
