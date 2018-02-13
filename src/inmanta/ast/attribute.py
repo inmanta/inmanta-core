@@ -42,6 +42,7 @@ class Attribute(Locatable):
     """
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable=False) -> None:
+        Locatable.__init__(self)
         self.__name = name
         entity.add_attribute(self)
         self.__entity = entity

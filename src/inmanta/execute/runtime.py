@@ -594,6 +594,8 @@ class ExecutionContext(object):
 class Instance(ExecutionContext, Locatable, Resolver):
 
     def __init__(self, mytype, resolver, queue):
+        Locatable.__init__(self)
+        # ExecutionContext, Resolver -> this class only uses it as an "interface", so no constructor call!
         self.resolver = resolver.get_root_resolver()
         self.type = mytype
         self.slots = {n: mytype.get_attribute(n).get_new_result_variable(self, queue) for n in mytype.get_all_attribute_names()}

@@ -54,7 +54,7 @@ class Entity(NamedType):
     """
 
     def __init__(self, name: str, namespace: Namespace) -> None:
-        Type.__init__(self)
+        NamedType.__init__(self)
 
         self.__name = name  # type: str
 
@@ -482,6 +482,7 @@ class Implementation(Named):
                  namespace: Namespace,
                  target_type: str,
                  comment: Optional[str]=None) -> None:
+        Named.__init__(self)
         self.name = name
         self.statements = stmts
         self.namespace = namespace
@@ -519,6 +520,7 @@ class Implement(Locatable):
     """
 
     def __init__(self) -> None:
+        Locatable.__init__(self)
         self.constraint = None  # type: ExpressionStatement
         self.implementations = []  # type: List[Implementation]
         self.comment = None  # type: str
@@ -537,6 +539,7 @@ class Default(Type):
     """
 
     def __init__(self, name: str) -> None:
+        Type.__init__(self)
         self.name = name
         self.entity = None  # type: Entity
         self._defaults = {}  # type: Dict[str,ExpressionStatement]

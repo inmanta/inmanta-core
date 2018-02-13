@@ -71,9 +71,6 @@ class Type(Locatable):
         These are types that are not relations.
     """
 
-    def __init__(self):
-        pass
-
     @classmethod
     def validate(cls, value):
         """

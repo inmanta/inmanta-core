@@ -72,7 +72,6 @@ class Locatable(object):
     def get_location(self) -> Location:
         return self.location
 
-
 class LocatableString(object):
     """
         A string with an attached source location.
@@ -128,7 +127,7 @@ class Anchor(object):
 class TypeReferenceAnchor(Anchor):
 
     def __init__(self, range: Range, namespace: "Namespace", type: str):
-        self.range = range
+        Anchor.__init__(self, range=range)
         self.namespace = namespace
         self.type = type
 
@@ -140,7 +139,7 @@ class TypeReferenceAnchor(Anchor):
 class AttributeReferenceAnchor(Anchor):
 
     def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str):
-        self.range = range
+        Anchor.__init__(self, range=range)
         self.namespace = namespace
         self.type = type
         self.attribute = attribute
@@ -166,6 +165,7 @@ class Named(Namespaced):
 class MockImport(Locatable):
 
     def __init__(self, target: "Namespace") -> None:
+        Locatable.__init__(self)
         self.target = target
 
 
@@ -175,6 +175,7 @@ class Namespace(Namespaced):
     """
 
     def __init__(self, name: str, parent: "Optional[Namespace]"=None) -> None:
+        Namespaced.__init__(self)
         self.__name = name
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
@@ -187,7 +188,6 @@ class Namespace(Namespaced):
             self.visible_namespaces = {name: MockImport(self)}
         self.primitives = None  # type: Dict[str,Type]
         self.scope = None  # type: ExecutionContext
-        self.location = None  # type: Location
 
     def set_primitives(self, primitives: "Dict[str,Type]") -> None:
         self.primitives = primitives

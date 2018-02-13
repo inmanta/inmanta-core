@@ -36,6 +36,7 @@ class Statement(Namespaced):
     """
 
     def __init__(self) -> None:
+        Namespaced.__init__(self)
         self.location = None  # type: Location
         self.namespace = None  # type: Namespace
         self.anchors = []
@@ -204,7 +205,6 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
         self.type = None  # type: NamedType
 
     def register_types(self) -> Tuple[str, "NamedType"]:
-        self.copy_location(self.type)
         self.namespace.define_type(self.name, self.type)
         return (self.fullName, self.type)
 

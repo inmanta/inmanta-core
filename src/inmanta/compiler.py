@@ -174,7 +174,6 @@ class Compiler(object):
         nullrange = Range("internal", 0, 0, 0, 0)
         entity = DefineEntity(ns, LocatableString("Entity", nullrange, 0, ns),
                               "The entity all other entities inherit from.", [], [])
-
         str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)
 
         requires_rel = DefineRelation((str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
@@ -183,5 +182,4 @@ class Compiler(object):
 
         statements.append(entity)
         statements.append(requires_rel)
-
         return (statements, blocks)
