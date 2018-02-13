@@ -52,6 +52,18 @@ class Location(object):
         return self.file == other.file and self.lnr == other.lnr
 
 
+class Range(Location):
+
+    def __init__(self, file: str, start_lnr: int, start_char: int, end_lnr: int, end_char: int) -> None:
+        Location.__init__(self, file, start_lnr)
+        self.start_char = start_char
+        self.end_lnr = end_lnr
+        self.end_char = end_char
+
+    def __str__(self) -> str:
+        return "%s:%d:%d" % (self.file, self.lnr, self.start_char)
+
+
 class Locatable(object):
 
     def __init__(self):
@@ -59,6 +71,82 @@ class Locatable(object):
 
     def get_location(self) -> Location:
         return self.location
+
+
+class LocatableString(object):
+    """
+        A string with an attached source location.
+
+        It is not a subtype of str, as str is not a normal class
+        As such, it is very important to unwrap strings ad this object is not an actual string.
+
+        All identifiers produced by the parser are of this type.
+
+        The unwrapping should be done in
+        1. anywhere in DefinitionStatements
+        2. in the constructors of other statements
+    """
+
+    def __init__(self, value, location: Range, lexpos, namespace):
+        self.value = value
+        self.location = location
+
+        self.lnr = location.lnr
+        self.elnr = location.end_lnr
+        self.end = location.end_char
+        self.start = location.start_char
+
+        self.lexpos = lexpos
+        self.namespace = namespace
+
+    def get_value(self):
+        return self.value
+
+    def get_location(self):
+        return self.location
+
+    def __str__(self):
+        return self.value
+
+
+class Anchor(object):
+
+    def __init__(self, range: Range):
+        self.range = range
+
+    def get_range(self) -> Range:
+        return self.range
+
+    def get_location(self) -> Range:
+        return self.range
+
+    @abstractmethod
+    def resolve(self):
+        raise NotImplementedError()
+
+
+class TypeReferenceAnchor(Anchor):
+
+    def __init__(self, range: Range, namespace: "Namespace", type: str):
+        self.range = range
+        self.namespace = namespace
+        self.type = type
+
+    def resolve(self):
+        t = self.namespace.get_type(self.type)
+        return t.get_location()
+
+
+class AttributeReferenceAnchor(Anchor):
+
+    def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str):
+        self.range = range
+        self.namespace = namespace
+        self.type = type
+        self.attribute = attribute
+
+    def resolve(self):
+        return self.namespace.get_type(self.type).get_attribute(self.attribute).get_location()
 
 
 class Namespaced(Locatable):

@@ -23,7 +23,7 @@ import glob
 import imp
 
 from inmanta.execute import scheduler
-from inmanta.ast import Namespace, Location
+from inmanta.ast import Namespace, LocatableString, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
 from inmanta.module import Project
 from inmanta.plugins import PluginMeta
@@ -49,6 +49,20 @@ def do_compile(refs={}):
     if not success:
         sys.stderr.write("Unable to execute all statements.\n")
     return (sched.get_types(), compiler.get_ns())
+
+
+def anchormap(refs={}):
+    """
+        Run run run
+    """
+    project = Project.get()
+    compiler = Compiler(os.path.join(project.project_path, project.main_file), refs=refs)
+
+    LOGGER.debug("Starting compile")
+
+    (statements, blocks) = compiler.compile()
+    sched = scheduler.Scheduler()
+    return sched.anchormap(compiler, statements, blocks)
 
 
 class Compiler(object):
@@ -156,13 +170,15 @@ class Compiler(object):
             statements.append(statement)
 
         # add the entity type (hack?)
-        entity = DefineEntity(self.__root_ns.get_child_or_create("std"),
-                              "Entity", "The entity all other entities inherit from.", [], [])
-        entity.location = Location("internal", 0)
+        ns = self.__root_ns.get_child_or_create("std")
+        nullrange = Range("internal", 0, 0, 0, 0)
+        entity = DefineEntity(ns, LocatableString("Entity", nullrange, 0, ns),
+                              "The entity all other entities inherit from.", [], [])
 
-        requires_rel = DefineRelation(("std::Entity", "requires", [0, None], False),
-                                      ("std::Entity", "provides", [0, None], False))
-        requires_rel.location = Location("internal", 0)
+        str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)
+
+        requires_rel = DefineRelation((str_std_entity, LocatableString("requires", nullrange, 0, ns), [0, None], False),
+                                      (str_std_entity, LocatableString("provides", nullrange, 0, ns), [0, None], False))
         requires_rel.namespace = self.__root_ns.get_ns_from_string("std")
 
         statements.append(entity)
