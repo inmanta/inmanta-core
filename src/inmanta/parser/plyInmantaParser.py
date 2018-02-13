@@ -910,19 +910,10 @@ def myparse(ns, tfile, content):
     namespace = ns
     lexer.namespace = ns
     lexer.begin('INITIAL')
-    try:
-        if content is None:
-            with open(tfile, 'r') as myfile:
-                data = myfile.read()
-                if len(data) == 0:
-                    return []
-                # prevent problems with EOF
-                data = data + "\n"
-                lexer.lineno = 1
-                lexer.linestart = 0
-                return parser.parse(data, lexer=lexer, debug=False)
-        else:
-            data = content
+
+    if content is None:
+        with open(tfile, 'r') as myfile:
+            data = myfile.read()
             if len(data) == 0:
                 return []
             # prevent problems with EOF
@@ -930,10 +921,16 @@ def myparse(ns, tfile, content):
             lexer.lineno = 1
             lexer.linestart = 0
             return parser.parse(data, lexer=lexer, debug=False)
-    except ParserException as e:
-        e.findCollumn(data)
-        e.location.file = tfile
-        raise e
+    else:
+        data = content
+        if len(data) == 0:
+            return []
+        # prevent problems with EOF
+        data = data + "\n"
+        lexer.lineno = 1
+        lexer.linestart = 0
+        return parser.parse(data, lexer=lexer, debug=False)
+   
 
 
 def parse(namespace, filename, content=None):

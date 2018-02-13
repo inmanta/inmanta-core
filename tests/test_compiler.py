@@ -881,7 +881,7 @@ def test_error_on_relation():
 Host.provider [1] -- Provider test""")
     assert e.value.location.file == "test"
     assert e.value.location.lnr == 3
-    assert e.value.column == 3
+    assert e.value.location.start_char == 2
 
 
 def test_doc_string_on_new_relation():
