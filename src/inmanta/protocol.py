@@ -28,9 +28,11 @@ from datetime import datetime
 from collections import defaultdict
 import enum
 import warnings
+import io
+import gzip
 
 import tornado.web
-from tornado import gen, queues
+from tornado import gen, queues, web
 from inmanta import methods, const, execute
 from inmanta import config as inmanta_config
 from tornado.httpserver import HTTPServer
@@ -235,6 +237,20 @@ def custom_json_encoder(o):
 def json_encode(value):
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+
+
+def gzipped_json(value):
+    value = json_encode(value)
+    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
+        return False, value
+
+    gzip_value = io.BytesIO()
+    gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
+
+    gzip_file.write(value.encode())
+    gzip_file.close()
+
+    return True, gzip_value.getvalue()
 
 
 class UnauhorizedError(Exception):
@@ -745,7 +761,7 @@ class RESTTransport(Transport):
         if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
             port = inmanta_config.Config.get()[self.id]["port"]
 
-        application = tornado.web.Application(self._handlers)
+        application = tornado.web.Application(self._handlers, compress_response=True)
 
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)
@@ -754,10 +770,10 @@ class RESTTransport(Transport):
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             ssl_ctx.load_cert_chain(crt, key)
 
-            self.http_server = HTTPServer(application, ssl_options=ssl_ctx)
+            self.http_server = HTTPServer(application, decompress_request=True, ssl_options=ssl_ctx)
             LOGGER.debug("Created REST transport with SSL")
         else:
-            self.http_server = HTTPServer(application)
+            self.http_server = HTTPServer(application, decompress_request=True)
 
         self.http_server.listen(port)
 
@@ -844,9 +860,12 @@ class RESTTransport(Transport):
 
         try:
             if body is not None:
-                body = json_encode(body)
+                zipped, body = gzipped_json(body)
+                if zipped:
+                    headers["Content-Encoding"] = "gzip"
+
             request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=self.connection_timout,
-                                  request_timeout=120, ca_certs=ca_certs)
+                                  request_timeout=120, ca_certs=ca_certs, decompress_response=True)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
         except HTTPError as e:
@@ -859,6 +878,7 @@ class RESTTransport(Transport):
 
             return Result(code=e.code, result={"message": str(e)})
         except Exception as e:
+            raise e
             return Result(code=500, result={"message": str(e)})
 
         return Result(code=response.code, result=self._decode(response.body))
