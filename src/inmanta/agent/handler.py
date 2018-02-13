@@ -715,7 +715,9 @@ class CRUDHandler(ResourceHandler):
                 ctx.set_status(const.ResourceState.skipped)
 
             else:
-                current = resource.clone()
+                # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
+                # state defines purged=true but the read_resource fails to set it to false if the resource does exist
+                current = resource.clone(purged=False)
                 changes = {}
                 try:
                     self.read_resource(ctx, current)
