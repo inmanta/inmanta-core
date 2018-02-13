@@ -270,7 +270,7 @@ class Exporter(object):
         self._validate_graph()
 
         resources = self.resources_to_list()
-        
+
         model = ModelExporter(types).export_all()
 
         if len(self._resources) == 0:
@@ -433,7 +433,7 @@ class Exporter(object):
 
         # Collecting version information
         version_info = {"export_metadata": metadata,
-                        "model":model}
+                        "model": model}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")
