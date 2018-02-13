@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -19,13 +19,23 @@ import random
 import base64
 
 import pytest
+from tornado.httpclient import HTTPRequest, AsyncHTTPClient
+from inmanta import config, protocol
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 import os
 
 
-def make_random_file():
+def make_random_file(size=0):
+    """
+        Generate a random file.
+
+        :param size: If size is > 0 content is generated that is equal or more than size.
+    """
     randomvalue = str(random.randint(0, 10000))
+    if size > 0:
+        while len(randomvalue) < size:
+            randomvalue += randomvalue
 
     content = ("Hello world %s\n" % (randomvalue)).encode()
     hash = hash_file(content)
@@ -137,3 +147,29 @@ def test_client_files_corrupt(client):
 
     result = yield client.upload_file(id=hash, content=body)
     assert result.code == 200
+
+
+@pytest.mark.gen_test
+def test_gzip_encoding(server):
+    """
+        Test if the server accepts gzipped encoding and returns gzipped encoding.
+    """
+    (hash, content, body) = make_random_file()
+
+    port = config.Config.get("server_rest_transport", "port")
+    url = "http://localhost:%s/api/v1/file/%s" % (port, hash)
+
+    zipped, body = protocol.gzipped_json({"content": body})
+    assert zipped
+
+    request = HTTPRequest(url=url, method="PUT", headers={"Accept-Encoding": "gzip", "Content-Encoding": "gzip"},
+                          body=body, decompress_response=True)
+    client = AsyncHTTPClient()
+    response = yield client.fetch(request)
+    assert response.code == 200
+
+    request = HTTPRequest(url=url, method="GET", headers={"Accept-Encoding": "gzip"}, decompress_response=True)
+    client = AsyncHTTPClient()
+    response = yield client.fetch(request)
+    assert response.code == 200
+    assert response.headers["X-Consumed-Content-Encoding"] == "gzip"
