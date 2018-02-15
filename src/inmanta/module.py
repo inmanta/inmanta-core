@@ -1436,6 +1436,12 @@ version: 0.0.1dev0""" % {"name": name})
             allrepos = ["'%s'" % x for x in repo]
             allrepos = ','.join(allrepos)
 
+            if len(module.versions()) > 0:
+                version_constraint = "%(name)s: %(name)s == %(version)s" % \
+                                     {"name": module.name, "version": str(module.versions()[0])}
+            else:
+                version_constraint = module.name
+
             LOGGER.info("Setting up project")
             with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
                 fd.write("""name: test
@@ -1444,8 +1450,8 @@ repo: [%(repo)s]
 modulepath: libs
 downloadpath: libs
 requires:
-    %(name)s: %(name)s == %(version)s
-""" % {"name": module.name, "version": str(module.versions()[0]), "repo": allrepos})
+    %(version)s
+""" % {"name": module.name, "version": version_constraint, "repo": allrepos})
 
             LOGGER.info("Installing dependencies")
             test_project = Project(project_dir)
@@ -1460,7 +1466,8 @@ requires:
             if workingcopy:
                 # overwrite with actual
                 modpath = os.path.join(project_dir, "libs", module.name)
-                shutil.rmtree(modpath)
+                if os.path.exists(modpath):
+                    shutil.rmtree(modpath)
                 shutil.copytree(module._path, modpath)
 
             project = Project(project_dir)
