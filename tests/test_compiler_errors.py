@@ -213,7 +213,7 @@ def test_null(snippetcompiler):
         a = A()
 
     """,
-        "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+        "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`"
         " caused by Invalid value 'null', expected String (reported in Construct(A) ({dir}/main.cf:6))")
 
 
@@ -225,7 +225,7 @@ def test_null_on_list(snippetcompiler):
         end
         implement A using std::none
         a = A()
-    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`" +
+    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`"
         " caused by Invalid value 'null', expected list (reported in Construct(A) ({dir}/main.cf:6))")
 
 
@@ -268,3 +268,12 @@ def test_for_error_2(snippetcompiler):
         end
     """,
         "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:2))")
+
+
+def test_index_undefined_attribute(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        index std::Entity(foo, bar)
+    """,
+        "Attribute 'foo' referenced in index is not defined in entity std::Entity (reported in index "
+        "std::Entity(foo, bar) ({dir}/main.cf:2))")

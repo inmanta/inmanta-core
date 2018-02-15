@@ -524,7 +524,7 @@ class DefineIndex(DefinitionStatement):
         return [("type", self.type)]
 
     def __repr__(self):
-        return "index<%s>(%s)" % (self.type, "")
+        return "index %s(%s)" % (self.type, ", ".join(self.attributes))
 
     def evaluate(self):
         """
@@ -535,7 +535,8 @@ class DefineIndex(DefinitionStatement):
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
             if attribute not in allattributes:
-                raise NotFoundException(self, attribute, "Index defined on attribute that does not exist")
+                raise NotFoundException(self, attribute, "Attribute '%s' referenced in index is not defined in entity %s" %
+                                        (attribute, entity_type))
 
         entity_type.add_index(self.attributes)
 

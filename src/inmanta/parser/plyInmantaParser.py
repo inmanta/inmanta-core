@@ -93,7 +93,7 @@ def p_main_term(p):
 
 
 def p_top_stmt(p):
-    '''top_stmt : mls 
+    '''top_stmt : mls
                 | entity_def
                 | implement_def
                 | implementation_def
@@ -507,7 +507,7 @@ def p_typedef_cls(p):
 def p_index(p):
     """index : INDEX class_ref '(' id_list ')' """
     p[0] = DefineIndex(p[2], p[4])
-    attach_lnr(p, 2)
+    attach_lnr(p, 1)
 
 #######################
 # CONDITIONALS
@@ -930,7 +930,7 @@ def myparse(ns, tfile, content):
         lexer.lineno = 1
         lexer.linestart = 0
         return parser.parse(data, lexer=lexer, debug=False)
-   
+
 
 
 def parse(namespace, filename, content=None):
