@@ -296,7 +296,7 @@ class Constructor(GeneratorStatement):
         for attributename, valueexpression in self._indirect_attributes.items():
             var = object_instance.get_attribute(attributename)
             reqs = valueexpression.requires_emit_gradual(resolver, queue, var)
-            SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance)
+            SetAttributeHelper(queue, resolver, var, reqs, valueexpression, self, object_instance, attributename)
 
         # add anonymous implementations
         if self.implemented:

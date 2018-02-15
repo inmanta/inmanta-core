@@ -277,3 +277,41 @@ def test_index_undefined_attribute(snippetcompiler):
     """,
         "Attribute 'foo' referenced in index is not defined in entity std::Entity (reported in index "
         "std::Entity(foo, bar) ({dir}/main.cf:2))")
+
+
+def test_set_wrong_relation_type(snippetcompiler):
+    """
+        Test the error message when setting the wrong type on a relation in the two cases:
+        1) on an instance
+        2) in the constructor
+    """
+    snippetcompiler.setup_for_error(
+        """
+        entity Credentials:
+        end
+
+        Credentials.file [1] -- std::File
+
+        implement Credentials using std::none
+
+        creds = Credentials(file=creds)
+        """,
+        "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
+        "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
+        "(reported in Construct(Credentials) ({dir}/main.cf:9:34)) (reported in Construct(Credentials) ({dir}/main.cf:9))")
+
+    snippetcompiler.setup_for_error(
+        """
+        entity Credentials:
+        end
+
+        Credentials.file [1] -- std::File
+
+        implement Credentials using std::none
+
+        creds = Credentials()
+        creds.file = creds
+        """,
+        "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
+        "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
+        "(reported in creds.file = creds ({dir}/main.cf:10:22)) (reported in creds.file = creds ({dir}/main.cf:10))")

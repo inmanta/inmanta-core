@@ -116,7 +116,7 @@ class SetAttribute(AssignStatement):
         instance = self.instance.execute(requires, resolver, queue)
         var = instance.get_attribute(self.attribute_name)
         reqs = self.value.requires_emit_gradual(resolver, queue, var)
-        SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance)
+        SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
     def __str__(self) -> str:
         return "%s.%s = %s" % (str(self.instance), self.attribute_name, str(self.value))
@@ -131,17 +131,19 @@ class SetAttributeHelper(ExecutionUnit):
                  requires: typing.Dict[object, ResultVariable],
                  expression: ExpressionStatement,
                  stmt: Statement,
-                 instance: Instance) -> None:
+                 instance: Instance,
+                 attribute_name: str) -> None:
         ExecutionUnit.__init__(self, queue_scheduler, resolver, result, requires, expression)
         self.stmt = stmt
         self.instance = instance
+        self.attribute_name = attribute_name
 
     def execute(self) -> None:
         try:
             ExecutionUnit.execute(self)
         except RuntimeException as e:
             e.set_statement(self.stmt)
-            raise AttributeException(self.stmt, self.instance, self.stmt.attribute_name, e)
+            raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
 
     def __str__(self) -> str:
         return str(self.stmt)
