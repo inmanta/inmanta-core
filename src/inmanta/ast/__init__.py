@@ -67,10 +67,17 @@ class Range(Location):
 class Locatable(object):
 
     def __init__(self):
-        self.location = None  # type: Location
+        self._location = None  # type: Location
+
+    def set_location(self, location: Location):
+        assert location is not None
+        assert location.file == "internal" or location.lnr > 0
+        self._location = location
 
     def get_location(self) -> Location:
-        return self.location
+        return self._location
+
+    location = property(get_location, set_location)
 
 
 class LocatableString(object):

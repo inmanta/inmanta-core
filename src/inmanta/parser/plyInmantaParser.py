@@ -266,8 +266,7 @@ def p_attr_list(p):
     "attr : attr_type_multi ID"
     (attr, nullable, location) = p[1]
     p[0] = DefineAttribute(attr, p[2], None, True, nullable=nullable)
-    p[0].location = location
-    p[0].namespace = namespace
+    attach_lnr(p, 2)
 
 
 def p_attr_list_cte(p):
@@ -544,7 +543,7 @@ def p_condition_not(p):
 def p_condition_is_defined(p):
     """condition : var_ref '.' ID IS DEFINED"""
     p[0] = IsDefined(p[1], p[3])
-    attach_lnr(p)
+    attach_lnr(p, 2)
 
 
 def p_condition_is_defined_short(p):
@@ -591,7 +590,7 @@ def p_function_call(p):
 def p_list_def(p):
     " list_def : '[' operand_list ']'"
     p[0] = CreateList(p[2])
-    attach_lnr(p, 2)
+    attach_lnr(p, 1)
 
 
 def p_pair_list_collect(p):
@@ -613,7 +612,7 @@ def p_pair_list_term_2(p):
 def p_map_def(p):
     " map_def : '{' pair_list '}'"
     p[0] = CreateDict(p[2])
-    attach_lnr(p, 2)
+    attach_lnr(p, 1)
 
 
 def p_map_def_empty(p):
