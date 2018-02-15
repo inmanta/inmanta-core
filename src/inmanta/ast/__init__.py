@@ -75,6 +75,7 @@ class Locatable(object):
         self._location = location
 
     def get_location(self) -> Location:
+        assert self._location is not None
         return self._location
 
     location = property(get_location, set_location)
