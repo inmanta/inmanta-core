@@ -168,6 +168,8 @@ def deploy(options):
     try:
         io_loop.start()
     except (KeyboardInterrupt, deploy.FinishedException):
+        import traceback
+        traceback.print_exception()
         IOLoop.current().stop()
         run.stop()
 

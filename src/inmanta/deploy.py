@@ -278,13 +278,13 @@ class Deploy(object):
         return True
 
     @gen.coroutine
-    def get_agents_of_for_model(self, version):
+    def get_agents_for_model(self, version):
         version_result = yield self._client.get_version(tid=self._environment_id, id=version)
         if version_result.code != 200:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return []
 
-        return [x["agent"] for x in version_result.result["resources"]]
+        return {x["agent"] for x in version_result.result["resources"]}
 
     @gen.coroutine
     def deploy(self, dry_run, agent_map):
@@ -294,7 +294,7 @@ class Deploy(object):
             return
 
         # Update the agentmap to autostart all agents
-        agents = yield self.get_agents_of_for_model(version)
+        agents = yield self.get_agents_for_model(version)
         LOGGER.debug("Agent(s) %s defined, adding them to autostart agent map", ", ".join(agents))
         result = yield self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
 
@@ -368,7 +368,7 @@ class Deploy(object):
             yield gen.sleep(1)
 
         print("Deploy ready")
-        raise FinishedException()
+        #raise FinishedException()
 
     @gen.coroutine
     def _get_dryrun_status(self, dryrun_id):
@@ -426,7 +426,10 @@ class Deploy(object):
     @gen.coroutine
     def do_deploy(self, dry_run, agent_map):
         yield self.setup_project()
-        yield self.export(dry_run=dry_run, agent_map=agent_map)
+        try:
+            yield self.export(dry_run=dry_run, agent_map=agent_map)
+        except deploy.FinishedException:
+            raise Exception("FRoooooot")
 
     def run(self, options, only_setup=False):
         if options.agent is not None:
