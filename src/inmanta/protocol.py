@@ -36,7 +36,7 @@ from tornado import gen, queues, web
 from inmanta import methods, const, execute
 from inmanta import config as inmanta_config
 from tornado.httpserver import HTTPServer
-from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError, HTTPClient
+from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 import ssl
 import jwt
@@ -1436,6 +1436,7 @@ class SyncClient(object):
     def __getattr__(self, name):
         def async_call(*args, **kwargs):
             method = getattr(self._client, name)
+
             def method_call():
                 return method(*args, **kwargs)
 
