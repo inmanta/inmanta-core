@@ -70,8 +70,7 @@ class Locatable(object):
         self._location = None  # type: Location
 
     def set_location(self, location: Location):
-        assert location is not None
-        assert location.file == "internal" or location.lnr > 0
+        assert location is not None and location.lnr > 0
         self._location = location
 
     def get_location(self) -> Location:
