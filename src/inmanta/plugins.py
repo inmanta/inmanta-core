@@ -33,6 +33,7 @@ class Context(object):
         An instance of this class is used to pass context to the plugin
     """
     __client = None
+    __sync_client = None
 
     @classmethod
     def __get_client(cls):
@@ -88,6 +89,12 @@ class Context(object):
 
     def get_client(self):
         return self.__class__.__get_client()
+
+    def get_sync_client(self):
+        if self.__class__.__sync_client is None:
+            from inmanta import protocol
+            self.__class__.__sync_client = protocol.SyncClient("compiler")
+        return self.__class__.__sync_client
 
     def run_sync(self, function: typing.Callable, timeout: int=5):
         """

@@ -17,6 +17,8 @@
 """
 import random
 import base64
+import threading
+import time
 
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
@@ -62,6 +64,41 @@ def test_client_files(client):
     assert result.code == 200
     assert "content" in result.result
     assert result.result["content"] == body
+
+
+@pytest.mark.gen_test
+def test_sync_client_files(client):
+    done = []
+
+    def do_test():
+        sync_client = protocol.SyncClient("client")
+
+        (hash, content, body) = make_random_file()
+
+        # Check if the file exists
+        result = sync_client.stat_file(id=hash)
+        assert result.code == 404
+
+        # Create the file
+        result = sync_client.upload_file(id=hash, content=body)
+        assert result.code == 200
+
+        # Get the file
+        result = sync_client.get_file(id=hash)
+        assert result.code == 200
+        assert "content" in result.result
+        assert result.result["content"] == body
+
+        done.append(True)
+
+    thread = threading.Thread(target=do_test)
+    thread.start()
+
+    while len(done) == 0:
+        time.sleep(0.01)
+
+    thread.join()
+    assert len(done) > 0
 
 
 @pytest.mark.gen_test
