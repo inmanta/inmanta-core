@@ -167,9 +167,9 @@ implement Two using none
     annota = {"value": "a"}
     annotb = {"reference": "__config__::One_1"}
 
-    result = TypeBuilder().entity("std::Entity", "internal", 0).\
-        relation("requires", "std::Entity", "internal", 0, [0, -1], "std::Entity.provides").\
-        relation("provides", "std::Entity", "internal", 0, [0, -1], "std::Entity.requires").\
+    result = TypeBuilder().entity("std::Entity", "internal", 1).\
+        relation("requires", "std::Entity", "internal", 1, [0, -1], "std::Entity.provides").\
+        relation("provides", "std::Entity", "internal", 1, [0, -1], "std::Entity.requires").\
         entity("__config__::Two", main, 9, 'std::Entity').\
         relation("one", "__config__::One", main, 14, [0, -1], "__config__::One.two").\
         target_annotate(annota).target_annotate(annotb).\

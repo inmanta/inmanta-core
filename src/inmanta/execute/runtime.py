@@ -606,7 +606,6 @@ class Instance(ExecutionContext, Locatable, Resolver):
 
         # see inmanta.ast.execute.scheduler.QueueScheduler
         self.trackers = []
-        self.location = None
 
     def get_type(self):
         return self.type

@@ -37,7 +37,6 @@ class Statement(Namespaced):
 
     def __init__(self) -> None:
         Namespaced.__init__(self)
-        self.location = None  # type: Location
         self.namespace = None  # type: Namespace
         self.anchors = []
 

@@ -48,6 +48,7 @@ class SubConstructor(GeneratorStatement):
     def __init__(self, instance_type: "", implements: "Implement") -> None:
         GeneratorStatement.__init__(self)
         self.type = instance_type
+        self.location = instance_type.location
         self.implements = implements
 
     def normalize(self) -> None:

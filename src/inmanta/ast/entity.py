@@ -78,7 +78,6 @@ class Entity(NamedType):
         self._instance_list = set()  # type: Set[Instance]
 
         self.comment = ""
-        self.location = None  # type: Location
 
         self.normalized = False
 
@@ -488,7 +487,6 @@ class Implementation(Named):
         self.namespace = namespace
         self.target_type = target_type
         self.comment = comment
-        self.location = None  # type: Location
 
     def set_type(self, entity: Entity) -> None:
         self.entity = entity
