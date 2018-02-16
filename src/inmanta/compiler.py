@@ -171,7 +171,7 @@ class Compiler(object):
 
         # add the entity type (hack?)
         ns = self.__root_ns.get_child_or_create("std")
-        nullrange = Range("internal", 0, 0, 0, 0)
+        nullrange = Range("internal", 1, 0, 0, 0)
         entity = DefineEntity(ns, LocatableString("Entity", nullrange, 0, ns),
                               "The entity all other entities inherit from.", [], [])
         str_std_entity = LocatableString("std::Entity", nullrange, 0, ns)

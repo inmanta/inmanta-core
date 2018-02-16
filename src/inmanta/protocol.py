@@ -854,16 +854,15 @@ class RESTTransport(Transport):
         if self.token is not None:
             headers["Authorization"] = "Bearer " + self.token
 
-        ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
+        if body is not None:
+            zipped, body = gzipped_json(body)
+            if zipped:
+                headers["Content-Encoding"] = "gzip"
 
+        ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
         LOGGER.debug("Calling server %s %s", method, url)
 
         try:
-            if body is not None:
-                zipped, body = gzipped_json(body)
-                if zipped:
-                    headers["Content-Encoding"] = "gzip"
-
             request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=self.connection_timout,
                                   request_timeout=120, ca_certs=ca_certs, decompress_response=True)
             client = AsyncHTTPClient()
@@ -1423,6 +1422,30 @@ class Client(Endpoint, metaclass=ClientMeta):
         protocol_properties["method_name"] = get_method_name(protocol_properties)
         result = yield self._transport_instance.call(protocol_properties, args, kwargs)
         return result
+
+
+class SyncClient(object):
+    """
+        A synchronous client that communicates with end-point based on its configuration
+    """
+    def __init__(self, name, timeout=120):
+        self.name = name
+        self.timeout = timeout
+        self._client = Client(self.name)
+
+    def __getattr__(self, name):
+        def async_call(*args, **kwargs):
+            method = getattr(self._client, name)
+
+            def method_call():
+                return method(*args, **kwargs)
+
+            try:
+                return IOLoop.current().run_sync(method_call, self.timeout)
+            except TimeoutError:
+                raise ConnectionRefusedError()
+
+        return async_call
 
 
 class AgentClient(Endpoint, metaclass=ClientMeta):
