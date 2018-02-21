@@ -43,7 +43,8 @@ tokens = [
     'MLS_END',
     'CMP_OP',
     'REGEX',
-    'REL'
+    'REL',
+    'PEQ'
 ] + sorted(list(reserved.values()))
 
 
@@ -75,6 +76,11 @@ def t_REL(t):  # noqa: N802
 
 def t_CMP_OP(t):  # noqa: N802
     r'!=|==|>=|<=|<|>'
+    return t
+
+
+def t_PEQ(t):  # noqa: N802
+    r'[+]='
     return t
 
 

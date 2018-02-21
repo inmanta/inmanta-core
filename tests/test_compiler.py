@@ -27,7 +27,8 @@ from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint,
 from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup,\
+    SetAttribute
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
 from inmanta.execute.util import NoneValue
@@ -978,3 +979,23 @@ implement Test1 using tt when self.other is defined
     assert isinstance(stmt.select, IsDefined)
     assert stmt.select.attr.name == 'self'
     assert str(stmt.select.name) == 'other'
+
+
+def test_list_extend_bad():
+    with pytest.raises(ParserException):
+        parse_code("""
+    a+=b
+    """)
+
+
+def test_list_extend_good():
+    statements = parse_code("""
+z.a+=b
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, SetAttribute)
+    assert stmt.list_only is True
+    assert isinstance(stmt.value, Reference)
+    assert stmt.value.name == "b"
