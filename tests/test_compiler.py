@@ -24,7 +24,7 @@ from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
 from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineEntity,\
     DefineImplementInherits
-from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
+from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined, In
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
@@ -444,6 +444,21 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
     assert isinstance(stmt.get_expression(), Regex)
     assert (stmt.get_expression().children[1].value ==
             re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
+
+
+def test_typedef_in():
+    statements = parse_code("""
+typedef abc as string matching self in ["a","b","c"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineTypeConstraint)
+    assert str(stmt.name) == "abc"
+    assert stmt.basetype == "string"
+    assert isinstance(stmt.get_expression(), In)
+    assert ([x.value for x in stmt.get_expression().children[1].items] ==
+            ["a", "b", "c"])
 
 
 def test_typedef2():

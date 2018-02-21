@@ -1739,6 +1739,7 @@ def test_index_on_subtype2(snippetcompiler):
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
+
 diamond = """
 entity A:
     string at = "a"

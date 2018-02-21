@@ -62,6 +62,15 @@ class CreateList(ReferenceStatement):
 
         return qlist
 
+    def execute_direct(self, requires):
+        qlist = List()
+
+        for i in range(len(self.items)):
+            value = self.items[i]
+            qlist.append(value.execute_direct(requires))
+
+        return qlist
+
     def __repr__(self) -> str:
         return "List()"
 
