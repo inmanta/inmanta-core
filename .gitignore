@@ -39,3 +39,4 @@ src/*/parser/parsetab.py
 docs/reference/modules
 .vscode
 docs/moduleguides
+.idea

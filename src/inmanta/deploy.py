@@ -18,15 +18,13 @@
 import logging
 import os
 import random
-import re
 import subprocess
 import sys
 import time
 import socket
 
 from mongobox import mongobox
-from tornado import gen, process
-from inmanta import module, config, server, agent, protocol, const, data
+from inmanta import module, config, protocol, const, data
 
 
 LOGGER = logging.getLogger(__name__)
@@ -303,11 +301,6 @@ port=%(server_port)s
         agents = self.get_agents_for_model(version)
         LOGGER.debug("Agent(s) %s defined, adding them to autostart agent map", ", ".join(agents))
         result = self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
-
-        if result.code == 200:
-            current_map = result.result["value"]
-        else:
-            current_map = {}
 
         # release the version!
         if not dry_run:
