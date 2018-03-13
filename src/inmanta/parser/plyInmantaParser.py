@@ -81,7 +81,6 @@ def merge_lnr_to_string(p, starttoken=1, endtoken=2):
 def attach_from_string(p, token=1):
     v = p[0]
     v.location = p[token].location
-    v.lexpos = p[token].lexpos
     v.namespace = p[token].namespace
 
 
@@ -643,7 +642,8 @@ def p_short_index_lookup(p):
 
 def p_constant_mls(p):
     """ constant : mls """
-    p[0] = Literal(p[1])
+    p[0] = Literal(str(p[1]))
+    attach_from_string(p, 1)
 
 
 def p_constant(p):
