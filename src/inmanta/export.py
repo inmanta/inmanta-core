@@ -271,8 +271,6 @@ class Exporter(object):
 
         resources = self.resources_to_list()
 
-        model = ModelExporter(types).export_all()
-
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
@@ -281,6 +279,7 @@ class Exporter(object):
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
+            model = ModelExporter(types).export_all()
             self.commit_resources(self._version, resources, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 

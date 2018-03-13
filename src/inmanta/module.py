@@ -39,7 +39,7 @@ import yaml
 from inmanta import env
 from inmanta import plugins
 import inmanta
-from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location
+from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location, LocatableString
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement, BiStatement
 from inmanta.ast.statements.define import DefineImport
@@ -340,7 +340,7 @@ class ModuleLike(object):
                 block.add(s)
             elif isinstance(s, DefinitionStatement):
                 statements.append(s)
-            elif isinstance(s, str):
+            elif isinstance(s, str) or isinstance(s, LocatableString):
                 pass
             else:
                 block.add(s)
