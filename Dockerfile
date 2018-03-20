@@ -1,6 +1,6 @@
 FROM fedora:27
 
-RUN dnf install -y git python3 python3-devel python-virtualenv python3-virtualenv git nodejs-grunt-cli gcc-c++ gcc make
+RUN dnf install -y git python3 python3-devel python-virtualenv python3-virtualenv git nodejs-grunt-cli gcc-c++ gcc make redhat-rpm-config
 
 # install the server
 RUN mkdir -p /opt/inmanta
