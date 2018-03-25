@@ -159,6 +159,12 @@ def p_assign(p):
     attach_lnr(p, 2)
 
 
+def p_assign_extend(p):
+    "assign : var_ref PEQ operand"
+    p[0] = p[1].as_assign(p[3], list_only=True)
+    attach_lnr(p, 2)
+
+
 def p_for(p):
     "for : FOR ID IN operand ':' block"
     p[0] = For(p[4], p[2], BasicBlock(namespace, p[6]))

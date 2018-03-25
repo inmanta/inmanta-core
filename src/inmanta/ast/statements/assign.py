@@ -98,11 +98,12 @@ class SetAttribute(AssignStatement):
         Set an attribute of a given instance to a given value
     """
 
-    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement) -> None:
+    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool=False) -> None:
         AssignStatement.__init__(self, instance, value)
         self.instance = instance
         self.attribute_name = attribute_name
         self.value = value
+        self.list_only = list_only
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
@@ -115,6 +116,8 @@ class SetAttribute(AssignStatement):
                target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         var = instance.get_attribute(self.attribute_name)
+        if self.list_only and not var.is_multi():
+            raise TypingException(self, "Can not use += on relations with multiplicity 1")
         reqs = self.value.requires_emit_gradual(resolver, queue, var)
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 

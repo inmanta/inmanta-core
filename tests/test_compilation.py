@@ -1739,6 +1739,7 @@ def test_index_on_subtype2(snippetcompiler):
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
+
 diamond = """
 entity A:
     string at = "a"
@@ -1927,3 +1928,52 @@ net1 = Network(segmentation_id="10")
 """)
     with pytest.raises(AttributeException):
         compiler.do_compile()
+
+
+def test_587_assign_extend_correct(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+    end
+    implement A using std::none
+
+    entity B:
+        string name
+    end
+    implement B using std::none
+
+    A.b [0:] -- B
+
+    a = A()
+    a.b += B(name = "a")
+    a.b += B(name = "b")
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    ab = a.get_value().get_attribute("b").get_value()
+    assert ["a", "b"] == [v.get_attribute("name").get_value() for v in ab]
+
+
+def test_587_assign_extend_incorrect(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+    end
+    implement A using std::none
+
+    entity B:
+        string name
+    end
+    implement B using std::none
+
+    A.b [1:1] -- B
+
+    a = A()
+    a.b += B(name = "a")
+
+    """)
+
+    with pytest.raises(TypingException):
+        (_, scopes) = compiler.do_compile()
