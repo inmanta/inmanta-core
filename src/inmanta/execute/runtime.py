@@ -110,6 +110,9 @@ class ResultVariable(ResultCollector):
         """
         pass
 
+    def is_multi(self):
+        return False
+
 
 class AttributeVariable(ResultVariable):
     """
@@ -282,6 +285,9 @@ class ListVariable(DelayedResultVariable):
         for value in self.value:
             resultcollector.receive_result(value, location)
         self.listeners.append(resultcollector)
+
+    def is_multi(self):
+        return True
 
 
 class OptionVariable(DelayedResultVariable):
