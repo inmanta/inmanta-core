@@ -279,6 +279,42 @@ def test_index_undefined_attribute(snippetcompiler):
         "std::Entity(foo, bar) ({dir}/main.cf:2))")
 
 
+def test_typedef_in_non_constant(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+a = "A"
+typedef abc as string matching self in [a,"b","c"]
+
+entity Test:
+    abc value
+end
+
+implement Test using std::none
+
+Test(value="a")
+""",
+        "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` caused by "
+        "Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41)) "
+        "(reported in Construct(Test) ({dir}/main.cf:3:41))")
+
+
+def test_typedef_in_violates(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef abc as string matching self in ["a","b","c"]
+
+entity Test:
+    abc value
+end
+
+implement Test using std::none
+
+Test(value="ab")
+""",
+        "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` "
+        "caused by Invalid value 'ab', constraint does not match (reported in Construct(Test) ({dir}/main.cf:10))")
+
+
 def test_set_wrong_relation_type(snippetcompiler):
     """
         Test the error message when setting the wrong type on a relation in the two cases:
