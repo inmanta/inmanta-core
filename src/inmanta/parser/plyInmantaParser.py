@@ -418,7 +418,7 @@ def p_relation_comment(p):
         LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
                        (p[4], Location(file, p.lineno(4))))
     rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    rel.comment = p[8]
+    rel.comment = str(p[8])
     p[0] = rel
     attach_lnr(p, 2)
 
@@ -426,7 +426,7 @@ def p_relation_comment(p):
 def p_relation_new_outer_comment(p):
     "relation : relationnew mls"
     rel = p[1]
-    rel.comment = p[2]
+    rel.comment = str(p[2])
     p[0] = rel
 
 
@@ -489,7 +489,7 @@ def p_typedef_outer(p):
 def p_typedef_outer_comment(p):
     """typedef : typedef_inner mls"""
     tdef = p[1]
-    tdef.comment = p[2]
+    tdef.comment = str(p[2])
     p[0] = tdef
 
 

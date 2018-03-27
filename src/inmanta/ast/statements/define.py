@@ -59,7 +59,7 @@ class DefineEntity(TypeDefinitionStatement):
     def __init__(self,
                  namespace: Namespace,
                  lname: LocatableString,
-                 comment: str,
+                 comment: LocatableString,
                  parents: List[LocatableString],
                  attributes: List[DefineAttribute]) -> None:
         name = str(lname)
@@ -69,7 +69,10 @@ class DefineEntity(TypeDefinitionStatement):
 
         self.name = name
         self.attributes = attributes
-        self.comment = comment
+        if comment is not None:
+            self.comment = str(comment)
+        else:
+            self.comment = None
 
         self.parents = [str(x) for x in parents]
 
@@ -175,16 +178,21 @@ class DefineImplementation(TypeDefinitionStatement):
                  name: LocatableString,
                  target_type: LocatableString,
                  statements: BasicBlock,
-                 comment: str):
+                 comment: LocatableString):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.name = str(name)
         self.block = statements
         self.entity = str(target_type)
+
+        if comment is not None:
+            comment = str(comment)
+
+        self.comment = comment
+
         self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), comment)
         self.type.location = name.get_location()
         self.anchors = [TypeReferenceAnchor(target_type.get_location(), namespace, str(target_type))]
         self.anchors.extend(statements.get_anchors())
-        self.comment = comment
 
     def __repr__(self) -> str:
         """
@@ -203,10 +211,13 @@ class DefineImplementation(TypeDefinitionStatement):
 
 class DefineImplementInherits(DefinitionStatement):
 
-    def __init__(self, entity_name: LocatableString, comment: str=None):
+    def __init__(self, entity_name: LocatableString, comment: LocatableString=None):
         DefinitionStatement.__init__(self)
         self.entity = str(entity_name)
-        self.comment = comment
+        if comment is not None:
+            self.comment = str(comment)
+        else:
+            self.comment = None
         self.location = entity_name.get_location()
         self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
 
@@ -244,7 +255,7 @@ class DefineImplement(DefinitionStatement):
                  entity_name: LocatableString,
                  implementations: List[LocatableString],
                  select: ExpressionStatement=None,
-                 comment: str=None) -> None:
+                 comment: LocatableString=None) -> None:
         DefinitionStatement.__init__(self)
         self.entity = str(entity_name)
         self.entity_location = entity_name.get_location()
@@ -253,7 +264,10 @@ class DefineImplement(DefinitionStatement):
         self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
         self.anchors.extend(select.get_anchors())
         self.select = select
-        self.comment = comment
+        if comment is not None:
+            self.comment = str(comment)
+        else:
+            self.comment = None
 
     def __repr__(self):
         """
