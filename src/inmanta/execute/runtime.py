@@ -659,8 +659,9 @@ class Instance(ExecutionContext, Locatable, Resolver):
                     if attr.is_multi():
                         low = attr.low
                         length = len(v.value)
-                        excns.append(UnsetException("The object %s is not complete: attribute %s (%s) requires %d values but only %d are set" %
-                                                    (self, k, attr.location, low, length), self, attr))
+                        excns.append(UnsetException(
+                            "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set" %
+                            (self, k, attr.location, low, length), self, attr))
                     else:
                         excns.append(UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
                                                     (self, k, attr.location), self, attr))
