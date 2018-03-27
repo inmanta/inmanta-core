@@ -28,7 +28,7 @@ from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDe
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
 from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup,\
-    SetAttribute
+    SetAttribute, MapLookup
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
 from inmanta.execute.util import NoneValue
@@ -1058,3 +1058,38 @@ z.a+=b
     assert stmt.list_only is True
     assert isinstance(stmt.value, Reference)
     assert stmt.value.name == "b"
+
+
+def test_mapref():
+    """Test extending entities
+    """
+    statements = parse_code("""
+a = b.c["test"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, MapLookup)
+    assert isinstance(stmt.value.themap, AttributeReference)
+    assert stmt.value.themap.instance.name == "b"
+    assert stmt.value.themap.attribute == "c"
+    assert isinstance(stmt.value.key, Literal)
+    assert stmt.value.key.value == "test"
+
+
+def test_mapref_2():
+    """Test extending entities
+    """
+    statements = parse_code("""
+a = c["test"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, MapLookup)
+    assert isinstance(stmt.value.themap, Reference)
+    assert stmt.value.themap.name == "c"
+    assert isinstance(stmt.value.key, Literal)
+    assert stmt.value.key.value == "test"

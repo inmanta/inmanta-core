@@ -189,6 +189,32 @@ class Assign(AssignStatement):
         return "Assign(%s, %s)" % (self.name, self.value)
 
 
+class MapLookup(ReferenceStatement):
+    """
+        Lookup a value in a dict
+    """
+
+    def __init__(self,
+                 themap: ExpressionStatement,
+                 key: ExpressionStatement
+                 ):
+        super(MapLookup, self).__init__([themap, key])
+        self.themap = themap
+        self.key = key
+        self.location = themap.get_location().merge(key.location)
+
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+        mapv = self.themap.execute(requires, resolver, queue)
+        if not isinstance(mapv, dict):
+            raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
+
+        keyv = self.key.execute(requires, resolver, queue)
+        if not isinstance(keyv, str):
+            raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
+
+        return mapv[keyv]
+
+
 class IndexLookup(ReferenceStatement):
     """
         Lookup a value in a dictionary
