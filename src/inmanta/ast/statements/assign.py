@@ -24,7 +24,7 @@ from inmanta.ast.statements import AssignStatement, ExpressionStatement, Stateme
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
-    TypeReferenceAnchor
+    TypeReferenceAnchor, KeyException
 from inmanta.ast.attribute import RelationAttribute
 import typing
 
@@ -212,7 +212,13 @@ class MapLookup(ReferenceStatement):
         if not isinstance(keyv, str):
             raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
 
+        if keyv not in mapv:
+            raise KeyException(self, "key %s not found in dict, options are [%s]" % (keyv, ",".join(mapv.keys())))
+
         return mapv[keyv]
+
+    def __repr__(self) -> str:
+        return "%s[%s]" % (repr(self.themap), repr(self.key))
 
 
 class IndexLookup(ReferenceStatement):

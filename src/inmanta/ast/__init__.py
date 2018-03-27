@@ -510,6 +510,10 @@ class TypingException(RuntimeException):
     pass
 
 
+class KeyException(RuntimeException):
+    pass
+
+
 class CycleExcpetion(TypingException):
 
     def __init__(self, first_type, final_name):

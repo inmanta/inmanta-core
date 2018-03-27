@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+from conftest import snippetcompiler
 
 
 def test_plugin_excn(snippetcompiler):
@@ -351,3 +352,12 @@ def test_set_wrong_relation_type(snippetcompiler):
         "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
         "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
         "(reported in creds.file = creds ({dir}/main.cf:10:22)) (reported in creds.file = creds ({dir}/main.cf:10))")
+
+
+def test_bad_map_lookup(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        b = {"c" : 3}
+        c=b["a"]
+        """,
+        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))")
