@@ -63,12 +63,17 @@ def attach_lnr(p, token=1):
 def merge_lnr_to_string(p, starttoken=1, endtoken=2):
     v = p[0]
 
-    st = p[starttoken]
-    startline = st.lnr
-    startchar = st.start
     et = p[endtoken]
     endline = et.elnr
     endchar = et.end
+
+    st = p[starttoken]
+    if isinstance(st, LocatableString):
+        startline = st.lnr
+        startchar = st.start
+    else:
+        startline = et.lnr
+        startchar = et.start
 
     p[0] = LocatableString(v, Range(file, startline, startchar, endline, endchar), endchar, namespace)
 
@@ -76,7 +81,6 @@ def merge_lnr_to_string(p, starttoken=1, endtoken=2):
 def attach_from_string(p, token=1):
     v = p[0]
     v.location = p[token].location
-    v.lexpos = p[token].lexpos
     v.namespace = p[token].namespace
 
 
@@ -420,7 +424,7 @@ def p_relation_comment(p):
         LOGGER.warning("DEPRECATION: use of %s in relation definition is deprecated, use -- (in %s)" %
                        (p[4], Location(file, p.lineno(4))))
     rel = DefineRelation((p[1], p[2], p[3]), (p[6], p[7], p[5]))
-    rel.comment = p[8]
+    rel.comment = str(p[8])
     p[0] = rel
     attach_lnr(p, 2)
 
@@ -428,7 +432,7 @@ def p_relation_comment(p):
 def p_relation_new_outer_comment(p):
     "relation : relationnew mls"
     rel = p[1]
-    rel.comment = p[2]
+    rel.comment = str(p[2])
     p[0] = rel
 
 
@@ -491,7 +495,7 @@ def p_typedef_outer(p):
 def p_typedef_outer_comment(p):
     """typedef : typedef_inner mls"""
     tdef = p[1]
-    tdef.comment = p[2]
+    tdef.comment = str(p[2])
     p[0] = tdef
 
 
@@ -642,10 +646,15 @@ def p_short_index_lookup(p):
 # HELPERS
 
 
+def p_constant_mls(p):
+    """ constant : mls """
+    p[0] = Literal(str(p[1]))
+    attach_from_string(p, 1)
+
+
 def p_constant(p):
     """ constant : INT
     | FLOAT
-    | mls
     """
     p[0] = Literal(p[1])
     attach_lnr(p)
@@ -870,13 +879,12 @@ def p_id_list_term(p):
 def p_mls_term(p):
     "mls : MLS_END"
     p[0] = p[1]
-    # attach_lnr_for_parser(p)
 
 
 def p_mls_collect(p):
     "mls : MLS mls"
     p[0] = "%s%s" % (p[1], p[2])
-    # attach_lnr_for_parser(p)
+    merge_lnr_to_string(p, 1, 2)
 
 
 # Error rule for syntax errors
@@ -897,7 +905,8 @@ def p_error(p):
     if parser.symstack[-1].type in reserved.values():
         if hasattr(parser.symstack[-1].value, "location"):
             r = parser.symstack[-1].value.location
-        raise ParserException(r, str(parser.symstack[-1].value), "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value)
+        raise ParserException(r, str(parser.symstack[-1].value),
+                              "invalid identifier, %s is a reserved keyword" % parser.symstack[-1].value)
 
     raise ParserException(r, p.value)
 
@@ -935,7 +944,6 @@ def myparse(ns, tfile, content):
         lexer.lineno = 1
         lexer.linestart = 0
         return parser.parse(data, lexer=lexer, debug=False)
-
 
 
 def parse(namespace, filename, content=None):

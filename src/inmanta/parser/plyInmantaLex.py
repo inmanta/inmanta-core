@@ -101,13 +101,35 @@ def t_JCOMMENT(t):  # noqa: N802
 def t_begin_mls(t):
     r'["]{3}'
     t.lexer.begin('mls')
+    t.type = "MLS"
+
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString("", Range(lexer.inmfile, lexer.lineno, start,
+                                        lexer.lineno, end), lexer.lexpos, lexer.namespace)
+
+    return t
 
 
 def t_mls_end(t):
     r'.*["]{3}'
     t.lexer.begin('INITIAL')
     t.type = "MLS_END"
-    t.value = t.value[:-3]
+    value = t.value[:-3]
+
+    lexer = t.lexer
+
+    end = lexer.lexpos - lexer.linestart + 1
+    (s, e) = lexer.lexmatch.span()
+    start = end - (e - s)
+
+    t.value = LocatableString(value, Range(lexer.inmfile, lexer.lineno, start,
+                                           lexer.lineno, end), lexer.lexpos, lexer.namespace)
+
     return t
 
 

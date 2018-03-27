@@ -130,7 +130,7 @@ end
     stmt = statements[0]
     assert len(stmt.parents) == 2
     assert stmt.parents == ["Foo", "foo::sub::Bar"]
-    assert stmt.comment.strip() == documentation
+    assert str(stmt.comment).strip() == documentation
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
@@ -854,7 +854,7 @@ end
 
     print(mls)
 
-    assert mls == """
+    assert str(mls) == """
         This entity provides management, orchestration and monitoring
 
         More test
@@ -895,7 +895,7 @@ Each file needs to be associated with a host
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+    assert str(stmt.comment).strip() == "Each file needs to be associated with a host"
 
 
 def test_doc_string_on_relation():
@@ -908,7 +908,7 @@ Each file needs to be associated with a host
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+    assert str(stmt.comment).strip() == "Each file needs to be associated with a host"
 
 
 def test_doc_string_on_typedef():
@@ -921,7 +921,7 @@ typedef foo as string matching /^a+$/
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+    assert str(stmt.comment).strip() == "Foo is a stringtype that only allows \"a\""
 
 
 def test_doc_string_on_typedefault():
@@ -934,7 +934,7 @@ typedef Foo as File(x=5)
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+    assert str(stmt.comment).strip() == "Foo is a stringtype that only allows \"a\""
 
 
 def test_doc_string_on_impl():
@@ -948,7 +948,7 @@ end
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Bla bla"
+    assert str(stmt.comment).strip() == "Bla bla"
 
 
 def test_doc_string_on_implements():
@@ -965,7 +965,7 @@ implement Host using test
     assert len(statements) == 2
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Always use test!"
+    assert str(stmt.comment).strip() == "Always use test!"
 
 
 def test_precise_lexer_positions():
