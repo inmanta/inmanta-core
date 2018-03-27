@@ -1,6 +1,6 @@
 click==6.7
 colorlog==3.1.2
-cryptography==2.1.4
+cryptography==2.2.1
 execnet==1.4.1
 inmanta-sphinx>=0.3
 mongobox==0.1.6
