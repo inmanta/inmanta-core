@@ -2034,7 +2034,8 @@ c1 = C(name="c1")
 b1.a = a1
 b1.a = c1.a
 """)
-    (_, scopes) = compiler.do_compile()
+    with pytest.raises(OptionalValueException):
+        (_, scopes) = compiler.do_compile()
 
 
 def test_608_opt_to_single(snippetcompiler):
@@ -2071,7 +2072,8 @@ c1 = C(name="c1")
 b1.a = a1
 b1.a = c1.a
 """)
-    (_, scopes) = compiler.do_compile()
+    with pytest.raises(OptionalValueException):
+        (_, scopes) = compiler.do_compile()
 
 
 def test_608_opt_to_single_2(snippetcompiler):
