@@ -1977,3 +1977,23 @@ def test_587_assign_extend_incorrect(snippetcompiler):
 
     with pytest.raises(TypingException):
         (_, scopes) = compiler.do_compile()
+
+
+def test_552_string_rendering_for_lists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Network:
+    string[] tags=[]
+end
+
+implement Network using std::none
+
+net1 = Network(tags=["vlan"])
+a="Net has tags {{ net1.tags }}"
+""")
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+
+    assert a == """Net has tags ['vlan']"""
