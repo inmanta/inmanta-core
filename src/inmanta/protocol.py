@@ -16,6 +16,15 @@
     Contact: code@inmanta.com
 """
 
+
+"""
+
+RestServer  => manages tornado/handlers, marshalling, dispatching, and endpoints
+
+ServerEndpoint
+
+ServerEndpoint.server [1] -- RestServer.endpoints [1:]
+"""
 import logging
 import socket
 import time
@@ -125,86 +134,6 @@ class Transport(object):
             Create an instance of the transport class
         """
         return transport_class(endpoint)
-
-    def __init__(self, endpoint=None):
-        self.__end_point = endpoint
-        self.daemon = True
-        self._connected = False
-
-    endpoint = property(lambda x: x.__end_point)
-
-    def get_id(self):
-        """
-            Returns a unique id for a transport on an endpoint
-        """
-        return "%s_%s_transport" % (self.__end_point.name, self.__class__.__transport_name__)
-
-    id = property(get_id)
-
-    def start_endpoint(self):
-        """
-            Start the transport as endpoint
-        """
-        self.start()
-
-    def stop_endpoint(self):
-        """
-            Stop the transport as endpoint
-        """
-        self.stop()
-
-    def start_client(self):
-        """
-            Start this transport as client
-        """
-        self.start()
-
-    def stop_client(self):
-        """
-            Stop this transport as client
-        """
-        self.stop()
-
-    def start(self):
-        """
-            Start the transport as a new thread
-        """
-
-    def stop(self):
-        """
-            Stop the transport
-        """
-        self._connected = False
-
-    def call(self, method, destination=None, **kwargs):
-        """
-            Perform a method call
-        """
-        raise NotImplementedError()
-
-    def _decode(self, body):
-        """
-            Decode a response body
-        """
-        if body is not None and len(body) > 0:
-            body = json.loads(tornado.escape.to_basestring(body))
-        else:
-            body = None
-
-        return body
-
-    def set_connected(self):
-        """
-            Mark this transport as connected
-        """
-        LOGGER.debug("Transport %s is connected", self.get_id())
-        self._connected = True
-
-    def is_connected(self):
-        """
-            Is this transport connected
-        """
-        return self._connected
 
 
 def custom_json_encoder(o):
@@ -489,20 +418,7 @@ def authorize_request(auth_data, metadata, message, config):
     return
 
 
-class RESTTransport(Transport):
-    """"
-        A REST (json body over http) transport. Only methods that operate on resource can use all
-        HTTP verbs. For other methods the POST verb is used.
-    """
-    __transport_name__ = "rest"
-
-    def __init__(self, endpoint, connection_timout=120):
-        super().__init__(endpoint)
-        self.set_connected()
-        self._handlers = []
-        self.token = inmanta_config.Config.get(self.id, "token", None)
-        self.connection_timout = connection_timout
-        self.headers = set()
+class RESTBase:
 
     def _create_base_url(self, properties, msg=None, versioned=True):
         """
@@ -521,6 +437,17 @@ class RESTTransport(Transport):
             url += "/%s" % properties["method_name"]
 
         return url
+
+    def _decode(self, body):
+        """
+            Decode a response body
+        """
+        if body is not None and len(body) > 0:
+            body = json.loads(tornado.escape.to_basestring(body))
+        else:
+            body = None
+
+        return body
 
     def create_op_mapping(self):
         """
@@ -549,26 +476,6 @@ class RESTTransport(Transport):
         headers.add("Authorization")
         self.headers = headers
         return url_map
-
-    def match_call(self, url, method):
-        """
-            Get the method call for the given url and http method
-        """
-        url_map = self.create_op_mapping()
-        for url_re, handlers in url_map.items():
-            if not url_re.endswith("$"):
-                url_re += "$"
-            match = re.match(url_re, url)
-            if match and method in handlers:
-                return match.groupdict(), handlers[method]
-
-        return None, None
-
-    def return_error_msg(self, status=500, msg="", headers={}):
-        body = {"message": msg}
-        headers["Content-Type"] = "application/json"
-        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
-        return body, headers, status
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
@@ -719,34 +626,77 @@ class RESTTransport(Transport):
             LOGGER.exception("An exception occured during the request.")
             return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
 
-    def add_static_handler(self, location, path, default_filename=None, start=False):
+
+class ServerSlice(object):
+
+    def __init__(self, io_loop, name):
+        self._name = name
+        self._io_loop = io_loop
+        self.create_endpoint_metadata()
+
+    def add_future(self, future):
         """
-            Configure a static handler to serve data from the specified path.
+            Add a future to the ioloop to be handled, but do not require the result.
         """
-        if location[0] != "/":
-            location = "/" + location
+        def handle_result(f):
+            try:
+                f.result()
+            except Exception as e:
+                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        if location[-1] != "/":
-            location = location + "/"
+        self._io_loop.add_future(future, handle_result)
 
-        options = {"path": path}
-        if default_filename is None:
-            options["default_filename"] = "index.html"
+    def create_endpoint_metadata(self):
+        total_dict = {method_name: getattr(self, method_name)
+                      for method_name in dir(self) if callable(getattr(self, method_name))}
 
-        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
-        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
+        methods = self.__methods__
+        for name, attr in total_dict.items():
+            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
+                if attr.__protocol_method__ in methods:
+                    raise Exception("Unable to register multiple handlers for the same method.")
 
-        if start:
-            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
+                methods[attr.__protocol_method__] = (name, attr)
 
-    def add_static_content(self, path, content, content_type="application/javascript"):
-        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
-                                                                        "content_type": content_type}))
+        self.__methods__ = methods
 
-    def start_endpoint(self):
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+class RESTServer(RESTBase):
+
+    def __init__(self, connection_timout=120):
+        self.__end_points = []
+        self._handlers = []
+        self.token = inmanta_config.Config.get(self.id, "token", None)
+        self.connection_timout = connection_timout
+        self.headers = set()
+
+    def add_endpoint(self, endpoint: ServerSlice):
+        self.endpoints.extend(endpoint)
+
+    def get_id(self):
+        """
+            Returns a unique id for a transport on an endpoint
+        """
+        return "%s_%s_transport" % (self.__end_point.name, "rest")
+
+    id = property(get_id)
+
+    endpoint = property(lambda x: x.__end_point)
+
+    def start(self):
         """
             Start the transport
         """
+        
+        for endpoint in self.__end_points:
+            endpoint.start()
+        
         url_map = self.create_op_mapping()
 
         for url, configs in url_map.items():
@@ -778,11 +728,119 @@ class RESTTransport(Transport):
         self.http_server.listen(port)
 
         LOGGER.debug("Start REST transport")
-        super().start()
 
     def stop_endpoint(self):
-        super().stop()
+        self._connected = False
         self.http_server.stop()
+
+    def add_static_handler(self, location, path, default_filename=None, start=False):
+        """
+            Configure a static handler to serve data from the specified path.
+        """
+        if location[0] != "/":
+            location = "/" + location
+
+        if location[-1] != "/":
+            location = location + "/"
+
+        options = {"path": path}
+        if default_filename is None:
+            options["default_filename"] = "index.html"
+
+        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
+        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
+
+        if start:
+            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
+
+    def add_static_content(self, path, content, content_type="application/javascript"):
+        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
+                                                                        "content_type": content_type}))
+
+    def return_error_msg(self, status=500, msg="", headers={}):
+        body = {"message": msg}
+        headers["Content-Type"] = "application/json"
+        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
+        return body, headers, status
+
+
+class RESTTransport(Transport, RESTBase):
+    """"
+        A REST (json body over http) transport. Only methods that operate on resource can use all
+        HTTP verbs. For other methods the POST verb is used.
+    """
+    __transport_name__ = "rest"
+
+    def __init__(self, endpoint, connection_timout=120):
+        self.__end_point = endpoint
+        self.daemon = True
+        self._connected = False
+        self.set_connected()
+        self._handlers = []
+        self.token = inmanta_config.Config.get(self.id, "token", None)
+        self.connection_timout = connection_timout
+        self.headers = set()
+
+    endpoint = property(lambda x: x.__end_point)
+
+    def get_id(self):
+        """
+            Returns a unique id for a transport on an endpoint
+        """
+        return "%s_%s_transport" % (self.__end_point.name, self.__class__.__transport_name__)
+
+    id = property(get_id)
+
+    def start_client(self):
+        """
+            Start this transport as client
+        """
+        self.start()
+
+    def stop_client(self):
+        """
+            Stop this transport as client
+        """
+        self.stop()
+
+    def start(self):
+        """
+            Start the transport as a new thread
+        """
+        pass
+
+    def stop(self):
+        """
+            Stop the transport
+        """
+        self._connected = False
+
+    def set_connected(self):
+        """
+            Mark this transport as connected
+        """
+        LOGGER.debug("Transport %s is connected", self.get_id())
+        self._connected = True
+
+    def is_connected(self):
+        """
+            Is this transport connected
+        """
+        return self._connected
+
+    def match_call(self, url, method):
+        """
+            Get the method call for the given url and http method
+        """
+        url_map = self.create_op_mapping()
+        for url_re, handlers in url_map.items():
+            if not url_re.endswith("$"):
+                url_re += "$"
+            match = re.match(url_re, url)
+            if match and method in handlers:
+                return match.groupdict(), handlers[method]
+
+        return None, None
 
     def _get_client_config(self):
         """
@@ -1148,7 +1206,7 @@ class Session(object):
         return self.client
 
 
-class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
+class ServerEndpoint(Endpoint):
     """
         A service that receives method calls over one or more transports
     """
@@ -1156,9 +1214,10 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
 
     def __init__(self, name, io_loop, transport=RESTTransport, interval=60, hangtime=None):
         super().__init__(io_loop, name)
+        self.__methods__ = {}
         self._transport = transport
 
-        self._transport_instance = Transport.create(self._transport, self)
+        self._transport_instance = RESTServer(self)
         self._sched = Scheduler(self._io_loop)
 
         self._heartbeat_cb = None
@@ -1168,6 +1227,22 @@ class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
         if hangtime is None:
             hangtime = interval * 3 / 4
         self.hangtime = hangtime
+
+        self.add_endpoint(self)
+
+    def add_endpoint(self, endpoint):
+        total_dict = {method_name: getattr(endpoint, method_name)
+                      for method_name in dir(endpoint) if callable(getattr(endpoint, method_name))}
+
+        methods = self.__methods__
+        for name, attr in total_dict.items():
+            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
+                if attr.__protocol_method__ in methods:
+                    raise Exception("Unable to register multiple handlers for the same method.")
+
+                methods[attr.__protocol_method__] = (name, attr)
+
+        self.__methods__ = methods
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
@@ -1428,6 +1503,7 @@ class SyncClient(object):
     """
         A synchronous client that communicates with end-point based on its configuration
     """
+
     def __init__(self, name, timeout=120):
         self.name = name
         self.timeout = timeout
