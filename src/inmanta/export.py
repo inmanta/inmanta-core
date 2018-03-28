@@ -271,8 +271,6 @@ class Exporter(object):
 
         resources = self.resources_to_list()
 
-        model = ModelExporter(types).export_all()
-
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
@@ -281,6 +279,7 @@ class Exporter(object):
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
 
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
+            model = ModelExporter(types).export_all()
             self.commit_resources(self._version, resources, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
@@ -551,6 +550,11 @@ class ModelExporter(object):
         """
             Run after export_model!!
         """
+        def convert_comment(value):
+            if value is None:
+                return ''
+            else:
+                return str(value)
 
         def convert_value_for_type(value):
             if isinstance(value, Unknown):
@@ -561,14 +565,15 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
-            return model.Attribute(attr.type.__str__(), attr.is_optional(), attr.is_multi(), attr.comment, location(attr))
+            return model.Attribute(attr.type.__str__(), attr.is_optional(), attr.is_multi(),
+                                   convert_comment(attr.comment), location(attr))
 
         def convert_relation(relation: RelationAttribute):
 
             return model.Relation(relation.type.get_full_name(),
                                   [relation.low, relation.high],
                                   relation_name(relation.type, relation.end),
-                                  relation.comment, location(relation),
+                                  convert_comment(relation.comment), location(relation),
                                   [convert_value_for_type(x.get_value()) for x in relation.source_annotations],
                                   [convert_value_for_type(x.get_value()) for x in relation.target_annotations])
 

@@ -280,3 +280,14 @@ implement Two using none
         get_model()
 
     assert model == result
+
+    main = snippetcompiler.main
+
+    result = TypeBuilder().entity("std::Entity", "internal", 1).\
+        relation("requires", "std::Entity", "internal", 1, [0, -1], "std::Entity.provides").\
+        relation("provides", "std::Entity", "internal", 1, [0, -1], "std::Entity.requires").\
+        entity("__config__::Two", main, 3, 'std::Entity').\
+        attribute("odds", "string", main, 4, multi=True).\
+        attribute("b", "string", main, 5, nullable=True).get_model()
+
+    assert result == types
