@@ -356,9 +356,12 @@ class List(Type, list):
 
         return True
 
-    @classmethod
-    def __str__(cls):
-        return "list"
+#     @classmethod
+#     def __str__(cls):
+#         return "list"
+
+    def __str__(self):
+        return list.__str__(self)
 
 
 class Dict(Type, dict):
@@ -396,9 +399,8 @@ class Dict(Type, dict):
 
         return True
 
-    @classmethod
-    def __str__(cls):
-        return "dict"
+    def __str__(self):
+        return dict.__str__(self)
 
 
 class ConstraintType(Type):
