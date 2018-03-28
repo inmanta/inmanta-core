@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from conftest import snippetcompiler
 
 
 def test_plugin_excn(snippetcompiler):
@@ -361,3 +360,25 @@ def test_bad_map_lookup(snippetcompiler):
         c=b["a"]
         """,
         "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))")
+
+
+def test_610_multi_add(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+        end
+        implement A using std::none
+
+        entity B:
+            string name
+        end
+        implement B using std::none
+
+        A.b [2:] -- B
+
+        a = A()
+        a.b = B(name = "a")
+
+        """,
+        "The object __config__::A (instantiated at {dir}/main.cf:13) is not complete:"
+        " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set")
