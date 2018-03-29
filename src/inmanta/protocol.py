@@ -254,7 +254,7 @@ class RESTHandler(tornado.web.RequestHandler):
         A generic class use by the transport
     """
 
-    def initialize(self, transport: Transport, config):
+    def initialize(self, transport: "RESTServer", config):
         self._transport = transport
         self._config = config
 
@@ -449,34 +449,6 @@ class RESTBase:
 
         return body
 
-    def create_op_mapping(self):
-        """
-            Build a mapping between urls, ops and methods
-        """
-        url_map = defaultdict(dict)
-        headers = set()
-        for method, method_handlers in self.endpoint.__methods__.items():
-            properties = method.__protocol_properties__
-            call = (self.endpoint, method_handlers[0])
-
-            if "arg_options" in properties:
-                for opts in properties["arg_options"].values():
-                    if "header" in opts:
-                        headers.add(opts["header"])
-
-            url = self._create_base_url(properties)
-            properties["api_version"] = "1"
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-            url = self._create_base_url(properties, versioned=False)
-            properties = properties.copy()
-            properties["api_version"] = None
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-        headers.add("Authorization")
-        self.headers = headers
-        return url_map
-
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
         if "api_version" in config[0] and config[0]["api_version"] is None:
@@ -633,6 +605,19 @@ class ServerSlice(object):
         self._name = name
         self._io_loop = io_loop
         self.create_endpoint_metadata()
+        self._end_point_names = []
+
+    name = property(lambda self: self._name)
+
+    def get_end_point_names(self):
+        return self._end_point_names
+
+    def add_end_point_name(self, name):
+        """
+            Add an additional name to this endpoint to which it reacts and sends out in heartbeats
+        """
+        LOGGER.debug("Adding '%s' as endpoint", name)
+        self._end_point_names.append(name)
 
     def add_future(self, future):
         """
@@ -650,11 +635,11 @@ class ServerSlice(object):
         total_dict = {method_name: getattr(self, method_name)
                       for method_name in dir(self) if callable(getattr(self, method_name))}
 
-        methods = self.__methods__
+        methods = {}
         for name, attr in total_dict.items():
             if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
                 if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method.")
+                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
 
                 methods[attr.__protocol_method__] = (name, attr)
 
@@ -671,32 +656,67 @@ class RESTServer(RESTBase):
 
     def __init__(self, connection_timout=120):
         self.__end_points = []
+        self.__endpoint_dict = {}
         self._handlers = []
         self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.headers = set()
 
     def add_endpoint(self, endpoint: ServerSlice):
-        self.endpoints.extend(endpoint)
+        self.__end_points.append(endpoint)
+        self.__endpoint_dict[endpoint.name] = endpoint
+
+    def get_endpoint(self, name):
+        return self.__endpoint_dict[name]
 
     def get_id(self):
         """
             Returns a unique id for a transport on an endpoint
         """
-        return "%s_%s_transport" % (self.__end_point.name, "rest")
+        return "server_rest_transport"
 
     id = property(get_id)
 
-    endpoint = property(lambda x: x.__end_point)
+    def create_op_mapping(self):
+        """
+            Build a mapping between urls, ops and methods
+        """
+        url_map = defaultdict(dict)
+
+        # TODO: avoid colliding handlers
+
+        for endpoint in self.__end_points:
+            for method, method_handlers in endpoint.__methods__.items():
+                properties = method.__protocol_properties__
+                call = (endpoint, method_handlers[0])
+
+                if "arg_options" in properties:
+                    for opts in properties["arg_options"].values():
+                        if "header" in opts:
+                            self.headers.add(opts["header"])
+
+                url = self._create_base_url(properties)
+                properties["api_version"] = "1"
+                url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+                print(url)
+
+                url = self._create_base_url(properties, versioned=False)
+                properties = properties.copy()
+                properties["api_version"] = None
+                url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+                print(url)
+
+        return url_map
 
     def start(self):
         """
             Start the transport
         """
-        
+        LOGGER.debug("Starting Server Rest Endpoint")
+
         for endpoint in self.__end_points:
             endpoint.start()
-        
+
         url_map = self.create_op_mapping()
 
         for url, configs in url_map.items():
@@ -729,8 +749,10 @@ class RESTServer(RESTBase):
 
         LOGGER.debug("Start REST transport")
 
-    def stop_endpoint(self):
-        self._connected = False
+    def stop(self):
+        LOGGER.debug("Stoppin Server Rest Endpoint")
+        for endpoint in self.__end_points:
+            endpoint.stop()
         self.http_server.stop()
 
     def add_static_handler(self, location, path, default_filename=None, start=False):
@@ -827,6 +849,34 @@ class RESTTransport(Transport, RESTBase):
             Is this transport connected
         """
         return self._connected
+
+    def create_op_mapping(self):
+        """
+            Build a mapping between urls, ops and methods
+        """
+        url_map = defaultdict(dict)
+        headers = set()
+        for method, method_handlers in self.endpoint.__methods__.items():
+            properties = method.__protocol_properties__
+            call = (self.endpoint, method_handlers[0])
+
+            if "arg_options" in properties:
+                for opts in properties["arg_options"].values():
+                    if "header" in opts:
+                        headers.add(opts["header"])
+
+            url = self._create_base_url(properties)
+            properties["api_version"] = "1"
+            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+
+            url = self._create_base_url(properties, versioned=False)
+            properties = properties.copy()
+            properties["api_version"] = None
+            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+
+        headers.add("Authorization")
+        self.headers = headers
+        return url_map
 
     def match_call(self, url, method):
         """
@@ -1206,18 +1256,17 @@ class Session(object):
         return self.client
 
 
-class ServerEndpoint(Endpoint):
+class ServerEndpoint(ServerSlice):
     """
         A service that receives method calls over one or more transports
     """
     __methods__ = {}
 
-    def __init__(self, name, io_loop, transport=RESTTransport, interval=60, hangtime=None):
+    def __init__(self, name, io_loop, interval=60, hangtime=None):
         super().__init__(io_loop, name)
-        self.__methods__ = {}
-        self._transport = transport
 
         self._transport_instance = RESTServer(self)
+        self._transport_instance.add_endpoint(self)
         self._sched = Scheduler(self._io_loop)
 
         self._heartbeat_cb = None
@@ -1228,40 +1277,13 @@ class ServerEndpoint(Endpoint):
             hangtime = interval * 3 / 4
         self.hangtime = hangtime
 
-        self.add_endpoint(self)
-
-    def add_endpoint(self, endpoint):
-        total_dict = {method_name: getattr(endpoint, method_name)
-                      for method_name in dir(endpoint) if callable(getattr(endpoint, method_name))}
-
-        methods = self.__methods__
-        for name, attr in total_dict.items():
-            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
-                if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method.")
-
-                methods[attr.__protocol_method__] = (name, attr)
-
-        self.__methods__ = methods
-
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
-
-    def start(self):
-        """
-            Start this end-point using the central configuration
-        """
-        LOGGER.debug("Starting transport for endpoint %s", self.name)
-        if self._transport_instance is not None:
-            self._transport_instance.start_endpoint()
 
     def stop(self):
         """
             Stop the end-point and all of its transports
         """
-        if self._transport_instance is not None:
-            self._transport_instance.stop_endpoint()
-            LOGGER.debug("Stopped %s", self._transport_instance)
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)

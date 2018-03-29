@@ -27,6 +27,7 @@ from mongobox.unittest import MongoTestCase
 from inmanta import config
 from inmanta.server import Server
 from tornado.testing import AsyncTestCase
+from inmanta.protocol import RESTServer
 
 LOGGER = logging.getLogger(__name__)
 PORT = "45678"
@@ -66,10 +67,13 @@ class ServerTest(MongoTestCase, AsyncTestCase):
         if mongo_port is None:
             raise Exception("MONGOBOX_PORT env variable not available. Make sure test are executed with --with-mongobox")
 
+        self.rs = RESTServer()
         self.server = Server(database_host="localhost", database_port=int(mongo_port), io_loop=self.io_loop)
+        self.rs.add_endpoint(self.server)
+        self.rs.start()
 
     def tearDown(self):
-        self.server.stop()
+        self.rs.stop()
         # does not work with current pymongo
         for db_name in self.mongo_client.database_names():
             self.mongo_client.drop_database(db_name)

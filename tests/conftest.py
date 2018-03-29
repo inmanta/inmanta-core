@@ -41,6 +41,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from tornado import gen
 import re
 from tornado.ioloop import IOLoop
+from inmanta.protocol import RESTServer
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -156,13 +157,15 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 
     data.use_motor(motor)
 
+    rs = RESTServer()
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
+    rs.add_endpoint(server)
+    rs.start()
 
-    yield server
+    yield rs
 
     del IOLoop._instance
-    server.stop()
+    rs.stop()
     shutil.rmtree(state_dir)
 
 

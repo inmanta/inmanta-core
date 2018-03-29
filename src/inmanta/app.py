@@ -34,6 +34,7 @@ from inmanta import protocol, module
 from inmanta.export import cfg_env, ModelExporter
 from inmanta.ast import CompilerException
 import yaml
+from inmanta.protocol import RESTServer
 
 LOGGER = logging.getLogger()
 
@@ -43,8 +44,10 @@ def start_server(options):
     from inmanta import server
     io_loop = IOLoop.current()
 
+    rs = RESTServer()
     s = server.Server(io_loop)
-    s.start()
+    rs.add_endpoint(s)
+    rs.start()
 
     try:
         io_loop.start()

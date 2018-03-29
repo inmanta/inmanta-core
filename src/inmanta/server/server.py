@@ -80,7 +80,7 @@ class Server(protocol.ServerEndpoint):
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
 
-        self.add_end_point_name(self.node_name)
+        #self.add_end_point_name(self.node_name)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())

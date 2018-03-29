@@ -27,6 +27,7 @@ import pytest
 from tornado.gen import sleep
 from utils import retry_limited
 from tornado.ioloop import IOLoop
+from inmanta.protocol import RESTServer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -119,8 +120,10 @@ def test_2way_protocol(free_port, logs=False):
     Config.set("cmdline_rest_transport", "port", free_port)
 
     io_loop = IOLoop.current()
+    rs = RESTServer()
     server = Server("server", io_loop)
-    server.start()
+    rs.add_endpoint(server)
+    rs.start()
 
     agent = Agent("agent", io_loop)
     agent.add_end_point_name("agent")
@@ -144,7 +147,7 @@ def test_2way_protocol(free_port, logs=False):
         io_loop.start()
     except KeyboardInterrupt:
         io_loop.stop()
-    server.stop()
+    rs.stop()
     agent.stop()
 
 
@@ -171,9 +174,12 @@ def test_timeout(free_port):
     Config.set("compiler_rest_transport", "port", free_port)
     Config.set("client_rest_transport", "port", free_port)
     Config.set("cmdline_rest_transport", "port", free_port)
+    
+    rs = RESTServer()
     server = Server("server", io_loop, interval=2)
-    server.start()
-
+    rs.add_endpoint(server)
+    rs.start()
+    
     env = uuid.uuid4()
 
     # agent 1
@@ -225,5 +231,5 @@ def test_timeout(free_port):
         io_loop.start()
     except KeyboardInterrupt:
         io_loop.stop()
-    server.stop()
+    rs.stop()
     agent.stop()

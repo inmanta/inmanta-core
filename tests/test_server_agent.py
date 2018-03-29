@@ -38,6 +38,7 @@ from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
+from inmanta.protocol import RESTServer
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -380,16 +381,19 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
     server.stop()
 
+    rs = RESTServer()
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    rs.add_endpoint(server)
+    rs.start()
+
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -482,7 +486,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
-    server.stop()
+    rs.stop()
 
 
 @pytest.mark.gen_test(timeout=30)
@@ -504,7 +508,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -583,7 +587,7 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     myagent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -682,7 +686,7 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -789,8 +793,8 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.start()
 
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
-    assert len(server.agentmanager.sessions) == 2
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 2, 10)
+    assert len(server.get_endpoint("server").agentmanager.sessions) == 2
 
     result = yield client.list_agent_processes(env_id)
     assert result.code == 200
@@ -881,7 +885,7 @@ def test_get_facts(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -929,7 +933,7 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1026,7 +1030,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1054,7 +1058,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
     result = yield client.release_version(env_id, version, True)
     assert result.code == 200
 
-    yield server.renew_expired_facts()
+    yield server.get_endpoint("server").renew_expired_facts()
 
     env_id = uuid.UUID(env_id)
     params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
@@ -1082,7 +1086,7 @@ def test_fail(resource_container, client, server, io_loop):
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1192,7 +1196,7 @@ def test_wait(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1343,7 +1347,7 @@ def test_multi_instance(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1467,13 +1471,13 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(io_loop, hostname="node2", environment=env_id, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 2, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -1570,7 +1574,7 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1622,7 +1626,7 @@ def test_send_events(resource_container, io_loop, environment, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1685,13 +1689,13 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(io_loop, hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 2, 10)
 
     version = int(time.time())
 
@@ -1758,7 +1762,7 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1808,7 +1812,7 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 2, 10)
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
         result = yield client.get_version(environment, version)
@@ -1839,7 +1843,7 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -2174,7 +2178,7 @@ def test_server_recompile(server, client, environment):
 
         return versions.result
 
-    project_dir = os.path.join(server._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_endpoint("server")._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
 
     shutil.copytree(project_source, project_dir)
