@@ -40,3 +40,4 @@ docs/reference/modules
 .vscode
 docs/moduleguides
 .idea
+.pytest_cache
