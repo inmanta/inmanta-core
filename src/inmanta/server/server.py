@@ -36,7 +36,7 @@ from tornado import gen
 from tornado import locks
 from tornado import process
 
-from inmanta import const, compiler
+from inmanta import const
 from inmanta import data, config
 from inmanta import methods
 from inmanta import protocol

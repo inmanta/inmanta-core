@@ -38,7 +38,6 @@ from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
-from conftest import server_multi, client_multi
 
 logger = logging.getLogger("inmanta.test.server_agent")
 

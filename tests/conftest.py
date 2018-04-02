@@ -169,7 +169,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 @pytest.fixture(scope="function",
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
-                ids=["SSL and Auth", "SSL", "Auth", "Normal","SSL and Auth with not self signed certificate"])
+                ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
 def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
@@ -262,6 +262,7 @@ def environment(client, server, io_loop):
     env_id = result.result["environment"]["id"]
 
     yield env_id
+
 
 @pytest.fixture(scope="function")
 def environment_multi(client_multi, server_multi, io_loop):
