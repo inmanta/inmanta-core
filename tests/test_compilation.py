@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -1977,6 +1977,21 @@ def test_587_assign_extend_incorrect(snippetcompiler):
 
     with pytest.raises(TypingException):
         (_, scopes) = compiler.do_compile()
+
+
+def test_611_dict_access(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+a = "a"
+b = { "a" : a, "b" : "b", "c" : 3}
+c=b[a]
+d=b["c"]
+""")
+
+    (_, root) = compiler.do_compile()
+
+    scope = root.get_child("__config__").scope
+    assert scope.lookup("c").get_value() == "a"
+    assert scope.lookup("d").get_value() == 3
 
 
 def test_552_string_rendering_for_lists(snippetcompiler):

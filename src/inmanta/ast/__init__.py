@@ -51,6 +51,15 @@ class Location(object):
             return False
         return self.file == other.file and self.lnr == other.lnr
 
+    def merge(self, other):
+        if other is None:
+            return self
+
+        assert isinstance(other, Location)
+        assert self.file == other.file
+
+        return Location(self.file, min(self.lnr, other.lnr))
+
 
 class Range(Location):
 
@@ -59,6 +68,37 @@ class Range(Location):
         self.start_char = start_char
         self.end_lnr = end_lnr
         self.end_char = end_char
+
+    def merge(self, other):
+        if other is None:
+            return self
+
+        assert isinstance(other, Location)
+        assert self.file == other.file
+
+        if isinstance(other, Location):
+            return Location(self.file, min(self.lnr, other.lnr))
+        else:
+            if other.lnr < self.lnr:
+                lnr = other.lnr
+                start_char = other.start_char
+            elif other.lnr == self.lnr:
+                lnr = other.lnr
+                start_char = min(self.start_char, other.start_char)
+            else:
+                lnr = self.lnr
+                start_char = self.start_char
+
+            if other.end_lnr > self.end_lnr:
+                end_lnr = other.end_lnr
+                end_char = other.end_char
+            elif other.end_lnr == self.end_lnr:
+                end_lnr = other.end_lnr
+                end_char = max(self.end_char, other.end_char)
+            else:
+                end_lnr = self.lnr
+                end_char = self.end_char
+            return Range(self.file, lnr, start_char, end_lnr, end_char)
 
     def __str__(self) -> str:
         return "%s:%d:%d" % (self.file, self.lnr, self.start_char)
@@ -467,6 +507,10 @@ class OptionalValueException(RuntimeException):
 
 
 class TypingException(RuntimeException):
+    pass
+
+
+class KeyException(RuntimeException):
     pass
 
 
