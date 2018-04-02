@@ -144,8 +144,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     'backend': window.location.origin+'/'%s
 });
         """ % auth
-        self._transport_instance.add_static_content("/dashboard/config.js", content=content)
-        self._transport_instance.add_static_handler("/dashboard", dashboard_path, start=True)
+        self.add_static_content("/dashboard/config.js", content=content)
+        self.add_static_handler("/dashboard", dashboard_path, start=True)
 
     @gen.coroutine
     def _purge_versions(self):

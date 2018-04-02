@@ -606,8 +606,12 @@ class ServerSlice(object):
         self._io_loop = io_loop
         self.create_endpoint_metadata()
         self._end_point_names = []
+        self._handlers = []
 
     name = property(lambda self: self._name)
+
+    def get_handlers(self):
+        return self._handlers
 
     def get_end_point_names(self):
         return self._end_point_names
@@ -650,6 +654,30 @@ class ServerSlice(object):
 
     def stop(self):
         pass
+
+    def add_static_handler(self, location, path, default_filename=None, start=False):
+        """
+            Configure a static handler to serve data from the specified path.
+        """
+        if location[0] != "/":
+            location = "/" + location
+
+        if location[-1] != "/":
+            location = location + "/"
+
+        options = {"path": path}
+        if default_filename is None:
+            options["default_filename"] = "index.html"
+
+        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
+        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
+
+        if start:
+            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
+
+    def add_static_content(self, path, content, content_type="application/javascript"):
+        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
+                                                                        "content_type": content_type}))
 
 
 class RESTServer(RESTBase):
@@ -716,6 +744,7 @@ class RESTServer(RESTBase):
 
         for endpoint in self.__end_points:
             endpoint.start()
+            self.handlers.extend(endpoint.get_handlers())
 
         url_map = self.create_op_mapping()
 
@@ -754,30 +783,6 @@ class RESTServer(RESTBase):
         for endpoint in self.__end_points:
             endpoint.stop()
         self.http_server.stop()
-
-    def add_static_handler(self, location, path, default_filename=None, start=False):
-        """
-            Configure a static handler to serve data from the specified path.
-        """
-        if location[0] != "/":
-            location = "/" + location
-
-        if location[-1] != "/":
-            location = location + "/"
-
-        options = {"path": path}
-        if default_filename is None:
-            options["default_filename"] = "index.html"
-
-        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
-        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
-
-        if start:
-            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
-
-    def add_static_content(self, path, content, content_type="application/javascript"):
-        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
-                                                                        "content_type": content_type}))
 
     def return_error_msg(self, status=500, msg="", headers={}):
         body = {"message": msg}
