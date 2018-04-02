@@ -36,7 +36,7 @@ from tornado import gen
 from tornado import locks
 from tornado import process
 
-from inmanta import const
+from inmanta import const, compiler
 from inmanta import data, config
 from inmanta import methods
 from inmanta import protocol
@@ -46,6 +46,7 @@ from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
+from inmanta.config import compiler_transport
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -1554,7 +1555,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if opt.server_ssl_cert.get() is not None:
                 cmd.append("--ssl")
                 cmd.append("--ssl-ca-cert")
-                cmd.append(opt.server_ssl_cert.get())
+                cmd.append(compiler_transport.ssl_ca_cert_file.get())
 
             result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 

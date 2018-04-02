@@ -305,7 +305,7 @@ class TransportConfig(object):
                                        "CA cert file used to validate the server certificate against", is_str_opt)
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
 
-TransportConfig("compiler")
+compiler_transport = TransportConfig("compiler")
 TransportConfig("client")
 cmdline_rest_transport = TransportConfig("cmdline")
 

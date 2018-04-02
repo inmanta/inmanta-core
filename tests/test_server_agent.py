@@ -38,6 +38,7 @@ from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
+from conftest import server_multi, client_multi
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -2031,7 +2032,7 @@ def test_autostart_mapping(io_loop, server, client, resource_container, environm
 
 
 @pytest.mark.gen_test(timeout=15)
-def test_autostart_clear_environment(io_loop, server, client, resource_container, environment):
+def test_autostart_clear_environment(io_loop, server_multi, client_multi, resource_container, environment):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
@@ -2057,6 +2058,7 @@ def test_autostart_clear_environment(io_loop, server, client, resource_container
                   }
                  ]
 
+    client = client_multi
     result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
@@ -2150,11 +2152,14 @@ def test_export_duplicate(resource_container, snippetcompiler):
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_server_recompile(server, client, environment):
+def test_server_recompile(server_multi, client_multi, environment_multi):
     """
         Test a recompile on the server and verify recompile triggers
     """
     config.Config.set("server", "auto-recompile-wait", "0")
+    client = client_multi
+    server = server_multi
+    environment = environment_multi
 
     @gen.coroutine
     def wait_for_version(cnt):

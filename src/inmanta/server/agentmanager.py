@@ -21,7 +21,7 @@ from tornado import gen
 from tornado import locks
 
 from inmanta.config import Config
-from inmanta import data
+from inmanta import data, agent
 from inmanta import protocol
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
@@ -480,12 +480,18 @@ token=%s
     """ % (token)
 
         ssl_cert = Config.get("server", "ssl_key_file", None)
-        ssl_ca = Config.get("server", "ssl_cert_file", None)
+        ssl_ca = agent.config.agent_transport.ssl_ca_cert_file.get()
         if ssl_ca is not None and ssl_cert is not None:
+            # override CA
             config += """
 ssl=True
 ssl_ca_cert_file=%s
     """ % (ssl_ca)
+        elif ssl_cert is not None:
+            # system CA
+            config += """
+ssl=True
+    """
 
         return config
 
