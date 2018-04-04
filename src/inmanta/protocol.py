@@ -21,9 +21,13 @@
 
 RestServer  => manages tornado/handlers, marshalling, dispatching, and endpoints
 
-ServerEndpoint
+ServerSlice => contributes handlers and methods
 
-ServerEndpoint.server [1] -- RestServer.endpoints [1:]
+ServerSlice.server [1] -- RestServer.endpoints [1:]
+
+
+
+
 """
 import logging
 import socket
@@ -121,6 +125,7 @@ class Result(object):
         self._callback = fnc
 
 
+#todo: has to go
 class Transport(object):
     """
         This class implements a transport for the Inmanta protocol.
@@ -744,7 +749,7 @@ class RESTServer(RESTBase):
 
         for endpoint in self.__end_points:
             endpoint.start()
-            self.handlers.extend(endpoint.get_handlers())
+            self._handlers.extend(endpoint.get_handlers())
 
         url_map = self.create_op_mapping()
 

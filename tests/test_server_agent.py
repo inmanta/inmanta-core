@@ -388,10 +388,10 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
 
     server.stop()
 
-    rs = RESTServer()
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    rs.add_endpoint(server)
-    rs.start()
+    server = RESTServer()
+    xserver = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
+    server.add_endpoint(xserver)
+    server.start()
 
     yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
@@ -486,7 +486,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
-    rs.stop()
+    server.stop()
 
 
 @pytest.mark.gen_test(timeout=30)
