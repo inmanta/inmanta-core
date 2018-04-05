@@ -41,12 +41,12 @@ from inmanta.ast import CompilerException
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
-
 ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter', 'wait_for_done_with_waiters'])
 
 
 @fixture(scope="function")
 def resource_container():
+
     @resource("test::Resource", agent="agent", id_attribute="key")
     class MyResource(Resource):
         """
@@ -235,7 +235,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     result = yield client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -360,6 +360,84 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     actions = yield data.ResourceAction.get_list()
     assert len([x for x in actions if x.status == const.ResourceState.undefined]) == 1
     assert len([x for x in actions if x.status == const.ResourceState.skipped]) == 1
+
+    agent.stop()
+
+
+@pytest.mark.gen_test(timeout=15)
+def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_container):
+    """
+         Test deploy of resource with undefined
+    """
+    resource_container.Provider.reset()
+    result = yield client_multi.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client_multi.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent2")
+    agent.start()
+
+    yield retry_limited(lambda: len(server_multi.agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    resources = [
+                 {'key': 'key4',
+                  'value': execute.util.Unknown(source=None),
+                  'id': 'test::Resource[agent2,key=key4],v=%d' % version,
+                  'send_event': False,
+                  'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  }
+                 ]
+
+    status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined}
+    result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
+                                            unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client_multi.release_version(env_id, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    # The server will mark the full version as deployed even though the agent has not done anything yet.
+    result = yield client_multi.get_version(env_id, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client_multi.get_version(env_id, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    actions = yield data.ResourceAction.get_list()
+    assert len([x for x in actions if x.status == const.ResourceState.undefined]) >= 1
+
+    # Now wait until the agent has processed the undefined resource as well
+    while len([x for x in actions if x.status == const.ResourceState.undefined]) < 2:
+        actions = yield data.ResourceAction.get_list()
+        yield gen.sleep(0.1)
+
+    result = yield client_multi.get_version(env_id, version)
+
+    # Do a second deploy of the same model on agent2 with undefined resources
+    yield agent.trigger_update("env_id", "agent2")
+
+    # Now wait until the agent has processed the undefined resource as well
+    while len([x for x in actions if x.status == const.ResourceState.undefined]) < 3:
+        actions = yield data.ResourceAction.get_list()
+        yield gen.sleep(0.1)
 
     agent.stop()
 
