@@ -235,7 +235,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     result = yield client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -385,12 +385,21 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
 
     version = int(time.time())
 
-    resources = [
-                 {'key': 'key4',
+    resources = [{'key': 'key4',
                   'value': execute.util.Unknown(source=None),
                   'id': 'test::Resource[agent2,key=key4],v=%d' % version,
                   'send_event': False,
                   'requires': [],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                 },
+                 {'key': 'key5',
+                  'value': "val",
+                  'id': 'test::Resource[agent2,key=key5],v=%d' % version,
+                  'send_event': False,
+                  'requires': ['test::Resource[agent2,key=key4],v=%d' % version],
                   'purged': False,
                   'state_id': '',
                   'allow_restore': True,
@@ -408,7 +417,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["result"] == "deploying"
 
     # The server will mark the full version as deployed even though the agent has not done anything yet.
@@ -438,6 +447,10 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     while len([x for x in actions if x.status == const.ResourceState.undefined]) < 3:
         actions = yield data.ResourceAction.get_list()
         yield gen.sleep(0.1)
+
+    result = yield client_multi.get_version(env_id, version)
+    import pprint
+    pprint.pprint(result.result)
 
     agent.stop()
 
