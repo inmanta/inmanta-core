@@ -42,6 +42,7 @@ from tornado import gen
 import re
 from tornado.ioloop import IOLoop
 from inmanta.protocol import RESTServer
+from inmanta.server.bootloader import InmantaBootloader
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -144,7 +145,9 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(mongo_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -157,15 +160,13 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 
     data.use_motor(motor)
 
-    rs = RESTServer()
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    rs.add_endpoint(server)
-    rs.start()
+    ibl = InmantaBootloader()
+    ibl.start()
 
-    yield rs
+    yield ibl.restserver
 
+    ibl.stop()
     del IOLoop._instance
-    rs.stop()
     shutil.rmtree(state_dir)
 
 
@@ -173,6 +174,8 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                 params=[(True, True), (True, False), (False, True), (False, False)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal"])
 def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
+    IOLoop._instance = io_loop
+
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
@@ -200,7 +203,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()
-    config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(mongo_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -211,18 +216,18 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
 
-    rs = RESTServer()
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    rs.add_endpoint(server)
-    rs.start()
+    ibl = InmantaBootloader()
+    ibl.start()
 
-    yield rs
+    yield ibl.restserver
+
+    ibl.stop()
 
     try:
         del IOLoop._instance
     except Exception:
         pass
-    rs.stop()
+
     shutil.rmtree(state_dir)
 
 

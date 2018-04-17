@@ -420,7 +420,7 @@ def authorize_request(auth_data, metadata, message, config):
     return
 
 
-class RESTBase:
+class RESTBase(object):
 
     def _create_base_url(self, properties, msg=None, versioned=True):
         """
@@ -602,8 +602,8 @@ class RESTBase:
 
 
 class ServerSlice(object):
-    """ 
-        An API serving part of the server. 
+    """
+        An API serving part of the server.
     """
 
     def __init__(self, io_loop, name):

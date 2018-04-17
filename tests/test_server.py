@@ -25,7 +25,7 @@ import pytest
 from inmanta.agent.agent import Agent
 from inmanta import data, protocol
 from inmanta import const
-from inmanta.server import config as opt, agentmanager
+from inmanta.server import config as opt
 from datetime import datetime
 from uuid import UUID
 from inmanta.export import upload_code
