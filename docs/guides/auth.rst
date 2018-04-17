@@ -23,7 +23,9 @@ either add the CA cert to the trusted certificates of the system running the age
 in the transport configuration.
 
 For example for an agent this is :inmanta.config:option:`agent_rest_transport.ssl` and
-:inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file`
+:inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file` 
+
+For autostarted agents and compiles on the servers, the options :inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file` and :inmanta.config:option:`compiler_rest_transport.ssl-ca-cert-file` from the service config file are used to validate the server certificate.
 
 Authentication
 --------------
