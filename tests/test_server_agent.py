@@ -39,6 +39,7 @@ from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
 from inmanta.protocol import RESTServer
+from inmanta.server.bootloader import InmantaBootloader
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -388,10 +389,10 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
 
     server.stop()
 
-    server = RESTServer()
-    xserver = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.add_endpoint(xserver)
-    server.start()
+    ibl = InmantaBootloader()
+    server = ibl.restserver
+  
+    ibl.start()
 
     yield retry_limited(lambda: len(server.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
@@ -486,7 +487,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
-    server.stop()
+    ibl.stop()
 
 
 @pytest.mark.gen_test(timeout=30)
@@ -587,7 +588,7 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     myagent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -686,7 +687,7 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -885,7 +886,7 @@ def test_get_facts(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -933,7 +934,7 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1030,7 +1031,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1086,7 +1087,7 @@ def test_fail(resource_container, client, server, io_loop):
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1196,7 +1197,7 @@ def test_wait(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1347,7 +1348,7 @@ def test_multi_instance(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server.get_endpoint("server")._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")

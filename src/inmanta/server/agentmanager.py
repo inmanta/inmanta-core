@@ -338,12 +338,12 @@ class AgentManager(ServerSlice):
     @protocol.handle(methods.NodeMethod.get_agent_process, agent_id="id")
     @gen.coroutine
     def get_agent_process(self, agent_id):
-        return (yield self.agentmanager.get_agent_process_report(agent_id))
+        return (yield self.get_agent_process_report(agent_id))
 
     @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id", env="tid")
     @gen.coroutine
     def trigger_agent(self, env, agent_id):
-        yield self.agentmanager.trigger_agent(env.id, agent_id)
+        raise NotImplemented()
 
     @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine

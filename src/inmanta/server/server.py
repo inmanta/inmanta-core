@@ -94,7 +94,6 @@ class Server(protocol.ServerSlice):
 
     def prestart(self, server):
         self.agentmanager = server.get_endpoint("agentmanager")
-        protocol.SessionEndpoint.prestart(self, server)
 
     def start(self):
         super().start()
