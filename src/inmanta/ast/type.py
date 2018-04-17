@@ -522,4 +522,4 @@ def create_function(expression):
     return function
 
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict()}
+TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict}
