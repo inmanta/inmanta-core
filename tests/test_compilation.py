@@ -2226,3 +2226,33 @@ b1.a = c1.a
 """)
     with pytest.raises(AttributeException):
         (_, scopes) = compiler.do_compile()
+
+
+def test_633_default_on_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Foo:
+   list first=[]
+   list second=["a", "b"]
+   string[] third=["a", "b"]
+end
+
+implementation none for std::Entity:
+end
+
+implement Foo using none
+
+foo = Foo()
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    foo = root.lookup("foo").get_value()
+
+    ab = foo.get_attribute("first").get_value()
+    assert ab == []
+
+    second = foo.get_attribute("second").get_value()
+    assert second == ["a", "b"]
+
+    third = foo.get_attribute("third").get_value()
+    assert third == ["a", "b"]
