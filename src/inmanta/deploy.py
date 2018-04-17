@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
 
     Contact: code@inmanta.com
 """
-import os
 import logging
+import os
 import random
+import subprocess
 import sys
-import re
+import time
+import socket
 
 from mongobox import mongobox
-from tornado import gen, process
-from inmanta import module, config, server, agent, protocol, const, data
+from inmanta import module, config, protocol, const, data
 
 
 LOGGER = logging.getLogger(__name__)
@@ -42,19 +43,16 @@ class FinishedException(Exception):
 
 
 class Deploy(object):
-
-    def __init__(self, io_loop, mongoport=0):
+    def __init__(self, mongoport=0):
         self._mongobox = None
         self._mongoport = mongoport
         self._server_port = 0
         self._data_path = None
-        self._server = None
+        self._server_proc = None
         self._agent = None
         self._client = None
 
         self._environment_id = None
-
-        self._io_loop = io_loop
 
         self._agent_ready = False
 
@@ -69,41 +67,75 @@ class Deploy(object):
             LOGGER.debug("Creating directory %s", path)
             os.mkdir(path)
 
-    def _setup_server(self, no_agent_log):
-        # set the custom config before starting the server
-        config.Config.get("database", "name", "inmanta")
-
+    def setup_server(self, no_agent_log):
         state_dir = os.path.join(self._data_path, "state")
         self._ensure_dir(state_dir)
-        config.Config.set("config", "state-dir", state_dir)
 
         log_dir = os.path.join(self._data_path, "logs")
         self._ensure_dir(log_dir)
-        config.Config.set("config", "log-dir", log_dir)
 
         self._server_port = PORT_START + random.randint(0, 2000)
         assert self._server_port != self._mongoport
 
-        config.Config.set("server_rest_transport", "port", str(self._server_port))
-        config.Config.set("agent_rest_transport", "port", str(self._server_port))
-        config.Config.set("compiler_rest_transport", "port", str(self._server_port))
         config.Config.set("client_rest_transport", "port", str(self._server_port))
-        config.Config.set("cmdline_rest_transport", "port", str(self._server_port))
 
-        # start the server
-        self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop,
-                                     agent_no_log=no_agent_log)
-        self._server.start()
+        config_file = """
+[database]
+name=inmanta
+port=%(mongo_port)s
+
+[config]
+state-dir=%(state_dir)s
+log-dir=%(log_dir)s
+
+[server_rest_transport]
+port=%(server_port)s
+
+[agent_rest_transport]
+port=%(server_port)s
+
+[compiler_rest_transport]
+port=%(server_port)s
+
+[client_rest_transport]
+port=%(server_port)s
+
+[cmdline_rest_transport]
+port=%(server_port)s
+""" % {"state_dir": state_dir, "log_dir": log_dir, "server_port": self._server_port, "mongo_port": self._mongoport}
+
+        server_config = os.path.join(self._data_path, "server.cfg")
+        with open(server_config, "w+") as fd:
+            fd.write(config_file)
+
+        args = [sys.executable, "-m", "inmanta.app", "-vvv", "-c", server_config, "server"]
+
+        self._server_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         LOGGER.debug("Started server on port %d", self._server_port)
 
-        return True
+        while self._server_proc.poll() is None:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                try:
+                    s.connect(('localhost', int(self._server_port)))
+                    return True
+                except (IOError, socket.error):
+                    time.sleep(0.25)
+            finally:
+                s.close()
 
-    def _setup_mongodb(self):
+        return False
+
+    def setup_mongodb(self):
         # start a local mongodb on a random port
         if self._mongoport == 0:
+            log_dir = os.path.join(self._data_path, "logs")
+            self._ensure_dir(log_dir)
+
             self._mongoport = PORT_START + random.randint(0, 2000)
             mongo_dir = os.path.join(self._data_path, "mongo")
-            self._mongobox = mongobox.MongoBox(db_path=mongo_dir, port=self._mongoport)
+            self._mongobox = mongobox.MongoBox(db_path=mongo_dir, port=self._mongoport,
+                                               log_path=os.path.join(log_dir, "mongod.log"))
             LOGGER.debug("Starting mongodb on port %d", self._mongoport)
             if not self._mongobox.start():
                 LOGGER.error("Unable to start mongodb instance on port %d and data directory %s", self._mongoport, mongo_dir)
@@ -111,29 +143,26 @@ class Deploy(object):
 
         return True
 
-    @gen.coroutine
     def _create_project(self, project_name):
         LOGGER.debug("Creating project %s", project_name)
-        result = yield self._client.create_project(project_name)
+        result = self._client.create_project(project_name)
         if result.code != 200:
             LOGGER.error("Unable to create project %s", project_name)
             return False
 
         return result.result["project"]["id"]
 
-    @gen.coroutine
     def _create_environment(self, project_id, environment_name):
         LOGGER.debug("Creating environment %s in project %s", environment_name, project_id)
-        result = yield self._client.create_environment(project_id=project_id, name=environment_name)
+        result = self._client.create_environment(project_id=project_id, name=environment_name)
         if result.code != 200:
             LOGGER.error("Unable to create environment %s", environment_name)
             return False
 
         return result.result["environment"]["id"]
 
-    @gen.coroutine
     def _latest_version(self, environment_id):
-        result = yield self._client.list_versions(tid=environment_id)
+        result = self._client.list_versions(tid=environment_id)
         if result.code != 200:
             LOGGER.error("Unable to get all version of environment %s", environment_id)
             return None
@@ -145,12 +174,11 @@ class Deploy(object):
 
         return None
 
-    @gen.coroutine
     def setup_project(self):
         """
             Set up the configured project and environment on the embedded server
         """
-        self._client = protocol.Client("client")
+        self._client = protocol.SyncClient("client")
 
         # get config
         project_name = cfg_prj.get()
@@ -167,13 +195,13 @@ class Deploy(object):
         tries = 0
         while tries < MAX_TRIES:
             try:
-                yield self._client.list_projects()
+                self._client.list_projects()
                 break
             except Exception:
                 tries += 1
 
         # get project id
-        projects = yield self._client.list_projects()
+        projects = self._client.list_projects()
         if projects.code != 200:
             LOGGER.error("Unable to retrieve project listing from the server")
             return False
@@ -185,12 +213,12 @@ class Deploy(object):
                 break
 
         if project_id is None:
-            project_id = yield self._create_project(project_name)
+            project_id = self._create_project(project_name)
             if not project_id:
                 return False
 
         # get or create the environment
-        environments = yield self._client.list_environments()
+        environments = self._client.list_environments()
         if environments.code != 200:
             LOGGER.error("Unable to retrieve environments from server")
             return False
@@ -201,34 +229,13 @@ class Deploy(object):
                 break
 
         if self._environment_id is None:
-            self._environment_id = yield self._create_environment(project_id, environment_name)
+            self._environment_id = self._create_environment(project_id, environment_name)
             if not self._environment_id:
                 return False
 
         return True
 
-    @gen.coroutine
-    def _wait(self, condition, name=""):
-        tries = 0
-        while tries < MAX_TRIES and not condition():
-            tries += 1
-            yield gen.sleep(0.5)
-
-        if not condition():
-            raise Exception("Timeout while waiting for %s" % name)
-
-    @gen.coroutine
-    def setup_agent(self):
-        yield self._wait(lambda: self._environment_id is not None, "environment setup")
-
-        # start the agent
-        self._agent = agent.Agent(self._io_loop, env_id=self._environment_id, code_loader=True, poolsize=5)
-        self._agent.start()
-
-        self._agent_ready = True
-        return True
-
-    def setup_server(self, no_agent_log):
+    def setup(self, no_agent_log=True):
         """
             Run inmanta locally
         """
@@ -239,16 +246,19 @@ class Deploy(object):
         self._ensure_dir(os.path.join(project.project_path, "data"))
         self._ensure_dir(self._data_path)
 
-        if not self._setup_mongodb():
+        if not self.setup_mongodb():
             return False
 
-        if not self._setup_server(no_agent_log):
+        if not self.setup_server(no_agent_log):
+            return False
+
+        if not self.setup_project():
+            LOGGER.error("Failed to setup project")
             return False
 
         return True
 
-    @gen.coroutine
-    def export(self, dry_run, agent_map):
+    def export(self):
         """
             Export a version to the embedded server
         """
@@ -257,14 +267,11 @@ class Deploy(object):
         cmd = inmanta_path + ["-vvv", "export", "-e", str(self._environment_id), "--server_address", "localhost",
                               "--server_port", str(self._server_port)]
 
-        sub_process = process.Subprocess(cmd, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM)
+        sub_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        log_out, log_err, returncode = yield [sub_process.stdout.read_until_close(),
-                                              sub_process.stderr.read_until_close(),
-                                              sub_process.wait_for_exit(raise_error=False)]
+        log_out, log_err = sub_process.communicate()
 
-        sub_process.uninitialize()
-        if returncode > 0:
+        if sub_process.returncode > 0:
             print("An error occurred while compiling the model:")
             if len(log_out) > 0:
                 print(log_out.decode())
@@ -274,60 +281,39 @@ class Deploy(object):
             return False
 
         LOGGER.info("Export of model complete")
-        yield self.deploy(dry_run, agent_map)
         return True
 
-    @gen.coroutine
-    def get_agents_of_for_model(self, version):
-        version_result = yield self._client.get_version(tid=self._environment_id, id=version)
+    def get_agents_for_model(self, version):
+        version_result = self._client.get_version(tid=self._environment_id, id=version)
         if version_result.code != 200:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return []
 
-        return [x["agent"] for x in version_result.result["resources"]]
+        return {x["agent"] for x in version_result.result["resources"]}
 
-    @gen.coroutine
-    def deploy(self, dry_run, agent_map):
-        version = yield self._latest_version(self._environment_id)
+    def deploy(self, dry_run):
+        version = self._latest_version(self._environment_id)
         LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
             return
 
         # Update the agentmap to autostart all agents
-        agents = yield self.get_agents_of_for_model(version)
+        agents = self.get_agents_for_model(version)
         LOGGER.debug("Agent(s) %s defined, adding them to autostart agent map", ", ".join(agents))
-        result = yield self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
-
-        if result.code == 200:
-            current_map = result.result["value"]
-        else:
-            current_map = {}
-
-        parts = agent_map.split(",")
-        for part in parts:
-            split = re.split("=", part.strip(), 1)
-            if len(split) == 2:
-                current_map[split[0].strip()] = split[1].strip()
-
-        for agent_name in agents:
-            if agent_name not in agent_map:
-                current_map[agent_name] = "local:"
-
-        yield self._client.set_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP, value=current_map)
+        result = self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
 
         # release the version!
         if not dry_run:
-            yield self._client.release_version(tid=self._environment_id, id=version, push=True)
-            yield self.progress_deploy_report(version)
+            self._client.release_version(tid=self._environment_id, id=version, push=True)
+            self.progress_deploy_report(version)
 
         else:
-            result = yield self._client.dryrun_request(tid=self._environment_id, id=version)
+            result = self._client.dryrun_request(tid=self._environment_id, id=version)
             dryrun_id = result.result["dryrun"]["id"]
-            yield self.progress_dryrun_report(dryrun_id)
+            self.progress_dryrun_report(dryrun_id)
 
-    @gen.coroutine
     def _get_deploy_stats(self, version):
-        version_result = yield self._client.get_version(tid=self._environment_id, id=version)
+        version_result = self._client.get_version(tid=self._environment_id, id=version)
         if version_result.code != 200:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
             return []
@@ -344,14 +330,13 @@ class Deploy(object):
 
         return total, deployed, ready
 
-    @gen.coroutine
     def progress_deploy_report(self, version):
         print("Starting deploy")
         current_ready = set()
         total = 0
         deployed = -1
         while total > deployed:
-            total, deployed, ready = yield self._get_deploy_stats(version)
+            total, deployed, ready = self._get_deploy_stats(version)
 
             new = ready.keys() - current_ready
             current_ready = ready
@@ -365,14 +350,12 @@ class Deploy(object):
                 print("%s - %s" % (res, ready[res]))
 
             print("[%d / %d]" % (deployed, total))
-            yield gen.sleep(1)
+            time.sleep(1)
 
         print("Deploy ready")
-        raise FinishedException()
 
-    @gen.coroutine
     def _get_dryrun_status(self, dryrun_id):
-        result = yield self._client.dryrun_report(self._environment_id, dryrun_id)
+        result = self._client.dryrun_report(self._environment_id, dryrun_id)
 
         if result.code != 200:
             raise Exception("Unable to get dryrun report")
@@ -380,7 +363,6 @@ class Deploy(object):
         data = result.result["dryrun"]
         return data["total"], data["todo"], data["resources"]
 
-    @gen.coroutine
     def progress_dryrun_report(self, dryrun_id):
         print("Starting dryrun")
 
@@ -393,7 +375,7 @@ class Deploy(object):
                 sys.stdout.write('\033[1A')
                 sys.stdout.flush()
 
-            total, todo, ready = yield self._get_dryrun_status(dryrun_id)
+            total, todo, ready = self._get_dryrun_status(dryrun_id)
 
             new = ready.keys() - current_ready
             current_ready = ready
@@ -406,7 +388,7 @@ class Deploy(object):
                     print("%s:" % res)
                     for field, values in changes.items():
                         if field == "hash":
-                            diff_result = yield self._client.diff(a=values[0], b=values[1])
+                            diff_result = self._client.diff(a=values[0], b=values[1])
                             if diff_result.code == 200:
                                 print("  - content:")
                                 diff_value = diff_result.result
@@ -419,37 +401,17 @@ class Deploy(object):
                         print("")
 
             print("[%d / %d]" % (total - todo, total))
-            yield gen.sleep(1)
+            time.sleep(1)
 
         raise FinishedException()
 
-    @gen.coroutine
-    def do_deploy(self, dry_run, agent_map):
-        yield self.setup_project()
-        yield self.export(dry_run=dry_run, agent_map=agent_map)
-
     def run(self, options, only_setup=False):
-        if options.agent is not None:
-            config.Config.set("config", "agent", options.agent)
-        self.setup_server(options.no_agent_log)
-
-        if only_setup:
-            return
-
-        def handle_result(x):
-            if x.exception() is not None or not x.result():
-                self._io_loop.stop()
-                self.stop()
-                sys.exit(1)
-
-        self._io_loop.add_future(self.do_deploy(dry_run=options.dryrun, agent_map=options.map), handle_result)
+        self.export()
+        self.deploy(dry_run=options.dryrun)
 
     def stop(self):
-        if self._agent is not None:
-            self._agent.stop()
-
-        if self._server is not None:
-            self._server.stop()
+        if self._server_proc is not None:
+            self._server_proc.kill()
 
         if self._mongobox is not None:
             self._mongobox.stop()
