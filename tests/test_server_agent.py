@@ -2150,7 +2150,7 @@ def test_export_duplicate(resource_container, snippetcompiler):
     assert "exists more than once in the configuration model" in str(exc.value)
 
 
-@pytest.mark.gen_test(timeout=30)
+@pytest.mark.gen_test(timeout=90)
 def test_server_recompile(server_multi, client_multi, environment_multi):
     """
         Test a recompile on the server and verify recompile triggers
