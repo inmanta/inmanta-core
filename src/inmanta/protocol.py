@@ -15,20 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
-
-"""
-
-RestServer  => manages tornado/handlers, marshalling, dispatching, and endpoints
-
-ServerSlice => contributes handlers and methods
-
-ServerSlice.server [1] -- RestServer.endpoints [1:]
-
-
-
-
-"""
 import logging
 import socket
 import time
@@ -56,6 +42,136 @@ import jwt
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
+
+"""
+
+RestServer  => manages tornado/handlers, marshalling, dispatching, and endpoints
+
+ServerSlice => contributes handlers and methods
+
+ServerSlice.server [1] -- RestServer.endpoints [1:]
+
+"""
+
+
+# Util functions
+def custom_json_encoder(o):
+    """
+        A custom json encoder that knows how to encode other types commonly used by Inmanta
+    """
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime):
+        return o.isoformat()
+
+    if hasattr(o, "to_dict"):
+        return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
+
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    if isinstance(o, execute.util.Unknown):
+        return const.UNKNOWN_STRING
+
+    LOGGER.error("Unable to serialize %s", o)
+    raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def json_encode(value):
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+
+
+def gzipped_json(value):
+    value = json_encode(value)
+    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
+        return False, value
+
+    gzip_value = io.BytesIO()
+    gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
+
+    gzip_file.write(value.encode())
+    gzip_file.close()
+
+    return True, gzip_value.getvalue()
+
+
+def sh(msg, max_len=10):
+    if len(msg) < max_len:
+        return msg
+    return msg[0:max_len - 3] + "..."
+
+
+def encode_token(client_types, environment=None, idempotent=False, expire=None):
+    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
+
+    payload = {
+        "iss": cfg.issuer,
+        "aud": [cfg.audience],
+        const.INMANTA_URN + "ct": ",".join(client_types),
+    }
+
+    if not idempotent:
+        payload["iat"] = int(time.time())
+
+        if cfg.expire > 0:
+            payload["exp"] = int(time.time() + cfg.expire)
+        elif expire is not None:
+            payload["exp"] = int(time.time() + expire)
+
+    if environment is not None:
+        payload[const.INMANTA_URN + "env"] = environment
+
+    return jwt.encode(payload, cfg.key, cfg.algo).decode()
+
+
+def decode_token(token):
+    try:
+        # First decode the token without verification
+        header = jwt.get_unverified_header(token)
+        payload = jwt.decode(token, verify=False)
+    except Exception as e:
+        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
+
+    if "iss" not in payload:
+        raise UnauhorizedError("Issuer is required in token to validate.")
+
+    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
+    if cfg is None:
+        raise UnauhorizedError("Unknown issuer for token")
+
+    alg = header["alg"].lower()
+    if alg == "hs256":
+        key = cfg.key
+    elif alg == "rs256":
+        if "kid" not in header:
+            raise UnauhorizedError("A kid is required for RS256")
+        kid = header["kid"]
+        if kid not in cfg.keys:
+            raise UnauhorizedError("The kid provided in the token does not match a known key. Check the jwks_uri or try "
+                                   "restarting the server to load any new keys.")
+
+        key = cfg.keys[kid]
+    else:
+        raise UnauhorizedError("Algorithm %s is not supported." % alg)
+
+    try:
+        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
+        ct_key = const.INMANTA_URN + "ct"
+        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
+    except Exception as e:
+        raise UnauhorizedError(*e.args)
+
+    return payload
+
+
+class UnauhorizedError(Exception):
+    pass
 
 
 class Result(object):
@@ -125,7 +241,7 @@ class Result(object):
         self._callback = fnc
 
 
-#todo: has to go
+# todo: has to go
 class Transport(object):
     """
         This class implements a transport for the Inmanta protocol.
@@ -139,119 +255,6 @@ class Transport(object):
             Create an instance of the transport class
         """
         return transport_class(endpoint)
-
-
-def custom_json_encoder(o):
-    """
-        A custom json encoder that knows how to encode other types commonly used by Inmanta
-    """
-    if isinstance(o, uuid.UUID):
-        return str(o)
-
-    if isinstance(o, datetime):
-        return o.isoformat()
-
-    if hasattr(o, "to_dict"):
-        return o.to_dict()
-
-    if isinstance(o, enum.Enum):
-        return o.name
-
-    if isinstance(o, Exception):
-        # Logs can push exceptions through RPC. Return a string representation.
-        return str(o)
-
-    if isinstance(o, execute.util.Unknown):
-        return const.UNKNOWN_STRING
-
-    LOGGER.error("Unable to serialize %s", o)
-    raise TypeError(repr(o) + " is not JSON serializable")
-
-
-def json_encode(value):
-    # see json_encode in tornado.escape
-    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
-
-
-def gzipped_json(value):
-    value = json_encode(value)
-    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
-        return False, value
-
-    gzip_value = io.BytesIO()
-    gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
-
-    gzip_file.write(value.encode())
-    gzip_file.close()
-
-    return True, gzip_value.getvalue()
-
-
-class UnauhorizedError(Exception):
-    pass
-
-
-def encode_token(client_types, environment=None, idempotent=False, expire=None):
-    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-
-    payload = {
-        "iss": cfg.issuer,
-        "aud": [cfg.audience],
-        const.INMANTA_URN + "ct": ",".join(client_types),
-    }
-
-    if not idempotent:
-        payload["iat"] = int(time.time())
-
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
-
-    if environment is not None:
-        payload[const.INMANTA_URN + "env"] = environment
-
-    return jwt.encode(payload, cfg.key, cfg.algo).decode()
-
-
-def decode_token(token):
-    try:
-        # First decode the token without verification
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, verify=False)
-    except Exception as e:
-        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
-
-    if "iss" not in payload:
-        raise UnauhorizedError("Issuer is required in token to validate.")
-
-    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
-    if cfg is None:
-        raise UnauhorizedError("Unknown issuer for token")
-
-    alg = header["alg"].lower()
-    if alg == "hs256":
-        key = cfg.key
-    elif alg == "rs256":
-        if "kid" not in header:
-            raise UnauhorizedError("A kid is required for RS256")
-        kid = header["kid"]
-        if kid not in cfg.keys:
-            raise UnauhorizedError("The kid provided in the token does not match a known key. Check the jwks_uri or try "
-                                   "restarting the server to load any new keys.")
-
-        key = cfg.keys[kid]
-    else:
-        raise UnauhorizedError("Algorithm %s is not supported." % alg)
-
-    try:
-        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
-        ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
-    except Exception as e:
-        raise UnauhorizedError(*e.args)
-
-    return payload
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -385,12 +388,6 @@ class StaticContentHandler(tornado.web.RequestHandler):
         self.set_header("Content-Type", self._content_type)
         self.write(self._content)
         self.set_status(200)
-
-
-def sh(msg, max_len=10):
-    if len(msg) < max_len:
-        return msg
-    return msg[0:max_len - 3] + "..."
 
 
 def authorize_request(auth_data, metadata, message, config):
@@ -605,10 +602,14 @@ class RESTBase:
 
 
 class ServerSlice(object):
+    """ 
+        An API serving part of the server. 
+    """
 
     def __init__(self, io_loop, name):
         self._name = name
         self._io_loop = io_loop
+
         self.create_endpoint_metadata()
         self._end_point_names = []
         self._handlers = []
@@ -619,6 +620,7 @@ class ServerSlice(object):
         return self._handlers
 
     def get_end_point_names(self):
+        # TODO: why?
         return self._end_point_names
 
     def add_end_point_name(self, name):
@@ -785,9 +787,9 @@ class RESTServer(RESTBase):
 
     def stop(self):
         LOGGER.debug("Stoppin Server Rest Endpoint")
+        self.http_server.stop()
         for endpoint in self.__end_points:
             endpoint.stop()
-        self.http_server.stop()
 
     def return_error_msg(self, status=500, msg="", headers={}):
         body = {"message": msg}

@@ -241,7 +241,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     agent.add_end_point_name("agent1")
     agent.start()
 
-    yield retry_limited(lambda: len(server_multi.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(server_multi.get_endpoint("server").agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")

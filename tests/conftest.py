@@ -211,12 +211,18 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
 
+    rs = RESTServer()
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
+    rs.add_endpoint(server)
+    rs.start()
 
-    yield server
+    yield rs
 
-    server.stop()
+    try:
+        del IOLoop._instance
+    except Exception:
+        pass
+    rs.stop()
     shutil.rmtree(state_dir)
 
 
