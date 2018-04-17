@@ -2006,6 +2006,16 @@ c=b["a"]["b"]
     assert scope.lookup("c").get_value() == "c"
 
 
+def test_632_dict_access_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : "b"}
+c=b["a"]["b"]
+""")
+
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
 def test_552_string_rendering_for_lists(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Network:
