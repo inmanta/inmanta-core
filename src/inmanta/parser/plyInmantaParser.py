@@ -249,7 +249,8 @@ def p_attr(p):
 
 
 def p_attr_cte(p):
-    "attr : attr_type ID '=' constant"
+    """attr : attr_type ID '=' constant
+           | attr_type ID '=' constant_list"""
     (attr, nullable) = p[1]
     p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
     attach_lnr(p, 2)
