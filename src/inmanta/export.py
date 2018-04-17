@@ -281,7 +281,7 @@ class Exporter(object):
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
             if len(self._resources) > 0 or len(unknown_parameters) > 0:
                 model = ModelExporter(types).export_all()
-                with open(self.options.json+".types", "wb+") as fd:
+                with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
             model = ModelExporter(types).export_all()

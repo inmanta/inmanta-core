@@ -76,15 +76,16 @@ class Type(Locatable):
             (i.e. an inmanta instance === python instance of the python class === the inmanta type)
             1. List
             2. Dict
-        2. types for which the inmanta type == the python class and 
-            inmanta instances are python instances of a the corresponding python type 
+        2. types for which the inmanta type == the python class and
+            inmanta instances are python instances of a the corresponding python type
             1. Bool  => bool
             2. Number => float/int
             3. String => str
-        3. types for which the inmanta type is an instance of the python type and 
+        3. types for which the inmanta type is an instance of the python type and
             inmanta instance is also an instance of the python type
             1. TypedList
-        4. types for which the inmanta type is an instance of the python type and inmanta instance is an instance of a different python type
+        4. types for which the inmanta type is an instance of the python type and
+            inmanta instance is an instance of a different python type
             1. ConstraintType
             2. NullableType
 
@@ -109,11 +110,11 @@ class Type(Locatable):
         raise NotImplementedError()
 
     def type_string(self):
-        """ get the name of the type """
+        """get the name of the type """
         raise NotImplemented()
 
     def __str__(self):
-        """ get the string representation of the instance of the type """
+        """get the string representation of the instance of the type """
         raise NotImplemented()
 
     def normalize(self):
@@ -221,7 +222,7 @@ class Number(Type):
         return None
 
     @classmethod
-    def type_string(self):
+    def type_string(cls):
         return "number"
 
 
@@ -261,7 +262,7 @@ class Bool(Type):
         raise CastException()
 
     @classmethod
-    def type_string(self):
+    def type_string(cls):
         return "bool"
 
     @classmethod
