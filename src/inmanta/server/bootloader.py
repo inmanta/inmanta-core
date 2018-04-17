@@ -12,8 +12,9 @@
     Contact: code@inmanta.com
 """
 from tornado.ioloop import IOLoop
-from inmanta import server
+from inmanta.server import server
 from inmanta.protocol import RESTServer
+from inmanta.server.agentmanager import AgentManager
 
 
 class InmantaBootloader:
@@ -25,8 +26,11 @@ class InmantaBootloader:
         io_loop = IOLoop.current()
         return server.Server(io_loop)
 
+    def get_agent_manager_slice(self):
+        return AgentManager(self.restserver)
+
     def get_server_slices(self):
-        return [self.get_server_slice()]
+        return [self.get_server_slice(),  self.get_agent_manager_slice()]
 
     def start(self):
         for mypart in self.get_server_slices():

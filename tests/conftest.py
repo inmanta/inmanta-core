@@ -141,7 +141,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     # causes handler failure
     IOLoop._instance = io_loop
 
-    from inmanta.server import Server
+    from inmanta.server.server import Server
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
@@ -176,7 +176,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     IOLoop._instance = io_loop
 
-    from inmanta.server import Server
+    from inmanta.server.server import Server
     state_dir = tempfile.mkdtemp()
 
     ssl, auth = request.param

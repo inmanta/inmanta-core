@@ -40,6 +40,9 @@ from tornado.ioloop import IOLoop
 import ssl
 import jwt
 
+from inmanta.server import config as opt
+
+
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
 
@@ -613,6 +616,7 @@ class ServerSlice(object):
         self.create_endpoint_metadata()
         self._end_point_names = []
         self._handlers = []
+        self._sched = Scheduler(self._io_loop)
 
     name = property(lambda self: self._name)
 
@@ -641,6 +645,9 @@ class ServerSlice(object):
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
         self._io_loop.add_future(future, handle_result)
+        
+    def schedule(self, call, interval=60):
+        self._sched.add_action(call, interval)
 
     def create_endpoint_metadata(self):
         total_dict = {method_name: getattr(self, method_name)
@@ -655,6 +662,9 @@ class ServerSlice(object):
                 methods[attr.__protocol_method__] = (name, attr)
 
         self.__methods__ = methods
+
+    def prestart(self, server):
+        pass
 
     def start(self):
         pass
@@ -696,6 +706,8 @@ class RESTServer(RESTBase):
         self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.headers = set()
+        self.sessions_handler = SessionEndpoint(IOLoop.current())
+        self.add_endpoint(self.sessions_handler)
 
     def add_endpoint(self, endpoint: ServerSlice):
         self.__end_points.append(endpoint)
@@ -703,6 +715,9 @@ class RESTServer(RESTBase):
 
     def get_endpoint(self, name):
         return self.__endpoint_dict[name]
+
+    def validate_sid(self, sid):
+        return self.sessions_handler.validate_sid(sid)
 
     def get_id(self):
         """
@@ -748,6 +763,9 @@ class RESTServer(RESTBase):
             Start the transport
         """
         LOGGER.debug("Starting Server Rest Endpoint")
+
+        for endpoint in self.__end_points:
+            endpoint.prestart(self)
 
         for endpoint in self.__end_points:
             endpoint.start()
@@ -1268,18 +1286,29 @@ class Session(object):
         return self.client
 
 
-class ServerEndpoint(ServerSlice):
+class SessionListener:
+
+    def new_session(self, session: Session):
+        pass
+
+    def expire(self, session: Session, timeout):
+        pass
+
+    def seen(self, session: Session, endpoint_names: list):
+        pass
+
+
+class SessionEndpoint(ServerSlice):
     """
         A service that receives method calls over one or more transports
     """
     __methods__ = {}
 
-    def __init__(self, name, io_loop, interval=60, hangtime=None):
-        super().__init__(io_loop, name)
+    def __init__(self, io_loop):
+        super().__init__(io_loop, "session")
 
-        self._transport_instance = RESTServer(self)
-        self._transport_instance.add_endpoint(self)
-        self._sched = Scheduler(self._io_loop)
+        interval = opt.agent_timeout.get()
+        hangtime = opt.agent_hangtime.get()
 
         self._heartbeat_cb = None
         self.agent_handles = {}
@@ -1288,9 +1317,10 @@ class ServerEndpoint(ServerSlice):
         if hangtime is None:
             hangtime = interval * 3 / 4
         self.hangtime = hangtime
+        self.listeners = []
 
-    def schedule(self, call, interval=60):
-        self._sched.add_action(call, interval)
+    def add_listener(self, listener):
+        self.listeners.append(listener)
 
     def stop(self):
         """
@@ -1312,9 +1342,13 @@ class ServerEndpoint(ServerSlice):
         if sid not in self._sessions:
             session = self.new_session(sid, tid, endpoint_names, nodename)
             self._sessions[sid] = session
+            for listener in self.listeners:
+                listener.new_session(session)
         else:
             session = self._sessions[sid]
             self.seen(session, endpoint_names)
+            for listener in self.listeners:
+                listener.seen(session, endpoint_names)
 
         return session
 
@@ -1324,6 +1358,8 @@ class ServerEndpoint(ServerSlice):
 
     def expire(self, session: Session, timeout):
         LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
+        for listener in self.listeners:
+            listener.expire(session, timeout)
         del self._sessions[session.id]
 
     def seen(self, session: Session, endpoint_names: list):

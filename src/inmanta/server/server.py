@@ -53,14 +53,14 @@ agent_lock = locks.Lock()
 DBLIMIT = 100000
 
 
-class Server(protocol.ServerEndpoint):
+class Server(protocol.ServerSlice):
     """
         The central Inmanta server that communicates with clients and agents and persists configuration
         information
     """
 
     def __init__(self, io_loop, database_host=None, database_port=None, agent_no_log=False):
-        super().__init__("server", io_loop=io_loop, interval=opt.agent_timeout.get(), hangtime=opt.agent_hangtime.get())
+        super().__init__(io_loop=io_loop, name="server")
         LOGGER.info("Starting server endpoint")
         self._server_storage = self.check_storage()
         self._agent_no_log = agent_no_log
@@ -89,31 +89,18 @@ class Server(protocol.ServerEndpoint):
 
         self._recompiles = defaultdict(lambda: None)
 
-        self.agentmanager = AgentManager(self, fact_back_off=opt.server_fact_resource_block.get())
-
         self.setup_dashboard()
         self.dryrun_lock = locks.Lock()
 
-    def new_session(self, sid, tid, endpoint_names, nodename):
-        session = protocol.ServerEndpoint.new_session(self, sid, tid, endpoint_names, nodename)
-        self.agentmanager.new_session(session)
-        return session
-
-    def expire(self, session, timeout):
-        self.agentmanager.expire(session)
-        protocol.ServerEndpoint.expire(self, session, timeout)
-
-    def seen(self, session, endpoint_names):
-        self.agentmanager.seen(session, endpoint_names)
-        protocol.ServerEndpoint.seen(self, session, endpoint_names)
+    def prestart(self, server):
+        self.agentmanager = server.get_endpoint("agentmanager")
+        protocol.SessionEndpoint.prestart(self, server)
 
     def start(self):
         super().start()
-        self.agentmanager.start()
 
     def stop(self):
         super().stop()
-        self.agentmanager.stop()
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -643,36 +630,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 404
 
         return 200, {"diff": list(diff)}
-
-    @protocol.handle(methods.NodeMethod.get_agent_process, agent_id="id")
-    @gen.coroutine
-    def get_agent_process(self, agent_id):
-        return (yield self.agentmanager.get_agent_process_report(agent_id))
-
-    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id", env="tid")
-    @gen.coroutine
-    def trigger_agent(self, env, agent_id):
-        yield self.agentmanager.trigger_agent(env.id, agent_id)
-
-    @protocol.handle(methods.NodeMethod.list_agent_processes)
-    @gen.coroutine
-    def list_agent_processes(self, environment, expired):
-        if environment is not None:
-            env = yield data.Environment.get_by_id(environment)
-            if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
-
-        return (yield self.agentmanager.list_agent_processes(environment, expired))
-
-    @protocol.handle(methods.ServerAgentApiMethod.list_agents, env="tid")
-    @gen.coroutine
-    def list_agents(self, env):
-        return (yield self.agentmanager.list_agents(env.id))
-
-    @protocol.handle(methods.AgentRecovery.get_state, env="tid")
-    @gen.coroutine
-    def get_state(self, env: uuid.UUID, sid: uuid.UUID, agent: str):
-        return (yield self.agentmanager.get_state(env.id, sid, agent))
 
     @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id", env="tid")
     @gen.coroutine

@@ -21,7 +21,7 @@ from tornado import gen
 from tornado import locks
 
 from inmanta.config import Config
-from inmanta import data
+from inmanta import data, methods
 from inmanta import protocol
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
@@ -33,6 +33,9 @@ import time
 import sys
 import subprocess
 import uuid
+from inmanta.protocol import ServerSlice
+from inmanta.server import config as opt
+from tornado.ioloop import IOLoop
 
 
 LOGGER = logging.getLogger(__name__)
@@ -62,26 +65,35 @@ Model in server         On Agent
 |               |
 +---------------+
 
+
+get_resources_for_agent
+
+resource_action_update
+
+dryrun_update
+
+set_parameters
 """
 
 
-class AgentManager(object):
+class AgentManager(ServerSlice):
     '''
     This class contains all server functionality related to the management of agents
     '''
 
-    def __init__(self, server, closesessionsonstart=True, fact_back_off=60):
-        self._server = server
+    def __init__(self, restserver, closesessionsonstart=True, fact_back_off=None):
+        super(AgentManager, self).__init__(IOLoop.current(), "agentmanager")
+        self.restserver = restserver
+
+        if fact_back_off is None:
+            fact_back_off = opt.server_fact_resource_block.get()
 
         self._agent_procs = {}  # env uuid -> subprocess.Popen
-        server.add_future(self.start_agents())
 
         # back-off timer for fact requests
         self._fact_resource_block = fact_back_off
         # per resource time of last fact request
         self._fact_resource_block_set = {}
-
-        self._server_storage = server._server_storage
 
         # session lock
         self.session_lock = locks.Lock()
@@ -92,20 +104,17 @@ class AgentManager(object):
 
         self.closesessionsonstart = closesessionsonstart
 
-    # From server
-    def new_session(self, session: protocol.Session):
+    def prestart(self, server):
+        ServerSlice.prestart(self, server)
+        self._server = server.get_endpoint("server")
+        self._server_storage = self._server._server_storage
+        server.get_endpoint("session").add_listener(self)
+
+    def new_session(self, session):
         self.add_future(self.register_session(session, datetime.now()))
 
-    def expire(self, session: protocol.Session):
+    def expire(self, session, timeout):
         self.add_future(self.expire_session(session, datetime.now()))
-
-    def get_agent_client(self, tid: uuid.UUID, endpoint):
-        if isinstance(tid, str):
-            tid = uuid.UUID(tid)
-        key = (tid, endpoint)
-        if key in self.tid_endpoint_to_session:
-            return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
-        return None
 
     def seen(self, session, endpoint_names):
         if set(session.endpoint_names) != set(endpoint_names):
@@ -114,16 +123,22 @@ class AgentManager(object):
         # start async, let it run free
         self.add_future(self.flush_agent_presence(session, datetime.now()))
 
+    # From server
+    def get_agent_client(self, tid: uuid.UUID, endpoint):
+        if isinstance(tid, str):
+            tid = uuid.UUID(tid)
+        key = (tid, endpoint)
+        if key in self.tid_endpoint_to_session:
+            return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
+        return None
+
     def start(self):
+        self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
 
     def stop(self):
         self.terminate_agents()
-
-    # To Server
-    def add_future(self, future):
-        self._server.add_future(future)
 
     # Agent Management
 
@@ -320,9 +335,25 @@ class AgentManager(object):
                 errhandle.close()
 
     # External APIS
-
+    @protocol.handle(methods.NodeMethod.get_agent_process, agent_id="id")
     @gen.coroutine
-    def list_agent_processes(self, tid, expired):
+    def get_agent_process(self, agent_id):
+        return (yield self.agentmanager.get_agent_process_report(agent_id))
+
+    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id", env="tid")
+    @gen.coroutine
+    def trigger_agent(self, env, agent_id):
+        yield self.agentmanager.trigger_agent(env.id, agent_id)
+
+    @protocol.handle(methods.NodeMethod.list_agent_processes)
+    @gen.coroutine
+    def list_agent_processes(self, environment, expired):
+        if environment is not None:
+            env = yield data.Environment.get_by_id(environment)
+            if env is None:
+                return 404, {"message": "The given environment id does not exist!"}
+
+        tid = environment
         if tid is not None:
             if expired:
                 aps = yield data.AgentProcess.get_by_env(tid)
@@ -347,6 +378,30 @@ class AgentManager(object):
 
         return 200, {"processes": processes}
 
+    @protocol.handle(methods.ServerAgentApiMethod.list_agents, env="tid")
+    @gen.coroutine
+    def list_agents(self, env):
+        tid = env.id
+        if tid is not None:
+            ags = yield data.Agent.get_list(environment=tid)
+        else:
+            ags = yield data.Agent.get_list()
+
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat()}
+
+    @protocol.handle(methods.AgentRecovery.get_state, env="tid")
+    @gen.coroutine
+    def get_state(self, env: uuid.UUID, sid: uuid.UUID, agent: str):
+        tid = env.id
+        if isinstance(tid, str):
+            tid = uuid.UUID(tid)
+        key = (tid, agent)
+        if key in self.tid_endpoint_to_session:
+            session = self.tid_endpoint_to_session[(tid, agent)]
+            if session.id == sid:
+                return 200, {"enabled": True}
+        return 200, {"enabled": False}
+
     @gen.coroutine
     def get_agent_process_report(self, apid: uuid.UUID):
         ap = yield data.AgentProcess.get_by_id(apid)
@@ -358,15 +413,6 @@ class AgentManager(object):
         client = self.sessions[sid].get_client()
         result = yield client.get_status()
         return result.code, result.get_result()
-
-    @gen.coroutine
-    def list_agents(self, tid):
-        if tid is not None:
-            ags = yield data.Agent.get_list(environment=tid)
-        else:
-            ags = yield data.Agent.get_list()
-
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat()}
 
     # Start/stop agents
     @gen.coroutine
@@ -534,17 +580,7 @@ ssl_ca_cert_file=%s
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-    @gen.coroutine
-    def get_state(self, tid: uuid.UUID, sid: uuid.UUID, agent: str):
-        if isinstance(tid, str):
-            tid = uuid.UUID(tid)
-        key = (tid, agent)
-        if key in self.tid_endpoint_to_session:
-            session = self.tid_endpoint_to_session[(tid, agent)]
-            if session.id == sid:
-                return 200, {"enabled": True}
-        return 200, {"enabled": False}
-
+  
     @gen.coroutine
     def start_agents(self):
         """

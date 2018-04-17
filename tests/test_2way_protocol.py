@@ -48,10 +48,10 @@ class StatusMethod(methods.Method):
 from inmanta import protocol  # NOQA
 
 
-class Server(protocol.ServerEndpoint):
+class Server(protocol.SessionEndpoint):
 
     def __init__(self, name, io_loop, interval=60):
-        protocol.ServerEndpoint.__init__(self, name, io_loop, interval=interval)
+        protocol.SessionEndpoint.__init__(self, name, io_loop, interval=interval)
         self.expires = 0
 
     @protocol.handle(StatusMethod.get_status_x)
@@ -67,7 +67,7 @@ class Server(protocol.ServerEndpoint):
         return 200, {"agents": status_list}
 
     def expire(self, session, timeout):
-        protocol.ServerEndpoint.expire(self, session, timeout)
+        protocol.SessionEndpoint.expire(self, session, timeout)
         print(session._sid)
         self.expires += 1
 
