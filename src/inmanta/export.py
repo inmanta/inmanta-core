@@ -570,7 +570,7 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
-            return model.Attribute(attr.type.__str__(), attr.is_optional(), attr.is_multi(),
+            return model.Attribute(attr.type.type_string(), attr.is_optional(), attr.is_multi(),
                                    convert_comment(attr.comment), location(attr))
 
         def convert_relation(relation: RelationAttribute):

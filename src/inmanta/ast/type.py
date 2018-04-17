@@ -69,6 +69,25 @@ class Type(Locatable):
     """
         This class is the base class for all types that represent basic data.
         These are types that are not relations.
+
+        This code is rather tricky, as not all types are used in the same way
+
+        1. types that are used as python types and inmanta types
+            (i.e. an inmanta instance === python instance of the python class === the inmanta type)
+            1. List
+            2. Dict
+        2. types for which the inmanta type == the python class and 
+            inmanta instances are python instances of a the corresponding python type 
+            1. Bool  => bool
+            2. Number => float/int
+            3. String => str
+        3. types for which the inmanta type is an instance of the python type and 
+            inmanta instance is also an instance of the python type
+            1. TypedList
+        4. types for which the inmanta type is an instance of the python type and inmanta instance is an instance of a different python type
+            1. ConstraintType
+            2. NullableType
+
     """
 
     @classmethod
@@ -89,8 +108,13 @@ class Type(Locatable):
         """
         raise NotImplementedError()
 
+    def type_string(self):
+        """ get the name of the type """
+        raise NotImplemented()
+
     def __str__(self):
-        return str(self.__class__)
+        """ get the string representation of the instance of the type """
+        raise NotImplemented()
 
     def normalize(self):
         pass
@@ -128,8 +152,11 @@ class NullableType(Type):
 
         return self.basetype.validate(value)
 
+    def type_string(self):
+        return "%s?" % (self.basetype.type_string())
+
     def __str__(self):
-        return "%s?" % (self.basetype)
+        return "%s" % (self.basetype)
 
 
 class Number(Type):
@@ -193,6 +220,10 @@ class Number(Type):
     def get_location(cls) -> Location:
         return None
 
+    @classmethod
+    def type_string(self):
+        return "number"
+
 
 class Bool(Type):
     """
@@ -230,7 +261,7 @@ class Bool(Type):
         raise CastException()
 
     @classmethod
-    def __str__(cls):
+    def type_string(self):
         return "bool"
 
     @classmethod
@@ -274,7 +305,7 @@ class String(Type, str):
         return True
 
     @classmethod
-    def __str__(cls):
+    def type_string(cls):
         return "string"
 
     @classmethod
@@ -317,8 +348,11 @@ class TypedList(Type):
 
         return True
 
+    def type_string(self):
+        return "%s[]" % (self.type_string())
+
     def __str__(self):
-        return "list(%s)" % (self.basetype)
+        return str(self.basetype)
 
 
 class List(Type, list):
@@ -360,6 +394,10 @@ class List(Type, list):
 #     def __str__(cls):
 #         return "list"
 
+    @classmethod
+    def type_string(cls):
+        return "list"
+
     def __str__(self):
         return list.__str__(self)
 
@@ -398,6 +436,10 @@ class Dict(Type, dict):
             raise RuntimeException(None, "Invalid value '%s', expected dict" % value)
 
         return True
+
+    @classmethod
+    def type_string(cls):
+        return "dict"
 
     def __str__(self):
         return dict.__str__(self)
@@ -458,7 +500,7 @@ class ConstraintType(Type):
 
         return True
 
-    def __str__(self):
+    def type_string(self):
         return "%s::%s" % (self.namespace, self.name)
 
 
@@ -480,4 +522,4 @@ def create_function(expression):
     return function
 
 
-TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict}
+TYPES = {"string": String, "number": Number, "bool": Bool, "list": List, "dict": Dict()}
