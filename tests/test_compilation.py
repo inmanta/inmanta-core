@@ -1994,6 +1994,28 @@ d=b["c"]
     assert scope.lookup("d").get_value() == 3
 
 
+def test_632_dict_access_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : {"b":"c"}}
+c=b["a"]["b"]
+""")
+
+    (_, root) = compiler.do_compile()
+
+    scope = root.get_child("__config__").scope
+    assert scope.lookup("c").get_value() == "c"
+
+
+def test_632_dict_access_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : "b"}
+c=b["a"]["b"]
+""")
+
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
 def test_552_string_rendering_for_lists(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Network:

@@ -589,7 +589,8 @@ def p_operand(p):
 
 def p_map_lookup(p):
     """ map_lookup : attr_ref '[' operand ']'
-                   | local_var '[' operand ']'"""
+                   | local_var '[' operand ']'
+                   | map_lookup '[' operand ']'"""
     p[0] = MapLookup(p[1], p[3])
 
 

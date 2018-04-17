@@ -1093,3 +1093,23 @@ a = c["test"]
     assert stmt.value.themap.name == "c"
     assert isinstance(stmt.value.key, Literal)
     assert stmt.value.key.value == "test"
+
+
+def test_map_multi_ref():
+    """Test extending entities
+    """
+    statements = parse_code("""
+a = c["test"]["xx"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, MapLookup)
+    assert isinstance(stmt.value.themap, MapLookup)
+    assert isinstance(stmt.value.themap.themap, Reference)
+    assert stmt.value.themap.themap.name == "c"
+    assert isinstance(stmt.value.key, Literal)
+    assert stmt.value.key.value == "xx"
+    assert isinstance(stmt.value.themap.key, Literal)
+    assert stmt.value.themap.key.value == "test"
