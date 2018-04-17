@@ -12,7 +12,7 @@ requires = [
         'python-dateutil',
         'pyyaml',
         'texttable',
-        'tornado',
+        'tornado < 5',
         'typing',
         'virtualenv',
         'typing',
@@ -28,13 +28,12 @@ setup(
     description="Inmanta deployment tool",
     author="Inmanta",
     author_email="code@inmanta.com",
-    license="Apache Software License",
+    license="Apache Software License 2",
 
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
     install_requires=requires,
-    # setup_requires=['tox-setuptools', 'tox'],
 
     entry_points={
     'console_scripts': [

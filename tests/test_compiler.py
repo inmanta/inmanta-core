@@ -24,10 +24,11 @@ from inmanta.parser.plyInmantaParser import parse
 from inmanta.parser import ParserException
 from inmanta.ast.statements.define import DefineImplement, DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineEntity,\
     DefineImplementInherits
-from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined
+from inmanta.ast.constraint.expression import GreaterThan, Regex, Not, And, IsDefined, In
 from inmanta.ast.statements.generator import Constructor
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
+from inmanta.ast.statements.assign import Assign, CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup,\
+    SetAttribute, MapLookup
 from inmanta.ast.variables import Reference, AttributeReference
 import pytest
 from inmanta.execute.util import NoneValue
@@ -129,7 +130,7 @@ end
     stmt = statements[0]
     assert len(stmt.parents) == 2
     assert stmt.parents == ["Foo", "foo::sub::Bar"]
-    assert stmt.comment.strip() == documentation
+    assert str(stmt.comment).strip() == documentation
     assert len(stmt.attributes) == 3
 
     for ad in stmt.attributes:
@@ -446,6 +447,21 @@ typedef uuid as string matching /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a
             re.compile(r"[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}"))
 
 
+def test_typedef_in():
+    statements = parse_code("""
+typedef abc as string matching self in ["a","b","c"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, DefineTypeConstraint)
+    assert str(stmt.name) == "abc"
+    assert stmt.basetype == "string"
+    assert isinstance(stmt.get_expression(), In)
+    assert ([x.value for x in stmt.get_expression().children[1].items] ==
+            ["a", "b", "c"])
+
+
 def test_typedef2():
     statements = parse_code("""
 typedef ConfigFile as File(mode = 644, owner = "root", group = "root")
@@ -655,6 +671,50 @@ d=-0.256
         assert stmt.value.value == values[i]
 
 
+def test_string():
+    statements = parse_code("""
+a="jos"
+""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "jos"
+
+
+def test_string_2():
+    statements = parse_code("""
+a='jos'
+""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == "jos"
+
+
+def test_empty():
+    statements = parse_code("""
+a=""
+""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == ""
+
+
+def test_empty_2():
+    statements = parse_code("""
+a=''
+""")
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, Literal)
+    assert stmt.value.value == ""
+
+
 def test_string_format():
     statements = parse_code("""
 a="j{{o}}s"
@@ -853,7 +913,7 @@ end
 
     print(mls)
 
-    assert mls == """
+    assert str(mls) == """
         This entity provides management, orchestration and monitoring
 
         More test
@@ -894,7 +954,7 @@ Each file needs to be associated with a host
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+    assert str(stmt.comment).strip() == "Each file needs to be associated with a host"
 
 
 def test_doc_string_on_relation():
@@ -907,7 +967,7 @@ Each file needs to be associated with a host
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Each file needs to be associated with a host"
+    assert str(stmt.comment).strip() == "Each file needs to be associated with a host"
 
 
 def test_doc_string_on_typedef():
@@ -920,7 +980,7 @@ typedef foo as string matching /^a+$/
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+    assert str(stmt.comment).strip() == "Foo is a stringtype that only allows \"a\""
 
 
 def test_doc_string_on_typedefault():
@@ -933,7 +993,7 @@ typedef Foo as File(x=5)
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Foo is a stringtype that only allows \"a\""
+    assert str(stmt.comment).strip() == "Foo is a stringtype that only allows \"a\""
 
 
 def test_doc_string_on_impl():
@@ -947,7 +1007,7 @@ end
     assert len(statements) == 1
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Bla bla"
+    assert str(stmt.comment).strip() == "Bla bla"
 
 
 def test_doc_string_on_implements():
@@ -964,7 +1024,7 @@ implement Host using test
     assert len(statements) == 2
 
     stmt = statements[0]
-    assert stmt.comment.strip() == "Always use test!"
+    assert str(stmt.comment).strip() == "Always use test!"
 
 
 def test_precise_lexer_positions():
@@ -978,3 +1038,58 @@ implement Test1 using tt when self.other is defined
     assert isinstance(stmt.select, IsDefined)
     assert stmt.select.attr.name == 'self'
     assert str(stmt.select.name) == 'other'
+
+
+def test_list_extend_bad():
+    with pytest.raises(ParserException):
+        parse_code("""
+    a+=b
+    """)
+
+
+def test_list_extend_good():
+    statements = parse_code("""
+z.a+=b
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, SetAttribute)
+    assert stmt.list_only is True
+    assert isinstance(stmt.value, Reference)
+    assert stmt.value.name == "b"
+
+
+def test_mapref():
+    """Test extending entities
+    """
+    statements = parse_code("""
+a = b.c["test"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, MapLookup)
+    assert isinstance(stmt.value.themap, AttributeReference)
+    assert stmt.value.themap.instance.name == "b"
+    assert stmt.value.themap.attribute == "c"
+    assert isinstance(stmt.value.key, Literal)
+    assert stmt.value.key.value == "test"
+
+
+def test_mapref_2():
+    """Test extending entities
+    """
+    statements = parse_code("""
+a = c["test"]
+""")
+
+    assert len(statements) == 1
+    stmt = statements[0]
+    assert isinstance(stmt, Assign)
+    assert isinstance(stmt.value, MapLookup)
+    assert isinstance(stmt.value.themap, Reference)
+    assert stmt.value.themap.name == "c"
+    assert isinstance(stmt.value.key, Literal)
+    assert stmt.value.key.value == "test"

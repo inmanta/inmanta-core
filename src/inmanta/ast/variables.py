@@ -24,6 +24,7 @@ from inmanta.ast.statements.assign import Assign, SetAttribute
 from inmanta.ast.statements import ExpressionStatement, AssignStatement
 from inmanta.ast import RuntimeException, Locatable, Location, LocatableString
 from typing import List, Dict
+from inmanta.parser import ParserException
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,9 +54,13 @@ class Reference(ExpressionStatement):
         return requires[self.name]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
+        if self.name not in requires:
+            raise RuntimeException(self, "Could not resolve the value %s in this static context" % self.name)
         return requires[self.name]
 
-    def as_assign(self, value: ExpressionStatement) -> AssignStatement:
+    def as_assign(self, value: ExpressionStatement, list_only: bool=False) -> AssignStatement:
+        if list_only:
+            raise ParserException(self.location, "+=", "Can not perform += on variable %s" % self.name)
         return Assign(self.name, value)
 
     def root_in_self(self) -> "Reference":
@@ -213,8 +218,8 @@ class AttributeReference(Reference):
         # helper returned: return result
         return requires[self]
 
-    def as_assign(self, value: ExpressionStatement) -> AssignStatement:
-        return SetAttribute(self.instance, self.attribute, value)
+    def as_assign(self, value: ExpressionStatement, list_only: bool=False) -> AssignStatement:
+        return SetAttribute(self.instance, self.attribute, value, list_only)
 
     def root_in_self(self) -> Reference:
         return AttributeReference(self.instance.root_in_self(), self.attribute)

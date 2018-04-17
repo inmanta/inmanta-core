@@ -24,7 +24,7 @@ from inmanta.ast.statements import AssignStatement, ExpressionStatement, Stateme
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
-    TypeReferenceAnchor
+    TypeReferenceAnchor, KeyException
 from inmanta.ast.attribute import RelationAttribute
 import typing
 
@@ -59,6 +59,15 @@ class CreateList(ReferenceStatement):
         for i in range(len(self.items)):
             value = self.items[i]
             qlist.append(value.execute(requires, resolver, queue))
+
+        return qlist
+
+    def execute_direct(self, requires):
+        qlist = List()
+
+        for i in range(len(self.items)):
+            value = self.items[i]
+            qlist.append(value.execute_direct(requires))
 
         return qlist
 
@@ -98,11 +107,12 @@ class SetAttribute(AssignStatement):
         Set an attribute of a given instance to a given value
     """
 
-    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement) -> None:
+    def __init__(self, instance: "Reference", attribute_name: str, value: ExpressionStatement, list_only: bool=False) -> None:
         AssignStatement.__init__(self, instance, value)
         self.instance = instance
         self.attribute_name = attribute_name
         self.value = value
+        self.list_only = list_only
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
@@ -115,6 +125,8 @@ class SetAttribute(AssignStatement):
                target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
         var = instance.get_attribute(self.attribute_name)
+        if self.list_only and not var.is_multi():
+            raise TypingException(self, "Can not use += on relations with multiplicity 1")
         reqs = self.value.requires_emit_gradual(resolver, queue, var)
         SetAttributeHelper(queue, resolver, var, reqs, self.value, self, instance, self.attribute_name)
 
@@ -175,6 +187,38 @@ class Assign(AssignStatement):
 
     def __repr__(self) -> str:
         return "Assign(%s, %s)" % (self.name, self.value)
+
+
+class MapLookup(ReferenceStatement):
+    """
+        Lookup a value in a dict
+    """
+
+    def __init__(self,
+                 themap: ExpressionStatement,
+                 key: ExpressionStatement
+                 ):
+        super(MapLookup, self).__init__([themap, key])
+        self.themap = themap
+        self.key = key
+        self.location = themap.get_location().merge(key.location)
+
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+        mapv = self.themap.execute(requires, resolver, queue)
+        if not isinstance(mapv, dict):
+            raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
+
+        keyv = self.key.execute(requires, resolver, queue)
+        if not isinstance(keyv, str):
+            raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
+
+        if keyv not in mapv:
+            raise KeyException(self, "key %s not found in dict, options are [%s]" % (keyv, ",".join(mapv.keys())))
+
+        return mapv[keyv]
+
+    def __repr__(self) -> str:
+        return "%s[%s]" % (repr(self.themap), repr(self.key))
 
 
 class IndexLookup(ReferenceStatement):

@@ -110,6 +110,9 @@ class ResultVariable(ResultCollector):
         """
         pass
 
+    def is_multi(self):
+        return False
+
 
 class AttributeVariable(ResultVariable):
     """
@@ -282,6 +285,9 @@ class ListVariable(DelayedResultVariable):
         for value in self.value:
             resultcollector.receive_result(value, location)
         self.listeners.append(resultcollector)
+
+    def is_multi(self):
+        return True
 
 
 class OptionVariable(DelayedResultVariable):
@@ -650,8 +656,15 @@ class Instance(ExecutionContext, Locatable, Resolver):
                     v.freeze()
                 else:
                     attr = self.type.get_attribute(k)
-                    excns.append(UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
-                                                (self, k, attr.location), self, attr))
+                    if attr.is_multi():
+                        low = attr.low
+                        length = len(v.value)
+                        excns.append(UnsetException(
+                            "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set" %
+                            (self, k, attr.location, low, length), self, attr))
+                    else:
+                        excns.append(UnsetException("The object %s is not complete: attribute %s (%s) is not set" %
+                                                    (self, k, attr.location), self, attr))
 
     def dump(self):
         print("------------ ")

@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -279,6 +279,42 @@ def test_index_undefined_attribute(snippetcompiler):
         "std::Entity(foo, bar) ({dir}/main.cf:2))")
 
 
+def test_typedef_in_non_constant(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+a = "A"
+typedef abc as string matching self in [a,"b","c"]
+
+entity Test:
+    abc value
+end
+
+implement Test using std::none
+
+Test(value="a")
+""",
+        "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` caused by "
+        "Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41)) "
+        "(reported in Construct(Test) ({dir}/main.cf:3:41))")
+
+
+def test_typedef_in_violates(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef abc as string matching self in ["a","b","c"]
+
+entity Test:
+    abc value
+end
+
+implement Test using std::none
+
+Test(value="ab")
+""",
+        "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` "
+        "caused by Invalid value 'ab', constraint does not match (reported in Construct(Test) ({dir}/main.cf:10))")
+
+
 def test_set_wrong_relation_type(snippetcompiler):
     """
         Test the error message when setting the wrong type on a relation in the two cases:
@@ -315,3 +351,34 @@ def test_set_wrong_relation_type(snippetcompiler):
         "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
         "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
         "(reported in creds.file = creds ({dir}/main.cf:10:22)) (reported in creds.file = creds ({dir}/main.cf:10))")
+
+
+def test_bad_map_lookup(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        b = {"c" : 3}
+        c=b["a"]
+        """,
+        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))")
+
+
+def test_610_multi_add(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+        end
+        implement A using std::none
+
+        entity B:
+            string name
+        end
+        implement B using std::none
+
+        A.b [2:] -- B
+
+        a = A()
+        a.b = B(name = "a")
+
+        """,
+        "The object __config__::A (instantiated at {dir}/main.cf:13) is not complete:"
+        " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set")

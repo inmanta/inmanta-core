@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -1739,6 +1739,7 @@ def test_index_on_subtype2(snippetcompiler):
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
+
 diamond = """
 entity A:
     string at = "a"
@@ -1927,3 +1928,279 @@ net1 = Network(segmentation_id="10")
 """)
     with pytest.raises(AttributeException):
         compiler.do_compile()
+
+
+def test_587_assign_extend_correct(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+    end
+    implement A using std::none
+
+    entity B:
+        string name
+    end
+    implement B using std::none
+
+    A.b [0:] -- B
+
+    a = A()
+    a.b += B(name = "a")
+    a.b += B(name = "b")
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    ab = a.get_value().get_attribute("b").get_value()
+    assert ["a", "b"] == [v.get_attribute("name").get_value() for v in ab]
+
+
+def test_587_assign_extend_incorrect(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+    end
+    implement A using std::none
+
+    entity B:
+        string name
+    end
+    implement B using std::none
+
+    A.b [1:1] -- B
+
+    a = A()
+    a.b += B(name = "a")
+
+    """)
+
+    with pytest.raises(TypingException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_611_dict_access(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+a = "a"
+b = { "a" : a, "b" : "b", "c" : 3}
+c=b[a]
+d=b["c"]
+""")
+
+    (_, root) = compiler.do_compile()
+
+    scope = root.get_child("__config__").scope
+    assert scope.lookup("c").get_value() == "a"
+    assert scope.lookup("d").get_value() == 3
+
+
+def test_552_string_rendering_for_lists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Network:
+    string[] tags=[]
+end
+
+implement Network using std::none
+
+net1 = Network(tags=["vlan"])
+a="Net has tags {{ net1.tags }}"
+""")
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+
+    assert a == """Net has tags ['vlan']"""
+
+
+def test_608_opt_to_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1:] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:1] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+""")
+    with pytest.raises(OptionalValueException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_608_opt_to_single(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:1] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+""")
+    with pytest.raises(OptionalValueException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_608_opt_to_single_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:1] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+
+c1.a = a1
+""")
+    (_, scopes) = compiler.do_compile()
+
+
+def test_608_list_to_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1:] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+""")
+    (_, scopes) = compiler.do_compile()
+
+
+def test_608_list_to_single(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = c1.a
+""")
+    with pytest.raises(AttributeException):
+        (_, scopes) = compiler.do_compile()
