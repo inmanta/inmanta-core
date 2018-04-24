@@ -84,14 +84,10 @@ class RESTServer(RESTBase):
                 url = self._create_base_url(properties)
                 properties["api_version"] = "1"
                 url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-                print(url)
-
                 url = self._create_base_url(properties, versioned=False)
                 properties = properties.copy()
                 properties["api_version"] = None
                 url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-                print(url)
-
         return url_map
 
     def start(self):
