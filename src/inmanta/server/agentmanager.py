@@ -383,8 +383,8 @@ class AgentManager(ServerSlice):
     @protocol.handle(methods.ServerAgentApiMethod.list_agents, env="tid")
     @gen.coroutine
     def list_agents(self, env):
-        tid = env.id
-        if tid is not None:
+        if env is not None:
+            tid = env.id
             ags = yield data.Agent.get_list(environment=tid)
         else:
             ags = yield data.Agent.get_list()
