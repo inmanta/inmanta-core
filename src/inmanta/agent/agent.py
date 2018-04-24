@@ -733,7 +733,6 @@ class Agent(AgentEndPoint):
 
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
-        self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
         self._sched = Scheduler(io_loop=self._io_loop)
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
