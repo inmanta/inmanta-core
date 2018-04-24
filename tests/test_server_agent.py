@@ -396,6 +396,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     ibl = InmantaBootloader()
     server = ibl.restserver
     ibl.start()
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 

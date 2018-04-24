@@ -24,7 +24,6 @@ from inmanta import data
 from tornado import gen
 from inmanta.protocol import Result
 from utils import assert_equal_ish, UNKWN
-from collections import namedtuple
 
 
 class Collector(object):
