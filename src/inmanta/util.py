@@ -64,3 +64,48 @@ def hash_file(content):
     sha1sum.update(content)
 
     return sha1sum.hexdigest()
+
+
+class Scheduler(object):
+    """
+        An event scheduler class
+    """
+
+    def __init__(self, io_loop):
+        self._scheduled = set()
+        self._io_loop = io_loop
+
+    def add_action(self, action, interval, initial_delay=None):
+        """
+            Add a new action
+
+            :param action A function to call periodically
+            :param interval The interval between execution of actions
+            :param initial_delay Delay to the first execution, default to interval
+        """
+
+        if initial_delay is None:
+            initial_delay = interval
+
+        LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
+
+        def action_function():
+            LOGGER.info("Calling %s" % action)
+            if action in self._scheduled:
+                try:
+                    action()
+                except Exception:
+                    LOGGER.exception("Uncaught exception while executing scheduled action")
+
+                finally:
+                    self._io_loop.call_later(interval, action_function)
+
+        self._io_loop.call_later(initial_delay, action_function)
+        self._scheduled.add(action)
+
+    def remove(self, action):
+        """
+            Remove a scheduled action
+        """
+        if action in self._scheduled:
+            self._scheduled.remove(action)

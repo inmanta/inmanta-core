@@ -13,24 +13,25 @@
 """
 from tornado.ioloop import IOLoop
 from inmanta.server import server
-from inmanta.protocol import RESTServer
+from inmanta.server.protocol import RESTServer
 from inmanta.server.agentmanager import AgentManager
 
 
-class InmantaBootloader:
+class InmantaBootloader(object):
 
-    def __init__(self):
+    def __init__(self, agent_no_log=False):
         self.restserver = RESTServer()
+        self.agent_no_log = agent_no_log
 
     def get_server_slice(self):
         io_loop = IOLoop.current()
-        return server.Server(io_loop)
+        return server.Server(io_loop, agent_no_log=self.agent_no_log)
 
     def get_agent_manager_slice(self):
         return AgentManager(self.restserver)
 
     def get_server_slices(self):
-        return [self.get_server_slice(),  self.get_agent_manager_slice()]
+        return [self.get_server_slice(), self.get_agent_manager_slice()]
 
     def start(self):
         for mypart in self.get_server_slices():

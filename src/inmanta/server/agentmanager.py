@@ -22,7 +22,7 @@ from tornado import locks
 
 from inmanta.config import Config
 from inmanta import data, methods
-from inmanta import protocol
+from inmanta.server import protocol, SLICE_AGENT_MANAGER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
 
@@ -33,12 +33,15 @@ import time
 import sys
 import subprocess
 import uuid
-from inmanta.protocol import ServerSlice
+from inmanta.server.protocol import ServerSlice
 from inmanta.server import config as opt
 from tornado.ioloop import IOLoop
+from inmanta.protocol import encode_token
 
 
 LOGGER = logging.getLogger(__name__)
+
+
 agent_lock = locks.Lock()
 
 
@@ -82,7 +85,7 @@ class AgentManager(ServerSlice):
     '''
 
     def __init__(self, restserver, closesessionsonstart=True, fact_back_off=None):
-        super(AgentManager, self).__init__(IOLoop.current(), "agentmanager")
+        super(AgentManager, self).__init__(IOLoop.current(), SLICE_AGENT_MANAGER)
         self.restserver = restserver
 
         if fact_back_off is None:
@@ -141,7 +144,6 @@ class AgentManager(ServerSlice):
         self.terminate_agents()
 
     # Agent Management
-
     @gen.coroutine
     def ensure_agent_registered(self, env: data.Environment, nodename: str):
         """
@@ -520,7 +522,7 @@ host=localhost
             "statedir": privatestatedir, "agent_splay": agent_splay, "agent_interval": agent_interval}
 
         if server_config.server_enable_auth.get():
-            token = protocol.encode_token(["agent"], environment_id)
+            token = encode_token(["agent"], environment_id)
             config += """
 token=%s
     """ % (token)
@@ -580,7 +582,6 @@ ssl_ca_cert_file=%s
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-  
     @gen.coroutine
     def start_agents(self):
         """

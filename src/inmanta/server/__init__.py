@@ -14,4 +14,6 @@
 
 # flake8: noqa: F401
 
-#from inmanta.server.server import Server
+SLICE_SERVER = "server"
+SLICE_AGENT_MANAGER = "agentmanager"
+SLICE_SESSION_MANAGER = "session"

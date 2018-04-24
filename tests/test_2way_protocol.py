@@ -21,13 +21,16 @@ import sys
 import uuid
 
 import colorlog
-from inmanta import methods
+from inmanta import methods, data
 from tornado import gen
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
 from tornado.ioloop import IOLoop
-from inmanta.protocol import RESTServer
+from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
+from inmanta.server import SLICE_SESSION_MANAGER, server
+from inmanta.methods import ENV_ARG
+import importlib
 
 LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ class StatusMethod(methods.Method):
         pass
 
     @methods.protocol(operation="GET", id=True, server_agent=True, timeout=10)
-    def get_agent_status(self, id):
+    def get_agent_status_x(self, id):
         pass
 
 
@@ -48,38 +51,55 @@ class StatusMethod(methods.Method):
 from inmanta import protocol  # NOQA
 
 
-class Server(protocol.SessionEndpoint):
+class SessionSpy(SessionListener, ServerSlice):
 
-    def __init__(self, name, io_loop, interval=60):
-        protocol.SessionEndpoint.__init__(self, name, io_loop, interval=interval)
+    def __init__(self):
+        ServerSlice.__init__(self, IOLoop.current(), "sessionspy")
         self.expires = 0
+        self.__sessions = []
+
+    def new_session(self, session):
+        self.__sessions.append(session)
 
     @protocol.handle(StatusMethod.get_status_x)
     @gen.coroutine
     def get_status_x(self, tid):
         status_list = []
-        for session in self._sessions.values():
+        for session in self.__sessions:
             client = session.get_client()
-            status = yield client.get_agent_status("x")
+            status = yield client.get_agent_status_x("x")
             if status is not None and status.code == 200:
                 status_list.append(status.result)
 
         return 200, {"agents": status_list}
 
     def expire(self, session, timeout):
-        protocol.SessionEndpoint.expire(self, session, timeout)
+        self.__sessions.remove(session)
         print(session._sid)
         self.expires += 1
+
+    def get_sessions(self):
+        return self.__sessions
 
 
 class Agent(protocol.AgentEndPoint):
 
-    @protocol.handle(StatusMethod.get_agent_status)
+    @protocol.handle(StatusMethod.get_agent_status_x)
     @gen.coroutine
-    def get_agent_status(self, id):
+    def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
 
+importlib.reload(protocol)
+importlib.reload(server.protocol)
+
+
+@gen.coroutine
+def get_environment(env: uuid.UUID, metadata: dict):
+    return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
+
+
+@pytest.mark.gen_test(timeout=30)
 def test_2way_protocol(free_port, logs=False):
 
     from inmanta.config import Config
@@ -119,19 +139,26 @@ def test_2way_protocol(free_port, logs=False):
     Config.set("client_rest_transport", "port", free_port)
     Config.set("cmdline_rest_transport", "port", free_port)
 
-    io_loop = IOLoop.current()
-    rs = RESTServer()
-    server = Server("server", io_loop)
-    rs.add_endpoint(server)
-    rs.start()
+    # Disable validation of envs
+    old_get_env = ENV_ARG["getter"]
+    ENV_ARG["getter"] = get_environment
 
-    agent = Agent("agent", io_loop)
-    agent.add_end_point_name("agent")
-    agent.set_environment(uuid.uuid4())
-    agent.start()
+    try:
+        io_loop = IOLoop.current()
+        rs = RESTServer()
+        server = SessionSpy()
+        rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_endpoint(server)
+        rs.start()
 
-    @gen.coroutine
-    def do_call():
+        agent = Agent("agent", io_loop)
+        agent.add_end_point_name("agent")
+        agent.set_environment(uuid.uuid4())
+        agent.start()
+
+        yield retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+        assert len(server.get_sessions()) == 1
+
         client = protocol.Client("client")
         status = yield client.get_status_x(str(agent.environment))
         assert status.code == 200
@@ -141,24 +168,21 @@ def test_2way_protocol(free_port, logs=False):
         server.stop()
         io_loop.stop()
 
-    io_loop.add_callback(do_call)
-    io_loop.add_timeout(io_loop.time() + 2, lambda: io_loop.stop())
-    try:
-        io_loop.start()
-    except KeyboardInterrupt:
-        io_loop.stop()
-    rs.stop()
-    agent.stop()
+        rs.stop()
+        agent.stop()
+    finally:
+        ENV_ARG["getter"] = old_get_env
 
 
 @gen.coroutine
 def check_sessions(sessions):
     for s in sessions:
-        a = yield s.client.get_agent_status("X")
+        a = yield s.client.get_agent_status_x("X")
         assert a.get_result()['status'] == 'ok'
 
 
 @pytest.mark.slowtest
+@pytest.mark.gen_test(timeout=30)
 def test_timeout(free_port):
 
     from inmanta.config import Config
@@ -174,25 +198,31 @@ def test_timeout(free_port):
     Config.set("compiler_rest_transport", "port", free_port)
     Config.set("client_rest_transport", "port", free_port)
     Config.set("cmdline_rest_transport", "port", free_port)
-    
-    rs = RESTServer()
-    server = Server("server", io_loop, interval=2)
-    rs.add_endpoint(server)
-    rs.start()
-    
-    env = uuid.uuid4()
+    Config.set("server", "agent-timeout", "1")
 
-    # agent 1
-    agent = Agent("agent", io_loop)
-    agent.add_end_point_name("agent")
-    agent.set_environment(env)
-    agent.start()
+    # Disable validation of envs
+    old_get_env = ENV_ARG["getter"]
+    ENV_ARG["getter"] = get_environment
 
-    @gen.coroutine
-    def do_call():
+    try:
+
+        rs = RESTServer()
+        server = SessionSpy()
+        rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_endpoint(server)
+        rs.start()
+
+        env = uuid.uuid4()
+
+        # agent 1
+        agent = Agent("agent", io_loop)
+        agent.add_end_point_name("agent")
+        agent.set_environment(env)
+        agent.start()
+
         # wait till up
-        yield retry_limited(lambda: len(server._sessions) == 1, 0.1)
-        assert len(server._sessions) == 1
+        yield retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+        assert len(server.get_sessions()) == 1
 
         # agent 2
         agent2 = Agent("agent", io_loop)
@@ -201,14 +231,14 @@ def test_timeout(free_port):
         agent2.start()
 
         # wait till up
-        yield retry_limited(lambda: len(server._sessions) == 2, 0.1)
-        assert len(server._sessions) == 2
+        yield retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
+        assert len(server.get_sessions()) == 2
 
         # see if it stays up
-        yield(check_sessions(server._sessions.values()))
+        yield(check_sessions(server.get_sessions()))
         yield sleep(2)
-        assert len(server._sessions) == 2
-        yield(check_sessions(server._sessions.values()))
+        assert len(server.get_sessions()) == 2
+        yield(check_sessions(server.get_sessions()))
 
         # take it down
         agent2.stop()
@@ -216,20 +246,14 @@ def test_timeout(free_port):
         # timout
         yield sleep(2)
         # check if down
-        assert len(server._sessions) == 1
-        print(server._sessions)
-        yield(check_sessions(server._sessions.values()))
+        assert len(server.get_sessions()) == 1
+        print(server.get_sessions())
+        yield(check_sessions(server.get_sessions()))
         assert server.expires == 1
         agent.stop()
         server.stop()
 
-        io_loop.stop()
-
-    io_loop.add_callback(do_call)
-    io_loop.add_timeout(io_loop.time() + 2, lambda: io_loop.stop())
-    try:
-        io_loop.start()
-    except KeyboardInterrupt:
-        io_loop.stop()
-    rs.stop()
-    agent.stop()
+        rs.stop()
+        agent.stop()
+    finally:
+        ENV_ARG["getter"] = old_get_env

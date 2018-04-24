@@ -41,7 +41,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from tornado import gen
 import re
 from tornado.ioloop import IOLoop
-from inmanta.protocol import RESTServer
 from inmanta.server.bootloader import InmantaBootloader
 
 
@@ -141,7 +140,6 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     # causes handler failure
     IOLoop._instance = io_loop
 
-    from inmanta.server.server import Server
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
@@ -176,7 +174,6 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     IOLoop._instance = io_loop
 
-    from inmanta.server.server import Server
     state_dir = tempfile.mkdtemp()
 
     ssl, auth = request.param

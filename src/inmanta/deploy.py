@@ -23,8 +23,8 @@ import re
 
 from mongobox import mongobox
 from tornado import gen, process
-from inmanta import module, config, server, agent, protocol, const, data
-from inmanta.protocol import RESTServer
+from inmanta import module, config, agent, protocol, const, data
+from inmanta.server.bootloader import InmantaBootloader
 
 
 LOGGER = logging.getLogger(__name__)
@@ -90,12 +90,11 @@ class Deploy(object):
         config.Config.set("compiler_rest_transport", "port", str(self._server_port))
         config.Config.set("client_rest_transport", "port", str(self._server_port))
         config.Config.set("cmdline_rest_transport", "port", str(self._server_port))
+        config.Config.set("database", "host", "localhost")
+        config.Config.set("database", "port", str(self._mongoport))
 
         # start the server
-        rs = RESTServer()
-        self._server = server.Server(database_host="localhost", database_port=self._mongoport, io_loop=self._io_loop,
-                                     agent_no_log=no_agent_log)
-        rs.add_endpoint(self._server)
+        rs = InmantaBootloader(agent_no_log=no_agent_log)
         rs.start()
 
         LOGGER.debug("Started server on port %d", self._server_port)

@@ -34,7 +34,6 @@ from inmanta import protocol, module
 from inmanta.export import cfg_env, ModelExporter
 from inmanta.ast import CompilerException
 import yaml
-from inmanta.protocol import RESTServer
 from inmanta.server.bootloader import InmantaBootloader
 
 LOGGER = logging.getLogger()
@@ -42,7 +41,6 @@ LOGGER = logging.getLogger()
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
-    from inmanta import server
     io_loop = IOLoop.current()
 
     ibl = InmantaBootloader()

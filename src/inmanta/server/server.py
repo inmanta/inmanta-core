@@ -39,13 +39,13 @@ from tornado import process
 from inmanta import const
 from inmanta import data, config
 from inmanta import methods
-from inmanta import protocol
+from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
+from inmanta.protocol import encode_token
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -60,8 +60,9 @@ class Server(protocol.ServerSlice):
     """
 
     def __init__(self, io_loop, database_host=None, database_port=None, agent_no_log=False):
-        super().__init__(io_loop=io_loop, name="server")
+        super().__init__(io_loop=io_loop, name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
+
         self._server_storage = self.check_storage()
         self._agent_no_log = agent_no_log
 
@@ -79,8 +80,6 @@ class Server(protocol.ServerSlice):
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
-
-        #self.add_end_point_name(self.node_name)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
@@ -1503,7 +1502,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
                                   "--server_port", opt.transport_port.get(), "--metadata", json.dumps(metadata)]
             if config.Config.get("server", "auth", False):
-                token = protocol.encode_token(["compiler", "api"], str(environment_id))
+                token = encode_token(["compiler", "api"], str(environment_id))
                 cmd.append("--token")
                 cmd.append(token)
 
@@ -1773,4 +1772,4 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """
             Create a new auth token for this environment
         """
-        return 200, {"token": protocol.encode_token(client_types, str(env.id), idempotent)}
+        return 200, {"token": encode_token(client_types, str(env.id), idempotent)}

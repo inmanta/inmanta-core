@@ -25,7 +25,7 @@ import pytest
 from inmanta.agent.agent import Agent
 from inmanta import data, protocol
 from inmanta import const
-from inmanta.server import config as opt
+from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
 from uuid import UUID
 from inmanta.export import upload_code
@@ -43,11 +43,8 @@ def test_autostart(server, client, environment):
     env = yield data.Environment.get_by_id(uuid.UUID(environment))
     yield env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
 
-    agentmanager = server.get_endpoint("agentmanager")
-    serverendpoint = server.get_endpoint("server")
-    sessionendpoint = server.get_endpoint("session")
-
-
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    sessionendpoint = server.get_endpoint(SLICE_SESSION_MANAGER)
 
     yield agentmanager.ensure_agent_registered(env, "iaas_agent")
     yield agentmanager.ensure_agent_registered(env, "iaas_agentx")
@@ -88,9 +85,7 @@ def test_autostart_dual_env(client, server):
     """
 
     agentmanager = server.get_endpoint("server").agentmanager
-    serverendpoint = server.get_endpoint("server")
     sessionendpoint = server.get_endpoint("session")
-
 
     result = yield client.create_project("env-test")
     assert result.code == 200
@@ -128,13 +123,11 @@ def test_autostart_batched(client, server, environment):
     """
         Test auto start of agent
     """
-    sessionendpoint = server.get_endpoint("session")
-
     env = yield data.Environment.get_by_id(uuid.UUID(environment))
     yield env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
 
-    agentmanager = server.get_endpoint("server").agentmanager
-    serverendpoint = server.get_endpoint("server")
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    sessionendpoint = server.get_endpoint(SLICE_SESSION_MANAGER)
 
     yield agentmanager.ensure_agent_registered(env, "iaas_agent")
     yield agentmanager.ensure_agent_registered(env, "iaas_agentx")
