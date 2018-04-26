@@ -46,7 +46,6 @@ from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
-from inmanta.config import compiler_transport
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -1554,8 +1553,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             if opt.server_ssl_cert.get() is not None:
                 cmd.append("--ssl")
+
+            if opt.server_ssl_ca_cert is not None:
                 cmd.append("--ssl-ca-cert")
-                cmd.append(compiler_transport.ssl_ca_cert_file.get())
+                cmd.append(opt.server_ssl_ca_cert.get())
 
             result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 

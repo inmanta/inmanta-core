@@ -23,9 +23,12 @@ either add the CA cert to the trusted certificates of the system running the age
 in the transport configuration.
 
 For example for an agent this is :inmanta.config:option:`agent_rest_transport.ssl` and
-:inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file` 
+:inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file`
 
-For autostarted agents and compiles on the servers, the options :inmanta.config:option:`agent_rest_transport.ssl-ca-cert-file` and :inmanta.config:option:`compiler_rest_transport.ssl-ca-cert-file` from the service config file are used to validate the server certificate.
+Autostarted agents and compiles on the server also use SSL to communicate with the server. This requires either for the server
+SSL certificate to be trusted by the OS or by setting :inmanta.config:option:`server.ssl-ca-cert-file`. The server will use
+this value to set :inmanta.config:option:`compiler_rest_transport.ssl-ca-cert-file` and
+:inmanta.config:option:`server.ssl-ca-cert-file` for the compiler and the agents.
 
 Authentication
 --------------
@@ -144,7 +147,7 @@ create an initial login as decribed in the Keycloak documentation and login with
 
 This guide was made based on Keycloak 3.3
 
-If inmanta is configured to use SSL, the authentication provider should also use SSL. Otherwise, the dashboard will not be 
+If inmanta is configured to use SSL, the authentication provider should also use SSL. Otherwise, the dashboard will not be
 able to fetch user information from the authentication provider.
 
 

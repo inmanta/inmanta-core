@@ -25,7 +25,6 @@ from inmanta import data
 from inmanta import protocol
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
-from inmanta.agent import config as agent_config
 
 import logging
 import os
@@ -480,8 +479,9 @@ host=localhost
 token=%s
     """ % (token)
 
-        ssl_cert = Config.get("server", "ssl_key_file", None)
-        ssl_ca = agent_config.agent_transport.ssl_ca_cert_file.get()
+        ssl_cert = server_config.server_ssl_key.get()
+        ssl_ca = server_config.server_ssl_ca_cert.get()
+
         if ssl_ca is not None and ssl_cert is not None:
             # override CA
             config += """
