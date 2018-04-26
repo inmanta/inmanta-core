@@ -29,7 +29,7 @@ from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineI
     DefineTypeConstraint, DefineTypeDefault, DefineIndex, DefineImport, DefineImplementInherits
 from inmanta.ast.constraint.expression import Operator, Not, IsDefined
 from inmanta.ast.statements.call import FunctionCall
-from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup
+from inmanta.ast.statements.assign import CreateList, IndexLookup, StringFormat, CreateDict, ShortIndexLookup, MapLookup
 from inmanta.ast.variables import Reference, AttributeReference
 from inmanta.parser import plyInmantaLex, ParserException
 from inmanta.ast.blocks import BasicBlock
@@ -249,7 +249,8 @@ def p_attr(p):
 
 
 def p_attr_cte(p):
-    "attr : attr_type ID '=' constant"
+    """attr : attr_type ID '=' constant
+           | attr_type ID '=' constant_list"""
     (attr, nullable) = p[1]
     p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
     attach_lnr(p, 2)
@@ -582,8 +583,16 @@ def p_operand(p):
               | list_def
               | map_def
               | var_ref
-              | index_lookup"""
+              | index_lookup
+              | map_lookup"""
     p[0] = p[1]
+
+
+def p_map_lookup(p):
+    """ map_lookup : attr_ref '[' operand ']'
+                   | local_var '[' operand ']'
+                   | map_lookup '[' operand ']'"""
+    p[0] = MapLookup(p[1], p[3])
 
 
 def p_constructor(p):
@@ -801,6 +810,12 @@ def p_attr_ref(p):
     "attr_ref : var_ref '.' ID"
     p[0] = AttributeReference(p[1], p[3])
     attach_lnr(p, 2)
+
+
+def p_local_var(p):
+    "local_var : ns_ref"
+    p[0] = Reference(p[1])
+    attach_from_string(p, 1)
 
 
 def p_var_ref_2(p):

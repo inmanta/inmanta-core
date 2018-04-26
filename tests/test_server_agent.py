@@ -2056,7 +2056,7 @@ def test_autostart_mapping(io_loop, server, client, resource_container, environm
 
 
 @pytest.mark.gen_test(timeout=15)
-def test_autostart_clear_environment(io_loop, server, client, resource_container, environment):
+def test_autostart_clear_environment(io_loop, server_multi, client_multi, resource_container, environment):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
@@ -2082,6 +2082,7 @@ def test_autostart_clear_environment(io_loop, server, client, resource_container
                   }
                  ]
 
+    client = client_multi
     result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
@@ -2174,12 +2175,15 @@ def test_export_duplicate(resource_container, snippetcompiler):
     assert "exists more than once in the configuration model" in str(exc.value)
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_server_recompile(server, client, environment):
+@pytest.mark.gen_test(timeout=90)
+def test_server_recompile(server_multi, client_multi, environment_multi):
     """
         Test a recompile on the server and verify recompile triggers
     """
     config.Config.set("server", "auto-recompile-wait", "0")
+    client = client_multi
+    server = server_multi
+    environment = environment_multi
 
     @gen.coroutine
     def wait_for_version(cnt):

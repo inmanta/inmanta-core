@@ -239,8 +239,13 @@ class HandlerContext(object):
     def log_msg(self, level: int, msg: str, args: list, kwargs: dict) -> dict:
         if len(args) > 0:
             raise Exception("Args not supported")
+        if "exc_info" in kwargs:
+            exc_info = kwargs["exc_info"]
+            kwargs["traceback"] = traceback.format_exc()
+        else:
+            exc_info = False
         log = data.LogLine.log(level, msg, **kwargs)
-        LOGGER.log(level, log._data["msg"])
+        LOGGER.log(level, log._data["msg"], exc_info=exc_info)
         self._logs.append(log)
 
     def debug(self, msg: str, *args, **kwargs) -> None:
@@ -538,11 +543,9 @@ class ResourceHandler(object):
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
 
         except Exception as e:
-            print(e)
-            print(traceback.format_exc())
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
-                          resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
+                          resource_id=resource.id, exception=repr(e))
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """

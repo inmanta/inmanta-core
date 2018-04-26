@@ -24,7 +24,7 @@ from inmanta.ast.statements import AssignStatement, ExpressionStatement, Stateme
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
-    TypeReferenceAnchor
+    TypeReferenceAnchor, KeyException
 from inmanta.ast.attribute import RelationAttribute
 import typing
 
@@ -187,6 +187,38 @@ class Assign(AssignStatement):
 
     def __repr__(self) -> str:
         return "Assign(%s, %s)" % (self.name, self.value)
+
+
+class MapLookup(ReferenceStatement):
+    """
+        Lookup a value in a dict
+    """
+
+    def __init__(self,
+                 themap: ExpressionStatement,
+                 key: ExpressionStatement
+                 ):
+        super(MapLookup, self).__init__([themap, key])
+        self.themap = themap
+        self.key = key
+        self.location = themap.get_location().merge(key.location)
+
+    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+        mapv = self.themap.execute(requires, resolver, queue)
+        if not isinstance(mapv, dict):
+            raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
+
+        keyv = self.key.execute(requires, resolver, queue)
+        if not isinstance(keyv, str):
+            raise TypingException(self, "dict keys must be string, %s is not a string" % keyv)
+
+        if keyv not in mapv:
+            raise KeyException(self, "key %s not found in dict, options are [%s]" % (keyv, ",".join(mapv.keys())))
+
+        return mapv[keyv]
+
+    def __repr__(self) -> str:
+        return "%s[%s]" % (repr(self.themap), repr(self.key))
 
 
 class IndexLookup(ReferenceStatement):

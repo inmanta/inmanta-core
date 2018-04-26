@@ -1,5 +1,5 @@
 """
-    Copyright 2016 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -351,3 +351,34 @@ def test_set_wrong_relation_type(snippetcompiler):
         "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
         "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
         "(reported in creds.file = creds ({dir}/main.cf:10:22)) (reported in creds.file = creds ({dir}/main.cf:10))")
+
+
+def test_bad_map_lookup(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        b = {"c" : 3}
+        c=b["a"]
+        """,
+        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))")
+
+
+def test_610_multi_add(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+        end
+        implement A using std::none
+
+        entity B:
+            string name
+        end
+        implement B using std::none
+
+        A.b [2:] -- B
+
+        a = A()
+        a.b = B(name = "a")
+
+        """,
+        "The object __config__::A (instantiated at {dir}/main.cf:13) is not complete:"
+        " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set")

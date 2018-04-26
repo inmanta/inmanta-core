@@ -141,7 +141,16 @@ For example
 
 Lists of primitive types are also primitive types: ``string[]``, ``number[]``, ``bool[]`` or ``mac_addr[]``
 
-``dict`` is the primitive type that represents a dictionary
+``dict`` is the primitive type that represents a dictionary, with string keys. Dict values can be accessed using the ``[]`` operator. All members of a dict have to be set when the dict is constructed. e.g.
+
+.. code-block:: inmanta
+    
+    #correct
+    a = {"key":"value", "number":7}
+    value = a["key"]
+    # value = "value"
+    # incorrect, can't assign to dict after construction
+    # a["otherkey"] = "othervalue"
 
 
 Conditions

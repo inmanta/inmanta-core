@@ -161,14 +161,11 @@ def deploy(options):
     module.Project.get(options.main_file)
     from inmanta import deploy
 
-    io_loop = IOLoop.current()
-    run = deploy.Deploy(io_loop)
-    run.run(options)
-
+    run = deploy.Deploy()
     try:
-        io_loop.start()
-    except (KeyboardInterrupt, deploy.FinishedException):
-        IOLoop.current().stop()
+        run.setup()
+        run.run(options)
+    finally:
         run.stop()
 
 
@@ -245,6 +242,9 @@ def export(options):
     except Exception as e:
         exp = e
         types, scopes = (None, None)
+
+    # Even if the compile failed we might have collected additional data such as unknowns. So
+    # continue the export
 
     export = Exporter(options)
     version, _ = export.run(types, scopes, metadata=metadata)
