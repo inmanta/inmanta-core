@@ -243,6 +243,9 @@ def export(options):
         exp = e
         types, scopes = (None, None)
 
+    # Even if the compile failed we might have collected additional data such as unknowns. So
+    # continue the export
+
     export = Exporter(options)
     version, _ = export.run(types, scopes, metadata=metadata)
 

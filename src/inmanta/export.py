@@ -284,7 +284,10 @@ class Exporter(object):
                 with open(self.options.json + ".types", "wb+") as fd:
                     fd.write(protocol.json_encode(model).encode("utf-8"))
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
-            model = ModelExporter(types).export_all()
+            model = None
+            if types is not None:
+                model = ModelExporter(types).export_all()
+
             self.commit_resources(self._version, resources, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
