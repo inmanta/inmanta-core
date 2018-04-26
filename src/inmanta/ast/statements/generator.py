@@ -97,9 +97,9 @@ class GradualFor(ResultCollector):
         self.seen = set()
 
     def receive_result(self, value, location):
-        if value in self.seen:
+        if id(value) in self.seen:
             return
-        self.seen.add(value)
+        self.seen.add(id(value))
 
         xc = ExecutionContext(self.stmt.module, self.resolver.for_namespace(self.stmt.module.namespace))
         loopvar = xc.lookup(self.stmt.loop_var)
