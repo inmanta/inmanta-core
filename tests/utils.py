@@ -88,6 +88,7 @@ def expandToGraph(inp, types, version, values, agents, extra):
             all_nodes.add(k)
             all_nodes.update(set(v))
 
+    # Also add nodes not having dependencies
     terminals = all_nodes.difference(parts.keys())
 
     for t in terminals:

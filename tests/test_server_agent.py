@@ -2329,10 +2329,6 @@ def test_agent_scheduler_static_changes(resource_container):
         resources.append(resource)
 
     rs.reload(resources, {}, run=False)
-    
-    for r in rs.generation.values():
-        print( r.resource.key, r.priority)
-
 
     for r in rs.generation.values():
         assert r.priority == PRIO_MID
@@ -2373,22 +2369,27 @@ def test_agent_scheduler_static_changes(resource_container):
 
     changed = set(["A1", "A5", "A7", "A2", "A3", "A4", "A8"])
     normal = set(["A6", "A9"])
-    
+
     resources = []
     for res in rawresources:
         resource = Resource.deserialize(res)
         resources.append(resource)
 
     rs.reload(resources, {}, run=False)
-    
-    for r in rs.generation.values():
-        print( r.resource.key, r.priority)
 
     for r in rs.generation.values():
-        if r.resource.key in changed:
+        if r.resource is not None:
+            print(r.resource.key, r.priority)
+
+    print("----------")
+
+    for r in rs.generation.values():
+        if r.resource is None:
+            # Cross agent dependency
+            assert r.priority == PRIO_MID
+        elif r.resource.key in changed:
             assert r.priority == PRIO_MID
         elif r.resource.key in normal:
             assert r.priority == PRIO_NOMINAL
         else:
             assert r.resource.key == "Fail!"
-
