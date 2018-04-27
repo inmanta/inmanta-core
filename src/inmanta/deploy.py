@@ -24,8 +24,7 @@ import time
 import socket
 
 from mongobox import mongobox
-from tornado import gen, process
-from inmanta import module, config, agent, protocol, const, data
+from inmanta import module, config, protocol, const, data
 
 
 LOGGER = logging.getLogger(__name__)
