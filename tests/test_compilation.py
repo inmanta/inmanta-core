@@ -2256,3 +2256,19 @@ foo = Foo()
 
     third = foo.get_attribute("third").get_value()
     assert third == ["a", "b"]
+
+
+def test_lnr_on_double_is_defined(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string? two
+end
+
+Test.one [0:1] -- Test
+
+implement Test using std::none when self.one.two is defined
+
+a = Test(two="b")
+a.one = a
+""")
+    compiler.do_compile()
