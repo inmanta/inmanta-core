@@ -20,6 +20,7 @@ from tornado.concurrent import Future
 from tornado import gen
 from bisect import insort
 
+
 class WeightedWaiter(object):
 
     def __init__(self, future, prio):

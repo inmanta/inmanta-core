@@ -62,3 +62,52 @@ def assert_graph(graph, expected):
     elines = sorted(elines)
 
     assert elines == lines, (lines, elines)
+
+
+def expandToGraph(inp, types, version, values, agents, extra):
+    """expect graph input in the form
+            A1: B1 B2
+
+        types = {"A": "test::Alpha", "B": "test::Beta", "C": "test::Gamma"}
+    """
+    lines = inp.split("\n")
+
+    all_nodes = set()
+    parts = {}
+    for line in lines:
+        if ":" not in line:
+            parts[line.strip()] = []
+            all_nodes.add(line.strip())
+        else:
+            k, v = line.split(": ")
+            v = v.split(" ")
+            k = k.strip()
+            if k in parts:
+                raise Exception("Bad test case %s in %s", k, parts)
+            parts[k] = v
+            all_nodes.add(k)
+            all_nodes.update(set(v))
+
+    terminals = all_nodes.difference(parts.keys())
+
+    for t in terminals:
+        parts[t] = []
+
+    out = []
+
+    def id_for(k):
+        mytype = types[k[0]]
+        return '%s[%s,key=%s],v=%s' % (mytype, agents[k], k, version)
+
+    for k, vs in parts.items():
+        v = {
+            'key': k,
+            'value': values[k],
+            'agent': agents[k],
+            'id': id_for(k),
+            'requires': [id_for(val) for val in vs],
+        }
+        v.update(extra)
+        out.append(v)
+
+    return out

@@ -33,11 +33,14 @@ from _pytest.fixtures import fixture
 from inmanta import agent, data, const, execute, config
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
-from inmanta.agent.agent import Agent
-from utils import retry_limited, assert_equal_ish, UNKWN
+from inmanta.agent.agent import Agent, ResourceScheduler, PRIO_NOMINAL, PRIO_MID
+from utils import retry_limited, assert_equal_ish, UNKWN, expandToGraph
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
+from inmanta.agent.cache import AgentCache
+from inmanta.agent.util import PrioritySemaphore
+from inmanta.agent.scheduling import PriorityProvider, StaticChangesFirst
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -2226,3 +2229,166 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
     yield client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
     versions = yield wait_for_version(3)
     assert versions["count"] == 3
+
+
+def create_resource_scheduler(env, name, priorityprovider):
+
+    return ResourceScheduler(None, env, name,  AgentCache(), PrioritySemaphore(1), priorityprovider)
+
+
+@pytest.mark.gen_test
+def test_agent_scheduler_base(resource_container):
+    rs = create_resource_scheduler("testenv", "agent1", PriorityProvider())
+
+    version = int(time.time())
+    rawresources = [{'key': 'key1',
+                     'value': 'value1',
+                     'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                     'send_event': False,
+                     'purged': False,
+                     'state_id': '',
+                     'allow_restore': True,
+                     'allow_snapshot': True,
+                     'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                     },
+                    {'key': 'key2',
+                     'value': 'value2',
+                     'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                     'send_event': False,
+                     'requires': [],
+                     'purged': False,
+                     'state_id': '',
+                     'allow_restore': True,
+                     'allow_snapshot': True,
+                     },
+                    {'key': 'key3',
+                     'value': None,
+                     'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                     'send_event': False,
+                     'requires': [],
+                     'purged': True,
+                     'state_id': '',
+                     'allow_restore': True,
+                     'allow_snapshot': True,
+                     }
+                    ]
+    resources = []
+    for res in rawresources:
+        resource = Resource.deserialize(res)
+        resources.append(resource)
+
+    rs.reload(resources, {}, run=False)
+
+    for r in rs.generation.values():
+        assert r.priority == PRIO_NOMINAL
+
+
+@pytest.mark.gen_test
+def test_agent_scheduler_static_changes(resource_container):
+    rs = create_resource_scheduler("testenv", "agent1", StaticChangesFirst())
+
+    version = int(time.time())
+
+    rawresources = expandToGraph(
+        """A1: A2 A4
+    A2: A3
+    A5
+    A6: A7
+    A7: A8
+    A8: A9""",
+        types={"A": "test::Resource"},
+        version=version,
+        values={"A1": 1,
+                "A2": 2,
+                "A3": 3,
+                "A4": 4,
+                "A5": 5,
+                "A6": 6,
+                "A7": 7,
+                "A8": 8,
+                "A9": 9},
+        agents={"A1": "agent1",
+                "A2": "agent1",
+                "A3": "agent1",
+                "A4": "agent1",
+                "A5": "agent1",
+                "A6": "agent1",
+                "A7": "agent1",
+                "A8": "agent2",  # !
+                "A9": "agent1",
+                },
+        extra={'purged': False,
+               'state_id': '',
+               'send_event': False,
+               'allow_restore': True,
+               'allow_snapshot': True})
+
+    resources = []
+    for res in rawresources:
+        resource = Resource.deserialize(res)
+        resources.append(resource)
+
+    rs.reload(resources, {}, run=False)
+    
+    for r in rs.generation.values():
+        print( r.resource.key, r.priority)
+
+
+    for r in rs.generation.values():
+        assert r.priority == PRIO_MID
+
+    rawresources = expandToGraph(
+        """A1: A2 A4
+    A2: A3
+    A5
+    A6: A7
+    A7: A8
+    A8: A9""",
+        types={"A": "test::Resource"},
+        version=version,
+        values={"A1": "A",
+                "A2": 2,
+                "A3": 3,
+                "A4": 4,
+                "A5": "B",
+                "A6": 6,
+                "A7": "C",
+                "A8": 8,
+                "A9": 9},
+        agents={"A1": "agent1",
+                "A2": "agent1",
+                "A3": "agent1",
+                "A4": "agent1",
+                "A5": "agent1",
+                "A6": "agent1",
+                "A7": "agent1",
+                "A8": "agent2",  # !
+                "A9": "agent1",
+                },
+        extra={'purged': False,
+               'state_id': '',
+               'send_event': False,
+               'allow_restore': True,
+               'allow_snapshot': True})
+
+    changed = set(["A1", "A5", "A7", "A2", "A3", "A4", "A8"])
+    normal = set(["A6", "A9"])
+    
+    resources = []
+    for res in rawresources:
+        resource = Resource.deserialize(res)
+        resources.append(resource)
+
+    rs.reload(resources, {}, run=False)
+    
+    for r in rs.generation.values():
+        print( r.resource.key, r.priority)
+
+    for r in rs.generation.values():
+        if r.resource.key in changed:
+            assert r.priority == PRIO_MID
+        elif r.resource.key in normal:
+            assert r.priority == PRIO_NOMINAL
+        else:
+            assert r.resource.key == "Fail!"
+

@@ -38,9 +38,20 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
+from inmanta.agent.util import PrioritySemaphore
+from typing import Dict
+from inmanta.agent.scheduling import PriorityProvider
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
+
+# Snapshot and Restore
+PRIO_LOW = 10000
+# Dryrun and deploy
+PRIO_NOMINAL = 1000
+PRIO_MID = 200
+# Get Facts
+PRIO_HIGH = 100
 
 
 class ResourceActionResult(object):
@@ -61,7 +72,7 @@ class ResourceActionResult(object):
 
 class ResourceAction(object):
 
-    def __init__(self, scheduler, resource, gid):
+    def __init__(self, scheduler, resource, gid, priority=PRIO_NOMINAL):
         """
             :param gid A unique identifier to identify a deploy. This is local to this agent.
         """
@@ -76,6 +87,8 @@ class ResourceAction(object):
         self.change = None
         self.changes = None
         self.undeployable = None
+        self.priority = priority
+        self.dependencies = []
 
     def is_running(self):
         return self.running
@@ -140,7 +153,7 @@ class ResourceAction(object):
         waiters.append(dummy.future)
         results = yield waiters
 
-        with (yield self.scheduler.ratelimiter.acquire()):
+        with (yield self.scheduler.ratelimiter.acquire(priority=self.priority)):
             start = datetime.datetime.now()
             ctx = handler.HandlerContext(self.resource)
 
@@ -226,7 +239,7 @@ class RemoteResourceAction(ResourceAction):
     def execute(self, dummy, generation, cache):
         yield dummy.future
         try:
-            result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
+            result = yield self.scheduler.get_client().get_resource(self.scheduler._env_id, str(self.resource_id),
                                                                     logs=True, log_action=const.ResourceAction.deploy,
                                                                     log_limit=1)
             if result.code != 200:
@@ -275,7 +288,7 @@ class RemoteResourceAction(ResourceAction):
 
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id, name, cache, ratelimiter):
+    def __init__(self, agent, env_id, name, cache, ratelimiter, priorityprovider=PriorityProvider()):
         self.generation = {}
         self.cad = {}
         self._env_id = env_id
@@ -284,8 +297,9 @@ class ResourceScheduler(object):
         self.name = name
         self.ratelimiter = ratelimiter
         self.version = 0
+        self.priorityprovider = priorityprovider
 
-    def reload(self, resources, undeployable={}):
+    def reload(self, resources, undeployable={}, run=True):
         version = resources[0].id.get_version
 
         self.version = version
@@ -310,7 +324,11 @@ class ResourceScheduler(object):
         dummy = ResourceAction(self, None, gid)
         for r in self.generation.values():
             r.execute(dummy, self.generation, self.cache)
-        dummy.future.set_result(ResourceActionResult(True, False, False))
+
+        self.priorityprovider.set_priorities(self.generation)
+
+        if run:
+            dummy.future.set_result(ResourceActionResult(True, False, False))
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
         if resourceid not in self.cad:
@@ -347,7 +365,7 @@ class AgentInstance(object):
         self.provider_thread_pool = ThreadPoolExecutor(1)
         # threads to work
         self.thread_pool = ThreadPoolExecutor(process.poolsize)
-        self.ratelimiter = locks.Semaphore(process.poolsize)
+        self.ratelimiter = PrioritySemaphore(process.poolsize)
 
         self._env_id = process._env_id
 
@@ -482,7 +500,7 @@ class AgentInstance(object):
     @gen.coroutine
     def do_run_dryrun(self, version, dry_run_id):
         with (yield self.dryrunlock.acquire()):
-            with (yield self.ratelimiter.acquire()):
+            with (yield self.ratelimiter.acquire(priority=PRIO_NOMINAL)):
                 result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
                 if result.code == 404:
                     LOGGER.warning("Version %s does not exist, can not run dryrun", version)
@@ -500,10 +518,11 @@ class AgentInstance(object):
 
                 self._cache.open_version(version)
 
-                for res in resources:
-                    ctx = handler.HandlerContext(res, True)
-                    started = datetime.datetime.now()
-                    provider = None
+            for res in resources:
+                ctx = handler.HandlerContext(res, True)
+                started = datetime.datetime.now()
+                provider = None
+                with (yield self.ratelimiter.acquire(priority=PRIO_NOMINAL)):
                     try:
                         if const.ResourceState[res["status"]] in const.UNDEPLOYABLE_STATES:
                             ctx.exception("Skipping %(resource_id)s because in undeployable state %(status)s",
@@ -537,16 +556,17 @@ class AgentInstance(object):
                             provider.close()
 
                         finished = datetime.datetime.now()
-                        self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
-                                                                 action_id=ctx.action_id, action=const.ResourceAction.dryrun,
-                                                                 started=started, finished=finished, messages=ctx.logs,
-                                                                 status=const.ResourceState.dry)
+                        yield self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
+                                                                       action_id=ctx.action_id,
+                                                                       action=const.ResourceAction.dryrun,
+                                                                       started=started, finished=finished, messages=ctx.logs,
+                                                                       status=const.ResourceState.dry)
 
-                self._cache.close_version(version)
+            self._cache.close_version(version)
 
     @gen.coroutine
     def do_restore(self, restore_id, snapshot_id, resources):
-        with (yield self.ratelimiter.acquire()):
+        with (yield self.ratelimiter.acquire(priority=PRIO_LOW)):
 
             LOGGER.info("Start a restore %s", restore_id)
 
@@ -606,7 +626,7 @@ class AgentInstance(object):
 
     @gen.coroutine
     def do_snapshot(self, snapshot_id, resources):
-        with (yield self.ratelimiter.acquire()):
+        with (yield self.ratelimiter.acquire(priority=PRIO_LOW)):
             LOGGER.info("Start snapshot %s", snapshot_id)
 
             yield self.process._ensure_code(self._env_id, resources[0]["model"],
@@ -684,7 +704,7 @@ class AgentInstance(object):
 
     @gen.coroutine
     def get_facts(self, resource):
-        with (yield self.ratelimiter.acquire()):
+        with (yield self.ratelimiter.acquire(PRIO_HIGH)):
             yield self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
             ctx = handler.HandlerContext(resource)
 
