@@ -5,7 +5,7 @@ execnet==1.4.1
 inmanta-sphinx==0.6
 mongobox==0.1.6
 motor==1.2.1
-netifaces==0.10.6
+netifaces==0.10.7
 ply==3.11
 PyJWT==1.6.1
 pymongo==3.6.1
