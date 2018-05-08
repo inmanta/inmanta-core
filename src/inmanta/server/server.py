@@ -46,6 +46,7 @@ from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
+from inmanta.const import UNDEPLOYABLE_STATES
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -933,7 +934,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             yield self.resource_action_update(env, [r.resource_version_id for r in requires], action_id=uuid.uuid4(),
                                               started=now, finished=now, status=const.ResourceState.skipped,
                                               action=const.ResourceAction.deploy, changes={}, messages=[],
-                                              change=const.Change.nochange, send_events=False)
+                                              change=const.Change.nochange, send_events=False, ignore_undeployable=True)
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
@@ -1130,11 +1131,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.ResourceMethod.resource_action_update, env="tid")
     @gen.coroutine
     def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
-                               change, send_events):
+                               change, send_events, ignore_undeployable=False):
         resources = yield data.Resource.get_resources(env.id, resource_ids)
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
                          "Only %s of %s resources found." % (len(resources), len(resource_ids))}
+
+        if status is not None and status not in UNDEPLOYABLE_STATES:
+            if not ignore_undeployable:
+                if any([resource.status in UNDEPLOYABLE_STATES for resource in resources]):
+                    LOGGER.error("Attempting to set undeployable resource to deployable state")
+                    raise AssertionError("Attempting to set undeployable resource to deployable state")
+            else:
+                resources = [resource for resource in resources if resource.status not in UNDEPLOYABLE_STATES]
+                if len(resources) == 0:
+                    return
 
         resource_action = yield data.ResourceAction.get(environment=env.id, action_id=action_id)
         if resource_action is None:

@@ -31,13 +31,14 @@ import pytest
 from _pytest.fixtures import fixture
 
 from inmanta import agent, data, const, execute, config
-from inmanta.agent.handler import provider, ResourceHandler
+from inmanta.agent.handler import provider, ResourceHandler, SkipResource
 from inmanta.resources import resource, Resource
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
+from conftest import client_multi
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -72,6 +73,7 @@ def resource_container():
     class Provider(ResourceHandler):
 
         def check_resource(self, ctx, resource):
+            self.read(resource.id.get_agent_name(), resource.key)
             assert resource.value != const.UNKNOWN_STRING
             current = resource.clone()
             current.purged = not self.isset(resource.id.get_agent_name(), resource.key)
@@ -84,6 +86,11 @@ def resource_container():
             return current
 
         def do_changes(self, ctx, resource, changes):
+            self.touch(resource.id.get_agent_name(), resource.key)
+
+            if self.skip(resource.id.get_agent_name(), resource.key):
+                raise SkipResource()
+
             if "purged" in changes:
                 if changes["purged"]["desired"]:
                     self.delete(resource.id.get_agent_name(), resource.key)
@@ -120,7 +127,30 @@ def resource_container():
             self.__class__._EVENTS[str(resource.id)] = events
 
         _STATE = defaultdict(dict)
+        _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+        _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+        _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
         _EVENTS = {}
+
+        @classmethod
+        def set_skip(cls, agent, key, skip):
+            cls._TO_SKIP[agent][key] = skip
+
+        @classmethod
+        def skip(cls, agent, key):
+            doskip = cls._TO_SKIP[agent][key]
+            if doskip == 0:
+                return False
+            cls._TO_SKIP[agent][key] -= 1
+            return True
+
+        @classmethod
+        def touch(cls, agent, key):
+            cls._WRITE_COUNT[agent][key] += 1
+
+        @classmethod
+        def read(cls, agent, key):
+            cls._READ_COUNT[agent][key] += 1
 
         @classmethod
         def set(cls, agent, key, value):
@@ -142,9 +172,20 @@ def resource_container():
                 del cls._STATE[agent][key]
 
         @classmethod
+        def changecount(cls, agent, key):
+            return cls._WRITE_COUNT[agent][key]
+
+        @classmethod
+        def readcount(cls, agent, key):
+            return cls._READ_COUNT[agent][key]
+
+        @classmethod
         def reset(cls):
             cls._STATE = defaultdict(dict)
             cls._EVENTS = {}
+            cls._WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+            cls._READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+            cls._TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
 
     @provider("test::Fail", name="test_fail")
     class Fail(ResourceHandler):
@@ -364,17 +405,25 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     agent.stop()
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_container):
+@pytest.mark.gen_test(timeout=60)
+def test_deploy_with_undefined(io_loop, server, client, resource_container):
     """
          Test deploy of resource with undefined
     """
+
+    server_multi = server
+    client_multi = client
+
+    Config.set("config", "agent-interval", "100")
+
     resource_container.Provider.reset()
     result = yield client_multi.create_project("env-test")
     project_id = result.result["project"]["id"]
 
     result = yield client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
+
+    resource_container.Provider.set_skip("agent2", "key1", 1)
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
                   code_loader=False)
@@ -385,16 +434,36 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
 
     version = int(time.time())
 
-    resources = [{'key': 'key4',
-                  'value': execute.util.Unknown(source=None),
-                  'id': 'test::Resource[agent2,key=key4],v=%d' % version,
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent2,key=key1],v=%d' % version,
                   'send_event': False,
-                  'requires': [],
                   'purged': False,
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
-                 },
+                  'requires': [],
+                  },
+                 {'key': 'key2',
+                  'value': execute.util.Unknown(source=None),
+                  'id': 'test::Resource[agent2,key=key2],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  },
+                 {'key': 'key4',
+                  'value': execute.util.Unknown(source=None),
+                  'id': 'test::Resource[agent2,key=key4],v=%d' % version,
+                  'send_event': False,
+                  'requires': ['test::Resource[agent2,key=key1],v=%d' % version, 'test::Resource[agent2,key=key2],v=%d' % version],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  },
                  {'key': 'key5',
                   'value': "val",
                   'id': 'test::Resource[agent2,key=key5],v=%d' % version,
@@ -407,7 +476,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
                   }
                  ]
 
-    status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined}
+    status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined, 'test::Resource[agent2,key=key2]': const.ResourceState.undefined}
     result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                             unknowns=[], version_info={})
     assert result.code == 200
@@ -429,28 +498,39 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
         yield gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
+    assert result.code == 200
 
     actions = yield data.ResourceAction.get_list()
     assert len([x for x in actions if x.status == const.ResourceState.undefined]) >= 1
 
-    # Now wait until the agent has processed the undefined resource as well
-    while len([x for x in actions if x.status == const.ResourceState.undefined]) < 2:
-        actions = yield data.ResourceAction.get_list()
-        yield gen.sleep(0.1)
-
     result = yield client_multi.get_version(env_id, version)
+    assert result.code == 200
+
+    assert resource_container.Provider.changecount("agent2", "key4") == 0
+    assert resource_container.Provider.changecount("agent2", "key5") == 0
+    assert resource_container.Provider.changecount("agent2", "key1") == 1
+
+    assert resource_container.Provider.readcount("agent2", "key4") == 0
+    assert resource_container.Provider.readcount("agent2", "key5") == 0
+    assert resource_container.Provider.readcount("agent2", "key1") == 1
 
     # Do a second deploy of the same model on agent2 with undefined resources
     yield agent.trigger_update("env_id", "agent2")
 
-    # Now wait until the agent has processed the undefined resource as well
-    while len([x for x in actions if x.status == const.ResourceState.undefined]) < 3:
-        actions = yield data.ResourceAction.get_list()
-        yield gen.sleep(0.1)
+    # wait for deploy
+    yield gen.sleep(1)
 
-    result = yield client_multi.get_version(env_id, version)
+    result = yield client_multi.get_version(env_id, version, include_logs=True)
     import pprint
     pprint.pprint(result.result)
+
+    assert resource_container.Provider.changecount("agent2", "key4") == 0
+    assert resource_container.Provider.changecount("agent2", "key5") == 0
+    assert resource_container.Provider.changecount("agent2", "key1") == 2
+
+    assert resource_container.Provider.readcount("agent2", "key4") == 0
+    assert resource_container.Provider.readcount("agent2", "key5") == 0
+    assert resource_container.Provider.readcount("agent2", "key1") == 2
 
     agent.stop()
 
