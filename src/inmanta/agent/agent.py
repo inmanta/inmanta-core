@@ -39,7 +39,6 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 from inmanta.agent.util import PrioritySemaphore
-from typing import Dict
 from inmanta.agent.scheduling import PriorityProvider
 
 LOGGER = logging.getLogger(__name__)

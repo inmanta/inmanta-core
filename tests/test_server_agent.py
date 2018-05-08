@@ -34,7 +34,7 @@ from inmanta import agent, data, const, execute, config
 from inmanta.agent.handler import provider, ResourceHandler
 from inmanta.resources import resource, Resource
 from inmanta.agent.agent import Agent, ResourceScheduler, PRIO_NOMINAL, PRIO_MID
-from utils import retry_limited, assert_equal_ish, UNKWN, expandToGraph
+from utils import retry_limited, assert_equal_ish, UNKWN, expand_to_graph
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
@@ -2289,7 +2289,7 @@ def test_agent_scheduler_static_changes(resource_container):
 
     version = int(time.time())
 
-    rawresources = expandToGraph(
+    rawresources = expand_to_graph(
         """A1: A2 A4
     A2: A3
     A5
@@ -2333,13 +2333,14 @@ def test_agent_scheduler_static_changes(resource_container):
     for r in rs.generation.values():
         assert r.priority == PRIO_MID
 
-    rawresources = expandToGraph(
+    # flake8: noqa: E241
+    rawresources = expand_to_graph(
         """A1: A2 A4
-    A2: A3
-    A5
-    A6: A7
-    A7: A8
-    A8: A9""",
+           A2: A3
+           A5
+           A6: A7
+           A7: A8
+           A8: A9""",
         types={"A": "test::Resource"},
         version=version,
         values={"A1": "A",

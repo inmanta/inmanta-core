@@ -19,11 +19,6 @@ from inmanta import agent
 import pytest
 from utils import retry_limited
 from inmanta.agent import reporting
-from inmanta.agent.agent import ResourceScheduler
-from inmanta.agent.util import PrioritySemaphore
-from inmanta.agent.cache import AgentCache
-from inmanta.agent.scheduling import PriorityProvider
-import time
 
 
 @pytest.mark.slowtest
@@ -43,5 +38,3 @@ def test_agent_get_status(io_loop, server, environment):
     status = status.get_result()
     for name in reporting.reports.keys():
         assert name in status and status[name] != "ERROR"
-
-

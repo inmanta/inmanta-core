@@ -64,7 +64,7 @@ def assert_graph(graph, expected):
     assert elines == lines, (lines, elines)
 
 
-def expandToGraph(inp, types, version, values, agents, extra):
+def expand_to_graph(inp, types, version, values, agents, extra):
     """expect graph input in the form
             A1: B1 B2
 
