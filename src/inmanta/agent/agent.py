@@ -39,7 +39,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 from inmanta.agent.util import PrioritySemaphore
-from inmanta.agent.scheduling import PriorityProvider
+from inmanta.agent.scheduling import PriorityProvider, StaticChangesFirst
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -372,7 +372,13 @@ class AgentInstance(object):
 
         # init
         self._cache = AgentCache()
-        self._nq = ResourceScheduler(self, self.process.environment, name, self._cache, ratelimiter=self.ratelimiter)
+
+        self._scheduler = PriorityProvider()
+        if not cfg.agent_random_deploy_order:
+            self._scheduler = StaticChangesFirst()
+
+        self._nq = ResourceScheduler(self, self.process.environment, name, self._cache,
+                                     ratelimiter=self.ratelimiter, priorityprovider=self._scheduler)
         self._enabled = None
 
         # do regular deploys

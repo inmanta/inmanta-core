@@ -65,6 +65,9 @@ server_timeout = \
     Option("config", "server-timeout", 125,
            "Amount of time to wait for a response from the server before we try to reconnect, must be smaller than server.agent-hold", is_time)
 
+agent_random_deploy_order = \
+    Option("config", "agent-legacy-deploy-order", False,
+           "deploy resources in random order instead of changes first", is_bool)
 
 ##############################
 # agent_rest_transport
