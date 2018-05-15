@@ -6,3 +6,13 @@ entity Test:
 end
 
 implement Test using std::none
+
+
+entity Test2 extends std::PurgeableResource:
+	string agent ="agenta"
+	string name = "ida"
+	dict mydict
+	string[] mylist
+end
+
+implement Test2 using std::none

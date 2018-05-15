@@ -164,7 +164,7 @@ class BashIO(IOBase):
             Check if a given file exists
         """
         result = subprocess.Popen(self._run_as_args("stat", "-t", path), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print(result.communicate())
+        result.communicate()
 
         if result.returncode > 0:
             return False

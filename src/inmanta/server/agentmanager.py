@@ -479,13 +479,20 @@ host=localhost
 token=%s
     """ % (token)
 
-        ssl_cert = Config.get("server", "ssl_key_file", None)
-        ssl_ca = Config.get("server", "ssl_cert_file", None)
+        ssl_cert = server_config.server_ssl_key.get()
+        ssl_ca = server_config.server_ssl_ca_cert.get()
+
         if ssl_ca is not None and ssl_cert is not None:
+            # override CA
             config += """
 ssl=True
 ssl_ca_cert_file=%s
     """ % (ssl_ca)
+        elif ssl_cert is not None:
+            # system CA
+            config += """
+ssl=True
+    """
 
         return config
 

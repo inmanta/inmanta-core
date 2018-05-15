@@ -222,7 +222,9 @@ class AttributeReference(Reference):
         return SetAttribute(self.instance, self.attribute, value, list_only)
 
     def root_in_self(self) -> Reference:
-        return AttributeReference(self.instance.root_in_self(), self.attribute)
+        out = AttributeReference(self.instance.root_in_self(), self.attribute)
+        self.copy_location(out)
+        return out
 
     def __repr__(self, *args, **kwargs):
         return "%s.%s" % (repr(self.instance), self.attribute)

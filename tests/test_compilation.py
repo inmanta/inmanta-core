@@ -1994,6 +1994,28 @@ d=b["c"]
     assert scope.lookup("d").get_value() == 3
 
 
+def test_632_dict_access_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : {"b":"c"}}
+c=b["a"]["b"]
+""")
+
+    (_, root) = compiler.do_compile()
+
+    scope = root.get_child("__config__").scope
+    assert scope.lookup("c").get_value() == "c"
+
+
+def test_632_dict_access_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : "b"}
+c=b["a"]["b"]
+""")
+
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
 def test_552_string_rendering_for_lists(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Network:
@@ -2204,3 +2226,49 @@ b1.a = c1.a
 """)
     with pytest.raises(AttributeException):
         (_, scopes) = compiler.do_compile()
+
+
+def test_633_default_on_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Foo:
+   list first=[]
+   list second=["a", "b"]
+   string[] third=["a", "b"]
+end
+
+implementation none for std::Entity:
+end
+
+implement Foo using none
+
+foo = Foo()
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    foo = root.lookup("foo").get_value()
+
+    ab = foo.get_attribute("first").get_value()
+    assert ab == []
+
+    second = foo.get_attribute("second").get_value()
+    assert second == ["a", "b"]
+
+    third = foo.get_attribute("third").get_value()
+    assert third == ["a", "b"]
+
+
+def test_lnr_on_double_is_defined(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string? two
+end
+
+Test.one [0:1] -- Test
+
+implement Test using std::none when self.one.two is defined
+
+a = Test(two="b")
+a.one = a
+""")
+    compiler.do_compile()

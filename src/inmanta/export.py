@@ -274,17 +274,25 @@ class Exporter(object):
         if len(self._resources) == 0:
             LOGGER.warning("Empty deployment model.")
 
+        model = {}
+
         if self.options and self.options.json:
             with open(self.options.json, "wb+") as fd:
                 fd.write(protocol.json_encode(resources).encode("utf-8"))
-
+            if len(self._resources) > 0 or len(unknown_parameters) > 0:
+                model = ModelExporter(types).export_all()
+                with open(self.options.json + ".types", "wb+") as fd:
+                    fd.write(protocol.json_encode(model).encode("utf-8"))
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
-            model = ModelExporter(types).export_all()
+            model = None
+            if types is not None:
+                model = ModelExporter(types).export_all()
+
             self.commit_resources(self._version, resources, metadata, model)
             LOGGER.info("Committed resources with version %d" % self._version)
 
         if include_status:
-            return self._version, self._resources, self._resource_state
+            return self._version, self._resources, self._resource_state, model
         return self._version, self._resources
 
     def get_variable(self, name):
@@ -564,7 +572,7 @@ class ModelExporter(object):
                 return model.DirectValue(value)
 
         def convert_attribute(attr):
-            return model.Attribute(attr.type.__str__(), attr.is_optional(), attr.is_multi(),
+            return model.Attribute(attr.type.type_string(), attr.is_optional(), attr.is_multi(),
                                    convert_comment(attr.comment), location(attr))
 
         def convert_relation(relation: RelationAttribute):

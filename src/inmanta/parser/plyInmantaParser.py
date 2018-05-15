@@ -249,7 +249,8 @@ def p_attr(p):
 
 
 def p_attr_cte(p):
-    "attr : attr_type ID '=' constant"
+    """attr : attr_type ID '=' constant
+           | attr_type ID '=' constant_list"""
     (attr, nullable) = p[1]
     p[0] = DefineAttribute(attr, p[2], p[4], nullable=nullable)
     attach_lnr(p, 2)
@@ -589,7 +590,8 @@ def p_operand(p):
 
 def p_map_lookup(p):
     """ map_lookup : attr_ref '[' operand ']'
-                   | local_var '[' operand ']'"""
+                   | local_var '[' operand ']'
+                   | map_lookup '[' operand ']'"""
     p[0] = MapLookup(p[1], p[3])
 
 
