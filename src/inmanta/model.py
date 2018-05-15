@@ -1,8 +1,3 @@
-"""
-    Objects defining the serialization format for type information.
-
-    Types are exported as a Dict[str, :class:`.Entity` ]
-"""
 '''
   Copyright 2018 Inmanta
 
@@ -22,6 +17,12 @@
 '''
 from builtins import str
 from typing import List, Dict, Tuple
+
+"""
+    Objects defining the serialization format for type information.
+
+    Types are exported as a Dict[str, :class:`.Entity` ]
+"""
 
 
 class Location(object):
