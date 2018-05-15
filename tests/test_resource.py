@@ -58,7 +58,6 @@ def test_fields_parent_type():
 
 
 def test_resource_base():
-    resource.reset()
 
     import inmanta.resources
 
@@ -100,7 +99,6 @@ def test_resource_base():
 
 
 def test_resource_base_with_method_key():
-    resource.reset()
 
     import inmanta.resources
 
@@ -139,8 +137,6 @@ def test_resource_base_with_method_key():
         snippetcompiler.tearDownClass()
 
 def test_resource_with_keyword():
-
-    resource.reset()
 
     import inmanta.resources
 
@@ -181,8 +177,6 @@ def test_resource_with_keyword():
 
 
 def test_resource_with_private_method():
-
-    resource.reset()
 
     import inmanta.resources
 
