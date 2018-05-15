@@ -431,8 +431,7 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {"export_metadata": metadata,
-                        "model": model}
+        version_info = {"export_metadata": metadata}
 
         # TODO: start transaction
         LOGGER.info("Sending resource updates to server")

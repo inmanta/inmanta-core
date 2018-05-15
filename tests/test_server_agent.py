@@ -38,7 +38,6 @@ from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.server.server import Server
 from inmanta.ast import CompilerException
-from conftest import client_multi
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -261,7 +260,7 @@ def resource_container():
     return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters, waiter=waiter)
 
 
-@pytest.mark.gen_test(timeout=15)
+@pytest.mark.gen_test(timeout=150)
 def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_container):
     """
         dryrun and deploy a configuration model
@@ -337,6 +336,16 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'state_id': '',
                   'allow_restore': True,
                   'allow_snapshot': True,
+                  },
+                 {'key': 'key6',
+                  'value': "val",
+                  'id': 'test::Resource[agent2,key=key6],v=%d' % version,
+                  'send_event': False,
+                  'requires': ['test::Resource[agent2,key=key5],v=%d' % version],
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
                   }
                  ]
 
@@ -344,6 +353,13 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                             unknowns=[], version_info={})
     assert result.code == 200
+
+    mod_db = yield data.ConfigurationModel.get_version(uuid.UUID(env_id), version)
+    undep = yield mod_db.get_undeployable()
+    assert undep == ['test::Resource[agent2,key=key4]']
+
+    undep = yield mod_db.get_skipped_for_undeployable()
+    assert undep == ['test::Resource[agent2,key=key5]', 'test::Resource[agent2,key=key6]']
 
     # request a dryrun
     result = yield client_multi.dryrun_request(env_id, version)
@@ -381,7 +397,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 5
+    assert result.result["model"]["total"] == 6
     assert result.result["model"]["result"] == "deploying"
 
     result = yield client_multi.get_version(env_id, version)
@@ -399,8 +415,8 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     assert not resource_container.Provider.isset("agent1", "key3")
 
     actions = yield data.ResourceAction.get_list()
-    assert len([x for x in actions if x.status == const.ResourceState.undefined]) == 1
-    assert len([x for x in actions if x.status == const.ResourceState.skipped]) == 1
+    assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
+    assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
 
     agent.stop()
 
@@ -476,7 +492,8 @@ def test_deploy_with_undefined(io_loop, server, client, resource_container):
                   }
                  ]
 
-    status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined, 'test::Resource[agent2,key=key2]': const.ResourceState.undefined}
+    status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined,
+              'test::Resource[agent2,key=key2]': const.ResourceState.undefined}
     result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                             unknowns=[], version_info={})
     assert result.code == 200

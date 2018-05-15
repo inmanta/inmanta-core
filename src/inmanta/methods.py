@@ -417,7 +417,7 @@ class ResourceMethod(Method):
             Send a resource update to the server
 
             :param tid: The id of the environment this resource belongs to
-            :param resource_ids: The resource with the given id from the agent
+            :param resource_ids: The resource with the given resource_version_id id from the agent
             :param action_id: A unique id to indicate the resource action that has be updated
             :param action: The action performed
             :param started: The timestamp when this action was started. When this action (action_id) has not been saved yet,

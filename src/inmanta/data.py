@@ -93,6 +93,7 @@ class DataDocument(object):
         DataDocument childeren in BaseDocument fields, they will be serialized to dict. However, on retrieval this is not
         performed.
     """
+
     def __init__(self, **kwargs):
         self._data = kwargs
 
@@ -508,6 +509,7 @@ class Setting(object):
     """
         A class to define a new environment setting.
     """
+
     def __init__(self, name, typ, default=None, doc=None, validator=None, recompile=False, update_model=False,
                  agent_restart=False):
         """
@@ -1122,7 +1124,7 @@ class Resource(BaseDocument):
     provides = Field(field_type=list, default=[])  # List of resource versions
 
     __indexes__ = [
-        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.ASCENDING)]),
+        dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.ASCENDING), ("agent", pymongo.ASCENDING)]),
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_id", pymongo.ASCENDING)]),
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_id", pymongo.ASCENDING)], unique=True),
     ]
@@ -1382,6 +1384,10 @@ class ConfigurationModel(BaseDocument):
 
     total = Field(field_type=int, default=0)
 
+    # cached state for release
+    undeployable = Field(field_type=list, required=False)
+    skipped_for_undeployable = Field(field_type=list, required=False)
+
     __indexes__ = [
         dict(keys=[("environment", pymongo.ASCENDING), ("version", pymongo.ASCENDING)], unique=True)
     ]
@@ -1476,6 +1482,46 @@ class ConfigurationModel(BaseDocument):
         yield Code.delete_all(environment=self.environment, model=self.version)
         yield DryRun.delete_all(environment=self.environment, model=self.version)
         yield self.delete()
+
+    @gen.coroutine
+    def get_undeployable(self):
+        """
+            Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
+        """
+        if self.undeployable is None:
+            # Fallback if not cached
+            resources = yield Resource.get_undeployable(self.environment, self.version)
+            self.undeployable = [resource.resource_id for resource in resources]
+            yield ConfigurationModel._coll.update_one({"environment": self.environment, "version": self.version},
+                                                      {"$set": {"undeployable": self.undeployable}})
+        return self.undeployable
+
+    @gen.coroutine
+    def get_skipped_for_undeployable(self):
+        """
+            Returns a list of resource ids (NOT resource version ids) of resources which should get a skipped_for_undeployable state
+        """
+        if self.skipped_for_undeployable is None:
+            undeployable = yield Resource.get_undeployable(self.environment, self.version)
+
+            work = list(undeployable)
+            skipped = set()
+
+            while len(work) > 0:
+                current = work.pop()
+                if current.resource_id in skipped:
+                    continue
+                skipped.add(current.resource_id)
+                others = yield Resource.get_requires(self.environment, self.version, current.resource_version_id)
+                work.extend(others)
+
+            #get ids
+            undeployable = set([resource.resource_id for resource in undeployable])
+            self.skipped_for_undeployable = sorted(list(skipped - undeployable))
+
+            yield ConfigurationModel._coll.update_one({"environment": self.environment, "version": self.version},
+                                                      {"$set": {"skipped_for_undeployable": self.skipped_for_undeployable}})
+        return self.skipped_for_undeployable
 
 
 class Code(BaseDocument):

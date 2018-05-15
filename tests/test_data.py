@@ -24,6 +24,7 @@ from inmanta import const
 import pytest
 import pymongo
 import logging
+from tornado import gen
 
 
 class Doc(data.BaseDocument):
@@ -522,13 +523,13 @@ def test_escaped_resources(data_module):
 
 @pytest.mark.gen_test
 def test_data_document_recursion(data_module):
-        env_id = uuid.uuid4()
-        now = datetime.datetime.now()
-        ra = data.ResourceAction(environment=env_id, resource_version_ids=["id"], action_id=uuid.uuid4(),
-                                 action=const.ResourceAction.store, started=now, finished=now,
-                                 messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
-                                                            version=2)])
-        yield ra.insert()
+    env_id = uuid.uuid4()
+    now = datetime.datetime.now()
+    ra = data.ResourceAction(environment=env_id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+                             action=const.ResourceAction.store, started=now, finished=now,
+                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
+                                                        version=2)])
+    yield ra.insert()
 
 
 @pytest.mark.gen_test
@@ -544,3 +545,90 @@ def test_resource_provides(data_module):
     print(id(res1.provides) == id(res2.provides))
     res1.provides.append(res2.resource_version_id)
     assert len(res2.provides) == 0
+
+
+@gen.coroutine
+def populate_model(env_id, version):
+
+    def get_path(n):
+        return "/tmp/%d" % n
+
+    def get_id(n):
+        return "std::File[agent1,path=/tmp/%d],v=%s" % (n, version)
+
+    def get_resource(n, depends, status=const.ResourceState.available):
+        requires = [get_id(n) for n in depends]
+        return data.Resource.new(environment=env_id, resource_version_id=get_id(n),
+                                 status=status,
+                                 attributes={"path": get_path(n), "purge_on_delete": False, "purged": False, "requires": requires})
+
+    res1 = get_resource(1, [])
+    yield res1.insert()
+
+    res2 = get_resource(2, [1])
+    yield res2.insert()
+
+    res3 = get_resource(3, [], const.ResourceState.undefined)
+    yield res3.insert()
+
+    res4 = get_resource(4, [3])
+    yield res4.insert()
+
+    res5 = get_resource(5, [4])
+    yield res5.insert()
+
+
+@pytest.mark.gen_test
+def test_undeployable_cache_lazy(data_module):
+    env_id = uuid.uuid4()
+    version = 1
+
+    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=5, version_info={},
+                                  released=False, deployed=False)
+    yield cm1.insert()
+    yield populate_model(env_id, version)
+
+    assert cm1.undeployable is None
+
+    undep = yield cm1.get_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+
+    assert cm1.undeployable is not None
+
+    undep = yield cm1.get_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+
+    cm1 = yield data.ConfigurationModel.get_version(env_id, version)
+
+    assert cm1.undeployable is not None
+
+    undep = yield cm1.get_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+
+
+@pytest.mark.gen_test
+def test_undeployable_skip_cache_lazy(data_module):
+    env_id = uuid.uuid4()
+    version = 2
+
+    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=5, version_info={},
+                                  released=False, deployed=False)
+    yield cm1.insert()
+    yield populate_model(env_id, version)
+
+    assert cm1.skipped_for_undeployable is None
+
+    undep = yield cm1.get_skipped_for_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+
+    assert cm1.skipped_for_undeployable is not None
+
+    undep = yield cm1.get_skipped_for_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+
+    cm1 = yield data.ConfigurationModel.get_version(env_id, version)
+
+    assert cm1.skipped_for_undeployable is not None
+
+    undep = yield cm1.get_skipped_for_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]

@@ -155,6 +155,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     config.Config.set("server", "agent-timeout", "10")
 
     data.use_motor(motor)
+    io_loop.run_sync(data.create_indexes)
 
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
     server.start()
@@ -169,7 +170,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 @pytest.fixture(scope="function",
                 params=[(True, True), (True, False), (False, True), (False, False)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal"])
-def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
+def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor):
     from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
@@ -207,6 +208,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
+
+    data.use_motor(motor)
+    io_loop.run_sync(data.create_indexes)
 
     server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
     server.start()
