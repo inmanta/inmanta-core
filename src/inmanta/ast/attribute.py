@@ -22,7 +22,6 @@ from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable
 from inmanta.execute.util import Unknown
 from typing import List
 
-
 try:
     from typing import TYPE_CHECKING
 except ImportError:
@@ -49,6 +48,7 @@ class Attribute(Locatable):
         self.__type = value_type
         self.__multi = multi
         self.__nullallble = nullable
+        self.low = 0 if nullable else 1
         self.comment = None  # type: str
 
     def get_type(self) -> "Type":
