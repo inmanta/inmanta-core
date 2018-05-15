@@ -293,7 +293,7 @@ class ResourceScheduler(object):
         self.ratelimiter = ratelimiter
         self.version = 0
 
-    def reload(self, resources, undeployable={}, reason: str = "RELOAD"):
+    def reload(self, resources, undeployable={}, reason: str="RELOAD"):
         version = resources[0].id.get_version
 
         self.version = version
@@ -547,9 +547,12 @@ class AgentInstance(object):
 
                         finished = datetime.datetime.now()
                         yield self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
-                                                                 action_id=ctx.action_id, action=const.ResourceAction.dryrun,
-                                                                 started=started, finished=finished, messages=ctx.logs,
-                                                                 status=const.ResourceState.dry)
+                                                                       action_id=ctx.action_id,
+                                                                       action=const.ResourceAction.dryrun,
+                                                                       started=started,
+                                                                       finished=finished,
+                                                                       messages=ctx.logs,
+                                                                       status=const.ResourceState.dry)
 
                 self._cache.close_version(version)
 

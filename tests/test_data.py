@@ -557,10 +557,13 @@ def populate_model(env_id, version):
         return "std::File[agent1,path=/tmp/%d],v=%s" % (n, version)
 
     def get_resource(n, depends, status=const.ResourceState.available):
-        requires = [get_id(n) for n in depends]
+        requires = [get_id(z) for z in depends]
         return data.Resource.new(environment=env_id, resource_version_id=get_id(n),
                                  status=status,
-                                 attributes={"path": get_path(n), "purge_on_delete": False, "purged": False, "requires": requires})
+                                 attributes={"path": get_path(n),
+                                             "purge_on_delete": False,
+                                             "purged": False,
+                                             "requires": requires})
 
     res1 = get_resource(1, [])
     yield res1.insert()
@@ -611,7 +614,11 @@ def test_undeployable_skip_cache_lazy(data_module):
     env_id = uuid.uuid4()
     version = 2
 
-    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=5, version_info={},
+    cm1 = data.ConfigurationModel(environment=env_id,
+                                  version=version,
+                                  date=datetime.datetime.now(),
+                                  total=5,
+                                  version_info={},
                                   released=False, deployed=False)
     yield cm1.insert()
     yield populate_model(env_id, version)

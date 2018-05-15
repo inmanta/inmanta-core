@@ -1499,7 +1499,8 @@ class ConfigurationModel(BaseDocument):
     @gen.coroutine
     def get_skipped_for_undeployable(self):
         """
-            Returns a list of resource ids (NOT resource version ids) of resources which should get a skipped_for_undeployable state
+            Returns a list of resource ids (NOT resource version ids)
+            of resources which should get a skipped_for_undeployable state
         """
         if self.skipped_for_undeployable is None:
             undeployable = yield Resource.get_undeployable(self.environment, self.version)
@@ -1515,7 +1516,7 @@ class ConfigurationModel(BaseDocument):
                 others = yield Resource.get_requires(self.environment, self.version, current.resource_version_id)
                 work.extend(others)
 
-            #get ids
+            # get ids
             undeployable = set([resource.resource_id for resource in undeployable])
             self.skipped_for_undeployable = sorted(list(skipped - undeployable))
 

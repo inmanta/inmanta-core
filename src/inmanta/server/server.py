@@ -45,7 +45,7 @@ from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.server.agentmanager import AgentManager
 import json
-from inmanta.util import hash_file, is_call_ok
+from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 
 LOGGER = logging.getLogger(__name__)
@@ -895,7 +895,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         try:
             cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
-                                         total=len(resources), version_info=version_info, undeployable=undeployable, skipped_for_undeployable=skippeable)
+                                         total=len(resources), version_info=version_info, undeployable=undeployable,
+                                         skipped_for_undeployable=skippeable)
             yield cm.insert()
         except pymongo.errors.DuplicateKeyError:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
@@ -950,8 +951,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         # not checking error conditions
         yield self.resource_action_update(env, undep, action_id=uuid.uuid4(), started=now,
-                                          finished=now, status=const.ResourceState.undefined, action=const.ResourceAction.deploy,
-                                          changes={}, messages=[], change=const.Change.nochange, send_events=False)
+                                          finished=now, status=const.ResourceState.undefined,
+                                          action=const.ResourceAction.deploy, changes={}, messages=[],
+                                          change=const.Change.nochange, send_events=False)
 
         skippable = yield model.get_skipped_for_undeployable()
         skippable = [rid + ",v=%s" % version_id for rid in skippable]
@@ -1003,7 +1005,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         # Mark the resources in an undeployable state as done
         with (yield self.dryrun_lock.acquire()):
             undeployableids = yield model.get_undeployable()
-            undeployable = yield data.Resource.get_resources(environment=env.id, resource_version_ids=[rid + ",v=%s" % version_id for rid in undeployableids])
+            undeployableids = [rid + ",v=%s" % version_id for rid in undeployableids]
+            undeployable = yield data.Resource.get_resources(environment=env.id,
+                                                             resource_version_ids=undeployableids)
             for res in undeployable:
                 payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
                                                         "attribute": res.id_attribute_name,
@@ -1012,7 +1016,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
             skipundeployableids = yield model.get_skipped_for_undeployable()
-            skipundeployable = yield data.Resource.get_resources(environment=env.id, resource_version_ids=[rid + ",v=%s" % version_id for rid in skipundeployableids])
+            skipundeployableids = [rid + ",v=%s" % version_id for rid in skipundeployableids]
+            skipundeployable = yield data.Resource.get_resources(environment=env.id, resource_version_ids=skipundeployableids)
             for res in skipundeployable:
                 payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
                                                         "attribute": res.id_attribute_name,
