@@ -97,7 +97,7 @@ class SshIO(local.IOBase):
             LOGGER.info("Terminating execnet connection group due to exception %s", id(self._group), e)
             self._group.terminate(0.1)
             raise resources.HostNotFoundException(hostname=self._host, user=self._user, error=e)
-        except AssertionError:
+        except AssertionError as e:
             LOGGER.info("Terminating execnet connection group due to exception %s", id(self._group), e)
             self._group.terminate(0.1)
             raise CannotLoginException()
