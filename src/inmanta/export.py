@@ -248,7 +248,7 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def run(self, types, scopes, metadata={}, no_commit=False, include_status=False):
+    def run(self, types, scopes, metadata={}, no_commit=False, include_status=False, model_export=False):
         """
         Run the export functions
         """
@@ -285,7 +285,7 @@ class Exporter(object):
                     fd.write(protocol.json_encode(model).encode("utf-8"))
         elif len(self._resources) > 0 or len(unknown_parameters) > 0 and not no_commit:
             model = None
-            if types is not None:
+            if types is not None and model_export:
                 model = ModelExporter(types).export_all()
 
             self.commit_resources(self._version, resources, metadata, model)
