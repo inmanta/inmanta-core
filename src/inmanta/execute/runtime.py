@@ -187,11 +187,11 @@ class DelayedResultVariable(ResultVariable):
         self.queued = False
 
     def get_waiting_providers(self):
-        """ how many values are definitely still waiting for"""
+        """How many values are definitely still waiting for"""
         raise NotImplementedError()
 
     def get_progress_potential(self):
-        """ how many are actually waiting for us """
+        """How many are actually waiting for us """
         return len(self.waiters)
 
 
@@ -304,7 +304,7 @@ class ListVariable(DelayedResultVariable):
         return True
 
     def get_progress_potential(self):
-        """ how many are actually waiting for us """
+        """How many are actually waiting for us """
         return len(self.waiters) - len(self.listeners)
 
 
