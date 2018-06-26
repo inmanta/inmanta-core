@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from conftest import snippetcompiler
 
 
 def test_plugin_excn(snippetcompiler):
