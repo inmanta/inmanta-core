@@ -16,56 +16,53 @@
     Contact: code@inmanta.com
 """
 
-import unittest
-
 import pytest
-from test_compilation import SnippetCompilationTest
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import DynamicProxy
 
 
-class TestDynamicProxy(SnippetCompilationTest, unittest.TestCase):
+def proxy_object(snippetcompiler, snippet, var):
+    snippetcompiler.setup_for_snippet(snippet)
+    (_, root) = compiler.do_compile()
 
-    def proxy_object(self, snippet, var):
-        self.setup_for_snippet(snippet)
-        (_, root) = compiler.do_compile()
+    scope = root.get_child("__config__").scope
 
-        scope = root.get_child("__config__").scope
+    value = scope.lookup(var).get_value()
+    return DynamicProxy.return_value(value)
 
-        value = scope.lookup(var).get_value()
-        return DynamicProxy.return_value(value)
 
-    def test_basic_object(self):
-        px = self.proxy_object("""
+def test_basic_object(snippetcompiler):
+    px = proxy_object(snippetcompiler, """
 entity Test1:
-    string x
+string x
 end
 implement Test1 using std::none
 
 a = Test1(x="a")
 """, "a")
 
-        assert px.x == "a"
-        with pytest.raises(Exception):
-            px.x = "b"
+    assert px.x == "a"
+    with pytest.raises(Exception):
+        px.x = "b"
 
-    def test_dict_attr(self):
-        px = self.proxy_object("""
+
+def test_dict_attr(snippetcompiler):
+    px = proxy_object(snippetcompiler, """
 entity Test1:
-    dict x = {}
+dict x = {}
 end
 implement Test1 using std::none
 
 a = Test1(x={"a":"A"})
 """, "a")
 
-        dic = px.x
-        assert dic["a"] == "A"
-        with pytest.raises(Exception):
-            dic["a"] = "Z"
+    dic = px.x
+    assert dic["a"] == "A"
+    with pytest.raises(Exception):
+        dic["a"] = "Z"
 
-        with pytest.raises(Exception):
-            dic["b"]
+    with pytest.raises(Exception):
+        dic["b"]
 
-        with pytest.raises(Exception):
-            dic["b"] = "a"
+    with pytest.raises(Exception):
+        dic["b"] = "a"

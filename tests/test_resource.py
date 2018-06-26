@@ -94,7 +94,7 @@ def test_resource_base():
         assert myresource.agent == "agent"
         assert myresource.value == "value"
     finally:
-        shutil.rmtree(snippetcompiler.project_dir)
+        #shutil.rmtree(snippetcompiler.project_dir)
         snippetcompiler.tearDownClass()
 
 
@@ -133,7 +133,7 @@ def test_resource_base_with_method_key():
         with pytest.raises(ResourceException):
             snippetcompiler.do_export()
     finally:
-        shutil.rmtree(snippetcompiler.project_dir)
+        #shutil.rmtree(snippetcompiler.project_dir)
         snippetcompiler.tearDownClass()
 
 def test_resource_with_keyword():
@@ -172,7 +172,7 @@ def test_resource_with_keyword():
         with pytest.raises(ResourceException):
             snippetcompiler.do_export()
     finally:
-        shutil.rmtree(snippetcompiler.project_dir)
+        #shutil.rmtree(snippetcompiler.project_dir)
         snippetcompiler.tearDownClass()
 
 
@@ -208,5 +208,5 @@ def test_resource_with_private_method():
         with pytest.raises(ResourceException):
             snippetcompiler.do_export()
     finally:
-        shutil.rmtree(snippetcompiler.project_dir)
+        #shutil.rmtree(snippetcompiler.project_dir)
         snippetcompiler.tearDownClass()

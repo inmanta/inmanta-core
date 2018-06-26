@@ -289,8 +289,6 @@ def environment_multi(client_multi, server_multi, io_loop):
 
 
 class SnippetCompilationTest(object):
-    libs = None
-    env = None
 
     @classmethod
     def setUpClass(cls):
