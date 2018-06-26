@@ -382,3 +382,17 @@ def test_610_multi_add(snippetcompiler):
         """,
         "The object __config__::A (instantiated at {dir}/main.cf:13) is not complete:"
         " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set")
+
+
+def test_672_missing_type(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+        end
+
+        implementation test for Testt:
+        end
+
+        """,
+        "could not find type Testt in namespace __config__"
+        " (reported in Implementation(test) ({dir}/main.cf:5))")

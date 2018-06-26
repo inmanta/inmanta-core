@@ -26,7 +26,7 @@ from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException,\
-    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
+    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor, CompilerException
 from typing import List
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit
 from inmanta.ast.blocks import BasicBlock
@@ -204,9 +204,13 @@ class DefineImplementation(TypeDefinitionStatement):
         """
             Evaluate this statement in the given scope
         """
-        cls = self.namespace.get_type(self.entity)
-        self.type.set_type(cls)
-        self.copy_location(self.type)
+        try:
+            cls = self.namespace.get_type(self.entity)
+            self.type.set_type(cls)
+            self.copy_location(self.type)
+        except TypeNotFoundException as e:
+            e.set_statement(self)
+            raise e
 
 
 class DefineImplementInherits(DefinitionStatement):
