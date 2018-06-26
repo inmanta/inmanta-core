@@ -172,6 +172,7 @@ class DelayedResultVariable(ResultVariable):
     def freeze(self):
         if self.hasValue:
             return
+        self.queued = True
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
@@ -262,11 +263,11 @@ class ListVariable(DelayedResultVariable):
             value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
         if self.attribute.high is not None:
-            if self.attribute.high > len(self.value):
+            if len(self.value) > self.attribute.high:
                 raise RuntimeException(None, "List over full: max nr of items is %d, content is %s" %
                                        (self.attribute.high, self.value))
 
-            if self.attribute.high > len(self.value):
+            if self.attribute.high == len(self.value):
                 self.freeze()
 
         if self.can_get():

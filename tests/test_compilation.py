@@ -2274,6 +2274,32 @@ a.one = a
     compiler.do_compile()
 
 
+def test_671_bounds_check(snippetcompiler):
+    snippetcompiler.setup_for_snippet(""" entity Test:
+
+end
+
+entity Foo:
+
+end
+
+Test.foos [2] -- Foo
+
+t = Test()
+t.foos += Foo()
+t.foos += Foo()
+
+a = t.foos
+
+implementation none for std::Entity:
+end
+
+implement Test using none
+implement Foo using none
+""", autostd=False)
+    compiler.do_compile()
+
+
 def test_673_in_dict(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Test:
