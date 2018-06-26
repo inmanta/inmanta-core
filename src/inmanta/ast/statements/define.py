@@ -26,7 +26,7 @@ from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException,\
-    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor, CompilerException
+    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
 from typing import List
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit
 from inmanta.ast.blocks import BasicBlock
