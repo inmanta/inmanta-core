@@ -2332,3 +2332,159 @@ implement Test using test when "foo" in self.attributes
 Test(attributes=["blah", "foo"])
 """)
     compiler.do_compile()
+
+def test_643_cycle_empty(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+end
+
+implementation none for std::Entity:
+end
+
+implement Alpha using none
+
+a = Alpha()
+
+a.requires = a.provides
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+
+    ab = a.get_attribute("requires").get_value()
+    assert ab == []
+
+
+def test_643_cycle(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+implementation none for std::Entity:
+end
+
+implement Alpha using none
+
+a = Alpha(name="a")
+b = Alpha(name="b")
+
+a.requires = b
+a.requires = b.provides
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+
+    # a.requires = b  ==> b.provides = a
+    # a.requires = b.provides => a.requires = a ==> a.provides = a
+
+    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("requires").get_value()]
+    assert sorted(ab) == ["a", "b"]
+
+    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("provides").get_value()]
+    assert sorted(ab) == ["a"]
+
+    ab = [alpha.get_attribute("name").get_value() for alpha in b.get_attribute("provides").get_value()]
+    assert sorted(ab) == ["a"]
+
+
+def test_643_forcycle_complex(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+Alpha.alink [0:] -- Alpha
+
+implementation links for std::Entity:
+    for x in alink:
+        x.alink = self.alink
+    end
+end
+
+implement Alpha using links
+
+a = Alpha(name="a")
+b = Alpha(name="b")
+c = Alpha(name="c")
+d = Alpha(name="d")
+
+a.alink = b
+a.alink = c
+a.alink = d
+
+b.alink = c
+
+b.alink = a
+
+""", autostd=False)
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+    c = root.lookup("c").get_value()
+    d = root.lookup("d").get_value()
+
+    def get_names(a):
+        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute("alink").get_value()])
+
+    assert get_names(a) == ["a", "b", "c", "d"]
+    assert get_names(b) == ["a", "b", "c", "d"]
+    assert get_names(c) == ["a", "b", "c", "d"]
+    assert get_names(d) == ["a", "b", "c", "d"]
+    
+def test_643_forcycle_complex_reverse(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+Alpha.alink [0:] -- Alpha.blink [0:]
+
+implementation links for std::Entity:
+    for x in alink:
+        x.alink = self.alink
+    end
+end
+
+implement Alpha using links
+
+a = Alpha(name="a")
+b = Alpha(name="b")
+c = Alpha(name="c")
+d = Alpha(name="d")
+
+a.alink = b
+a.alink = c
+a.alink = d
+
+b.alink = c
+
+b.alink = a
+
+""", autostd=False)
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+    c = root.lookup("c").get_value()
+    d = root.lookup("d").get_value()
+
+    def get_names(a, name="alink"):
+        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute(name).get_value()])
+
+    assert get_names(a) == ["a", "b", "c", "d"]
+    assert get_names(b) == ["a", "b", "c", "d"]
+    assert get_names(c) == ["a", "b", "c", "d"]
+    assert get_names(d) == ["a", "b", "c", "d"]
+
+    assert get_names(a, "blink") == ["a", "b", "c", "d"]
+    assert get_names(b, "blink") == ["a", "b", "c", "d"]
+    assert get_names(c, "blink") == ["a", "b", "c", "d"]
+    assert get_names(d, "blink") == ["a", "b", "c", "d"]
