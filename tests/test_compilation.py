@@ -2272,3 +2272,37 @@ a = Test(two="b")
 a.one = a
 """)
     compiler.do_compile()
+
+
+def test_673_in_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    dict attributes
+end
+
+implementation test for Test:
+
+end
+
+implement Test using test when "foo" in self.attributes
+
+Test(attributes={"foo": 42})
+""")
+    compiler.do_compile()
+
+
+def test_673_in_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string[] attributes
+end
+
+implementation test for Test:
+
+end
+
+implement Test using test when "foo" in self.attributes
+
+Test(attributes=["blah", "foo"])
+""")
+    compiler.do_compile()
