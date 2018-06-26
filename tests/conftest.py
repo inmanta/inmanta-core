@@ -290,21 +290,19 @@ def environment_multi(client_multi, server_multi, io_loop):
 
 class SnippetCompilationTest(object):
 
-    @classmethod
-    def setUpClass(cls):
-        cls.libs = tempfile.mkdtemp()
-        cls.env = tempfile.mkdtemp()
+    def setUpClass(self):
+        self.libs = tempfile.mkdtemp()
+        self.env = tempfile.mkdtemp()
         config.Config.load_config()
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.libs)
-        shutil.rmtree(cls.env)
+    def tearDownClass(self):
+        shutil.rmtree(self.libs)
+        shutil.rmtree(self.env)
 
     def setup_for_snippet(self, snippet, autostd=True):
         # init project
         self.project_dir = tempfile.mkdtemp()
-        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
+        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
@@ -314,9 +312,9 @@ class SnippetCompilationTest(object):
             downloadpath: %s
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
-                % (self.__class__.libs,
+                % (self.libs,
                     os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.__class__.libs))
+                    self.libs))
 
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
