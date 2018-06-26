@@ -2437,7 +2437,8 @@ b.alink = a
     assert get_names(b) == ["a", "b", "c", "d"]
     assert get_names(c) == ["a", "b", "c", "d"]
     assert get_names(d) == ["a", "b", "c", "d"]
-    
+
+
 def test_643_forcycle_complex_reverse(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Alpha:
