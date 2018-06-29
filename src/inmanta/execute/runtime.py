@@ -676,7 +676,9 @@ class Instance(ExecutionContext, Locatable, Resolver):
                     attr = self.type.get_attribute(k)
                     if attr.is_multi():
                         low = attr.low
-                        length = len(v.value)
+                        # none for list attributes
+                        # list for n-ary relations
+                        length = 0 if v.value is None else len(v.value)
                         excns.append(UnsetException(
                             "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set" %
                             (self, k, attr.location, low, length), self, attr))
