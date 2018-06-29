@@ -285,7 +285,11 @@ class RemoteRepo(ModuleRepo):
 
     def clone(self, name: str, dest: str) -> bool:
         try:
-            gitprovider.clone(self.baseurl + name, os.path.join(dest, name))
+            url = self.baseurl.format(name)
+            if url == self.baseurl:
+                url = self.baseurl + name
+
+            gitprovider.clone(url, os.path.join(dest, name))
             return True
         except Exception:
             LOGGER.debug("could not clone repo", exc_info=True)

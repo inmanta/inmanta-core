@@ -51,9 +51,8 @@ modules. project.yml defines the following settings:
         * master: Use the master branch.
 
     * ``repo`` This key requires a list (a yaml list) of repositories where Inmanta can find
-      modules. The git url of a module is created by appending the name of the module to the repo
-      in this list. Inmanta tries to clone a module in the order in which it is defined in this
-      value.
+      modules. Inmanta creates the git repo url by formatting {} or {0} with the name of the repo. If no formatter is present it
+      appends the name of the module. Inmanta tries to clone a module in the order in which it is defined in this value.
     * ``requires`` Model files import other modules. These imports do not determine a version, this
       is based on the install_model setting. Modules and projects can constrain a version in the
       requires setting. Similar to the module, version constraints are defined using `PEP440 syntax
