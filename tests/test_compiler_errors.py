@@ -409,5 +409,3 @@ def test_672_missing_type(snippetcompiler):
         """,
         "could not find type Testt in namespace __config__"
         " (reported in Implementation(test) ({dir}/main.cf:5))")
-
-
