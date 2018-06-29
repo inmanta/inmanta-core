@@ -398,7 +398,7 @@ def test_653_list_attribute_unset(snippetcompiler):
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
         " attribute bla ({dir}/main.cf:3) requires 1 values but only 0 are set")
 
-    
+
 def test_670_assign_on_relation(snippetcompiler):
     snippetcompiler.setup_for_error_re(
         """
