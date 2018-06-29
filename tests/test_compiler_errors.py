@@ -384,6 +384,19 @@ def test_610_multi_add(snippetcompiler):
         " attribute b ({dir}/main.cf:11:11) requires 2 values but only 1 are set")
 
 
+def test_670_assign_on_relation(snippetcompiler):
+    snippetcompiler.setup_for_error_re(
+        """
+        h = std::Host(name="test", os=std::linux)
+        f = std::ConfigFile(host=h, path="a", content="")
+
+        h.files.path = "1"
+
+        """,
+        "The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
+        " \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)")
+
+
 def test_672_missing_type(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
