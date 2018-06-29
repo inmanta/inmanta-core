@@ -211,9 +211,9 @@ class Scheduler(object):
         basequeue = []
         # queue for RV's that are delayed
         waitqueue = []
-        # queue for RV's that are delayed and had no waiters when they were first in the waitqueue
+        # queue for RV's that are delayed and had no effective waiters when they were first in the waitqueue
         zerowaiters = []
-        # queue containing everything, to find haning statements
+        # queue containing everything, to find hanging statements
         all_statements = []
 
         # Wrap in object to pass around
@@ -255,7 +255,7 @@ class Scheduler(object):
             # find a RV that has waiters, so freezing creates progress
             while len(waitqueue) > 0 and not progress:
                 next = waitqueue.pop(0)
-                if len(next.waiters) == 0:
+                if next.get_progress_potential() == 0:
                     zerowaiters.append(next)
                 elif next.get_waiting_providers() > 0:
                     # definitely not done
@@ -270,9 +270,9 @@ class Scheduler(object):
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = [w for w in zerowaiters if len(w.waiters) is not 0]
+                waitqueue = [w for w in zerowaiters if w.get_progress_potential() is not 0]
                 queue.waitqueue = waitqueue
-                zerowaiters = [w for w in zerowaiters if len(w.waiters) is 0]
+                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() is 0]
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
                     next = waitqueue.pop(0)

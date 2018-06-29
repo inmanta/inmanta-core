@@ -138,7 +138,7 @@ class For(GeneratorStatement):
         return list(set(base).union(ext) - set(var))
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
-        # pass context!
+        # pass context via requires!
         helper = GradualFor(self, resolver, queue)
 
         helperwrapped = ResultVariable()

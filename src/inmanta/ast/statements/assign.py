@@ -124,6 +124,9 @@ class SetAttribute(AssignStatement):
                queue: QueueScheduler,
                target: ResultVariable) -> None:
         instance = self.instance.execute(requires, resolver, queue)
+        if not isinstance(instance, Instance):
+            raise TypingException(self, "The object at %s is not an Entity but a %s with value %s" %
+                                  (self.instance, type(instance), instance))
         var = instance.get_attribute(self.attribute_name)
         if self.list_only and not var.is_multi():
             raise TypingException(self, "Can not use += on relations with multiplicity 1")

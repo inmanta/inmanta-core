@@ -397,3 +397,30 @@ def test_653_list_attribute_unset(snippetcompiler):
         """,
         "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
         " attribute bla ({dir}/main.cf:3) requires 1 values but only 0 are set")
+
+    
+def test_670_assign_on_relation(snippetcompiler):
+    snippetcompiler.setup_for_error_re(
+        """
+        h = std::Host(name="test", os=std::linux)
+        f = std::ConfigFile(host=h, path="a", content="")
+
+        h.files.path = "1"
+
+        """,
+        "The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
+        " \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)")
+
+
+def test_672_missing_type(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+        end
+
+        implementation test for Testt:
+        end
+
+        """,
+        "could not find type Testt in namespace __config__"
+        " (reported in Implementation(test) ({dir}/main.cf:5))")

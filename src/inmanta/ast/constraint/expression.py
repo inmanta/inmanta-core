@@ -437,7 +437,7 @@ class Or(LazyBinaryOperator):
 
 class In(BinaryOperator):
     """
-        The in operator for iterable types
+        The in operator for iterable types and dicts
     """
     __op = "in"
 
@@ -448,11 +448,13 @@ class In(BinaryOperator):
         """
             @see Operator#_op
         """
-        if not (isinstance(arg2, list) or (hasattr(arg2, "type") and arg2.type() == list)):
-            raise Exception("Operand two of 'in' can only be a list (%s)" % arg2[0])
-
-        for arg in arg2:
-            if arg == arg1:
-                return True
+        if isinstance(arg2, dict):
+            return arg1 in arg2
+        elif isinstance(arg2, list):
+            for arg in arg2:
+                if arg == arg1:
+                    return True
+        else:
+            raise Exception("Operand two of 'in' can only be a list or dict (%s)" % arg2[0])
 
         return False
