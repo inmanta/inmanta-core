@@ -192,6 +192,8 @@ def export_parser_config(parser):
     parser.add_argument("--metadata", dest="metadata", help="JSON metadata why this compile happened. If a non-json string is "
                         "passed it is used as the 'message' attribute in the metadata.",
                         default=None)
+    parser.add_argument("--model-export", dest="model_export", help="Export the configuration model to the server as metadata.",
+                        action="store_true", default=False)
 
 
 @command("export", help_msg="Export the configuration", parser_config=export_parser_config, require_project=True)
@@ -247,7 +249,7 @@ def export(options):
     # continue the export
 
     export = Exporter(options)
-    version, _ = export.run(types, scopes, metadata=metadata)
+    version, _ = export.run(types, scopes, metadata=metadata, model_export=options.model_export)
 
     if exp is not None:
         if not options.errors:
