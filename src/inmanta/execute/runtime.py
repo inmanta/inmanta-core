@@ -187,7 +187,12 @@ class DelayedResultVariable(ResultVariable):
         self.queued = False
 
     def get_waiting_providers(self):
+        """How many values are definitely still waiting for"""
         raise NotImplementedError()
+
+    def get_progress_potential(self):
+        """How many are actually waiting for us """
+        return len(self.waiters)
 
 
 class Promise(object):
@@ -231,7 +236,15 @@ class ListVariable(DelayedResultVariable):
             if value in self.value:
                 return
             else:
-                raise RuntimeException(None, "List modified after freeze")
+                if isinstance(value, list):
+                    if len(value) == 0:
+                        # empty list terminates list addition
+                        return
+                    for subvalue in value:
+                        if subvalue not in self.value:
+                            raise RuntimeException(None, "List modified after freeze")
+                else:
+                    raise RuntimeException(None, "List modified after freeze")
 
         if isinstance(value, list):
             if len(value) == 0:
@@ -289,6 +302,10 @@ class ListVariable(DelayedResultVariable):
 
     def is_multi(self):
         return True
+
+    def get_progress_potential(self):
+        """How many are actually waiting for us """
+        return len(self.waiters) - len(self.listeners)
 
 
 class OptionVariable(DelayedResultVariable):
