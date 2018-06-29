@@ -2333,6 +2333,7 @@ Test(attributes=["blah", "foo"])
 """)
     compiler.do_compile()
 
+
 def test_643_cycle_empty(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Alpha:
