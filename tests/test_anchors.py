@@ -63,3 +63,39 @@ implement Test using a
     verify_anchor(19, 22, 26, 2)
     verify_anchor(23, 11, 15, 2)
     verify_anchor(23, 22, 23, 19)
+
+
+def test_anchors_two(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    list a = ["a"]
+    dict b
+end
+
+a = Test(b={})
+z = a.a
+u = a.b
+
+implementation a for Test:
+
+end
+
+implement Test using a
+""", autostd=False)
+    anchormap = compiler.anchormap()
+
+    assert len(anchormap) == 5
+
+    checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
+
+    def verify_anchor(flnr, s, e, tolnr):
+        assert checkmap[(flnr, s, e)] == tolnr
+
+    for f, t in anchormap:
+        print("%s:%d -> %s" % (f, f.end_char, t))
+    verify_anchor(7, 5, 9, 2)
+    verify_anchor(7, 10, 11, 4)
+    verify_anchor(11, 22, 26, 2)
+    verify_anchor(15, 22, 23, 11)
+    verify_anchor(15, 11, 15, 2)
+    

@@ -402,6 +402,10 @@ class List(Type, list):
     def __str__(self):
         return list.__str__(self)
 
+    @classmethod
+    def get_location(cls) -> Location:
+        return None
+
 
 class Dict(Type, dict):
     """
