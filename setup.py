@@ -12,7 +12,7 @@ requires = [
         'python-dateutil',
         'pyyaml',
         'texttable',
-        'tornado<5.0.0',
+        'tornado < 5',
         'typing',
         'virtualenv',
         'typing',
