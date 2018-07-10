@@ -98,4 +98,3 @@ implement Test using a
     verify_anchor(11, 22, 26, 2)
     verify_anchor(15, 22, 23, 11)
     verify_anchor(15, 11, 15, 2)
-    
