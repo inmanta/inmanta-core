@@ -21,6 +21,6 @@ sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.4.0
 sphinx==1.7.5
 texttable==1.4.0
-tornado==4.5.3
+tornado==5.1
 typing==3.6.4
 virtualenv==16.0.0
