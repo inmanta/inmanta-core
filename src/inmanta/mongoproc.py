@@ -123,7 +123,6 @@ class MongoProc(object):
             os.kill(self.process.pid, 9)
         self.process.wait()
 
-
         if self._db_path_is_temporary:
             shutil.rmtree(self.db_path)
             self.db_path = None
