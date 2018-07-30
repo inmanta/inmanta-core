@@ -172,6 +172,7 @@ class DelayedResultVariable(ResultVariable):
     def freeze(self):
         if self.hasValue:
             return
+        self.queued = True
         self.hasValue = True
         for waiter in self.waiters:
             waiter.ready(self)
@@ -186,7 +187,12 @@ class DelayedResultVariable(ResultVariable):
         self.queued = False
 
     def get_waiting_providers(self):
+        """How many values are definitely still waiting for"""
         raise NotImplementedError()
+
+    def get_progress_potential(self):
+        """How many are actually waiting for us """
+        return len(self.waiters)
 
 
 class Promise(object):
@@ -230,7 +236,15 @@ class ListVariable(DelayedResultVariable):
             if value in self.value:
                 return
             else:
-                raise RuntimeException(None, "List modified after freeze")
+                if isinstance(value, list):
+                    if len(value) == 0:
+                        # empty list terminates list addition
+                        return
+                    for subvalue in value:
+                        if subvalue not in self.value:
+                            raise RuntimeException(None, "List modified after freeze")
+                else:
+                    raise RuntimeException(None, "List modified after freeze")
 
         if isinstance(value, list):
             if len(value) == 0:
@@ -262,11 +276,11 @@ class ListVariable(DelayedResultVariable):
             value.set_attribute(self.attribute.end.name, self.myself, location, False)
 
         if self.attribute.high is not None:
-            if self.attribute.high > len(self.value):
+            if len(self.value) > self.attribute.high:
                 raise RuntimeException(None, "List over full: max nr of items is %d, content is %s" %
                                        (self.attribute.high, self.value))
 
-            if self.attribute.high > len(self.value):
+            if self.attribute.high == len(self.value):
                 self.freeze()
 
         if self.can_get():
@@ -288,6 +302,10 @@ class ListVariable(DelayedResultVariable):
 
     def is_multi(self):
         return True
+
+    def get_progress_potential(self):
+        """How many are actually waiting for us """
+        return len(self.waiters) - len(self.listeners)
 
 
 class OptionVariable(DelayedResultVariable):
@@ -658,7 +676,9 @@ class Instance(ExecutionContext, Locatable, Resolver):
                     attr = self.type.get_attribute(k)
                     if attr.is_multi():
                         low = attr.low
-                        length = len(v.value)
+                        # none for list attributes
+                        # list for n-ary relations
+                        length = 0 if v.value is None else len(v.value)
                         excns.append(UnsetException(
                             "The object %s is not complete: attribute %s (%s) requires %d values but only %d are set" %
                             (self, k, attr.location, low, length), self, attr))

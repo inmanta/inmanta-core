@@ -25,9 +25,8 @@ from tempfile import mktemp
 import socket
 
 
-from mongobox import MongoBox
 import pytest
-from inmanta import config, data, command
+from inmanta import config, data, command, mongoproc
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
@@ -49,15 +48,15 @@ DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 @pytest.fixture(scope="session", autouse=True)
 def mongo_db():
     db_path = tempfile.mkdtemp(dir="/dev/shm")
-    mongobox = MongoBox(db_path=db_path)
+    mproc = mongoproc.MongoProc(db_path=db_path, port=get_free_tcp_port())
     port_envvar = DEFAULT_PORT_ENVVAR
 
-    mongobox.start()
-    os.environ[port_envvar] = str(mongobox.port)
+    mproc.start()
+    os.environ[port_envvar] = str(mproc.port)
 
-    yield mongobox
+    yield mproc
 
-    mongobox.stop()
+    mproc.stop()
     del os.environ[port_envvar]
     shutil.rmtree(db_path)
 
@@ -76,7 +75,11 @@ def clean_reset(mongo_client):
     reset_all()
 
     for db_name in mongo_client.database_names():
-        mongo_client.drop_database(db_name)
+        if db_name != "admin":
+            try:
+                mongo_client.drop_database(db_name)
+            except Exception:
+                pass
 
 
 @pytest.fixture(scope="session")
