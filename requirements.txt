@@ -11,13 +11,13 @@ pymongo==3.7.0
 pytest-cover==3.0.0
 pytest-randomly==1.2.3
 pytest-tornado==0.5.0
-pytest==3.6.2
+pytest==3.6.4
 python-dateutil==2.7.2
-pyyaml==3.12
+pyyaml==3.13
 six==1.11.0
 sphinx-argparse==0.2.2
 sphinx-autodoc-annotation==1.0-1
-sphinx-rtd-theme==0.4.0
+sphinx-rtd-theme==0.4.1
 sphinx==1.7.5
 texttable==1.4.0
 tornado==4.5.3
