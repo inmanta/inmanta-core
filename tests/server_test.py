@@ -23,7 +23,6 @@ import logging
 import string
 import random
 
-from mongobox.unittest import MongoTestCase
 from inmanta import config
 from inmanta.server import Server
 from tornado.testing import AsyncTestCase
@@ -32,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 PORT = "45678"
 
 
-class ServerTest(MongoTestCase, AsyncTestCase):
+class ServerTest(AsyncTestCase):
 
     def __init__(self, methodName='runTest'):  # noqa: H803
         MongoTestCase.__init__(self, methodName)

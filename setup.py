@@ -4,7 +4,6 @@ requires = [
         'click',
         'colorlog',
         'execnet',
-        'mongobox',
         'motor >= 1.1',
         'netifaces',
         'ply',
