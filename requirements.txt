@@ -7,7 +7,7 @@ motor==2.0.0
 netifaces==0.10.7
 ply==3.11
 PyJWT==1.6.4
-pymongo==3.7.0
+pymongo==3.7.1
 pytest-cover==3.0.0
 pytest-randomly==1.2.3
 pytest-tornado==0.5.0
