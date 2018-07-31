@@ -708,39 +708,34 @@ class CRUDHandler(ResourceHandler):
         try:
             self.pre(ctx, resource)
 
-            if resource.require_failed:
-                ctx.info("Skipping %(resource_id)s because of failed dependencies", resource_id=resource.id)
-                ctx.set_status(const.ResourceState.skipped)
+            # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
+            # state defines purged=true but the read_resource fails to set it to false if the resource does exist
+            current = resource.clone(purged=False)
+            changes = {}
+            try:
+                self.read_resource(ctx, current)
+                changes = self._diff(current, resource)
 
+            except ResourcePurged:
+                if not resource.purged:
+                    changes["purged"] = dict(desired=resource.purged, current=True)
+
+            for field, values in changes.items():
+                ctx.add_change(field, desired=values["desired"], current=values["current"])
+
+            if not dry_run:
+                if "purged" in changes:
+                    if not changes["purged"]["desired"]:
+                        self.create_resource(ctx, resource)
+                    else:
+                        self.delete_resource(ctx, resource)
+
+                elif len(changes) > 0:
+                    self.update_resource(ctx, changes, resource)
+
+                ctx.set_status(const.ResourceState.deployed)
             else:
-                # current is clone, except for purged is set to false to prevent a bug that occurs often where the desired
-                # state defines purged=true but the read_resource fails to set it to false if the resource does exist
-                current = resource.clone(purged=False)
-                changes = {}
-                try:
-                    self.read_resource(ctx, current)
-                    changes = self._diff(current, resource)
-
-                except ResourcePurged:
-                    if not resource.purged:
-                        changes["purged"] = dict(desired=resource.purged, current=True)
-
-                for field, values in changes.items():
-                    ctx.add_change(field, desired=values["desired"], current=values["current"])
-
-                if not dry_run:
-                    if "purged" in changes:
-                        if not changes["purged"]["desired"]:
-                            self.create_resource(ctx, resource)
-                        else:
-                            self.delete_resource(ctx, resource)
-
-                    elif len(changes) > 0:
-                        self.update_resource(ctx, changes, resource)
-
-                    ctx.set_status(const.ResourceState.deployed)
-                else:
-                    ctx.set_status(const.ResourceState.dry)
+                ctx.set_status(const.ResourceState.dry)
 
             self.post(ctx, resource)
         except SkipResource as e:
