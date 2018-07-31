@@ -29,6 +29,10 @@ from inmanta.module import Project
 LOGGER = logging.getLogger(__name__)
 
 
+class ResourceException(Exception):
+    pass
+
+
 class resource(object):  # noqa: H801
     """
         A decorator that registers a new resource. The decorator must be applied to classes that inherit from
@@ -58,6 +62,11 @@ class resource(object):  # noqa: H801
 
         resource._resources[self._cls_name] = (cls, self._options)
         return cls
+
+    @classmethod
+    def validate(cls):
+        for resource, _ in cls._resources.values():
+            resource.validate()
 
     @classmethod
     def get_entity_resources(cls):
@@ -175,6 +184,9 @@ def serialize_proxy(d):
         return [serialize_proxy(value) for value in d]
 
     return d
+
+
+RESERVED_FOR_RESOURCE = set(["id", "version", "model", "requires", "unknowns", "set_version", "clone", "is_type", "serialize"])
 
 
 class Resource(metaclass=ResourceMeta):
@@ -330,15 +342,21 @@ class Resource(metaclass=ResourceMeta):
 
         return obj
 
+    @classmethod
+    def validate(cls):
+        for field in cls.fields:
+            if field.startswith("_"):
+                raise ResourceException("Resource field names can not start with _, reported in %s" % cls.__name__)
+            if field in RESERVED_FOR_RESOURCE:
+                raise ResourceException("Resource %s is a reserved keyword and not a valid field name, reported in %s" %
+                                        (field, cls.__name__))
+
     def __init__(self, _id):
         self.id = _id
         self.version = 0
         self.requires = set()
-        self.requires_queue = {}
         self.unknowns = set()
         self.model = None
-        self.do_reload = False
-        self.require_failed = False
 
         if not hasattr(self.__class__, "fields"):
             raise Exception("A resource should have a list of fields")
@@ -359,26 +377,6 @@ class Resource(metaclass=ResourceMeta):
             self.unknowns.add(name)
 
         self.__dict__[name] = value
-
-    def add_require(self, rid, version):
-        """
-            This resource required resource with id $rid to be at version $version
-            or higher.
-        """
-        self.requires_queue[rid] = version
-
-    def update_require(self, rid, version, failed=False):
-        """
-            This method is called when a resource with id $rid is updated to
-            $version
-        """
-        if failed:
-            self.require_failed = True
-
-        if rid in self.requires_queue and self.requires_queue[rid] <= version:
-            del self.requires_queue[rid]
-
-        return len(self.requires_queue) == 0
 
     def __str__(self):
         return str(self.id)

@@ -522,11 +522,6 @@ class ResourceHandler(object):
         try:
             self.pre(ctx, resource)
 
-            if resource.require_failed:
-                ctx.info(msg="Skipping %(resource_id)s because of failed dependencies", resource_id=resource.id)
-                ctx.set_status(const.ResourceState.skipped)
-                return
-
             changes = self.list_changes(ctx, resource)
             ctx.update_changes(changes)
 

@@ -147,6 +147,7 @@ class Exporter(object):
         """
             Load all registered resources
         """
+        resource.validate()
         entities = resource.get_entity_resources()
         resource_mapping = {}
         ignored_set = set()
