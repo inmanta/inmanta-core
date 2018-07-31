@@ -84,6 +84,7 @@ def test_primary_selection(motor):
     futures = Collector()
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
+    am.add_future = futures
 
     @gen.coroutine
     def assert_agent(name: str, state: str, sid: UUID):
@@ -134,7 +135,7 @@ def test_primary_selection(motor):
     yield assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
     # expire first
-    am.expire(ts1)
+    am.expire(ts1, 100)
     yield futures.proccess()
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", True)
@@ -142,7 +143,7 @@ def test_primary_selection(motor):
     yield assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
     # expire second
-    am.expire(ts2)
+    am.expire(ts2, 100)
     yield futures.proccess()
     assert len(am.sessions) == 0
     yield assert_agents("paused", "down", "down")
@@ -165,6 +166,7 @@ def test_api(motor):
     futures = Collector()
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
+    am.add_future = futures
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
@@ -247,7 +249,7 @@ def test_api(motor):
                             'environment': env2.id, "state": "down"}]}
     assert_equal_ish(shouldbe, all_agents, ['name'])
 
-    code, all_agents = yield am.list_agents(env2.id)
+    code, all_agents = yield am.list_agents(env2)
     assert code == 200
     shouldbe = {
         'agents': [{'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
@@ -269,6 +271,7 @@ def test_db_clean(motor):
     futures = Collector()
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
+    am.add_future = futures
 
     @gen.coroutine
     def assert_agent(name: str, state: str, sid: UUID):
@@ -318,7 +321,7 @@ def test_db_clean(motor):
     yield assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
     # expire first
-    am.expire(ts1)
+    am.expire(ts1, 100)
     yield futures.proccess()
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", True)
@@ -327,6 +330,7 @@ def test_db_clean(motor):
 
     # failover
     am = AgentManager(server, False)
+    am.add_future = futures
     yield am.clean_db()
 
     # one session
@@ -354,7 +358,7 @@ def test_db_clean(motor):
     yield assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
     # expire first
-    am.expire(ts1)
+    am.expire(ts1, 100)
     yield futures.proccess()
     assert len(am.sessions) == 1
     ts2.get_client().set_state.assert_called_with("agent2", True)
@@ -362,7 +366,7 @@ def test_db_clean(motor):
     yield assert_agents("paused", "up", "up", sid2=ts2.id, sid3=ts2.id)
 
     # expire second
-    am.expire(ts2)
+    am.expire(ts2, 100)
     yield futures.proccess()
     assert len(am.sessions) == 0
     yield assert_agents("paused", "down", "down")

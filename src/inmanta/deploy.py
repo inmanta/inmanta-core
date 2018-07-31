@@ -110,6 +110,7 @@ port=%(server_port)s
         args = [sys.executable, "-m", "inmanta.app", "-vvv", "-c", server_config, "server"]
 
         self._server_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
         LOGGER.debug("Started server on port %d", self._server_port)
 
         while self._server_proc.poll() is None:

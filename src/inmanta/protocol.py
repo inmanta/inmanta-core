@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 import logging
 import socket
 import time
@@ -31,18 +30,180 @@ import warnings
 import io
 import gzip
 
-import tornado.web
-from tornado import gen, queues, web
+import tornado
+from tornado import gen, web
 from inmanta import methods, const, execute
 from inmanta import config as inmanta_config
-from tornado.httpserver import HTTPServer
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
-import ssl
 import jwt
+
+from inmanta.util import Scheduler
+
 
 LOGGER = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
+
+"""
+
+RestServer  => manages tornado/handlers, marshalling, dispatching, and endpoints
+
+ServerSlice => contributes handlers and methods
+
+ServerSlice.server [1] -- RestServer.endpoints [1:]
+
+"""
+
+
+# Util functions
+def custom_json_encoder(o):
+    """
+        A custom json encoder that knows how to encode other types commonly used by Inmanta
+    """
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime):
+        return o.isoformat()
+
+    if hasattr(o, "to_dict"):
+        return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
+
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    if isinstance(o, execute.util.Unknown):
+        return const.UNKNOWN_STRING
+
+    LOGGER.error("Unable to serialize %s", o)
+    raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def json_encode(value):
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+
+
+def gzipped_json(value):
+    value = json_encode(value)
+    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
+        return False, value
+
+    gzip_value = io.BytesIO()
+    gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
+
+    gzip_file.write(value.encode())
+    gzip_file.close()
+
+    return True, gzip_value.getvalue()
+
+
+def sh(msg, max_len=10):
+    if len(msg) < max_len:
+        return msg
+    return msg[0:max_len - 3] + "..."
+
+
+def encode_token(client_types, environment=None, idempotent=False, expire=None):
+    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
+
+    payload = {
+        "iss": cfg.issuer,
+        "aud": [cfg.audience],
+        const.INMANTA_URN + "ct": ",".join(client_types),
+    }
+
+    if not idempotent:
+        payload["iat"] = int(time.time())
+
+        if cfg.expire > 0:
+            payload["exp"] = int(time.time() + cfg.expire)
+        elif expire is not None:
+            payload["exp"] = int(time.time() + expire)
+
+    if environment is not None:
+        payload[const.INMANTA_URN + "env"] = environment
+
+    return jwt.encode(payload, cfg.key, cfg.algo).decode()
+
+
+def decode_token(token):
+    try:
+        # First decode the token without verification
+        header = jwt.get_unverified_header(token)
+        payload = jwt.decode(token, verify=False)
+    except Exception as e:
+        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
+
+    if "iss" not in payload:
+        raise UnauhorizedError("Issuer is required in token to validate.")
+
+    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
+    if cfg is None:
+        raise UnauhorizedError("Unknown issuer for token")
+
+    alg = header["alg"].lower()
+    if alg == "hs256":
+        key = cfg.key
+    elif alg == "rs256":
+        if "kid" not in header:
+            raise UnauhorizedError("A kid is required for RS256")
+        kid = header["kid"]
+        if kid not in cfg.keys:
+            raise UnauhorizedError("The kid provided in the token does not match a known key. Check the jwks_uri or try "
+                                   "restarting the server to load any new keys.")
+
+        key = cfg.keys[kid]
+    else:
+        raise UnauhorizedError("Algorithm %s is not supported." % alg)
+
+    try:
+        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
+        ct_key = const.INMANTA_URN + "ct"
+        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
+    except Exception as e:
+        raise UnauhorizedError(*e.args)
+
+    return payload
+
+
+def authorize_request(auth_data, metadata, message, config):
+    """
+        Authorize a request based on the given data
+    """
+    if auth_data is None:
+        return
+
+    # Enforce environment restrictions
+    env_key = const.INMANTA_URN + "env"
+    if env_key in auth_data:
+        if env_key not in metadata:
+            raise UnauhorizedError("The authorization token is scoped to a specific environment.")
+
+        if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
+            raise UnauhorizedError("The authorization token is not valid for the requested environment.")
+
+    # Enforce client_types restrictions
+    ok = False
+    ct_key = const.INMANTA_URN + "ct"
+    for ct in auth_data[ct_key]:
+        if ct in config[0]["client_types"]:
+            ok = True
+
+    if not ok:
+        raise UnauhorizedError("The authorization token does not have a valid client type for this call." +
+                               " (%s provided, %s expected" % (auth_data[ct_key], config[0]["client_types"]))
+
+    return
+
+
+# API
+class UnauhorizedError(Exception):
+    pass
 
 
 class Result(object):
@@ -112,397 +273,11 @@ class Result(object):
         self._callback = fnc
 
 
-class Transport(object):
-    """
-        This class implements a transport for the Inmanta protocol.
+# Tornado Interface
 
-        :param end_point_name: The name of the endpoint to which this transport belongs. This is used
-            for logging and configuration purposes
-    """
-    @classmethod
-    def create(cls, transport_class, endpoint=None):
-        """
-            Create an instance of the transport class
-        """
-        return transport_class(endpoint)
 
-    def __init__(self, endpoint=None):
-        self.__end_point = endpoint
-        self.daemon = True
-        self._connected = False
-
-    endpoint = property(lambda x: x.__end_point)
-
-    def get_id(self):
-        """
-            Returns a unique id for a transport on an endpoint
-        """
-        return "%s_%s_transport" % (self.__end_point.name, self.__class__.__transport_name__)
-
-    id = property(get_id)
-
-    def start_endpoint(self):
-        """
-            Start the transport as endpoint
-        """
-        self.start()
-
-    def stop_endpoint(self):
-        """
-            Stop the transport as endpoint
-        """
-        self.stop()
-
-    def start_client(self):
-        """
-            Start this transport as client
-        """
-        self.start()
-
-    def stop_client(self):
-        """
-            Stop this transport as client
-        """
-        self.stop()
-
-    def start(self):
-        """
-            Start the transport as a new thread
-        """
-
-    def stop(self):
-        """
-            Stop the transport
-        """
-        self._connected = False
-
-    def call(self, method, destination=None, **kwargs):
-        """
-            Perform a method call
-        """
-        raise NotImplementedError()
-
-    def _decode(self, body):
-        """
-            Decode a response body
-        """
-        if body is not None and len(body) > 0:
-            body = json.loads(tornado.escape.to_basestring(body))
-        else:
-            body = None
-
-        return body
-
-    def set_connected(self):
-        """
-            Mark this transport as connected
-        """
-        LOGGER.debug("Transport %s is connected", self.get_id())
-        self._connected = True
-
-    def is_connected(self):
-        """
-            Is this transport connected
-        """
-        return self._connected
-
-
-def custom_json_encoder(o):
-    """
-        A custom json encoder that knows how to encode other types commonly used by Inmanta
-    """
-    if isinstance(o, uuid.UUID):
-        return str(o)
-
-    if isinstance(o, datetime):
-        return o.isoformat()
-
-    if hasattr(o, "to_dict"):
-        return o.to_dict()
-
-    if isinstance(o, enum.Enum):
-        return o.name
-
-    if isinstance(o, Exception):
-        # Logs can push exceptions through RPC. Return a string representation.
-        return str(o)
-
-    if isinstance(o, execute.util.Unknown):
-        return const.UNKNOWN_STRING
-
-    LOGGER.error("Unable to serialize %s", o)
-    raise TypeError(repr(o) + " is not JSON serializable")
-
-
-def json_encode(value):
-    # see json_encode in tornado.escape
-    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
-
-
-def gzipped_json(value):
-    value = json_encode(value)
-    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
-        return False, value
-
-    gzip_value = io.BytesIO()
-    gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
-
-    gzip_file.write(value.encode())
-    gzip_file.close()
-
-    return True, gzip_value.getvalue()
-
-
-class UnauhorizedError(Exception):
-    pass
-
-
-def encode_token(client_types, environment=None, idempotent=False, expire=None):
-    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
-
-    payload = {
-        "iss": cfg.issuer,
-        "aud": [cfg.audience],
-        const.INMANTA_URN + "ct": ",".join(client_types),
-    }
-
-    if not idempotent:
-        payload["iat"] = int(time.time())
-
-        if cfg.expire > 0:
-            payload["exp"] = int(time.time() + cfg.expire)
-        elif expire is not None:
-            payload["exp"] = int(time.time() + expire)
-
-    if environment is not None:
-        payload[const.INMANTA_URN + "env"] = environment
-
-    return jwt.encode(payload, cfg.key, cfg.algo).decode()
-
-
-def decode_token(token):
-    try:
-        # First decode the token without verification
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, verify=False)
-    except Exception as e:
-        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
-
-    if "iss" not in payload:
-        raise UnauhorizedError("Issuer is required in token to validate.")
-
-    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
-    if cfg is None:
-        raise UnauhorizedError("Unknown issuer for token")
-
-    alg = header["alg"].lower()
-    if alg == "hs256":
-        key = cfg.key
-    elif alg == "rs256":
-        if "kid" not in header:
-            raise UnauhorizedError("A kid is required for RS256")
-        kid = header["kid"]
-        if kid not in cfg.keys:
-            raise UnauhorizedError("The kid provided in the token does not match a known key. Check the jwks_uri or try "
-                                   "restarting the server to load any new keys.")
-
-        key = cfg.keys[kid]
-    else:
-        raise UnauhorizedError("Algorithm %s is not supported." % alg)
-
-    try:
-        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
-        ct_key = const.INMANTA_URN + "ct"
-        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
-    except Exception as e:
-        raise UnauhorizedError(*e.args)
-
-    return payload
-
-
-class RESTHandler(tornado.web.RequestHandler):
-    """
-        A generic class use by the transport
-    """
-
-    def initialize(self, transport: Transport, config):
-        self._transport = transport
-        self._config = config
-
-    def _get_config(self, http_method):
-        if http_method.upper() not in self._config:
-            allowed = ", ".join(self._config.keys())
-            self.set_header("Allow", allowed)
-            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" %
-                                             (http_method, allowed))
-            return
-
-        return self._config[http_method]
-
-    def get_auth_token(self, headers: dict):
-        """
-            Get the auth token provided by the caller. The token is provided as a bearer token.
-        """
-        if "Authorization" not in headers:
-            return None
-
-        parts = headers["Authorization"].split(" ")
-        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
-            LOGGER.warning("Invalid authentication header, Inmanta expects a bearer token. (%s was provided)",
-                           headers["Authorization"])
-            return None
-
-        return decode_token(parts[1])
-
-    def respond(self, body, headers, status):
-        if body is not None:
-            self.write(json_encode(body))
-
-        for header, value in headers.items():
-            self.set_header(header, value)
-
-        self.set_status(status)
-
-    @gen.coroutine
-    def _call(self, kwargs, http_method, call_config):
-        """
-            An rpc like call
-        """
-        if call_config is None:
-            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
-            self.respond(body, headers, status)
-            return
-
-        self.set_header("Access-Control-Allow-Origin", "*")
-        try:
-            message = self._transport._decode(self.request.body)
-            if message is None:
-                message = {}
-
-            for key, value in self.request.query_arguments.items():
-                if len(value) == 1:
-                    message[key] = value[0].decode("latin-1")
-                else:
-                    message[key] = [v.decode("latin-1") for v in value]
-
-            request_headers = self.request.headers
-
-            try:
-                auth_token = self.get_auth_token(request_headers)
-            except UnauhorizedError as e:
-                self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
-                return
-
-            auth_enabled = inmanta_config.Config.get("server", "auth", False)
-            if not auth_enabled or auth_token is not None:
-                result = yield self._transport._execute_call(kwargs, http_method, call_config,
-                                                             message, request_headers, auth_token)
-                self.respond(*result)
-            else:
-                self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))
-        except ValueError:
-            LOGGER.exception("An exception occured")
-            self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
-
-    @gen.coroutine
-    def head(self, *args, **kwargs):
-        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
-
-    @gen.coroutine
-    def get(self, *args, **kwargs):
-        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
-
-    @gen.coroutine
-    def post(self, *args, **kwargs):
-        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
-
-    @gen.coroutine
-    def delete(self, *args, **kwargs):
-        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
-
-    @gen.coroutine
-    def patch(self, *args, **kwargs):
-        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
-
-    @gen.coroutine
-    def put(self, *args, **kwargs):
-        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
-
-    @gen.coroutine
-    def options(self, *args, **kwargs):
-        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
-        if len(self._transport.headers):
-            allow_headers += ", " + ", ".join(self._transport.headers)
-
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", allow_headers)
-
-        self.set_status(200)
-
-
-class StaticContentHandler(tornado.web.RequestHandler):
-    def initialize(self, transport: Transport, content, content_type):
-        self._transport = transport
-        self._content = content
-        self._content_type = content_type
-
-    def get(self, *args, **kwargs):
-        self.set_header("Content-Type", self._content_type)
-        self.write(self._content)
-        self.set_status(200)
-
-
-def sh(msg, max_len=10):
-    if len(msg) < max_len:
-        return msg
-    return msg[0:max_len - 3] + "..."
-
-
-def authorize_request(auth_data, metadata, message, config):
-    """
-        Authorize a request based on the given data
-    """
-    if auth_data is None:
-        return
-
-    # Enforce environment restrictions
-    env_key = const.INMANTA_URN + "env"
-    if env_key in auth_data:
-        if env_key not in metadata:
-            raise UnauhorizedError("The authorization token is scoped to a specific environment.")
-
-        if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
-            raise UnauhorizedError("The authorization token is not valid for the requested environment.")
-
-    # Enforce client_types restrictions
-    ok = False
-    ct_key = const.INMANTA_URN + "ct"
-    for ct in auth_data[ct_key]:
-        if ct in config[0]["client_types"]:
-            ok = True
-
-    if not ok:
-        raise UnauhorizedError("The authorization token does not have a valid client type for this call." +
-                               " (%s provided, %s expected" % (auth_data[ct_key], config[0]["client_types"]))
-
-    return
-
-
-class RESTTransport(Transport):
-    """"
-        A REST (json body over http) transport. Only methods that operate on resource can use all
-        HTTP verbs. For other methods the POST verb is used.
-    """
-    __transport_name__ = "rest"
-
-    def __init__(self, endpoint, connection_timout=120):
-        super().__init__(endpoint)
-        self.set_connected()
-        self._handlers = []
-        self.token = inmanta_config.Config.get(self.id, "token", None)
-        self.connection_timout = connection_timout
-        self.headers = set()
+# Shared
+class RESTBase(object):
 
     def _create_base_url(self, properties, msg=None, versioned=True):
         """
@@ -522,53 +297,16 @@ class RESTTransport(Transport):
 
         return url
 
-    def create_op_mapping(self):
+    def _decode(self, body):
         """
-            Build a mapping between urls, ops and methods
+            Decode a response body
         """
-        url_map = defaultdict(dict)
-        headers = set()
-        for method, method_handlers in self.endpoint.__methods__.items():
-            properties = method.__protocol_properties__
-            call = (self.endpoint, method_handlers[0])
+        if body is not None and len(body) > 0:
+            body = json.loads(tornado.escape.to_basestring(body))
+        else:
+            body = None
 
-            if "arg_options" in properties:
-                for opts in properties["arg_options"].values():
-                    if "header" in opts:
-                        headers.add(opts["header"])
-
-            url = self._create_base_url(properties)
-            properties["api_version"] = "1"
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-            url = self._create_base_url(properties, versioned=False)
-            properties = properties.copy()
-            properties["api_version"] = None
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-        headers.add("Authorization")
-        self.headers = headers
-        return url_map
-
-    def match_call(self, url, method):
-        """
-            Get the method call for the given url and http method
-        """
-        url_map = self.create_op_mapping()
-        for url_re, handlers in url_map.items():
-            if not url_re.endswith("$"):
-                url_re += "$"
-            match = re.match(url_re, url)
-            if match and method in handlers:
-                return match.groupdict(), handlers[method]
-
-        return None, None
-
-    def return_error_msg(self, status=500, msg="", headers={}):
-        body = {"message": msg}
-        headers["Content-Type"] = "application/json"
-        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
-        return body, headers, status
+        return body
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
@@ -719,70 +457,113 @@ class RESTTransport(Transport):
             LOGGER.exception("An exception occured during the request.")
             return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
 
-    def add_static_handler(self, location, path, default_filename=None, start=False):
+
+# Client side
+class RESTTransport(RESTBase):
+    """"
+        A REST (json body over http) transport. Only methods that operate on resource can use all
+        HTTP verbs. For other methods the POST verb is used.
+    """
+    __transport_name__ = "rest"
+
+    def __init__(self, endpoint, connection_timout=120):
+        self.__end_point = endpoint
+        self.daemon = True
+        self._connected = False
+        self.set_connected()
+        self._handlers = []
+        self.token = inmanta_config.Config.get(self.id, "token", None)
+        self.connection_timout = connection_timout
+        self.headers = set()
+
+    endpoint = property(lambda x: x.__end_point)
+
+    def get_id(self):
         """
-            Configure a static handler to serve data from the specified path.
+            Returns a unique id for a transport on an endpoint
         """
-        if location[0] != "/":
-            location = "/" + location
+        return "%s_%s_transport" % (self.__end_point.name, self.__class__.__transport_name__)
 
-        if location[-1] != "/":
-            location = location + "/"
+    id = property(get_id)
 
-        options = {"path": path}
-        if default_filename is None:
-            options["default_filename"] = "index.html"
-
-        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
-        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
-
-        if start:
-            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
-
-    def add_static_content(self, path, content, content_type="application/javascript"):
-        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
-                                                                        "content_type": content_type}))
-
-    def start_endpoint(self):
+    def start_client(self):
         """
-            Start the transport
+            Start this transport as client
+        """
+        self.start()
+
+    def stop_client(self):
+        """
+            Stop this transport as client
+        """
+        self.stop()
+
+    def start(self):
+        """
+            Start the transport as a new thread
+        """
+        pass
+
+    def stop(self):
+        """
+            Stop the transport
+        """
+        self._connected = False
+
+    def set_connected(self):
+        """
+            Mark this transport as connected
+        """
+        LOGGER.debug("Transport %s is connected", self.get_id())
+        self._connected = True
+
+    def is_connected(self):
+        """
+            Is this transport connected
+        """
+        return self._connected
+
+    def create_op_mapping(self):
+        """
+            Build a mapping between urls, ops and methods
+        """
+        url_map = defaultdict(dict)
+        headers = set()
+        for method, method_handlers in self.endpoint.__methods__.items():
+            properties = method.__protocol_properties__
+            call = (self.endpoint, method_handlers[0])
+
+            if "arg_options" in properties:
+                for opts in properties["arg_options"].values():
+                    if "header" in opts:
+                        headers.add(opts["header"])
+
+            url = self._create_base_url(properties)
+            properties["api_version"] = "1"
+            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+
+            url = self._create_base_url(properties, versioned=False)
+            properties = properties.copy()
+            properties["api_version"] = None
+            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
+
+        headers.add("Authorization")
+        self.headers = headers
+        return url_map
+
+    def match_call(self, url, method):
+        """
+            Get the method call for the given url and http method
         """
         url_map = self.create_op_mapping()
+        for url_re, handlers in url_map.items():
+            if not url_re.endswith("$"):
+                url_re += "$"
+            match = re.match(url_re, url)
+            if match and method in handlers:
+                return match.groupdict(), handlers[method]
 
-        for url, configs in url_map.items():
-            handler_config = {}
-            for op, cfg in configs.items():
-                handler_config[op] = cfg
-
-            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
-            LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
-
-        port = 8888
-        if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
-            port = inmanta_config.Config.get()[self.id]["port"]
-
-        application = tornado.web.Application(self._handlers, compress_response=True)
-
-        crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
-        key = inmanta_config.Config.get("server", "ssl_key_file", None)
-
-        if(crt is not None and key is not None):
-            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            ssl_ctx.load_cert_chain(crt, key)
-
-            self.http_server = HTTPServer(application, decompress_request=True, ssl_options=ssl_ctx)
-            LOGGER.debug("Created REST transport with SSL")
-        else:
-            self.http_server = HTTPServer(application, decompress_request=True)
-
-        self.http_server.listen(port)
-
-        LOGGER.debug("Start REST transport")
-        super().start()
-
-    def stop_endpoint(self):
-        super().stop()
-        self.http_server.stop()
+        return None, None
 
     def _get_client_config(self):
         """
@@ -941,51 +722,6 @@ class EndpointMeta(type):
         return type.__new__(cls, class_name, bases, dct)
 
 
-class Scheduler(object):
-    """
-        An event scheduler class
-    """
-
-    def __init__(self, io_loop):
-        self._scheduled = set()
-        self._io_loop = io_loop
-
-    def add_action(self, action, interval, initial_delay=None):
-        """
-            Add a new action
-
-            :param action A function to call periodically
-            :param interval The interval between execution of actions
-            :param initial_delay Delay to the first execution, default to interval
-        """
-
-        if initial_delay is None:
-            initial_delay = interval
-
-        LOGGER.debug("Scheduling action %s every %d seconds with initial delay %d", action, interval, initial_delay)
-
-        def action_function():
-            LOGGER.info("Calling %s" % action)
-            if action in self._scheduled:
-                try:
-                    action()
-                except Exception:
-                    LOGGER.exception("Uncaught exception while executing scheduled action")
-
-                finally:
-                    self._io_loop.call_later(interval, action_function)
-
-        self._io_loop.call_later(initial_delay, action_function)
-        self._scheduled.add(action)
-
-    def remove(self, action):
-        """
-            Remove a scheduled action
-        """
-        if action in self._scheduled:
-            self._scheduled.remove(action)
-
-
 class Endpoint(object):
     """
         An end-point in the rpc framework
@@ -1038,215 +774,6 @@ class Endpoint(object):
         return self._node_name
 
     node_name = property(get_node_name)
-
-
-class Session(object):
-    """
-        An environment that segments agents connected to the server
-    """
-
-    def __init__(self, sessionstore, io_loop, sid, hang_interval, timout, tid, endpoint_names, nodename):
-        self._sid = sid
-        self._interval = hang_interval
-        self._timeout = timout
-        self._sessionstore = sessionstore
-        self._seen = time.time()
-        self._callhandle = None
-        self.expired = False
-
-        self.tid = tid
-        self.endpoint_names = endpoint_names
-        self.nodename = nodename
-
-        self._io_loop = io_loop
-
-        self._replies = {}
-        self.check_expire()
-        self._queue = queues.Queue()
-
-        self.client = ReturnClient(str(sid), self)
-
-    def check_expire(self):
-        if self.expired:
-            LOGGER.exception("Tried to expire session already expired")
-        ttw = self._timeout + self._seen - time.time()
-        if ttw < 0:
-            self.expire(self._seen - time.time())
-        else:
-            self._callhandle = self._io_loop.call_later(ttw, self.check_expire)
-
-    def get_id(self):
-        return self._sid
-
-    id = property(get_id)
-
-    def expire(self, timeout):
-        self.expired = True
-        if self._callhandle is not None:
-            self._io_loop.remove_timeout(self._callhandle)
-        self._sessionstore.expire(self, timeout)
-
-    def seen(self):
-        self._seen = time.time()
-
-    def _set_timeout(self, future, timeout, log_message):
-        def on_timeout():
-            if not self.expired:
-                LOGGER.warning(log_message)
-            future.set_exception(gen.TimeoutError())
-
-        timeout_handle = self._io_loop.add_timeout(self._io_loop.time() + timeout, on_timeout)
-        future.add_done_callback(lambda _: self._io_loop.remove_timeout(timeout_handle))
-
-    def put_call(self, call_spec, timeout=10):
-        future = tornado.concurrent.Future()
-
-        reply_id = uuid.uuid4()
-
-        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec["method"], call_spec["url"], self._sid)
-
-        q = self._queue
-        call_spec["reply_id"] = reply_id
-        q.put(call_spec)
-        self._set_timeout(future, timeout, "Call %s: %s %s for agent %s timed out." %
-                          (reply_id, call_spec["method"], call_spec["url"], self._sid))
-        self._replies[call_spec["reply_id"]] = future
-
-        return future
-
-    @gen.coroutine
-    def get_calls(self):
-        """
-            Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
-            fails.
-        """
-        try:
-            q = self._queue
-            call_list = []
-            call = yield q.get(timeout=self._io_loop.time() + self._interval)
-            call_list.append(call)
-            while q.qsize() > 0:
-                call = yield q.get()
-                call_list.append(call)
-
-            return call_list
-
-        except gen.TimeoutError:
-            return None
-
-    def set_reply(self, reply_id, data):
-        LOGGER.log(3, "Received Reply: %s", reply_id)
-        if reply_id in self._replies:
-            future = self._replies[reply_id]
-            del self._replies[reply_id]
-            if not future.done():
-                future.set_result(data)
-        else:
-            LOGGER.debug("Received Reply that is unknown: %s", reply_id)
-
-    def get_client(self):
-        return self.client
-
-
-class ServerEndpoint(Endpoint, metaclass=EndpointMeta):
-    """
-        A service that receives method calls over one or more transports
-    """
-    __methods__ = {}
-
-    def __init__(self, name, io_loop, transport=RESTTransport, interval=60, hangtime=None):
-        super().__init__(io_loop, name)
-        self._transport = transport
-
-        self._transport_instance = Transport.create(self._transport, self)
-        self._sched = Scheduler(self._io_loop)
-
-        self._heartbeat_cb = None
-        self.agent_handles = {}
-        self._sessions = {}
-        self.interval = interval
-        if hangtime is None:
-            hangtime = interval * 3 / 4
-        self.hangtime = hangtime
-
-    def schedule(self, call, interval=60):
-        self._sched.add_action(call, interval)
-
-    def start(self):
-        """
-            Start this end-point using the central configuration
-        """
-        LOGGER.debug("Starting transport for endpoint %s", self.name)
-        if self._transport_instance is not None:
-            self._transport_instance.start_endpoint()
-
-    def stop(self):
-        """
-            Stop the end-point and all of its transports
-        """
-        if self._transport_instance is not None:
-            self._transport_instance.stop_endpoint()
-            LOGGER.debug("Stopped %s", self._transport_instance)
-        # terminate all sessions cleanly
-        for session in self._sessions.copy().values():
-            session.expire(0)
-
-    def validate_sid(self, sid):
-        if isinstance(sid, str):
-            sid = uuid.UUID(sid)
-        return sid in self._sessions
-
-    def get_or_create_session(self, sid, tid, endpoint_names, nodename):
-        if isinstance(sid, str):
-            sid = uuid.UUID(sid)
-
-        if sid not in self._sessions:
-            session = self.new_session(sid, tid, endpoint_names, nodename)
-            self._sessions[sid] = session
-        else:
-            session = self._sessions[sid]
-            self.seen(session, endpoint_names)
-
-        return session
-
-    def new_session(self, sid, tid, endpoint_names, nodename):
-        LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
-        return Session(self, self._io_loop, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
-
-    def expire(self, session: Session, timeout):
-        LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
-        del self._sessions[session.id]
-
-    def seen(self, session: Session, endpoint_names: list):
-        LOGGER.debug("Seen session with id %s" % (session.get_id()))
-        session.seen()
-
-    @handle(methods.HeartBeatMethod.heartbeat, env="tid")
-    @gen.coroutine
-    def heartbeat(self, sid, env, endpoint_names, nodename):
-        LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
-
-        session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
-
-        LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-        call_list = yield session.get_calls()
-        if call_list is not None:
-            LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
-            return 200, {"method_calls": call_list}
-        else:
-            LOGGER.debug("Heartbeat wait expired for %s, returning. (long poll)", nodename)
-
-        return 200
-
-    @handle(methods.HeartBeatMethod.heartbeat_reply)
-    @gen.coroutine
-    def heartbeat_reply(self, sid, reply_id, data):
-        try:
-            env = self._sessions[sid]
-            env.set_reply(reply_id, data)
-            return 200
-        except Exception:
-            LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
 
 
 class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
@@ -1411,7 +938,7 @@ class Client(Endpoint, metaclass=ClientMeta):
         self._transport_instance = None
 
         LOGGER.debug("Start transport for client %s", self.name)
-        tr = Transport.create(self._transport, self)
+        tr = self._transport(self)
         self._transport_instance = tr
 
     @gen.coroutine
@@ -1428,6 +955,7 @@ class SyncClient(object):
     """
         A synchronous client that communicates with end-point based on its configuration
     """
+
     def __init__(self, name, timeout=120):
         self.name = name
         self.timeout = timeout

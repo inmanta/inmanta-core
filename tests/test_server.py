@@ -25,7 +25,7 @@ import pytest
 from inmanta.agent.agent import Agent
 from inmanta import data, protocol
 from inmanta import const
-from inmanta.server import config as opt
+from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
 from uuid import UUID
 from inmanta.export import upload_code
@@ -43,35 +43,38 @@ def test_autostart(server, client, environment):
     env = yield data.Environment.get_by_id(uuid.UUID(environment))
     yield env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
 
-    yield server.agentmanager.ensure_agent_registered(env, "iaas_agent")
-    yield server.agentmanager.ensure_agent_registered(env, "iaas_agentx")
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    sessionendpoint = server.get_endpoint(SLICE_SESSION_MANAGER)
 
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent"])
+    yield agentmanager.ensure_agent_registered(env, "iaas_agent")
+    yield agentmanager.ensure_agent_registered(env, "iaas_agentx")
+
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 20)
-    assert len(server._sessions) == 1
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent"])
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
+    assert len(sessionendpoint._sessions) == 1
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent"])
     assert not res
-    assert len(server._sessions) == 1
+    assert len(sessionendpoint._sessions) == 1
 
     LOGGER.warning("Killing agent")
-    server.agentmanager._agent_procs[env.id].terminate()
-    yield retry_limited(lambda: len(server._sessions) == 0, 20)
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent"])
+    agentmanager._agent_procs[env.id].terminate()
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 3)
-    assert len(server._sessions) == 1
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
+    assert len(sessionendpoint._sessions) == 1
 
     # second agent for same env
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agentx"])
+    res = yield agentmanager._ensure_agents(env, ["iaas_agentx"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 20)
-    assert len(server._sessions) == 1
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
+    assert len(sessionendpoint._sessions) == 1
 
     # Test stopping all agents
-    yield server.agentmanager.stop_agents(env)
-    assert len(server._sessions) == 0
-    assert len(server.agentmanager._agent_procs) == 0
+    yield agentmanager.stop_agents(env)
+    assert len(sessionendpoint._sessions) == 0
+    assert len(agentmanager._agent_procs) == 0
 
 
 @pytest.mark.gen_test(timeout=60)
@@ -80,6 +83,10 @@ def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
+
+    agentmanager = server.get_endpoint("server").agentmanager
+    sessionendpoint = server.get_endpoint("session")
+
     result = yield client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]
@@ -96,18 +103,18 @@ def test_autostart_dual_env(client, server):
     env2 = yield data.Environment.get_by_id(uuid.UUID(env_id2))
     yield env2.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": ""})
 
-    yield server.agentmanager.ensure_agent_registered(env, "iaas_agent")
-    yield server.agentmanager.ensure_agent_registered(env2, "iaas_agent")
+    yield agentmanager.ensure_agent_registered(env, "iaas_agent")
+    yield agentmanager.ensure_agent_registered(env2, "iaas_agent")
 
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent"])
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 20)
-    assert len(server._sessions) == 1
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
+    assert len(sessionendpoint._sessions) == 1
 
-    res = yield server.agentmanager._ensure_agents(env2, ["iaas_agent"])
+    res = yield agentmanager._ensure_agents(env2, ["iaas_agent"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 2, 20)
-    assert len(server._sessions) == 2
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 2, 20)
+    assert len(sessionendpoint._sessions) == 2
 
 
 @pytest.mark.gen_test(timeout=60)
@@ -119,28 +126,31 @@ def test_autostart_batched(client, server, environment):
     env = yield data.Environment.get_by_id(uuid.UUID(environment))
     yield env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
 
-    yield server.agentmanager.ensure_agent_registered(env, "iaas_agent")
-    yield server.agentmanager.ensure_agent_registered(env, "iaas_agentx")
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    sessionendpoint = server.get_endpoint(SLICE_SESSION_MANAGER)
 
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    yield agentmanager.ensure_agent_registered(env, "iaas_agent")
+    yield agentmanager.ensure_agent_registered(env, "iaas_agentx")
+
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 20)
-    assert len(server._sessions) == 1
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent"])
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
+    assert len(sessionendpoint._sessions) == 1
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent"])
     assert not res
-    assert len(server._sessions) == 1
+    assert len(sessionendpoint._sessions) == 1
 
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
     assert not res
-    assert len(server._sessions) == 1
+    assert len(sessionendpoint._sessions) == 1
 
     LOGGER.warning("Killing agent")
-    server.agentmanager._agent_procs[env.id].terminate()
-    yield retry_limited(lambda: len(server._sessions) == 0, 20)
-    res = yield server.agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
+    agentmanager._agent_procs[env.id].terminate()
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 0, 20)
+    res = yield agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
     assert res
-    yield retry_limited(lambda: len(server._sessions) == 1, 3)
-    assert len(server._sessions) == 1
+    yield retry_limited(lambda: len(sessionendpoint._sessions) == 1, 3)
+    assert len(sessionendpoint._sessions) == 1
 
 
 @pytest.mark.gen_test(timeout=10)
@@ -160,7 +170,7 @@ def test_version_removal(client, server):
     for _i in range(20):
         version += 1
 
-        yield server._purge_versions()
+        yield server.get_endpoint("server")._purge_versions()
         res = yield client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
         assert res.code == 200
         result = yield client.get_project(id=project_id)

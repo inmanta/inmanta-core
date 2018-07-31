@@ -40,6 +40,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from tornado import gen
 import re
 from tornado.ioloop import IOLoop
+from inmanta.server.bootloader import InmantaBootloader
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -142,11 +143,12 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     # causes handler failure
     IOLoop._instance = io_loop
 
-    from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(mongo_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -159,13 +161,13 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
 
     data.use_motor(motor)
 
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
+    ibl = InmantaBootloader()
+    ibl.start()
 
-    yield server
+    yield ibl.restserver
 
+    ibl.stop()
     del IOLoop._instance
-    server.stop()
     shutil.rmtree(state_dir)
 
 
@@ -174,7 +176,8 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
 def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
-    from inmanta.server import Server
+    IOLoop._instance = io_loop
+
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -208,7 +211,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
             config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()
-    config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(mongo_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -219,12 +224,18 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
 
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
+    ibl = InmantaBootloader()
+    ibl.start()
 
-    yield server
+    yield ibl.restserver
 
-    server.stop()
+    ibl.stop()
+
+    try:
+        del IOLoop._instance
+    except Exception:
+        pass
+
     shutil.rmtree(state_dir)
 
 
