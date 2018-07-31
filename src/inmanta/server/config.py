@@ -53,7 +53,8 @@ server_ssl_cert = Option("server", "ssl_cert_file", None,
 server_ssl_ca_cert = Option("server", "ssl_ca_cert_file", None,
                             "The CA cert file required to validate the server ssl cert. This setting is used by the server"
                             "to correctly configure the compiler and agents that the server starts itself. If not set and "
-                            "SSL is enabled, the server cert should be verifiable with the CAs installed in the OS.")
+                            "SSL is enabled, the server cert should be verifiable with the CAs installed in the OS.",
+                            is_str_opt)
 
 server_fact_expire = Option("server", "fact-expire", 3600,
                             "After how many seconds will discovered facts/parameters expire", is_time)

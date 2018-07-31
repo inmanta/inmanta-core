@@ -1554,7 +1554,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if opt.server_ssl_cert.get() is not None:
                 cmd.append("--ssl")
 
-            if opt.server_ssl_ca_cert is not None:
+            if opt.server_ssl_ca_cert.get() is not None:
                 cmd.append("--ssl-ca-cert")
                 cmd.append(opt.server_ssl_ca_cert.get())
 
