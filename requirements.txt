@@ -2,7 +2,7 @@ click==6.7
 colorlog==3.1.4
 cryptography==2.3.1
 execnet==1.4.1
-inmanta-sphinx==0.7
+inmanta-sphinx==0.8
 motor==2.0.0
 netifaces==0.10.7
 ply==3.11
