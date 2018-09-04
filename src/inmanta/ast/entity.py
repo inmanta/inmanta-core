@@ -29,6 +29,7 @@ from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
 
 from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
+from attr import attributes
 
 try:
     from typing import TYPE_CHECKING
@@ -376,6 +377,11 @@ class Entity(NamedType):
         """
             Add an index over the given attributes.
         """
+        # duplicate check
+        for index in self._index_def:
+            if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
+                return
+
         self._index_def.append(sorted(attributes))
         for child in self.child_entities:
             child.add_index(attributes)
