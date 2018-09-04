@@ -29,7 +29,6 @@ from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
 
 from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
-from attr import attributes
 
 try:
     from typing import TYPE_CHECKING
