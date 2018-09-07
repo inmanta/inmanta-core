@@ -16,20 +16,16 @@
     Contact: code@inmanta.com
 """
 
-
-from _io import StringIO
-import logging
 import os
 import shutil
 import subprocess
 import tempfile
-import unittest
 from subprocess import CalledProcessError
 import re
 
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
+from inmanta.module import ModuleTool, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import yaml
