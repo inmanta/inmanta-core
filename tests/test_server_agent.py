@@ -83,6 +83,13 @@ def resource_container():
         """
         fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
+    @resource("test::FailFast", agent="agent", id_attribute="key")
+    class FailFastR(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
 
@@ -177,6 +184,13 @@ def resource_container():
 
         def do_changes(self, ctx, resource, changes):
             raise Exception()
+
+    @provider("test::FailFast", name="test_failfast")
+    class FailFast(ResourceHandler):
+
+        def check_resource(self, ctx, resource):
+            raise Exception()
+
 
     @provider("test::Fact", name="test_fact")
     class Fact(ResourceHandler):
@@ -1847,6 +1861,101 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
     dry_run_id = result.result["dryruns"][0]["id"]
     result = yield client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
+
+    agent.stop()
+
+
+@pytest.mark.gen_test(timeout=30)
+def test_dryrun_failures(resource_container, io_loop, server, client):
+    """
+        test dryrun scaling
+    """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
+    resource_container.Provider.reset()
+    result = yield client.create_project("env-test")
+    project_id = result.result["project"]["id"]
+
+    result = yield client.create_environment(project_id=project_id, name="dev")
+    env_id = result.result["environment"]["id"]
+
+    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Noprov[agent1,key=key1],v=%d' % version,
+                  'purged': False,
+                  'send_event': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  }, {
+                  'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::FailFast[agent1,key=key2],v=%d' % version,
+                  'purged': False,
+                  'send_event': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  }, {
+                  'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::DoesNotExist[agent1,key=key2],v=%d' % version,
+                  'purged': False,
+                  'send_event': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  }
+                 ]
+
+    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # request a dryrun
+    result = yield client.dryrun_request(env_id, version)
+    assert result.code == 200
+    assert result.result["dryrun"]["total"] == len(resources)
+    assert result.result["dryrun"]["todo"] == len(resources)
+
+    # get the dryrun results
+    result = yield client.dryrun_list(env_id, version)
+    assert result.code == 200
+    assert len(result.result["dryruns"]) == 1
+
+    while result.result["dryruns"][0]["todo"] > 0:
+        result = yield client.dryrun_list(env_id, version)
+        print(result.result)
+        yield gen.sleep(0.1)
+
+    dry_run_id = result.result["dryruns"][0]["id"]
+    result = yield client.dryrun_report(env_id, dry_run_id)
+    assert result.code == 200
+
+    resources = result.result["dryrun"]["resources"]
+
+    def assert_handler_failed(resource, msg):
+        changes = resources[resource]
+        assert "changes" in changes
+        changes = changes["changes"]
+        assert "handler" in changes
+        change = changes["handler"]
+        assert change["current"] == "FAILED"
+        assert change["desired"] == msg
+
+    assert_handler_failed('test::Noprov[agent1,key=key1],v=%d' % version, "Unable to find a handler")
+    assert_handler_failed('test::FailFast[agent1,key=key2],v=%d' % version, "Handler failed")
+    assert_handler_failed('test::DoesNotExist[agent1,key=key2],v=%d' % version, "Resource Deserialization Failed")
 
     agent.stop()
 

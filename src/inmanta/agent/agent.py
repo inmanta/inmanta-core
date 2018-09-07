@@ -38,6 +38,7 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
+from inmanta.const import ResourceState
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -523,15 +524,34 @@ class AgentInstance(object):
                             ctx.exception("Unable to find a handler for %(resource_id)s (exception: %(exception)s",
                                           resource_id=str(resource.id), exception=str(e))
                             yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                  changes={})
+                                                                  changes={"handler": {"current": "FAILED",
+                                                                                       "desired": "Unable to find a handler"}})
                         else:
-                            yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
-                            yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
-                                                                  changes=ctx.changes)
+                            try:
+                                yield self.thread_pool.submit(provider.execute, ctx, resource, dry_run=True)
+                                changes = ctx.changes
+                                if changes is None:
+                                    changes = {}
+                                if(ctx.status == ResourceState.failed):
+                                    changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
+                                yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                                      changes=changes)
+                            except Exception as e:
+                                ctx.exception("Exception during dryrun for %(resource_id)s (exception: %(exception)s",
+                                              resource_id=str(resource.id), exception=str(e))
+                                changes = ctx.changes
+                                if changes is None:
+                                    changes = {}
+                                changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
+                                yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                                      changes=changes)
 
-                    except TypeError:
+                    except Exception:
                         ctx.exception("Unable to process resource for dryrun.")
-
+                        changes = {}
+                        changes["handler"] = {"current": "FAILED", "desired": "Resource Deserialization Failed"}
+                        yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
+                                                              changes=changes)
                     finally:
                         if provider is not None:
                             provider.close()
