@@ -1108,17 +1108,25 @@ class ModuleTool(object):
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
         lst.add_argument("-r", help="Output a list of requires that can be included in project.yml", dest="requires",
                          action="store_true")
+
         do = subparser.add_parser("do", help="Execute a command on all loaded modules")
         do.add_argument("command", metavar='command', help='the command to  execute')
+
         subparser.add_parser("update", help="Update all modules used in this project")
+
         subparser.add_parser("install", help="Install all modules required for this this project")
+
         subparser.add_parser("status", help="Run a git status on all modules and report")
+
         subparser.add_parser("push", help="Run a git push on all modules and report")
+
         # not currently working
         subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
+
         validate = subparser.add_parser(
             "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model")
         validate.add_argument("-r", "--repo", help="Additional repo to load modules from", action="append")
@@ -1130,6 +1138,7 @@ class ModuleTool(object):
                               action="store_true")
         validate.add_argument("-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag",
                               action="store_true")
+
         commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
         commit.add_argument("-m", "--message", help="Commit message", required=True)
         commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")

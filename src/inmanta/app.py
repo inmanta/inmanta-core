@@ -136,8 +136,24 @@ def list_commands(options):
         print(" %s: %s" % (cmd, info["help"]))
 
 
+def help_parser_config(parser: ArgumentParser):
+    parser.add_argument("subcommand", help="Output help for a particular subcommand",
+                        nargs="?", default=None)
+
+
+@command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
+def help_command(options):
+    if options.subcommand is None:
+        cmd_parser().print_help()
+    else:
+        subc = options.subcommand
+        parser = cmd_parser()
+        parser.parse_args([subc, "-h"])
+
+
 @command("modules", help_msg="Subcommand to manage modules",
-         parser_config=module.ModuleTool.modules_parser_config)
+         parser_config=module.ModuleTool.modules_parser_config,
+         aliases=["module"])
 def modules(options):
     tool = module.ModuleTool()
     tool.execute(options.cmd, options)
@@ -294,7 +310,7 @@ def cmd_parser():
                         "-v warning, -vv info and -vvv debug and -vvvv trace")
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"])
+        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
         if cmd_options["parser_config"] is not None:
             cmd_options["parser_config"](cmd_subparser)
         cmd_subparser.set_defaults(func=cmd_options["function"])

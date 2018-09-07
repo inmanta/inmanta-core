@@ -24,7 +24,7 @@ class Commander(object):
     __command_functions = {}
 
     @classmethod
-    def add(cls, name, function, help_msg, parser_config, require_project=False):
+    def add(cls, name, function, help_msg, parser_config, require_project=False, aliases=[]):
         """
             Add a new export function
         """
@@ -35,7 +35,8 @@ class Commander(object):
             "function": function,
             "help": help_msg,
             "parser_config": parser_config,
-            "require_project": require_project
+            "require_project": require_project,
+            "aliases": aliases
         }
 
     config = None
@@ -59,15 +60,16 @@ class command(object):  # noqa: N801
     """
         A decorator that registers an export function
     """
-    def __init__(self, name, help_msg, parser_config=None, require_project=False):
+    def __init__(self, name, help_msg, parser_config=None, require_project=False, aliases=[]):
         self.name = name
         self.help = help_msg
         self.require_project = require_project
         self.parser_config = parser_config
+        self.aliases = aliases
 
     def __call__(self, function):
         """
             The wrapping
         """
-        Commander.add(self.name, function, self.help, self.parser_config, self.require_project)
+        Commander.add(self.name, function, self.help, self.parser_config, self.require_project, self.aliases)
         return function
