@@ -1896,8 +1896,8 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
                   'allow_restore': True,
                   'allow_snapshot': True,
                   'requires': [],
-                  }, {
-                  'key': 'key2',
+                  },
+                 {'key': 'key2',
                   'value': 'value2',
                   'id': 'test::FailFast[agent1,key=key2],v=%d' % version,
                   'purged': False,
@@ -1906,8 +1906,8 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
                   'allow_restore': True,
                   'allow_snapshot': True,
                   'requires': [],
-                  }, {
-                  'key': 'key2',
+                  },
+                 {'key': 'key2',
                   'value': 'value2',
                   'id': 'test::DoesNotExist[agent1,key=key2],v=%d' % version,
                   'purged': False,
