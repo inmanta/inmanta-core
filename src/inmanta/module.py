@@ -144,6 +144,8 @@ class CLIGitProvider(GitProvider):
         tfile = tf.next()
         b = tf.extractfile(tfile)
         return b.read().decode("utf-8")
+
+
 # try:
 #     import pygit2
 #     import re
@@ -1105,8 +1107,23 @@ class ModuleTool(object):
     def __init__(self):
         self._mod_handled_list = set()
 
+    def execute(self, cmd, args):
+        """
+            Execute the given subcommand
+        """
+        if cmd is not None and cmd != '' and hasattr(self, cmd):
+            method = getattr(self, cmd)
+            margs = inspect.getfullargspec(method).args
+            margs.remove("self")
+            outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
+            method(**outargs)
+        else:
+            raise Exception("%s not implemented" % cmd)
+
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
+        parser.add_argument("module", help="Module to apply this command to", nargs="?", default=None)
+
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
         lst = subparser.add_parser("list", help="List all modules used in this project in a table")
@@ -1151,8 +1168,29 @@ class ModuleTool(object):
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
 
-    def create(self, name):
+    def get_project(self, load=False) -> Project:
         project = Project.get()
+        if load:
+            project.load()
+        return project
+
+    def get_module(self, module: str=None, project=None) -> Module:
+        """ Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
+        if module is None:
+            module = Module(None, os.path.realpath(os.curdir))
+            return module
+        else:
+            project = self.get_project(load=True)
+            return project.load_module(module)
+
+    def get_modules(self, module: str=None):
+        if module is not None:
+            return [self.get_module(module)]
+        else:
+            return self.get_project(load=True).sorted_modules()
+
+    def create(self, name):
+        project = self.get_project()
         mod_root = project.modulepath[-1]
         LOGGER.info("Creating new module %s in %s", name, mod_root)
 
@@ -1184,30 +1222,8 @@ version: 0.0.1dev0""" % {"name": name})
 
         LOGGER.info("Module successfully created.")
 
-    def execute(self, cmd, args):
-        """
-            Execute the given command
-        """
-        if cmd is not None and cmd != '' and hasattr(self, cmd):
-            method = getattr(self, cmd)
-            margs = inspect.getfullargspec(method).args
-            margs.remove("self")
-            outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
-            method(**outargs)
-        else:
-            raise Exception("%s not implemented" % cmd)
-
-    def help(self):
-        """
-            Show a list of commands
-        """
-        print("Available commands: list")
-
-    def do(self, command):
-        project = Project.get()
-
-        project.load()
-        for mod in Project.get().sorted_modules():
+    def do(self, command, module):
+        for mod in self.get_modules(module):
             try:
                 mod.execute_command(command)
             except Exception as e:
@@ -1265,51 +1281,58 @@ version: 0.0.1dev0""" % {"name": name})
                 t.add_row(row)
             print(t.draw())
 
-    def update(self, project=None):
+    def update(self, module=None, project=None):
         """
             Update all modules from their source
         """
 
         if project is None:
-            project = Project.get()
+            project = self.get_project(False)
 
         project.get_complete_ast()
         specs = project.collect_imported_requirements()
 
-        for name, spec in specs.items():
-            print("updating module: %s" % name)
-            try:
-                Module.update(project, name, spec, install_mode=project._install_mode)
-            except Exception:
-                LOGGER.exception("Failed to update module")
+        if module is None:
+            for name, spec in specs.items():
+                print("updating module: %s" % name)
+                try:
+                    Module.update(project, name, spec, install_mode=project._install_mode)
+                except Exception:
+                    LOGGER.exception("Failed to update module")
+        else:
+            if module not in specs:
+                print("Could not find module: %s" % module)
+            else:
+                spec = specs[module]
+                try:
+                    Module.update(project, name, spec, install_mode=project._install_mode)
+                except Exception:
+                    LOGGER.exception("Failed to update module")
 
-    def install(self, project=None):
+    def install(self, module=None, project=None):
         """
-            Install all modules the project requires
+            Install all modules the project requires or a single module without its dependencies
         """
         if project is None:
-            project = Project.get()
+                project = self.get_project(False)
 
-        project.load()
+        if module is None:
+            project.load()
+        else:
+            project.load_module(module)
 
-    def status(self):
+    def status(self, module=None):
         """
             Run a git status on all modules and report
         """
-        project = Project.get()
-
-        project.load()
-        for mod in project.sorted_modules():
+        for mod in self.get_modules(module):
             mod.status()
 
-    def push(self):
+    def push(self, module=None):
         """
             Push all modules
         """
-        project = Project.get()
-
-        project.load()
-        for mod in Project.get().sorted_modules():
+        for mod in self.get_modules(module):
             mod.push()
 
     def verify(self):
@@ -1378,12 +1401,12 @@ version: 0.0.1dev0""" % {"name": name})
 
         return outversion
 
-    def commit(self, message, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
+    def commit(self, message, module=None, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
         """
             Commit all current changes.
         """
         # find module
-        module = self._find_module()
+        module = self.get_module(module)
         # get version
         old_version = parse_version(str(module.version))
 

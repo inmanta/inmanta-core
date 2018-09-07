@@ -65,7 +65,8 @@ def mongo_db():
 def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
-    command.Commander.reset()
+    # No dynamic loading of commands at the moment, so no need to reset/reload
+    # command.Commander.reset()
     handler.Commander.reset()
 
 

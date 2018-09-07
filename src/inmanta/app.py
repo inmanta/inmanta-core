@@ -149,6 +149,7 @@ def help_command(options):
         subc = options.subcommand
         parser = cmd_parser()
         parser.parse_args([subc, "-h"])
+    sys.exit(0)
 
 
 @command("modules", help_msg="Subcommand to manage modules",
