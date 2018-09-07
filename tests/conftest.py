@@ -26,7 +26,7 @@ import socket
 
 
 import pytest
-from inmanta import config, data, command, mongoproc
+from inmanta import config, data, mongoproc
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
@@ -68,6 +68,7 @@ def reset_all():
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
+    Project._project = None
 
 
 @pytest.fixture(scope="function", autouse=True)

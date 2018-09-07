@@ -1175,7 +1175,7 @@ class ModuleTool(object):
         return project
 
     def get_module(self, module: str=None, project=None) -> Module:
-        """ Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
+        """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
             module = Module(None, os.path.realpath(os.curdir))
             return module
