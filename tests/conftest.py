@@ -72,9 +72,14 @@ def reset_all():
 
 @pytest.fixture(scope="function", autouse=True)
 def clean_reset(mongo_client):
+    cwd = os.getcwd()
+
     reset_all()
     yield
     reset_all()
+
+    # reset cwd
+    os.chdir(cwd)
 
     for db_name in mongo_client.database_names():
         if db_name != "admin":
