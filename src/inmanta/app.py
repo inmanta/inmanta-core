@@ -30,7 +30,7 @@ from inmanta.command import command, Commander
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
-from inmanta import protocol, module
+from inmanta import protocol, module, moduletool
 from inmanta.export import cfg_env, ModelExporter
 from inmanta.ast import CompilerException
 import yaml
@@ -153,10 +153,10 @@ def help_command(options):
 
 
 @command("modules", help_msg="Subcommand to manage modules",
-         parser_config=module.ModuleTool.modules_parser_config,
+         parser_config=moduletool.ModuleTool.modules_parser_config,
          aliases=["module"])
 def modules(options):
-    tool = module.ModuleTool()
+    tool = moduletool.ModuleTool()
     tool.execute(options.cmd, options)
 
 

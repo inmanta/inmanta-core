@@ -25,11 +25,12 @@ import re
 
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
+from inmanta.module import LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import yaml
 from pkg_resources import parse_version
+from inmanta.moduletool import ModuleTool
 
 
 def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
@@ -61,8 +62,6 @@ repo: %s""" % reporoot)
             for req in deps:
                 if req[1] is not None:
                     projectfile.write("\n    - {} {}".format(req[0], req[1]))
-                else:
-                    projectfile.write("\n    - {}".format(req[0]))
 
         projectfile.write("\n")
 
@@ -126,6 +125,28 @@ def add_tag(modpath, tag):
     subprocess.check_output(["git", "tag", tag], cwd=modpath, stderr=subprocess.STDOUT)
 
 
+def make_module_simple(reporoot, name, depends=[], version="3.2", project=False):
+    mod = makemodule(reporoot, name, depends, project=project)
+    commitmodule(mod, "first commit")
+    if not project:
+        add_file(mod, "signal", "present", "second commit", version=version)
+    return mod
+
+
+def make_module_simple_deps(reporoot, name, depends=[], project=False, version="3.2"):
+    return make_module_simple(reporoot, "mod" + name, [("mod" + x, None) for x in depends], project=project, version=version)
+
+
+def install_project(modules_dir, name):
+    coroot = os.path.join(modules_dir, name)
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
+    return coroot
+
+
 class BadModProvider(object):
 
     def __init__(self, parent, badname):
@@ -149,46 +170,83 @@ def modules_dir():
 
 @pytest.fixture(scope="session")
 def modules_repo(modules_dir):
+    """
++--------+-------------+----------+
+| Name   | Requires    | Versions |
++--------+-------------+----------+
+| std    |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+| mod1   | mod3 ~= 0.1 | 0.0.1    |
++--------+-------------+----------+
+|        | mod3 ~= 0.1 | 3.2      |
++--------+-------------+----------+
+| mod2   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 2016.1   |
++--------+-------------+----------+
+| mod3   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 0.1      |
++--------+-------------+----------+
+| badmod | mod2 < 2016 | 0.0.1    |
++--------+-------------+----------+
+|        |             | 0.1      |
++--------+-------------+----------+
+| mod5   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 0.1      |
++--------+-------------+----------+
+| mod6   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+| mod7   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+|        |             | 3.2.1    |
++--------+-------------+----------+
+|        |             | 3.2.2    |
++--------+-------------+----------+
+|        |             | 4.0      |
++--------+-------------+----------+
+|        |             | 4.2      |
++--------+-------------+----------+
+|        |             | 4.3      |
++--------+-------------+----------+
+| mod8   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+|        |             | 3.3.dev  |
++--------+-------------+----------+
+"""
     tempdir = modules_dir
 
     reporoot = os.path.join(tempdir, "repos")
     os.makedirs(reporoot)
 
-    std = makemodule(reporoot, "std", [])
-    commitmodule(std, "first commit")
-    add_file(std, "signal", "present", "second commit", version="3.2")
+    make_module_simple(reporoot, "std")
 
-    mod1 = makemodule(reporoot, "mod1", [("mod3", "~=0.1")])
-    commitmodule(mod1, "first commit")
-    add_file(mod1, "signal", "present", "second commit", version="3.2")
+    make_module_simple(reporoot, "mod1", depends=[("mod3", "~=0.1")])
 
-    mod2 = makemodule(reporoot, "mod2", [])
-    commitmodule(mod2, "first commit")
-    add_file(mod2, "signal", "present", "second commit", version="2016.1")
+    make_module_simple(reporoot, "mod2", version="2016.1")
 
-    mod3 = makemodule(reporoot, "mod3", [])
-    commitmodule(mod3, "first commit")
-    add_file(mod3, "signal", "present", "second commit", version="0.1")
+    mod3 = make_module_simple(reporoot, "mod3", version="0.1")
     add_file(mod3, "badsignal", "present", "third commit")
 
-    mod4 = makemodule(reporoot, "badmod", [("mod2", "<2016")])
-    commitmodule(mod4, "first commit")
-    add_file(mod4, "signal", "present", "second commit", version="0.1")
+    mod4 = make_module_simple(reporoot, "badmod", [("mod2", "<2016")])
     add_file(mod4, "badsignal", "present", "third commit")
 
-    mod5 = makemodule(reporoot, "mod5", [])
-    commitmodule(mod5, "first commit")
-    add_file(mod5, "signal", "present", "second commit", version="0.1")
+    mod5 = make_module_simple(reporoot, "mod5", version="0.1")
     add_file(mod5, "badsignal", "present", "third commit")
 
-    mod6 = makemodule(reporoot, "mod6", [])
-    commitmodule(mod6, "first commit")
-    add_file(mod6, "signal", "present", "second commit", version="3.2")
+    mod6 = make_module_simple(reporoot, "mod6")
     add_file(mod6, "badsignal", "present", "third commit")
 
-    mod7 = makemodule(reporoot, "mod7", [])
-    commitmodule(mod7, "first commit")
-    add_file(mod7, "nsignal", "present", "second commit", version="3.2")
+    mod7 = make_module_simple(reporoot, "mod7")
     add_file(mod7, "nsignal", "present", "third commit", version="3.2.1")
     add_file(mod7, "signal", "present", "fourth commit", version="3.2.2")
     add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
@@ -198,9 +256,7 @@ def modules_repo(modules_dir):
                                      version="4.2", compiler_version="1000000.5")
     add_file(mod7, "badsignal", "present", "sixth commit", version="4.3")
 
-    mod8 = makemodule(reporoot, "mod8", [])
-    commitmodule(mod8, "first commit")
-    add_file(mod8, "signal", "present", "second commit", version="3.2")
+    mod8 = make_module_simple(reporoot, "mod8", [])
     add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
     add_file(mod8, "mastersignal", "present", "last commit")
 
@@ -227,6 +283,28 @@ def modules_repo(modules_dir):
 
     noverproject = makemodule(reporoot, "noverproject", project=True, imports=["nover"])
     commitmodule(noverproject, "first commit")
+
+    """
+    for freeze, test from C
+    A-> B,C,D
+    C-> E,F,E::a
+    C::a -> I
+    E::a -> J
+    E-> H
+    D-> F,G
+    """
+    make_module_simple_deps(reporoot, "A", ["B", "C", "D"], project=True)
+    make_module_simple_deps(reporoot, "B")
+    c = make_module_simple_deps(reporoot, "C", ["E", "F", "E::a"], version="3.0")
+    add_file(c, "model/a.cf", "import modI", "add mod C::a", "3.2")
+    make_module_simple_deps(reporoot, "D", ["F", "G"])
+    e = make_module_simple_deps(reporoot, "E", ["H"], version="3.0")
+    add_file(e, "model/a.cf", "import modJ", "add mod E::a", "3.2")
+    make_module_simple_deps(reporoot, "F")
+    make_module_simple_deps(reporoot, "G")
+    make_module_simple_deps(reporoot, "H")
+    make_module_simple_deps(reporoot, "I")
+    make_module_simple_deps(reporoot, "J")
 
     return reporoot
 
@@ -380,12 +458,7 @@ def test_bad_dep_checkout(modules_dir, modules_repo):
 
 
 def test_master_checkout(modules_dir, modules_repo):
-    coroot = os.path.join(modules_dir, "masterproject")
-    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "masterproject")],
-                            cwd=modules_dir, stderr=subprocess.STDOUT)
-    os.chdir(coroot)
-    os.curdir = coroot
-    Config.load_config()
+    coroot = install_project(modules_dir, "masterproject")
 
     ModuleTool().execute("install", [])
 
@@ -468,3 +541,14 @@ compiler_version: 2017.2
     mod.rewrite_version("1.3.1")
     assert mod.version == "1.3.1"
     assert mod.compiler_version == "2017.2"
+
+
+def test_freeze_basic(modules_dir, modules_repo):
+    install_project(modules_dir, "modA")
+    modtool = ModuleTool()
+    cmod = modtool.get_module("modC")
+    assert cmod.get_freeze("modC", recursive=False, mode="==") == {"std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2"}
+    assert cmod.get_freeze("modC", recursive=True, mode="==") == {
+        "std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2", "modH": "== 3.2", "modJ": "== 3.2"}
+
+    assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
