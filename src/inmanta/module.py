@@ -971,14 +971,14 @@ class Module(ModuleLike):
 
         todo = imports
 
-        for imp in todo:
-            if imp not in out:
-                mainmod = self._project.get_module(imp)
+        for impor in todo:
+            if impor not in out:
+                mainmod = self._project.get_module(impor)
                 version = mainmod.version
                 # track submodules for cycle avoidance
-                out[imp] = mode + " " + version
+                out[impor] = mode + " " + version
                 if recursive:
-                    todo.extend([statement.name for statement in mainmod.get_imports(imp)])
+                    todo.extend([statement.name for statement in mainmod.get_imports(impor)])
 
         # drop submodules
         return {x: v for x, v in out.items() if "::" not in x}
