@@ -1838,6 +1838,20 @@ def test_index_on_subtype_diamond_3(snippetcompiler):
     compiler.do_compile()
 
 
+def test_index_on_subtype_diamond_4(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = C(at="a")
+    b = C(at="a")
+    a=b
+    """)
+    (types, _) = compiler.do_compile()
+    c = types["__config__::C"]
+    assert len(c.get_indices()) == 1
+
+
 def test_relation_attributes(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
 entity Test:
