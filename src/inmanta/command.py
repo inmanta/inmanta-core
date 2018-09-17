@@ -17,6 +17,13 @@
 """
 
 
+class CLIException(Exception):
+
+    def __init__(self, exitcode, *args, **kwargs):
+        self.exitcode = exitcode
+        super(CLIException, self).__init__(*args, **kwargs)
+
+
 class Commander(object):
     """
         This class handles commands
@@ -60,6 +67,7 @@ class command(object):  # noqa: N801
     """
         A decorator that registers an export function
     """
+
     def __init__(self, name, help_msg, parser_config=None, require_project=False, aliases=[]):
         self.name = name
         self.help = help_msg

@@ -38,7 +38,7 @@ from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
 from inmanta.util import memoize, get_compiler_version
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 
 LOGGER = logging.getLogger(__name__)
@@ -483,6 +483,12 @@ class Project(ModuleLike):
         os.chdir(project._path)
         plugins.PluginMeta.clear()
 
+    def get_config(self, name, default):
+        if name not in self._meta:
+            return default
+        else:
+            return self._meta[name]
+
     def load(self):
         if not self.loaded:
             self.get_complete_ast()
@@ -527,6 +533,38 @@ class Project(ModuleLike):
 
         # get imports
         imports = [x for x in self.get_imports()]
+        for _, nstmt, nb in self.load_module_recursive(imports):
+            statements.extend(nstmt)
+            blocks.append(nb)
+
+        return (statements, blocks)
+
+    def __load_ast(self):
+        main_ns = Namespace("__config__", self.root_ns)
+        return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
+
+    def get_modules(self) -> Dict[str, "Module"]:
+        self.load()
+        return self.modules
+
+    def get_module(self, full_module_name):
+        parts = full_module_name.split("::")
+        module_name = parts[0]
+
+        if module_name in self.modules:
+            return self.modules[module_name]
+        return self.load_module(module_name)
+
+    def load_module_recursive(self, imports: List[DefineImport]) -> List[Tuple[str, List[Statement], BasicBlock]]:
+        """
+            Load a specific module and all submodules into this project
+
+            For each module, return a triple of name, statements, basicblock
+        """
+        out = []
+
+        # get imports
+        imports = [x for x in self.get_imports()]
 
         done = set()
         while len(imports) > 0:
@@ -549,27 +587,14 @@ class Project(ModuleLike):
                     (nstmt, nb) = module.get_ast(subs)
 
                     done.add(subs)
-                    statements.extend(nstmt)
-                    blocks.append(nb)
+                    out.append((subs, nstmt, nb))
 
                     # get imports and add to list
                     imports.extend(module.get_imports(subs))
             except InvalidModuleException:
                 raise ModuleNotFoundException(ns, imp)
 
-        return (statements, blocks)
-
-    def __load_ast(self):
-        main_ns = Namespace("__config__", self.root_ns)
-        return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
-
-    def get_module(self, full_module_name):
-        parts = full_module_name.split("::")
-        module_name = parts[0]
-
-        if module_name in self.modules:
-            return self.modules[module_name]
-        return self.load_module(module_name)
+        return out
 
     def load_module(self, module_name) -> "Module":
         try:
@@ -665,7 +690,7 @@ class Project(ModuleLike):
             version = parse_version(str(module.version))
             for r in spec:
                 if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
+                    LOGGER.warning("requirement %s on module %s not fullfilled, now at version %s" % (r, name, version))
                     good = False
 
         return good
@@ -689,6 +714,20 @@ class Project(ModuleLike):
 
     def get_root_namespace(self):
         return self.root_ns
+
+    def get_freeze(self, mode="==", recursive=False):
+        # collect in scope modules
+        if not recursive:
+            modules = {m.name: m for m in (self.get_module(imp.name) for imp in self.get_imports())}
+        else:
+            modules = self.get_modules()
+
+        out = {}
+        for name, mod in modules.items():
+            version = str(mod.version)
+            out[name] = mode + " " + version
+
+        return out
 
 
 class Module(ModuleLike):

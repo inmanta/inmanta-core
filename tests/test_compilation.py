@@ -56,7 +56,6 @@ class CompilerBaseTest(object):
             project.main_file = self.mainfile
         Project.set(project)
         self.state_dir = tempfile.mkdtemp()
-        config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
 
     def tearDown(self):
@@ -1244,6 +1243,17 @@ class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
         print(text)
         assert text.startswith("Exception in plugin test::badtype caused by Invalid type for value 'a'," +
                                " should be type test::Item (reported in test::badtype(c1.items) (")
+
+
+def test_execute_twice(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+import mod4::other
+import mod4
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    assert scopes.get_child("mod4").lookup("main").get_value() == 0
+    assert scopes.get_child("mod4").get_child("other").lookup("other").get_value() == 0
 
 
 def test_275_default_override(snippetcompiler):

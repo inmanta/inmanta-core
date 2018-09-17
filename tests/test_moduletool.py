@@ -30,10 +30,12 @@ from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import yaml
 from pkg_resources import parse_version
-from inmanta.moduletool import ModuleTool
+from inmanta.moduletool import ModuleTool, ProjectTool
+from test_app_cli import app
+from inmanta.command import CLIException
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
+def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None, options=""):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -137,13 +139,15 @@ def make_module_simple_deps(reporoot, name, depends=[], project=False, version="
     return make_module_simple(reporoot, "mod" + name, [("mod" + x, None) for x in depends], project=project, version=version)
 
 
-def install_project(modules_dir, name):
-    coroot = os.path.join(modules_dir, name)
+def install_project(modules_dir, name, config=True):
+    subroot = tempfile.mkdtemp()
+    coroot = os.path.join(subroot, name)
     subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)],
-                            cwd=modules_dir, stderr=subprocess.STDOUT)
+                            cwd=subroot, stderr=subprocess.STDOUT)
     os.chdir(coroot)
     os.curdir = coroot
-    Config.load_config()
+    if config:
+        Config.load_config()
     return coroot
 
 
@@ -552,3 +556,127 @@ def test_freeze_basic(modules_dir, modules_repo):
         "std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2", "modH": "== 3.2", "modJ": "== 3.2"}
 
     assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
+
+
+def test_project_freeze_basic(modules_dir, modules_repo):
+    install_project(modules_dir, "modA")
+    modtool = ModuleTool()
+    proj = modtool.get_project()
+    assert proj.get_freeze(recursive=False, mode="==") == {"std": "== 3.2",
+                                                           "modB": "== 3.2", "modC": "== 3.2", "modD": "== 3.2"}
+    assert proj.get_freeze(recursive=True, mode="==") == {
+        "std": "== 3.2",
+        "modB": "== 3.2",
+        "modC": "== 3.2",
+        "modD": "== 3.2",
+        "modE": "== 3.2",
+        "modF": "== 3.2",
+        "modG": "== 3.2",
+        "modH": "== 3.2",
+        "modJ": "== 3.2"}
+
+
+def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
+    coroot = install_project(modules_dir, "baddep", config=False)
+
+    with pytest.raises(CLIException) as e:
+        app(["project", "freeze"])
+
+    assert e.value.exitcode == 1
+    assert str(e.value) == "Could not load project"
+
+    out, err = capsys.readouterr()
+
+    assert len(err) == 0
+    assert len(out) == 0
+    assert "requirement mod2<2016 on module mod2 not fullfilled, now at version 2016.1" in caplog.text
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+
+
+def test_project_freeze(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+
+    app(["project", "freeze", "-o", "-"])
+
+    out, err = capsys.readouterr()
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+    assert len(err) == 0
+    assert out == """name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+requires:
+- modB ~= 3.2
+- modC ~= 3.2
+- modD ~= 3.2
+- std ~= 3.2
+""" % modules_repo
+
+
+def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog):
+    coroot = install_project(modules_dir, "modA")
+
+    app(["project", "freeze", "-o", "-", "--operator", "xxx"])
+
+    out, err = capsys.readouterr()
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+    assert len(err) == 0
+    assert out == """name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+requires:
+- modB xxx 3.2
+- modC xxx 3.2
+- modD xxx 3.2
+- std xxx 3.2
+""" % modules_repo
+
+    assert "Operator xxx is unknown, expecting one of ['==', '~=', '>=']" in caplog.text
+
+
+def test_project_options_in_config(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+    with open("project.yml", "w") as fh:
+        fh.write("""name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+freeze_recursive: True
+freeze_operator: "=="
+"""% modules_repo)
+    app(["project", "freeze"])
+
+    out, err = capsys.readouterr()
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+    assert len(err) == 0
+    assert len(out) == 0
+
+    with open("project.yml", "r") as fh:
+        assert fh.read() == ("""name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+requires:
+- std == 3.2
+- modB == 3.2
+- modC == 3.2
+- modD == 3.2
+- modE == 3.2
+- modF == 3.2
+- modG == 3.2
+- modH == 3.2
+- modJ == 3.2
+""" % modules_repo)

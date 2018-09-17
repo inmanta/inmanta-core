@@ -26,24 +26,43 @@ import subprocess
 import tempfile
 import time
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, FileType
 from pkg_resources import parse_version
 import texttable
 
 import inmanta
 from inmanta.ast import Namespace
 from inmanta.parser.plyInmantaParser import parse
+from inmanta.command import CLIException
+from webbrowser import Opera
+import yaml
+from _collections import OrderedDict
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ModuleTool(object):
+def set_yaml_order_perserving():
     """
-        A tool to manage configuration modules
-    """
+    Set yaml modules to be order preserving.
 
-    def __init__(self):
-        self._mod_handled_list = set()
+    !!! Big Side-effect !!!
+
+    Library is not OO, unavoidable
+    """
+    _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
+
+    def dict_representer(dumper, data):
+        return dumper.represent_dict(data.items())
+
+    def dict_constructor(loader, node):
+        return OrderedDict(loader.construct_pairs(node))
+
+    yaml.add_representer(OrderedDict, dict_representer)
+    yaml.add_constructor(_mapping_tag, dict_constructor)
+
+
+class ModuleLikeTool(object):
+    """Shared code for modules and projects """
 
     def execute(self, cmd, args):
         """
@@ -57,6 +76,130 @@ class ModuleTool(object):
             method(**outargs)
         else:
             raise Exception("%s not implemented" % cmd)
+
+    def get_project(self, load=False) -> Project:
+        project = Project.get()
+        if load:
+            project.load()
+        return project
+
+    def determine_new_version(self, old_version, version, major, minor, patch, dev):
+        was_dev = old_version.is_prerelease
+
+        if was_dev:
+            if major or minor or patch:
+                LOGGER.warn("when releasing a dev version, options --major, --minor and --patch are ignored")
+
+            # determine new version
+            if version is not None:
+                baseversion = version
+            else:
+                baseversion = old_version.base_version
+
+            if not dev:
+                outversion = baseversion
+            else:
+                outversion = "%s.dev%d" % (baseversion, time.time())
+        else:
+            opts = [x for x in [major, minor, patch] if x]
+            if version is not None:
+                if len(opts) > 0:
+                    LOGGER.warn("when using the --version option, --major, --minor and --patch are ignored")
+                outversion = version
+            else:
+                if len(opts) == 0:
+                    LOGGER.error("One of the following options is required: --major, --minor or --patch")
+                    return None
+                elif len(opts) > 1:
+                    LOGGER.error("You can use only one of the following options: --major, --minor or --patch")
+                    return None
+                parts = old_version.base_version.split(".")
+                while len(parts) < 3:
+                    parts.append("0")
+                parts = [int(x) for x in parts]
+                if patch:
+                    parts[2] += 1
+                if minor:
+                    parts[1] += 1
+                    parts[2] = 0
+                if major:
+                    parts[0] += 1
+                    parts[1] = 0
+                    parts[2] = 0
+                outversion = '.'.join([str(x) for x in parts])
+
+            if dev:
+                outversion = "%s.dev%d" % (outversion, time.time())
+
+        outversion = parse_version(outversion)
+        if outversion <= old_version:
+            LOGGER.error("new versions (%s) is not larger then old version (%s), aborting" % (outversion, old_version))
+            return None
+
+        return outversion
+
+
+class ProjectTool(ModuleLikeTool):
+
+    @classmethod
+    def parser_config(cls, parser: ArgumentParser):
+        subparser = parser.add_subparsers(title="subcommand", dest="cmd")
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+        freeze.add_argument("-o", "--outfile",
+                            help="File in which to put the new project.yml, default is the existing project.yml",
+                            type=FileType('w', encoding='UTF-8'),
+                            default=None)
+        freeze.add_argument("-r", "--recursive",
+                            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
+                            "which defaults to False",
+                            action="store_true",
+                            default=None)
+        freeze.add_argument("--operator",
+                            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
+                            " project.yml is used which defaults to ~=",
+                            default=None)
+
+    def freeze(self, outfile, recursive, operator):
+        """
+        !!! Big Side-effect !!! sets yaml parser to be order preserving
+         """
+        try:
+            project = self.get_project(load=True)
+        except Exception:
+            raise CLIException(1, "Could not load project")
+
+        if recursive is None:
+            recursive = bool(project.get_config("freeze_recursive", False))
+
+        if operator is None:
+            operator = project.get_config("freeze_operator", "~=")
+
+        if operator not in ["==", "~=", ">="]:
+            LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
+
+        if outfile is None:
+            outfile = open(project.get_config_file_name(), "w", encoding='UTF-8')
+
+        freeze = project.get_freeze(mode=operator, recursive=recursive)
+
+        set_yaml_order_perserving()
+
+        with open(project.get_config_file_name(), "r") as fd:
+            newconfig = yaml.load(fd)
+
+        requires = sorted([k + " " + v for k, v in freeze.items()])
+        newconfig["requires"] = requires
+
+        outfile.write(yaml.dump(newconfig, default_flow_style=False))
+
+
+class ModuleTool(ModuleLikeTool):
+    """
+        A tool to manage configuration modules
+    """
+
+    def __init__(self):
+        self._mod_handled_list = set()
 
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
@@ -105,12 +248,6 @@ class ModuleTool(object):
 
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
-
-    def get_project(self, load=False) -> Project:
-        project = Project.get()
-        if load:
-            project.load()
-        return project
 
     def get_module(self, module: str=None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
@@ -283,61 +420,6 @@ version: 0.0.1dev0""" % {"name": name})
         module = Module(None, os.path.realpath(os.curdir))
         LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
         return module
-
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
-        was_dev = old_version.is_prerelease
-
-        if was_dev:
-            if major or minor or patch:
-                print("WARNING: when releasing a dev version, options --major, --minor and --patch are ignored")
-
-            # determine new version
-            if version is not None:
-                baseversion = version
-            else:
-                baseversion = old_version.base_version
-
-            if not dev:
-                outversion = baseversion
-            else:
-                outversion = "%s.dev%d" % (baseversion, time.time())
-        else:
-            opts = [x for x in [major, minor, patch] if x]
-            if version is not None:
-                if len(opts) > 0:
-                    print("WARNING: when using the --version option, --major, --minor and --patch are ignored")
-                outversion = version
-            else:
-                if len(opts) == 0:
-                    print("One of the following options is required: --major, --minor or --patch")
-                    return None
-                elif len(opts) > 1:
-                    print("You can use only one of the following options: --major, --minor or --patch")
-                    return None
-                parts = old_version.base_version.split(".")
-                while len(parts) < 3:
-                    parts.append("0")
-                parts = [int(x) for x in parts]
-                if patch:
-                    parts[2] += 1
-                if minor:
-                    parts[1] += 1
-                    parts[2] = 0
-                if major:
-                    parts[0] += 1
-                    parts[1] = 0
-                    parts[2] = 0
-                outversion = '.'.join([str(x) for x in parts])
-
-            if dev:
-                outversion = "%s.dev%d" % (outversion, time.time())
-
-        outversion = parse_version(outversion)
-        if outversion <= old_version:
-            print("new versions (%s) is not larger then old version (%s), aborting" % (outversion, old_version))
-            return None
-
-        return outversion
 
     def commit(self, message, module=None, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
         """
