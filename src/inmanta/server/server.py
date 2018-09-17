@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2018 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -39,13 +39,13 @@ from tornado import process
 from inmanta import const
 from inmanta import data, config
 from inmanta import methods
-from inmanta import protocol
+from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-from inmanta.server.agentmanager import AgentManager
 import json
 from inmanta.util import hash_file
+from inmanta.protocol import encode_token
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -53,15 +53,16 @@ agent_lock = locks.Lock()
 DBLIMIT = 100000
 
 
-class Server(protocol.ServerEndpoint):
+class Server(protocol.ServerSlice):
     """
         The central Inmanta server that communicates with clients and agents and persists configuration
         information
     """
 
     def __init__(self, io_loop, database_host=None, database_port=None, agent_no_log=False):
-        super().__init__("server", io_loop=io_loop, interval=opt.agent_timeout.get(), hangtime=opt.agent_hangtime.get())
+        super().__init__(io_loop=io_loop, name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
+
         self._server_storage = self.check_storage()
         self._agent_no_log = agent_no_log
 
@@ -80,8 +81,6 @@ class Server(protocol.ServerEndpoint):
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
 
-        self.add_end_point_name(self.node_name)
-
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
 
@@ -89,31 +88,17 @@ class Server(protocol.ServerEndpoint):
 
         self._recompiles = defaultdict(lambda: None)
 
-        self.agentmanager = AgentManager(self, fact_back_off=opt.server_fact_resource_block.get())
-
         self.setup_dashboard()
         self.dryrun_lock = locks.Lock()
 
-    def new_session(self, sid, tid, endpoint_names, nodename):
-        session = protocol.ServerEndpoint.new_session(self, sid, tid, endpoint_names, nodename)
-        self.agentmanager.new_session(session)
-        return session
-
-    def expire(self, session, timeout):
-        self.agentmanager.expire(session)
-        protocol.ServerEndpoint.expire(self, session, timeout)
-
-    def seen(self, session, endpoint_names):
-        self.agentmanager.seen(session, endpoint_names)
-        protocol.ServerEndpoint.seen(self, session, endpoint_names)
+    def prestart(self, server):
+        self.agentmanager = server.get_endpoint("agentmanager")
 
     def start(self):
         super().start()
-        self.agentmanager.start()
 
     def stop(self):
         super().stop()
-        self.agentmanager.stop()
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -144,8 +129,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     'backend': window.location.origin+'/'%s
 });
         """ % auth
-        self._transport_instance.add_static_content("/dashboard/config.js", content=content)
-        self._transport_instance.add_static_handler("/dashboard", dashboard_path, start=True)
+        self.add_static_content("/dashboard/config.js", content=content)
+        self.add_static_handler("/dashboard", dashboard_path, start=True)
 
     @gen.coroutine
     def _purge_versions(self):
@@ -643,36 +628,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 404
 
         return 200, {"diff": list(diff)}
-
-    @protocol.handle(methods.NodeMethod.get_agent_process, agent_id="id")
-    @gen.coroutine
-    def get_agent_process(self, agent_id):
-        return (yield self.agentmanager.get_agent_process_report(agent_id))
-
-    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id", env="tid")
-    @gen.coroutine
-    def trigger_agent(self, env, agent_id):
-        yield self.agentmanager.trigger_agent(env.id, agent_id)
-
-    @protocol.handle(methods.NodeMethod.list_agent_processes)
-    @gen.coroutine
-    def list_agent_processes(self, environment, expired):
-        if environment is not None:
-            env = yield data.Environment.get_by_id(environment)
-            if env is None:
-                return 404, {"message": "The given environment id does not exist!"}
-
-        return (yield self.agentmanager.list_agent_processes(environment, expired))
-
-    @protocol.handle(methods.ServerAgentApiMethod.list_agents, env="tid")
-    @gen.coroutine
-    def list_agents(self, env):
-        return (yield self.agentmanager.list_agents(env.id))
-
-    @protocol.handle(methods.AgentRecovery.get_state, env="tid")
-    @gen.coroutine
-    def get_state(self, env: uuid.UUID, sid: uuid.UUID, agent: str):
-        return (yield self.agentmanager.get_state(env.id, sid, agent))
 
     @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id", env="tid")
     @gen.coroutine
@@ -1547,14 +1502,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
                                   "--server_port", opt.transport_port.get(), "--metadata", json.dumps(metadata)]
             if config.Config.get("server", "auth", False):
-                token = protocol.encode_token(["compiler", "api"], str(environment_id))
+                token = encode_token(["compiler", "api"], str(environment_id))
                 cmd.append("--token")
                 cmd.append(token)
 
             if opt.server_ssl_cert.get() is not None:
                 cmd.append("--ssl")
 
-            if opt.server_ssl_ca_cert is not None:
+            if opt.server_ssl_ca_cert.get() is not None:
                 cmd.append("--ssl-ca-cert")
                 cmd.append(opt.server_ssl_ca_cert.get())
 
@@ -1819,4 +1774,4 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """
             Create a new auth token for this environment
         """
-        return 200, {"token": protocol.encode_token(client_types, str(env.id), idempotent)}
+        return 200, {"token": encode_token(client_types, str(env.id), idempotent)}

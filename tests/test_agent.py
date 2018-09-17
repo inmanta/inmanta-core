@@ -19,6 +19,7 @@ from inmanta import agent
 import pytest
 from utils import retry_limited
 from inmanta.agent import reporting
+from inmanta.server import SLICE_SESSION_MANAGER
 
 
 @pytest.mark.slowtest
@@ -29,8 +30,8 @@ def test_agent_get_status(io_loop, server, environment):
     myagent.add_end_point_name("agent1")
     myagent.start()
 
-    yield retry_limited(lambda: len(server._sessions) == 1, 0.5)
-    clients = server._sessions.values()
+    yield retry_limited(lambda: len(server.get_endpoint(SLICE_SESSION_MANAGER)._sessions) == 1, 0.5)
+    clients = server.get_endpoint(SLICE_SESSION_MANAGER)._sessions.values()
     assert len(clients) == 1
     clients = [x for x in clients]
     client = clients[0].get_client()

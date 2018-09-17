@@ -376,6 +376,11 @@ class Entity(NamedType):
         """
             Add an index over the given attributes.
         """
+        # duplicate check
+        for index in self._index_def:
+            if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
+                return
+
         self._index_def.append(sorted(attributes))
         for child in self.child_entities:
             child.add_index(attributes)

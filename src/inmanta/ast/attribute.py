@@ -109,7 +109,6 @@ class Attribute(Locatable):
             out = ResultVariable()
 
         out.set_type(mytype)
-        out.set_provider(instance)
         return out
 
     def is_optional(self):
