@@ -1368,7 +1368,7 @@ def test_null_unset_hang(snippetcompiler):
             a = A()
             b = a.a
         """)
-    with pytest.raises(UnsetException):
+    with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
