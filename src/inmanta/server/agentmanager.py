@@ -37,6 +37,7 @@ from inmanta.server.protocol import ServerSlice
 from inmanta.server import config as opt
 from tornado.ioloop import IOLoop
 from inmanta.protocol import encode_token
+from inmanta.resources import Resource, Id
 
 
 LOGGER = logging.getLogger(__name__)
@@ -554,24 +555,21 @@ ssl=True
         if resource_id is not None and resource_id != "":
             env = yield data.Environment.get_by_id(env_id)
 
-            # get the latest version
-            version = yield data.ConfigurationModel.get_latest_version(env_id)
-
-            if version is None:
-                return 404, {"message": "The environment associated with this parameter does not have any releases."}
-
             # get a resource version
             res = yield data.Resource.get_latest_version(env_id, resource_id)
 
             if res is None:
                 return 404, {"message": "The resource has no recent version."}
 
+            rid = Id.parse_id(res.resource_version_id)
+            version = rid.version
+
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
             if (resource_id not in self._fact_resource_block_set or
                     (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
 
-                agents = yield data.ConfigurationModel.get_agents(env.id, version.version)
+                agents = yield data.ConfigurationModel.get_agents(env.id, version)
                 yield self._ensure_agents(env, agents)
 
                 client = self.get_agent_client(env_id, res.agent)
