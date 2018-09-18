@@ -37,7 +37,7 @@ from inmanta.server.protocol import ServerSlice
 from inmanta.server import config as opt
 from tornado.ioloop import IOLoop
 from inmanta.protocol import encode_token
-from inmanta.resources import Resource, Id
+from inmanta.resources import Id
 
 
 LOGGER = logging.getLogger(__name__)

@@ -1126,7 +1126,12 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
         assert result.code == result_code
         return result
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={}, resource_state=resource_states)
+    result = yield client.put_version(tid=environment,
+                                      version=version,
+                                      resources=resources,
+                                      unknowns=[],
+                                      version_info={},
+                                      resource_state=resource_states)
     assert result.code == 200
 
     yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
