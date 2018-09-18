@@ -31,7 +31,7 @@ import pytest
 from _pytest.fixtures import fixture
 
 from inmanta import agent, data, const, execute, config
-from inmanta.agent.handler import provider, ResourceHandler
+from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext
 from inmanta.resources import resource, Resource
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
@@ -54,6 +54,13 @@ def resource_container():
             A file on a filesystem
         """
         fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+
+    @resource("test::Fact", agent="agent", id_attribute="key")
+    class FactResource(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "skip", "factvalue")
 
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
@@ -163,6 +170,37 @@ def resource_container():
 
         def do_changes(self, ctx, resource, changes):
             raise Exception()
+
+    @provider("test::Fact", name="test_fact")
+    class Fact(ResourceHandler):
+
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            current.value = "that"
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if resource.skip:
+                raise SkipResource("can not deploy")
+            if "purged" in changes:
+                if changes["purged"]["desired"]:
+                    Provider.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
+                else:
+                    Provider.set(resource.id.get_agent_name(), resource.key, "x")
+                    ctx.set_created()
+            else:
+                ctx.set_updated()
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            if not Provider.isset(resource.id.get_agent_name(), resource.key):
+                return {}
+            elif resource.factvalue is None:
+                raise SkipResource("Not ready")
+            return {"fact": resource.factvalue}
 
     waiter = Condition()
 
@@ -998,6 +1036,125 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
     # The resource facts should be purged
     result = yield client.get_param(environment, "length", resource_id_wov)
     assert result.code == 503
+
+
+@pytest.mark.gen_test
+def test_get_facts_extended(io_loop, server, client, resource_container, environment):
+    """
+        dryrun and deploy a configuration model automatically
+    """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    # allow very rapid fact refresh
+    agentmanager._fact_resource_block = 0.1
+
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    # mark some as existing
+    resource_container.Provider.set("agent1", "key1", "value")
+    resource_container.Provider.set("agent1", "key2", "value")
+    resource_container.Provider.set("agent1", "key4", "value")
+    resource_container.Provider.set("agent1", "key5", "value")
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': True,
+                  'factvalue': "fk1",
+                  'requires': [],
+                  },
+                 {'key': 'key2',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key2],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': "fk2",
+                  'requires': [],
+                  },
+                 {'key': 'key3',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key3],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': "fk3",
+                  'requires': [],
+                  },
+                 {'key': 'key4',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key4],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': "fk4",
+                  'requires': [],
+                  },
+                 {'key': 'key5',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key5],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': None,
+                  'requires': [],
+                  }
+                 ]
+
+    resource_states = {'test::Fact[agent1,key=key4],v=%d' % version: const.ResourceState.undefined,
+                       'test::Fact[agent1,key=key5],v=%d' % version: const.ResourceState.undefined}
+
+    @gen.coroutine
+    def get_fact(rid, result_code=200, limit=10, lower_limit=2):
+        lower_limit = limit - lower_limit
+        result = yield client.get_param(environment, "fact", rid)
+
+        # add minimal nr of reps or failure cases
+        while (result.code != result_code and limit > 0) or limit > lower_limit:
+            limit -= 1
+            yield gen.sleep(0.1)
+            result = yield client.get_param(environment, "fact", rid)
+
+        assert result.code == result_code
+        return result
+
+    result = yield client.put_version(tid=environment,
+                                      version=version,
+                                      resources=resources,
+                                      unknowns=[],
+                                      version_info={},
+                                      resource_state=resource_states)
+    assert result.code == 200
+
+    yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
+    yield get_fact('test::Fact[agent1,key=key2]')  # normal
+    yield get_fact('test::Fact[agent1,key=key3]', 503)  # not present
+    yield get_fact('test::Fact[agent1,key=key4]')  # unknown
+    yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
+    yield get_fact('test::Fact[agent1,key=key2]')  # normal
+    yield get_fact('test::Fact[agent1,key=key3]')  # not present -> present
+    yield get_fact('test::Fact[agent1,key=key4]')  # unknown
+    yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+
+    agent.stop()
 
 
 @pytest.mark.gen_test
