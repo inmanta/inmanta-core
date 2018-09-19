@@ -2549,3 +2549,73 @@ b.alink = a
     assert get_names(b, "blink") == ["a", "b", "c", "d"]
     assert get_names(c, "blink") == ["a", "b", "c", "d"]
     assert get_names(d, "blink") == ["a", "b", "c", "d"]
+
+
+def test_lazy_attibutes(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+   string value
+end
+
+implement Thing using std::none
+
+index Thing(id)
+
+a = Thing(id=5, value="{{a.id}}")
+
+""")
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value()
+
+
+def test_lazy_attibutes2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+   string value
+end
+
+implement Thing using std::none
+
+index Thing(id)
+
+a = Thing(id=5)
+a.value="{{a.id}}"
+
+""")
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value()
+
+
+def test_lazy_attibutes3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+end
+
+Thing.value [1] -- StringWrapper
+
+entity StringWrapper:
+    string value
+end
+
+implement Thing using std::none
+implement StringWrapper using std::none
+
+
+index Thing(id)
+
+a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
+
+""")
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
