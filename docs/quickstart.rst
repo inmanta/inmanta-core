@@ -88,7 +88,8 @@ The configuration model
 
 In this section we will use the configuration concepts defined in the existing modules to set up Drupal on the host named ``vm1``.
 
-First, create a new ``main.cf`` file or execute ``git checkout single_machine``:
+First, create a new ``main.cf`` file or use the contents of ``single_machine.cf`` in the project
+directory:
 
 
 .. code-block:: inmanta
@@ -181,7 +182,8 @@ Update the configuration model
 
 A second virtual machine is easily added to the system by adding the definition
 of the virtual machine to the configuration model and assigning the MySQL server
-to the new virtual machine. Update ``main.cf`` to the following:
+to the new virtual machine. Update ``main.cf`` to the following (or use the contents of file
+``dual_machine.cf``:
 
 .. code-block:: inmanta
     :linenos:
