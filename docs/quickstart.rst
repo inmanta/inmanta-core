@@ -1,4 +1,4 @@
-.. vim: spell
+    .. vim: spell
 
 Quickstart
 ***************
@@ -230,22 +230,31 @@ If you browse to the Drupal site again, the database should be empty once more.
 Using the dashboard
 ==========================
 
+Inmanta can deploy from the server using only the dashboard. All changes have to go through the repository in this case.
+
+#. Clone the quickstart project on github (or to another repository location).
 #. Go to the `dashboard <http://127.0.0.1:8888>`_.
 #. Create a new project with the name ``test`` by clicking *Add new project*.
 #. Go into the new project and create a new environment by clicking *Add new environment*:
 
     * Select the ``test`` project.
     * Give the environment a name, e.g. ``env-quickstart``.
-    * Specify the repo: ``https://github.com/inmanta/quickstart``.
+    * Specify the repo: for example ``https://github.com/user/quickstart``.
     * Specify the branch: ``master``.
 
+#. Checkout your clone of the quickstart repository and make changes to the main.cf file, for example add the contents
+   of single_machine.cf to the main.cf file. Commit the changes and push them to your repository.
 #. Go into your new environment.
 #. Press *Update & Recompile* (this may take a while, as all dependencies are downloaded).
 
-    * Now the Inmanta server downloads the configuration model from GitHub. It also downloads all required modules (i.e. dependencies). These modules contain the instructions to install specific parts of the setup such as for example `mysql` or `drupal` itself. To see the source go `here <https://github.com/inmanta/quickstart>`_, for a more in-depth explanation :ref:`see above <qsconfigmodel>`.
+    * Now the Inmanta server downloads the configuration model from your clone of the repository. It also downloads all required
+      modules (i.e. dependencies). These modules contain the instructions to install specific parts of the setup such as for
+      example `mysql` or `drupal` itself. To see the source go `here <https://github.com/inmanta/quickstart>`_, for a more
+      in-depth explanation :ref:`see above <qsconfigmodel>`.
     * When this is done, it compiles all modules and integrates them into a new deployment plan.
 
-#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it. This shows a list of all configuration items in this configuration.
+#. When the compilation is done, a new version appears. This contains the new deployment plan. Click on this version to open it.
+   This shows a list of all configuration items in this configuration.
 #. Press *Deploy* to start rolling out this version.
 
     * An agent is now started that remotely logs in into the virtual machines (via SSH) and starts deploying the Drupal server.
