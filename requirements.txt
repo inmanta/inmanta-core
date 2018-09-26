@@ -21,5 +21,5 @@ sphinx-rtd-theme==0.4.1
 sphinx==1.8.1
 texttable==1.4.0
 tornado==4.5.3
-typing==3.6.4
+typing==3.6.6
 virtualenv==16.0.0
