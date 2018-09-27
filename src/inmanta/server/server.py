@@ -262,9 +262,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if not isinstance(value, str):
             value = str(value)
 
-        if value is None or value == "":
-            value = " "
-
         if resource_id is None:
             resource_id = ""
 

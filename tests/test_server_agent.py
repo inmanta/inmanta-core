@@ -60,7 +60,7 @@ def resource_container():
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "skip", "factvalue")
+        fields = ("key", "value", "purged", "skip", "factvalue", 'skipFact')
 
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
@@ -198,7 +198,7 @@ def resource_container():
         def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
             if not Provider.isset(resource.id.get_agent_name(), resource.key):
                 return {}
-            elif resource.factvalue is None:
+            elif resource.skipFact:
                 raise SkipResource("Not ready")
             return {"fact": resource.factvalue}
 
@@ -1061,6 +1061,8 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
     resource_container.Provider.set("agent1", "key2", "value")
     resource_container.Provider.set("agent1", "key4", "value")
     resource_container.Provider.set("agent1", "key5", "value")
+    resource_container.Provider.set("agent1", "key6", "value")
+    resource_container.Provider.set("agent1", "key7", "value")
 
     resources = [{'key': 'key1',
                   'value': 'value1',
@@ -1068,6 +1070,7 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                   'send_event': False,
                   'purged': False,
                   'skip': True,
+                  'skipFact': False,
                   'factvalue': "fk1",
                   'requires': [],
                   },
@@ -1077,6 +1080,7 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                   'send_event': False,
                   'purged': False,
                   'skip': False,
+                  'skipFact': False,
                   'factvalue': "fk2",
                   'requires': [],
                   },
@@ -1086,6 +1090,7 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                   'send_event': False,
                   'purged': False,
                   'skip': False,
+                  'skipFact': False,
                   'factvalue': "fk3",
                   'requires': [],
                   },
@@ -1095,6 +1100,7 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                   'send_event': False,
                   'purged': False,
                   'skip': False,
+                  'skipFact': False,
                   'factvalue': "fk4",
                   'requires': [],
                   },
@@ -1104,9 +1110,30 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                   'send_event': False,
                   'purged': False,
                   'skip': False,
+                  'skipFact': True,
                   'factvalue': None,
                   'requires': [],
-                  }
+                  },
+                 {'key': 'key6',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key6],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'skipFact': False,
+                  'factvalue': None,
+                  'requires': [],
+                  },
+                 {'key': 'key7',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key7],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'skipFact': False,
+                  'factvalue': "",
+                  'requires': [],
+                  },
                  ]
 
     resource_states = {'test::Fact[agent1,key=key4],v=%d' % version: const.ResourceState.undefined,
@@ -1139,6 +1166,11 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
     yield get_fact('test::Fact[agent1,key=key3]', 503)  # not present
     yield get_fact('test::Fact[agent1,key=key4]')  # unknown
     yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+    f6 = yield get_fact('test::Fact[agent1,key=key6]')  # normal
+    f7 = yield get_fact('test::Fact[agent1,key=key7]')  # normal
+
+    assert f6.result["parameter"]["value"] == 'None'
+    assert f7.result["parameter"]["value"] == ""
 
     result = yield client.release_version(environment, version, True)
     assert result.code == 200
