@@ -152,7 +152,11 @@ class ResourceAction(object):
                 # Action is cancelled
                 LOGGER.log(const.LogLevel.TRACE.value, "%s %s is no longer active" % (self.gid, self.resource))
                 self.running = False
-                ctx.set_status(const.ResourceState.cancelled)
+                if self.undeployable is not None:
+                    # don't overwrite undeployable
+                    ctx.set_status(self.undeployable)
+                else:
+                    ctx.set_status(const.ResourceState.cancelled)
                 return
 
             result = sum(results, ResourceActionResult(True, False, False))
@@ -160,15 +164,19 @@ class ResourceAction(object):
             if result.cancel:
                 # self.running will be set to false when self.cancel is called
                 # Only happens when global cancel has not cancelled us but our predecessors have already been cancelled
-                ctx.set_status(const.ResourceState.cancelled)
+                if self.undeployable is not None:
+                    # don't overwrite undeployable
+                    ctx.set_status(self.undeployable)
+                else:
+                    ctx.set_status(const.ResourceState.cancelled)
                 return
 
-            if not result.success:
-                ctx.set_status(const.ResourceState.skipped)
+            if self.undeployable is not None:
+                ctx.set_status(self.undeployable)
                 success = False
                 send_event = False
-            elif self.undeployable is not None:
-                ctx.set_status(self.undeployable)
+            elif not result.success:
+                ctx.set_status(const.ResourceState.skipped)
                 success = False
                 send_event = False
             else:
@@ -286,7 +294,7 @@ class ResourceScheduler(object):
         self.ratelimiter = ratelimiter
         self.version = 0
 
-    def reload(self, resources, undeployable={}):
+    def reload(self, resources, undeployable={}, reason: str="RELOAD"):
         version = resources[0].id.get_version
 
         self.version = version
@@ -295,6 +303,7 @@ class ResourceScheduler(object):
             ra.cancel()
 
         gid = uuid.uuid4()
+        LOGGER.debug("Running %s for reason: %s" % (gid, reason))
         self.generation = {r.id.resource_str(): ResourceAction(self, r, gid) for r in resources}
 
         for key, res in self.generation.items():
@@ -310,7 +319,7 @@ class ResourceScheduler(object):
 
         dummy = ResourceAction(self, None, gid)
         for r in self.generation.values():
-            r.execute(dummy, self.generation, self.cache)
+            self.agent.add_future(r.execute(dummy, self.generation, self.cache))
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
@@ -392,7 +401,7 @@ class AgentInstance(object):
 
         @gen.coroutine
         def action():
-            yield self.get_latest_version_for_agent()
+            yield self.get_latest_version_for_agent("Auto deploy")
 
         self._enabled = action
         self.process._sched.add_action(action, self._deploy_interval, self._splay_value)
@@ -429,7 +438,7 @@ class AgentInstance(object):
         return provider
 
     @gen.coroutine
-    def get_latest_version_for_agent(self):
+    def get_latest_version_for_agent(self, reason="Unknown"):
         """
             Get the latest version for the given agent (this is also how we are notified)
         """
@@ -473,7 +482,7 @@ class AgentInstance(object):
                     LOGGER.exception("Failed to receive update")
 
                 if len(resources) > 0:
-                    self._nq.reload(resources, undeployable)
+                    self._nq.reload(resources, undeployable, reason=reason)
 
     @gen.coroutine
     def dryrun(self, dry_run_id, version):
@@ -557,10 +566,13 @@ class AgentInstance(object):
                             provider.close()
 
                         finished = datetime.datetime.now()
-                        self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
-                                                                 action_id=ctx.action_id, action=const.ResourceAction.dryrun,
-                                                                 started=started, finished=finished, messages=ctx.logs,
-                                                                 status=const.ResourceState.dry)
+                        yield self.get_client().resource_action_update(tid=self._env_id, resource_ids=[res["id"]],
+                                                                       action_id=ctx.action_id,
+                                                                       action=const.ResourceAction.dryrun,
+                                                                       started=started,
+                                                                       finished=finished,
+                                                                       messages=ctx.logs,
+                                                                       status=const.ResourceState.dry)
 
                 self._cache.close_version(version)
 
@@ -836,7 +848,7 @@ class Agent(AgentEndPoint):
             Get the latest version of managed resources for all agents
         """
         for agent in self._instances.values():
-            yield agent.get_latest_version_for_agent()
+            yield agent.get_latest_version_for_agent(reason="call to get_latest_version on agent")
 
     @gen.coroutine
     def _ensure_code(self, environment, version, resourcetypes):
@@ -874,7 +886,7 @@ class Agent(AgentEndPoint):
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
-        future = self._instances[agent].get_latest_version_for_agent()
+        future = self._instances[agent].get_latest_version_for_agent(reason="call to trigger_update")
         self.add_future(future)
         return 200
 

@@ -25,14 +25,52 @@ class ResourceState(Enum):
     dry = 3
     deployed = 4
     failed = 5
-    queued = 6
+    queued = 6  # Unused
     available = 7
     cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
     undefined = 9  # The state of this resource is unknown at this moment in the orchestration process
+    skipped_for_undefined = 10  # This resource depends on an undefined resource
 
 
-UNDEPLOYABLE_STATES = [ResourceState.undefined]
+UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
 UNKNOWN_STRING = "<<undefined>>"
+
+"""
+States set by server upon upload
+
+1. available
+2. undefined (terminal state)
+3. skipped_for_undefined (terminal state)
+
+States set by agent
+1. skipped
+2. failed
+3. deployed
+4. unavailable
+5. cancelled
+
+Each deploy sets the agent state again, all agent states can transition to all agent states
+
+States that are in the action log, but not actual states
+1. dry
+
+
+                                           +-----> skipped     -<--------+
+                                           |                             |
+                                           +-----> failed      -<--------+
+                                           |                             |
+    +---------------->  available  +-------------> unavailable -<--------+
+    |                                      |                             |
+    |                                      +-----> deployed    -<--------+
+    |                                      |                             |
++---+---------+                            +-----> cancelled   -<--------+
+| compiler    +------> undefined
++---+---------+
+    |
+    |
+    +----------------> skipped_for_undefined
+
+"""
 
 
 class Change(Enum):
