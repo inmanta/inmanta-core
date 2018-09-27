@@ -463,7 +463,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     agent.stop()
 
 
-@pytest.mark.gen_test(timeout=60)
+@pytest.mark.gen_test(timeout=100)
 def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_container):
     """
          Test deploy of resource with undefined
