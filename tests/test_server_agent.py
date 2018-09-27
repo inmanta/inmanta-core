@@ -90,13 +90,6 @@ def resource_container():
         """
         fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
-    @resource("test::Noprov", agent="agent", id_attribute="key")
-    class NoProv(Resource):
-        """
-            A file on a filesystem
-        """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
-
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
 
@@ -643,64 +636,6 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
-
-    agent.stop()
-
-
-@pytest.mark.gen_test(timeout=30)
-def test_failing_deploy_no_handler(resource_container, io_loop, server, client):
-    """
-        dryrun and deploy a configuration model
-    """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
-
-    resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
-    agent.add_end_point_name("agent1")
-    agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    version = int(time.time())
-
-    resources = [{'key': 'key1',
-                  'value': 'value1',
-                  'id': 'test::Noprov[agent1,key=key1],v=%d' % version,
-                  'purged': False,
-                  'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
-                  'requires': [],
-                  }
-                 ]
-
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
-
-    # do a deploy
-    result = yield client.release_version(env_id, version, True)
-    assert result.code == 200
-    assert result.result["model"]["total"] == 1
-
-    result = yield client.get_version(env_id, version)
-    assert result.code == 200
-
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
-
-    assert result.result["model"]["done"] == len(resources)
-
-    result = yield client.get_version(env_id, version, include_logs=True)
-
-    final_log = result.result["resources"][0]["actions"][0]["messages"][-1]
-    assert "traceback" in final_log["kwargs"]
 
     agent.stop()
 
