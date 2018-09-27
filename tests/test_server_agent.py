@@ -191,7 +191,6 @@ def resource_container():
         def check_resource(self, ctx, resource):
             raise Exception()
 
-
     @provider("test::Fact", name="test_fact")
     class Fact(ResourceHandler):
 
