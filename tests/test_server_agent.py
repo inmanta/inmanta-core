@@ -583,13 +583,15 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     import pprint
     pprint.pprint(result.result)
 
-    assert resource_container.Provider.changecount("agent2", "key4") == 0
-    assert resource_container.Provider.changecount("agent2", "key5") == 0
-    assert resource_container.Provider.changecount("agent2", "key1") == 2
+    def done():
+        return resource_container.Provider.changecount("agent2", "key4") == 0 and \
+            resource_container.Provider.changecount("agent2", "key5") == 0 and \
+            resource_container.Provider.changecount("agent2", "key1") == 2 and \
+            resource_container.Provider.readcount("agent2", "key4") == 0 and \
+            resource_container.Provider.readcount("agent2", "key5") == 0 and \
+            resource_container.Provider.readcount("agent2", "key1") == 2
 
-    assert resource_container.Provider.readcount("agent2", "key4") == 0
-    assert resource_container.Provider.readcount("agent2", "key5") == 0
-    assert resource_container.Provider.readcount("agent2", "key1") == 2
+    yield retry_limited(done, 50)
 
     agent.stop()
 
