@@ -464,13 +464,12 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
 
 
 @pytest.mark.gen_test(timeout=60)
-def test_deploy_with_undefined(io_loop, server, client, resource_container):
+def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_container):
     """
          Test deploy of resource with undefined
     """
 
-    server_multi = server
-    client_multi = client
+    agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
 
     Config.set("config", "agent-interval", "100")
 
@@ -488,7 +487,7 @@ def test_deploy_with_undefined(io_loop, server, client, resource_container):
     agent.add_end_point_name("agent2")
     agent.start()
 
-    yield retry_limited(lambda: len(server_multi.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
