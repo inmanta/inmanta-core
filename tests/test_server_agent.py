@@ -591,7 +591,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
             resource_container.Provider.readcount("agent2", "key5") == 0 and \
             resource_container.Provider.readcount("agent2", "key1") == 2
 
-    yield retry_limited(done, 50)
+    yield retry_limited(done, 100)
 
     agent.stop()
 
