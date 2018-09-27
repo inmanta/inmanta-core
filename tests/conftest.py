@@ -25,9 +25,8 @@ from tempfile import mktemp
 import socket
 
 
-from mongobox import MongoBox
 import pytest
-from inmanta import config, data, command
+from inmanta import config, data, command, mongoproc
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
@@ -41,6 +40,7 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from tornado import gen
 import re
 from tornado.ioloop import IOLoop
+from inmanta.server.bootloader import InmantaBootloader
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -49,15 +49,15 @@ DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 @pytest.fixture(scope="session", autouse=True)
 def mongo_db():
     db_path = tempfile.mkdtemp(dir="/dev/shm")
-    mongobox = MongoBox(db_path=db_path)
+    mproc = mongoproc.MongoProc(db_path=db_path, port=get_free_tcp_port())
     port_envvar = DEFAULT_PORT_ENVVAR
 
-    mongobox.start()
-    os.environ[port_envvar] = str(mongobox.port)
+    mproc.start()
+    os.environ[port_envvar] = str(mproc.port)
 
-    yield mongobox
+    yield mproc
 
-    mongobox.stop()
+    mproc.stop()
     del os.environ[port_envvar]
     shutil.rmtree(db_path)
 
@@ -76,7 +76,11 @@ def clean_reset(mongo_client):
     reset_all()
 
     for db_name in mongo_client.database_names():
-        mongo_client.drop_database(db_name)
+        if db_name != "admin":
+            try:
+                mongo_client.drop_database(db_name)
+            except Exception:
+                pass
 
 
 @pytest.fixture(scope="session")
@@ -139,11 +143,12 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     # causes handler failure
     IOLoop._instance = io_loop
 
-    from inmanta.server import Server
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(mongo_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -157,13 +162,13 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     data.use_motor(motor)
     io_loop.run_sync(data.create_indexes)
 
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
+    ibl = InmantaBootloader()
+    ibl.start()
 
-    yield server
+    yield ibl.restserver
 
+    ibl.stop()
     del IOLoop._instance
-    server.stop()
     shutil.rmtree(state_dir)
 
 
@@ -172,7 +177,8 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
 def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor):
-    from inmanta.server import Server
+    IOLoop._instance = io_loop
+
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -206,7 +212,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
             config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()
-    config.Config.get("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "host", "localhost")
+    config.Config.set("database", "port", str(mongo_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -220,12 +228,18 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
     data.use_motor(motor)
     io_loop.run_sync(data.create_indexes)
 
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
+    ibl = InmantaBootloader()
+    ibl.start()
 
-    yield server
+    yield ibl.restserver
 
-    server.stop()
+    ibl.stop()
+
+    try:
+        del IOLoop._instance
+    except Exception:
+        pass
+
     shutil.rmtree(state_dir)
 
 
@@ -290,24 +304,23 @@ def environment_multi(client_multi, server_multi, io_loop):
 
 
 class SnippetCompilationTest(object):
-    libs = None
-    env = None
 
-    @classmethod
-    def setUpClass(cls):
-        cls.libs = tempfile.mkdtemp()
-        cls.env = tempfile.mkdtemp()
+    def setUpClass(self):
+        self.libs = tempfile.mkdtemp()
+        self.env = tempfile.mkdtemp()
         config.Config.load_config()
+        self.cwd = os.getcwd()
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.libs)
-        shutil.rmtree(cls.env)
+    def tearDownClass(self):
+        shutil.rmtree(self.libs)
+        shutil.rmtree(self.env)
+        # reset cwd
+        os.chdir(self.cwd)
 
     def setup_for_snippet(self, snippet, autostd=True):
         # init project
         self.project_dir = tempfile.mkdtemp()
-        os.symlink(self.__class__.env, os.path.join(self.project_dir, ".env"))
+        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
@@ -317,9 +330,9 @@ class SnippetCompilationTest(object):
             downloadpath: %s
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
-                % (self.__class__.libs,
+                % (self.libs,
                     os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.__class__.libs))
+                    self.libs))
 
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:

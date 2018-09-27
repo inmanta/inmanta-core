@@ -708,10 +708,6 @@ class AgentInstance(object):
 
                 version = resource_obj.id.version
                 try:
-                    if const.ResourceState[resource["status"]] in const.UNDEPLOYABLE_STATES:
-                        LOGGER.exception("Skipping %s because in undeployable state %s", resource["id"], resource["status"])
-                        return 200
-
                     self._cache.open_version(version)
                     provider = yield self.get_provider(resource_obj)
                     result = yield self.thread_pool.submit(provider.check_facts, ctx, resource_obj)

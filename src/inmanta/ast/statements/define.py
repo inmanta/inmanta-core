@@ -204,9 +204,13 @@ class DefineImplementation(TypeDefinitionStatement):
         """
             Evaluate this statement in the given scope
         """
-        cls = self.namespace.get_type(self.entity)
-        self.type.set_type(cls)
-        self.copy_location(self.type)
+        try:
+            cls = self.namespace.get_type(self.entity)
+            self.type.set_type(cls)
+            self.copy_location(self.type)
+        except TypeNotFoundException as e:
+            e.set_statement(self)
+            raise e
 
 
 class DefineImplementInherits(DefinitionStatement):

@@ -23,7 +23,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.execute.runtime import Resolver, QueueScheduler
 from inmanta.ast.statements.generator import SubConstructor
 from inmanta.ast import RuntimeException, DuplicateException, NotFoundException, Namespace, Location, \
-    Named, Locatable
+    Named, Locatable, CompilerException
 from inmanta.util import memoize
 from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
@@ -376,6 +376,11 @@ class Entity(NamedType):
         """
             Add an index over the given attributes.
         """
+        # duplicate check
+        for index in self._index_def:
+            if len(index) == len(attributes) and all((a == b for a, b in zip(index, attributes))):
+                return
+
         self._index_def.append(sorted(attributes))
         for child in self.child_entities:
             child.add_index(attributes)
@@ -496,7 +501,11 @@ class Implementation(Named):
         return "Implementation(name = %s)" % self.name
 
     def normalize(self) -> None:
-        self.statements.normalize()
+        try:
+            self.statements.normalize()
+        except CompilerException as e:
+            e.set_location(self.location)
+            raise
 
     def get_full_name(self) -> str:
         return self.namespace.get_full_name() + "::" + self.name

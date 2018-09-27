@@ -602,7 +602,8 @@ class ParameterMethod(Method):
 
             :param tid: The id of the environment
             :param id: The name of the parameter
-            :param resource_id: Optionally, scope the parameter to resource (fact)
+            :param resource_id: Optionally, scope the parameter to resource (fact),
+                                if the resource id should not contain a version, the latest version is used
             :return: Returns the following status codes:
                     200: The parameter content is returned
                     404: The parameter is not found and unable to find it because its resource is not known to the server

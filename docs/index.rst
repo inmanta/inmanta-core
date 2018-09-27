@@ -45,6 +45,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     guides
     moduleguides
     developers
+    faq
     glossary
     reference/index
 

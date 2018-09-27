@@ -23,8 +23,7 @@ import sys
 import time
 import socket
 
-from mongobox import mongobox
-from inmanta import module, config, protocol, const, data
+from inmanta import module, config, protocol, const, data, mongoproc
 
 
 LOGGER = logging.getLogger(__name__)
@@ -44,7 +43,7 @@ class FinishedException(Exception):
 
 class Deploy(object):
     def __init__(self, mongoport=0):
-        self._mongobox = None
+        self._mongoproc = None
         self._mongoport = mongoport
         self._server_port = 0
         self._data_path = None
@@ -111,6 +110,7 @@ port=%(server_port)s
         args = [sys.executable, "-m", "inmanta.app", "-vvv", "-c", server_config, "server"]
 
         self._server_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
         LOGGER.debug("Started server on port %d", self._server_port)
 
         while self._server_proc.poll() is None:
@@ -134,10 +134,10 @@ port=%(server_port)s
 
             self._mongoport = PORT_START + random.randint(0, 2000)
             mongo_dir = os.path.join(self._data_path, "mongo")
-            self._mongobox = mongobox.MongoBox(db_path=mongo_dir, port=self._mongoport,
-                                               log_path=os.path.join(log_dir, "mongod.log"))
+            self._mongoproc = mongoproc.MongoProc(db_path=mongo_dir, port=self._mongoport,
+                                                  log_path=os.path.join(log_dir, "mongod.log"))
             LOGGER.debug("Starting mongodb on port %d", self._mongoport)
-            if not self._mongobox.start():
+            if not self._mongoproc.start():
                 LOGGER.error("Unable to start mongodb instance on port %d and data directory %s", self._mongoport, mongo_dir)
                 return False
 
@@ -413,5 +413,5 @@ port=%(server_port)s
         if self._server_proc is not None:
             self._server_proc.kill()
 
-        if self._mongobox is not None:
-            self._mongobox.stop()
+        if self._mongoproc is not None:
+            self._mongoproc.stop()

@@ -31,13 +31,14 @@ import pytest
 from _pytest.fixtures import fixture
 
 from inmanta import agent, data, const, execute, config
-from inmanta.agent.handler import provider, ResourceHandler, SkipResource
+from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext
 from inmanta.resources import resource, Resource
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
-from inmanta.server.server import Server
 from inmanta.ast import CompilerException
+from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server import SLICE_AGENT_MANAGER
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -53,6 +54,13 @@ def resource_container():
             A file on a filesystem
         """
         fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+
+    @resource("test::Fact", agent="agent", id_attribute="key")
+    class FactResource(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "skip", "factvalue")
 
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
@@ -203,6 +211,37 @@ def resource_container():
         def do_changes(self, ctx, resource, changes):
             raise Exception()
 
+    @provider("test::Fact", name="test_fact")
+    class Fact(ResourceHandler):
+
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            current.value = "that"
+
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            if resource.skip:
+                raise SkipResource("can not deploy")
+            if "purged" in changes:
+                if changes["purged"]["desired"]:
+                    Provider.delete(resource.id.get_agent_name(), resource.key)
+                    ctx.set_purged()
+                else:
+                    Provider.set(resource.id.get_agent_name(), resource.key, "x")
+                    ctx.set_created()
+            else:
+                ctx.set_updated()
+
+        def facts(self, ctx: HandlerContext, resource: Resource) -> dict:
+            if not Provider.isset(resource.id.get_agent_name(), resource.key):
+                return {}
+            elif resource.factvalue is None:
+                raise SkipResource("Not ready")
+            return {"fact": resource.factvalue}
+
     waiter = Condition()
 
     @gen.coroutine
@@ -268,6 +307,9 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
         There is a second agent with an undefined resource. The server will shortcut the dryrun and deploy for this resource
         without an agent being present.
     """
+
+    agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     result = yield client_multi.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -280,7 +322,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     agent.add_end_point_name("agent1")
     agent.start()
 
-    yield retry_limited(lambda: len(server_multi.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -558,6 +600,8 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     """
         dryrun and deploy a configuration model
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -569,16 +613,19 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
     server.stop()
 
-    server = Server(database_host="localhost", database_port=int(mongo_db.port), io_loop=io_loop)
-    server.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    ibl = InmantaBootloader()
+    server = ibl.restserver
+    ibl.start()
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -671,7 +718,7 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
     assert not resource_container.Provider.isset("agent1", "key3")
 
     agent.stop()
-    server.stop()
+    ibl.stop()
 
 
 @pytest.mark.gen_test(timeout=30)
@@ -679,6 +726,8 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -693,7 +742,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -772,7 +821,7 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     myagent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -871,7 +920,7 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -965,6 +1014,8 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
 
 @pytest.mark.gen_test
 def test_server_agent_api(resource_container, client, server, io_loop):
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
@@ -978,8 +1029,8 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.start()
 
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
-    assert len(server.agentmanager.sessions) == 2
+    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+    assert len(agentmanager.sessions) == 2
 
     result = yield client.list_agent_processes(env_id)
     assert result.code == 200
@@ -1070,7 +1121,7 @@ def test_get_facts(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1118,7 +1169,7 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1177,6 +1228,125 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
 
 
 @pytest.mark.gen_test
+def test_get_facts_extended(io_loop, server, client, resource_container, environment):
+    """
+        dryrun and deploy a configuration model automatically
+    """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    # allow very rapid fact refresh
+    agentmanager._fact_resource_block = 0.1
+
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    # mark some as existing
+    resource_container.Provider.set("agent1", "key1", "value")
+    resource_container.Provider.set("agent1", "key2", "value")
+    resource_container.Provider.set("agent1", "key4", "value")
+    resource_container.Provider.set("agent1", "key5", "value")
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': True,
+                  'factvalue': "fk1",
+                  'requires': [],
+                  },
+                 {'key': 'key2',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key2],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': "fk2",
+                  'requires': [],
+                  },
+                 {'key': 'key3',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key3],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': "fk3",
+                  'requires': [],
+                  },
+                 {'key': 'key4',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key4],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': "fk4",
+                  'requires': [],
+                  },
+                 {'key': 'key5',
+                  'value': 'value1',
+                  'id': 'test::Fact[agent1,key=key5],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'skip': False,
+                  'factvalue': None,
+                  'requires': [],
+                  }
+                 ]
+
+    resource_states = {'test::Fact[agent1,key=key4],v=%d' % version: const.ResourceState.undefined,
+                       'test::Fact[agent1,key=key5],v=%d' % version: const.ResourceState.undefined}
+
+    @gen.coroutine
+    def get_fact(rid, result_code=200, limit=10, lower_limit=2):
+        lower_limit = limit - lower_limit
+        result = yield client.get_param(environment, "fact", rid)
+
+        # add minimal nr of reps or failure cases
+        while (result.code != result_code and limit > 0) or limit > lower_limit:
+            limit -= 1
+            yield gen.sleep(0.1)
+            result = yield client.get_param(environment, "fact", rid)
+
+        assert result.code == result_code
+        return result
+
+    result = yield client.put_version(tid=environment,
+                                      version=version,
+                                      resources=resources,
+                                      unknowns=[],
+                                      version_info={},
+                                      resource_state=resource_states)
+    assert result.code == 200
+
+    yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
+    yield get_fact('test::Fact[agent1,key=key2]')  # normal
+    yield get_fact('test::Fact[agent1,key=key3]', 503)  # not present
+    yield get_fact('test::Fact[agent1,key=key4]')  # unknown
+    yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+
+    result = yield client.get_version(environment, version)
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
+    yield get_fact('test::Fact[agent1,key=key2]')  # normal
+    yield get_fact('test::Fact[agent1,key=key3]')  # not present -> present
+    yield get_fact('test::Fact[agent1,key=key4]')  # unknown
+    yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+
+    agent.stop()
+
+
+@pytest.mark.gen_test
 def test_get_set_param(resource_container, client, server, io_loop):
     """
         Test getting and setting params
@@ -1215,7 +1385,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1243,7 +1413,7 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
     result = yield client.release_version(env_id, version, True)
     assert result.code == 200
 
-    yield server.renew_expired_facts()
+    yield server.get_endpoint("server").renew_expired_facts()
 
     env_id = uuid.UUID(env_id)
     params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
@@ -1271,7 +1441,7 @@ def test_fail(resource_container, client, server, io_loop):
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1381,7 +1551,7 @@ def test_wait(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1532,7 +1702,7 @@ def test_multi_instance(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server._sessions) == 1, 10)
+    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1643,6 +1813,8 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     """
         deploy a configuration model with cross host dependency
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     # config for recovery mechanism
     Config.set("config", "agent-interval", "10")
@@ -1656,13 +1828,13 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(io_loop, hostname="node2", environment=env_id, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -1748,6 +1920,8 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
     """
         test dryrun scaling
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     result = yield client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -1759,7 +1933,7 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1806,12 +1980,14 @@ def test_send_events(resource_container, io_loop, environment, server, client):
     """
         Send and receive events within one agent
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1869,18 +2045,20 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
     """
         Send and receive events over agents
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(io_loop, hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     version = int(time.time())
 
@@ -1942,12 +2120,14 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
     """
         Send and receive events over agents with agents starting after deploy
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     agent2 = Agent(io_loop, hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1997,7 +2177,7 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 2, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
         result = yield client.get_version(environment, version)
@@ -2023,12 +2203,14 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
     """
         dryrun and deploy a configuration model automatically
     """
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
     resource_container.Provider.reset()
     agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.agentmanager.sessions) == 1, 10)
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -2367,7 +2549,7 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
 
         return versions.result
 
-    project_dir = os.path.join(server._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_endpoint("server")._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
 
     shutil.copytree(project_source, project_dir)
