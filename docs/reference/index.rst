@@ -12,5 +12,6 @@ Inmanta, please check out the :doc:`../quickstart` guide.
 
     commands
     config
+    projectyml
     api
     modules

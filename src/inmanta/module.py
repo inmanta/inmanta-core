@@ -363,6 +363,12 @@ class ModuleLike(object):
             reqs.append(req)
         return reqs
 
+    def get_config(self, name, default):
+        if name not in self._meta:
+            return default
+        else:
+            return self._meta[name]
+
 
 INSTALL_RELEASES = "release"
 INSTALL_PRERELEASES = "prerelease"
@@ -482,12 +488,6 @@ class Project(ModuleLike):
         cls._project = project
         os.chdir(project._path)
         plugins.PluginMeta.clear()
-
-    def get_config(self, name, default):
-        if name not in self._meta:
-            return default
-        else:
-            return self._meta[name]
 
     def load(self):
         if not self.loaded:
@@ -1046,7 +1046,7 @@ class Module(ModuleLike):
 
         return files
 
-    def get_all_submodules(self):
+    def get_all_submodules(self) -> List[str]:
         """
             Get all submodules of this module
         """

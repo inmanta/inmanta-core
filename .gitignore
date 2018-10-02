@@ -41,3 +41,5 @@ docs/reference/modules
 docs/moduleguides
 .idea
 .pytest_cache
+
+types

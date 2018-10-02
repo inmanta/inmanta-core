@@ -252,6 +252,20 @@ class ModuleTool(ModuleLikeTool):
         create = subparser.add_parser("create", help="Create a new module")
         create.add_argument("name", help="The name of the module")
 
+        freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
+        freeze.add_argument("-o", "--outfile",
+                            help="File in which to put the new project.yml, default is the existing project.yml",
+                            default=None)
+        freeze.add_argument("-r", "--recursive",
+                            help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
+                            "which defaults to False",
+                            action="store_true",
+                            default=None)
+        freeze.add_argument("--operator",
+                            help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
+                            " project.yml is used which defaults to ~=",
+                            default=None)
+
     def get_module(self, module: str=None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
@@ -559,3 +573,42 @@ requires:
             sys.exit(1)
 
         sys.exit(0)
+
+    def freeze(self, outfile, recursive, operator, module=None):
+        """
+        !!! Big Side-effect !!! sets yaml parser to be order preserving
+         """
+
+        # find module
+        module = self.get_module(module)
+
+        if recursive is None:
+            recursive = bool(module.get_config("freeze_recursive", False))
+
+        if operator is None:
+            operator = module.get_config("freeze_operator", "~=")
+
+        if operator not in ["==", "~=", ">="]:
+            LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
+
+        freeze = {}
+
+        for submodule in module.get_all_submodules():
+            freeze.update(module.get_freeze(submodule=submodule, mode=operator, recursive=recursive))
+
+        set_yaml_order_perserving()
+
+        with open(module.get_config_file_name(), "r") as fd:
+            newconfig = yaml.load(fd)
+
+        requires = sorted([k + " " + v for k, v in freeze.items()])
+        newconfig["requires"] = requires
+
+        if outfile is None:
+            outfile = open(module.get_config_file_name(), "w", encoding='UTF-8')
+        elif outfile == "-":
+            outfile = sys.stdout
+        else:
+            outfile = open(outfile, "w", encoding='UTF-8')
+
+        outfile.write(yaml.dump(newconfig, default_flow_style=False))
