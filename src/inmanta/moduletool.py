@@ -26,7 +26,7 @@ import subprocess
 import tempfile
 import time
 
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser
 from pkg_resources import parse_version
 import texttable
 
@@ -34,7 +34,6 @@ import inmanta
 from inmanta.ast import Namespace
 from inmanta.parser.plyInmantaParser import parse
 from inmanta.command import CLIException
-from webbrowser import Opera
 import yaml
 from collections import OrderedDict
 

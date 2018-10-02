@@ -76,5 +76,3 @@ def test_help_sub(inmanta_config, capsys):
     assert "export" not in out
     # check subcommands help
     assert "update" in out
-
-

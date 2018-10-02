@@ -30,7 +30,7 @@ from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import yaml
 from pkg_resources import parse_version
-from inmanta.moduletool import ModuleTool, ProjectTool
+from inmanta.moduletool import ModuleTool
 from test_app_cli import app
 from inmanta.command import CLIException
 
