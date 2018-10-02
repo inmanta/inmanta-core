@@ -651,26 +651,27 @@ version: 0.0.1
 modulepath: libs
 downloadpath: libs
 repo: %s
-freeze_recursive: True
-freeze_operator: "=="
-"""% modules_repo)
-    app(["project", "freeze"])
+freeze_recursive: true
+freeze_operator: ==
+""" % modules_repo)
 
-    out, err = capsys.readouterr()
+    def verify():
+        out, err = capsys.readouterr()
 
-    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-    assert len(err) == 0
-    assert len(out) == 0
+        assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+        assert len(err) == 0
+        assert len(out) == 0
 
-    with open("project.yml", "r") as fh:
-        assert fh.read() == ("""name: modA
+        with open("project.yml", "r") as fh:
+            assert fh.read() == ("""name: modA
 license: Apache 2.0
 version: 0.0.1
 modulepath: libs
 downloadpath: libs
 repo: %s
+freeze_recursive: true
+freeze_operator: ==
 requires:
-- std == 3.2
 - modB == 3.2
 - modC == 3.2
 - modD == 3.2
@@ -679,4 +680,10 @@ requires:
 - modG == 3.2
 - modH == 3.2
 - modJ == 3.2
+- std == 3.2
 """ % modules_repo)
+
+    app(["project", "freeze"])
+    verify()
+    app(["project", "freeze"])
+    verify()

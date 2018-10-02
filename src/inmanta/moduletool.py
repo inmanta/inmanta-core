@@ -36,7 +36,7 @@ from inmanta.parser.plyInmantaParser import parse
 from inmanta.command import CLIException
 from webbrowser import Opera
 import yaml
-from _collections import OrderedDict
+from collections import OrderedDict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -147,7 +147,6 @@ class ProjectTool(ModuleLikeTool):
         freeze = subparser.add_parser("freeze", help="Set all version numbers in project.yml")
         freeze.add_argument("-o", "--outfile",
                             help="File in which to put the new project.yml, default is the existing project.yml",
-                            type=FileType('w', encoding='UTF-8'),
                             default=None)
         freeze.add_argument("-r", "--recursive",
                             help="Freeze dependencies recursively. If not set, freeze_recursive option in project.yml is used,"
@@ -177,9 +176,6 @@ class ProjectTool(ModuleLikeTool):
         if operator not in ["==", "~=", ">="]:
             LOGGER.warning("Operator %s is unknown, expecting one of ['==', '~=', '>=']", operator)
 
-        if outfile is None:
-            outfile = open(project.get_config_file_name(), "w", encoding='UTF-8')
-
         freeze = project.get_freeze(mode=operator, recursive=recursive)
 
         set_yaml_order_perserving()
@@ -189,6 +185,13 @@ class ProjectTool(ModuleLikeTool):
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
+
+        if outfile is None:
+            outfile = open(project.get_config_file_name(), "w", encoding='UTF-8')
+        elif outfile == "-":
+            outfile = sys.stdout
+        else:
+            outfile = open(outfile, "w", encoding='UTF-8')
 
         outfile.write(yaml.dump(newconfig, default_flow_style=False))
 
@@ -436,7 +439,6 @@ version: 0.0.1dev0""" % {"name": name})
             return
 
         module.rewrite_version(str(outversion))
-        print("set version to: " + str(outversion))
         # commit
         gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
         # tag
