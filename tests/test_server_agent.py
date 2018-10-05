@@ -594,7 +594,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     assert resource_container.Provider.readcount("agent2", "key1") == 1
 
     # wait for get resources backoff
-    yield gen.sleep(0.1)
+    yield gen.sleep(0.3)
 
     # Do a second deploy of the same model on agent2 with undefined resources
     yield agent.trigger_update("env_id", "agent2")
