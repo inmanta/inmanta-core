@@ -319,7 +319,7 @@ class Entity(EntityLike, NamedType):
             Return an instance of the class defined in this entity
         """
         out = Instance(self, resolver, queue)
-        out.location = location
+        out.set_location(location)
         for k, v in attributes.items():
             out.set_attribute(k, v, location)
 

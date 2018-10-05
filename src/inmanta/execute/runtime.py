@@ -21,7 +21,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException, \
     Locatable, Location
 from inmanta.ast.type import Type
-from typing import Dict, Any
+from typing import List, Dict, Any
 
 
 class ResultCollector(object):
@@ -636,6 +636,8 @@ class Instance(ExecutionContext, Locatable, Resolver):
         # see inmanta.ast.execute.scheduler.QueueScheduler
         self.trackers = []
 
+        self.locations = []
+
     def get_type(self):
         return self.type
 
@@ -657,7 +659,7 @@ class Instance(ExecutionContext, Locatable, Resolver):
         return "%s %02x" % (self.type, self.sid)
 
     def __str__(self):
-        return "%s (instantiated at %s)" % (self.type, self.location)
+        return "%s (instantiated at %s)" % (self.type, ",".join([str(l) for l in self.get_locations()]))
 
     def add_implementation(self, impl):
         if impl in self.implemenations:
@@ -709,5 +711,12 @@ class Instance(ExecutionContext, Locatable, Resolver):
                 return False
         return True
 
+    def set_location(self, location: Location):
+        Locatable.set_location(self, location)
+        self.locations.append(location)
+
     def get_location(self) -> Location:
         return self.location
+
+    def get_locations(self) -> List[Location]:
+        return self.locations

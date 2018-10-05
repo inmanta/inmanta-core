@@ -440,3 +440,50 @@ def test_672_missing_type(snippetcompiler):
         """,
         "could not find type Testt in namespace __config__"
         " (reported in Implementation(test) ({dir}/main.cf:5))")
+
+
+def test_747_index_collisions(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+            string name
+            string value
+        end
+
+        implementation none for Test:
+        end
+
+        implement Test using none
+
+        index Test(name)
+        Test(name="A", value="a")
+        Test(name="A", value="b")
+
+        """,
+        "could not find type Testt in namespace __config__"
+        " (reported in Implementation(test) ({dir}/main.cf:5))")
+
+
+def test_747_index_collisions_invisible(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+            string name
+            string value
+        end
+
+        implementation none for Test:
+        end
+
+        implement Test using none
+
+        index Test(name)
+
+        for v in ["a","b"]:
+            Test(name="A", value=v)
+        end
+
+        """,
+        "could not find type Testt in namespace __config__"
+        " (reported in Implementation(test) ({dir}/main.cf:5))")
+
