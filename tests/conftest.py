@@ -364,7 +364,7 @@ class SnippetCompilationTest(object):
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
-            text = str(e)
+            text = e.format_trace(indent="  ")
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert shouldbe == text
@@ -375,7 +375,7 @@ class SnippetCompilationTest(object):
             compiler.do_compile()
             assert False, "Should get exception"
         except CompilerException as e:
-            text = str(e)
+            text = e.format_trace(indent="  ")
             print(text)
             shouldbe = shouldbe.format(dir=self.project_dir)
             assert re.search(shouldbe, text) is not None

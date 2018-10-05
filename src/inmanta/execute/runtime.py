@@ -645,7 +645,7 @@ class Instance(ExecutionContext, Locatable, Resolver):
         try:
             self.slots[name].set_value(value, location, recur)
         except RuntimeException as e:
-            raise AttributeException(None, self, name, cause=e)
+            raise AttributeException(self, self, name, cause=e)
 
     def get_attribute(self, name) -> ResultVariable:
         try:

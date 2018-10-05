@@ -433,36 +433,63 @@ class CompilerException(Exception):
     def __init__(self, msg: str=None) -> None:
         Exception.__init__(self, msg)
         self.location = None  # type: Location
+        self.msg = msg
 
     def set_location(self, location: Location) -> None:
         if self.location is None:
             self.location = location
 
+    def get_message(self) -> str:
+        return self.msg
+
+    def get_location(self) -> Location:
+        return self.location
+
+    def get_causes(self) -> "List[CompilerException]":
+        return []
+
+    def format(self) -> str:
+        """ Make a string representation of this particular exception """
+        location = self.get_location()
+        if location is not None:
+            return "%s (%s)" % (self.get_message(), location)
+        else:
+            return self.get_message()
+
+    def format_trace(self, indent="", indent_level=0):
+        """ make a representation of this exception and its causes"""
+        out = indent*indent_level + self.format()
+
+        for cause in self.get_causes():
+            part = cause.format_trace(indent=indent, indent_level=indent_level+1)
+            out += "\n" + indent*indent_level + "caused by:"
+            out += "\n" + part
+
+        return out
+
+    def __str__(self):
+        return self.format()
+
 
 class RuntimeException(CompilerException):
 
-    def __init__(self, stmt: "Optional[Locatable]", msg: str, root_cause_chance=10) -> None:
-        CompilerException.__init__(self)
+    def __init__(self, stmt: "Optional[Locatable]", msg: str) -> None:
+        CompilerException.__init__(self, msg)
         self.stmt = None
         if stmt is not None:
             self.set_location(stmt.get_location())
             self.stmt = stmt
-        self.msg = msg
-        self.root_cause_chance = root_cause_chance
 
     def set_statement(self, stmt: "Locatable", replace: bool = True):
         if replace or self.stmt is None:
             self.set_location(stmt.get_location())
             self.stmt = stmt
 
-    def __str__(self) -> str:
-        if self.stmt is None and self.location is None:
-            return self.msg
-        else:
+    def format(self) -> str:
+        """ Make a string representation of this particular exception """
+        if self.stmt is not None:
             return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
-
-    def __le__(self, other) -> bool:
-        return self.root_cause_chance < other.root_cause_chance
+        return super(RuntimeException, self).format()
 
 
 class TypeNotFoundException(RuntimeException):
@@ -482,27 +509,30 @@ def stringify_exception(exn: Exception) -> str:
 class WrappingRuntimeException(RuntimeException):
 
     def __init__(self, stmt: Locatable, msg: str, cause: Exception) -> None:
-        if stmt is None:
-            if isinstance(cause, RuntimeException):
-                stmt = cause.stmt
-        longmsg = "%s caused by %s" % (msg, stringify_exception(cause))
-        RuntimeException.__init__(self, stmt=stmt, msg=longmsg)
+        if stmt is None and isinstance(cause, RuntimeException):
+            stmt = cause.stmt
+
+        RuntimeException.__init__(self, stmt=stmt, msg=msg)
+
         self.__cause__ = cause
+
+    def get_causes(self) -> List[CompilerException]:
+        return [self.__cause__]
 
 
 class AttributeException(WrappingRuntimeException):
 
-    def __init__(self, stmt: "Statement", entity: "Instance", attribute: str, cause: Exception) -> None:
+    def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: Exception) -> None:
         WrappingRuntimeException.__init__(
-            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(entity)), cause=cause)
+            self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause)
         self.attribute = attribute
-        self.entity = entity
+        self.instance = instance
 
 
 class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: str) -> None:
-        RuntimeException.__init__(self, None, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute))
+        RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute))
         self.instance = instance
         self.attribute = attribute
 
@@ -530,9 +560,9 @@ class CycleExcpetion(TypingException):
             self.complete = True
         self.types.append(element)
 
-    def __str__(self, *args, **kwargs):
+    def get_message(self) -> str:
         trace = ",".join([x.get_full_name() for x in self.types])
-        return "Entity can not be its own parent %s (reported in %s (%s))" % (trace, self.stmt, self.location)
+        return "Entity can not be its own parent %s" % (trace)
 
 
 class ModuleNotFoundException(RuntimeException):
@@ -571,8 +601,8 @@ class DuplicateException(TypingException):
         TypingException.__init__(self, stmt, msg)
         self.other = other
 
-    def __str__(self) -> str:
-        return "%s (reported at (%s)) (duplicate at (%s))" % (self.msg, self.location, self.other.get_location())
+    def format(self) -> str:
+        return "%s (original at (%s)) (duplicate at (%s))" % (self.get_message(), self.location, self.other.get_location())
 
 
 class CompilerError(Exception):
@@ -582,8 +612,15 @@ class CompilerError(Exception):
 
 class MultiException(CompilerException):
 
-    def __init__(self, others: List[Exception]) -> None:
+    def __init__(self, others: List[CompilerException]) -> None:
+        CompilerException.__init__(self, "")
         self.others = others
+
+    def get_causes(self) -> List[CompilerException]:
+        return self.others
+
+    def format(self) -> str:
+        return "Reported %d errors" % len(self.others)
 
     def __str__(self) -> str:
         return "Reported %d errors:\n\t" % len(self.others) + '\n\t'.join([str(e) for e in self.others])

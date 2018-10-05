@@ -95,9 +95,9 @@ end
 
 Test1(a=3)
 """,
-        "Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` caused by Invalid "
-        "value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6)) "
-        "(reported in Construct(Test1) ({dir}/main.cf:6))"
+        """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)`
+caused by:
+  Invalid value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))"""
     )
 
 

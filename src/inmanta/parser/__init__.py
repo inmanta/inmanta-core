@@ -22,17 +22,10 @@ from inmanta.ast import CompilerException, Range
 class ParserException(CompilerException):
 
     def __init__(self, location: Range, value, msg=None):
-        CompilerException.__init__(self)
+        if msg is None:
+            msg = "Syntax error at token %s" % value
+        else:
+            msg = "Syntax error %s" % msg
+        CompilerException.__init__(self, msg)
         self.set_location(location)
         self.value = value
-        self.position = None
-        self.msg = msg
-
-    def findCollumn(self, content):  # noqa: N802
-        pass
-
-    def __str__(self, *args, **kwargs):
-        if self.msg is None:
-            return "Syntax error at token %s (%s)" % (self.value, self.location)
-        else:
-            return "Syntax error %s (%s)" % (self.msg, self.location)
