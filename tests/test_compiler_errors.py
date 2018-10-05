@@ -96,7 +96,8 @@ end
 Test1(a=3)
 """,
         "Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` caused by Invalid "
-        "value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))"
+        "value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6)) "
+        "(reported in Construct(Test1) ({dir}/main.cf:6))"
     )
 
 
@@ -295,7 +296,7 @@ Test(value="a")
 """,
         "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` caused by "
         "Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41)) "
-        "(reported in Construct(Test) ({dir}/main.cf:3:41))")
+        "(reported in Construct(Test) ({dir}/main.cf:11))")
 
 
 def test_typedef_in_violates(snippetcompiler):
@@ -312,7 +313,8 @@ implement Test using std::none
 Test(value="ab")
 """,
         "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` "
-        "caused by Invalid value 'ab', constraint does not match (reported in Construct(Test) ({dir}/main.cf:10))")
+        "caused by Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9)) "
+        "(reported in Construct(Test) ({dir}/main.cf:10))")
 
 
 def test_set_wrong_relation_type(snippetcompiler):
@@ -334,7 +336,7 @@ def test_set_wrong_relation_type(snippetcompiler):
         """,
         "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
         "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
-        "(reported in Construct(Credentials) ({dir}/main.cf:9:34)) (reported in Construct(Credentials) ({dir}/main.cf:9))")
+        "(reported in Construct(Credentials) ({dir}/main.cf:9)) (reported in Construct(Credentials) ({dir}/main.cf:9))")
 
     snippetcompiler.setup_for_error(
         """
@@ -350,7 +352,7 @@ def test_set_wrong_relation_type(snippetcompiler):
         """,
         "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
         "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
-        "(reported in creds.file = creds ({dir}/main.cf:10:22)) (reported in creds.file = creds ({dir}/main.cf:10))")
+        "(reported in creds.file = creds ({dir}/main.cf:10)) (reported in creds.file = creds ({dir}/main.cf:10))")
 
 
 def test_bad_map_lookup(snippetcompiler):

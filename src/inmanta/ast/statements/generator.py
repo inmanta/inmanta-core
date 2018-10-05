@@ -36,7 +36,7 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Entity, Implement  # noqa: F401
+    from inmanta.ast.entity import Default, Entity, Implement  # noqa: F401
 
 
 class SubConstructor(GeneratorStatement):
@@ -45,10 +45,10 @@ class SubConstructor(GeneratorStatement):
         imports the statements
     """
 
-    def __init__(self, instance_type: "", implements: "Implement") -> None:
+    def __init__(self, instance_type: "Entity", implements: "Implement") -> None:
         GeneratorStatement.__init__(self)
         self.type = instance_type
-        self.location = instance_type.location
+        self.location = instance_type.get_location()
         self.implements = implements
 
     def normalize(self) -> None:
@@ -185,7 +185,7 @@ class Constructor(GeneratorStatement):
                  namespace: Namespace) -> None:
         GeneratorStatement.__init__(self)
         self.class_type = str(class_type)
-        self.__attributes = {}
+        self.__attributes = {}  # type: Dict[str,ExpressionStatement]
         self.implemented = False
         self.register = False
         self.location = location
@@ -198,15 +198,20 @@ class Constructor(GeneratorStatement):
         self._indirect_attributes = {}
 
     def normalize(self) -> None:
-        self.type = self.namespace.get_type(self.class_type)
+        mytype = self.namespace.get_type(self.class_type)
+
+        self.type = mytype  # type: EntityLike
+
         for (k, v) in self.__attributes.items():
             v.normalize()
 
         inindex = set()
 
-        all_attributes = set(self.attributes.keys()) | \
-            set(self.type.get_defaults().keys()) | \
+        has_default = set(self.type.get_defaults().keys()) | \
             set(self.type.get_entity().get_defaults().keys())
+
+        all_attributes = set(self.attributes.keys()) | \
+            has_default
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
@@ -220,7 +225,7 @@ class Constructor(GeneratorStatement):
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
-            if isinstance(attribute, RelationAttribute) and k not in inindex:
+            if (isinstance(attribute, RelationAttribute) or k not in has_default) and k not in inindex:
                 self._indirect_attributes[k] = v
             else:
                 self._direct_attributes[k] = v
@@ -316,7 +321,7 @@ class Constructor(GeneratorStatement):
 
         return object_instance
 
-    def add_attribute(self, lname: LocatableString, value: object):
+    def add_attribute(self, lname: LocatableString, value: ExpressionStatement) -> None:
         """
             Add an attribute to this constructor call
         """

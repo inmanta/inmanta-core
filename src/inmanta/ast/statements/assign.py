@@ -155,9 +155,9 @@ class SetAttributeHelper(ExecutionUnit):
 
     def execute(self) -> None:
         try:
-            ExecutionUnit.execute(self)
+            ExecutionUnit._unsafe_execute(self)
         except RuntimeException as e:
-            e.set_statement(self.stmt)
+            e.set_statement(self.stmt, False)
             raise AttributeException(self.stmt, self.instance, self.attribute_name, e)
 
     def __str__(self) -> str:

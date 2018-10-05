@@ -466,15 +466,18 @@ class ExecutionUnit(Waiter):
             self.await(r)
         self.ready(self)
 
+    def _unsafe_execute(self):
+        requires = {k: v.get_value() for (k, v) in self.requires.items()}
+        value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
+        self.result.set_value(value, self.expression.location)
+        self.done = True
+
     def execute(self):
         try:
-            requires = {k: v.get_value() for (k, v) in self.requires.items()}
-            value = self.expression.execute(requires, self.resolver, self.queue_scheduler)
-            self.result.set_value(value, self.expression.location)
+            self._unsafe_execute()
         except RuntimeException as e:
             e.set_statement(self.expression)
             raise e
-        self.done = True
 
     def __repr__(self):
         return repr(self.expression)
