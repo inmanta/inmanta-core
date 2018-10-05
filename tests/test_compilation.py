@@ -483,7 +483,7 @@ index A(name,opt)
 
 
 def test_issue_index_on_not_existing(snippetcompiler):
-    with pytest.raises(TypeNotFoundException) as e:
+    with pytest.raises(TypeNotFoundException):
         snippetcompiler.setup_for_snippet("""
 index A(name)
 """)
