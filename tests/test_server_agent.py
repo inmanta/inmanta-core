@@ -33,6 +33,7 @@ from _pytest.fixtures import fixture
 from inmanta import agent, data, const, execute, config
 from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext
 from inmanta.resources import resource, Resource
+import inmanta.agent.agent
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
@@ -489,6 +490,10 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
          Test deploy of resource with undefined
     """
 
+    # agent backoff makes this test unreliable or slow, so we turn it off
+    backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
+    inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
+
     agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
 
     Config.set("config", "agent-interval", "100")
@@ -593,9 +598,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     assert resource_container.Provider.readcount("agent2", "key5") == 0
     assert resource_container.Provider.readcount("agent2", "key1") == 1
 
-    # wait for get resources backoff
     yield gen.sleep(0.1)
-
     # Do a second deploy of the same model on agent2 with undefined resources
     yield agent.trigger_update("env_id", "agent2")
 
@@ -614,6 +617,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     yield retry_limited(done, 100)
 
     agent.stop()
+    inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
 
 
 @pytest.mark.gen_test(timeout=30)
