@@ -20,6 +20,7 @@ from inmanta import util
 
 from typing import Dict, Sequence, List, Optional, Union  # noqa: F401
 from abc import abstractmethod
+import traceback
 
 
 try:
@@ -488,7 +489,7 @@ class RuntimeException(CompilerException):
     def format(self) -> str:
         """ Make a string representation of this particular exception """
         if self.stmt is not None:
-            return "%s (reported in %s (%s))" % (self.msg, self.stmt, self.location)
+            return "%s (reported in %s (%s))" % (self.get_message(), self.stmt, self.get_location())
         return super(RuntimeException, self).format()
 
 
@@ -506,9 +507,31 @@ def stringify_exception(exn: Exception) -> str:
     return "%s: %s" % (exn.__class__.__name__, str(exn))
 
 
-class WrappingRuntimeException(RuntimeException):
+class ExternalException(RuntimeException):
 
     def __init__(self, stmt: Locatable, msg: str, cause: Exception) -> None:
+        RuntimeException.__init__(self, stmt=stmt, msg=msg)
+
+        self.__cause__ = cause
+
+    def get_causes(self) -> List[CompilerException]:
+        return []
+
+    def format_trace(self, indent="", indent_level=0):
+        """ make a representation of this exception and its causes"""
+        out = indent*indent_level + self.format()
+
+        part = traceback.format_exception_only(self.__cause__.__class__, self.__cause__)
+        out += "\n" + indent*indent_level + "caused by:\n"
+        for line in part:
+            out += indent*(indent_level+1) + line
+
+        return out
+
+
+class WrappingRuntimeException(RuntimeException):
+
+    def __init__(self, stmt: Locatable, msg: str, cause: RuntimeException) -> None:
         if stmt is None and isinstance(cause, RuntimeException):
             stmt = cause.stmt
 
@@ -522,7 +545,7 @@ class WrappingRuntimeException(RuntimeException):
 
 class AttributeException(WrappingRuntimeException):
 
-    def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: Exception) -> None:
+    def __init__(self, stmt: "Locatable", instance: "Instance", attribute: str, cause: RuntimeException) -> None:
         WrappingRuntimeException.__init__(
             self, stmt=stmt, msg="Could not set attribute `%s` on instance `%s`" % (attribute, str(instance)), cause=cause)
         self.attribute = attribute
