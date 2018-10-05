@@ -119,7 +119,7 @@ t1.a=3
 """,
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
 caused by:
-  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))"""
+  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))"""  # nopep8
     )
 
 
@@ -219,7 +219,8 @@ def test_null(snippetcompiler):
     """,
         """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
 caused by:
-  Invalid value 'null', expected String""")
+  Invalid value 'null', expected String"""  # nopep8
+  )
 
 
 def test_null_on_list(snippetcompiler):
@@ -232,7 +233,8 @@ def test_null_on_list(snippetcompiler):
         a = A()
     """, """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
 caused by:
-  Invalid value 'null', expected list""")
+  Invalid value 'null', expected list"""  # nopep8
+  )
 
 
 def test_null_on_dict(snippetcompiler):
@@ -302,7 +304,8 @@ Test(value="a")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
 caused by:
-  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""")
+  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))"""  # nopep8
+  )
 
 
 def test_typedef_in_violates(snippetcompiler):
@@ -320,7 +323,8 @@ Test(value="ab")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
-  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""")
+  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))"""  # nopep8
+  )
 
 
 def test_set_wrong_relation_type(snippetcompiler):
@@ -361,7 +365,8 @@ caused by:
         """,
         """Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` (reported in creds.file = creds ({dir}/main.cf:10))
 caused by:
-  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))""")
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))"""  # nopep8
+  )
 
 
 def test_bad_map_lookup(snippetcompiler):

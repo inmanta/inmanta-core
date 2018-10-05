@@ -106,7 +106,7 @@ class FunctionCall(ReferenceStatement):
             except UnsetException as e:
                 raise e
             except RuntimeException as e:
-                raise WrappingRuntimeException(self,  "Exception in plugin %s" % self.name, e)
+                raise WrappingRuntimeException(self, "Exception in plugin %s" % self.name, e)
             except Exception as e:
                 raise ExternalException(self, "Exception in plugin %s" % self.name, e)
 

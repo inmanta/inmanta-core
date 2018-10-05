@@ -450,7 +450,7 @@ class CompilerException(Exception):
         return []
 
     def format(self) -> str:
-        """ Make a string representation of this particular exception """
+        """Make a string representation of this particular exception """
         location = self.get_location()
         if location is not None:
             return "%s (%s)" % (self.get_message(), location)
@@ -458,12 +458,12 @@ class CompilerException(Exception):
             return self.get_message()
 
     def format_trace(self, indent="", indent_level=0):
-        """ make a representation of this exception and its causes"""
-        out = indent*indent_level + self.format()
+        """Make a representation of this exception and its causes"""
+        out = indent * indent_level + self.format()
 
         for cause in self.get_causes():
-            part = cause.format_trace(indent=indent, indent_level=indent_level+1)
-            out += "\n" + indent*indent_level + "caused by:"
+            part = cause.format_trace(indent=indent, indent_level=indent_level + 1)
+            out += "\n" + indent * indent_level + "caused by:"
             out += "\n" + part
 
         return out
@@ -487,7 +487,7 @@ class RuntimeException(CompilerException):
             self.stmt = stmt
 
     def format(self) -> str:
-        """ Make a string representation of this particular exception """
+        """Make a string representation of this particular exception """
         if self.stmt is not None:
             return "%s (reported in %s (%s))" % (self.get_message(), self.stmt, self.get_location())
         return super(RuntimeException, self).format()
@@ -518,13 +518,13 @@ class ExternalException(RuntimeException):
         return []
 
     def format_trace(self, indent="", indent_level=0):
-        """ make a representation of this exception and its causes"""
-        out = indent*indent_level + self.format()
+        """Make a representation of this exception and its causes"""
+        out = indent * indent_level + self.format()
 
         part = traceback.format_exception_only(self.__cause__.__class__, self.__cause__)
-        out += "\n" + indent*indent_level + "caused by:\n"
+        out += "\n" + indent * indent_level + "caused by:\n"
         for line in part:
-            out += indent*(indent_level+1) + line
+            out += indent * (indent_level + 1) + line
 
         return out
 
@@ -555,7 +555,8 @@ class AttributeException(WrappingRuntimeException):
 class OptionalValueException(RuntimeException):
 
     def __init__(self, instance: "Instance", attribute: str) -> None:
-        RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" % (instance, attribute))
+        RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" %
+                                  (instance, attribute))
         self.instance = instance
         self.attribute = attribute
 
