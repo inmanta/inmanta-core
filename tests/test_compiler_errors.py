@@ -460,8 +460,14 @@ def test_747_index_collisions(snippetcompiler):
         Test(name="A", value="b")
 
         """,
-        "could not find type Testt in namespace __config__"
-        " (reported in Implementation(test) ({dir}/main.cf:5))")
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:13,{dir}/main.cf:14)` (reported in Construct(Test) ({dir}/main.cf:14))
+caused by:
+  value set twice: 
+\told value: a
+\t\tset at {dir}/main.cf:13
+\tnew value: b
+\t\tset at {dir}/main.cf:14
+ (reported in Construct(Test) ({dir}/main.cf:14))""")
 
 
 def test_747_index_collisions_invisible(snippetcompiler):
@@ -484,6 +490,12 @@ def test_747_index_collisions_invisible(snippetcompiler):
         end
 
         """,
-        "could not find type Testt in namespace __config__"
-        " (reported in Implementation(test) ({dir}/main.cf:5))")
+         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:15,{dir}/main.cf:15)` (reported in Construct(Test) ({dir}/main.cf:15))
+caused by:
+  value set twice: 
+\told value: a
+\t\tset at {dir}/main.cf:15:34
+\tnew value: b
+\t\tset at {dir}/main.cf:15:34
+ (reported in Construct(Test) ({dir}/main.cf:15))""")
 
