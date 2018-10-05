@@ -467,7 +467,8 @@ caused by:
 \t\tset at {dir}/main.cf:13
 \tnew value: b
 \t\tset at {dir}/main.cf:14
- (reported in Construct(Test) ({dir}/main.cf:14))""")
+ (reported in Construct(Test) ({dir}/main.cf:14))"""  # nopep8
+    )
 
 
 def test_747_index_collisions_invisible(snippetcompiler):
@@ -497,5 +498,5 @@ caused by:
 \t\tset at {dir}/main.cf:15:34
 \tnew value: b
 \t\tset at {dir}/main.cf:15:34
- (reported in Construct(Test) ({dir}/main.cf:15))""")
-
+ (reported in Construct(Test) ({dir}/main.cf:15))"""  # nopep8
+    )
