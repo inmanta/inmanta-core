@@ -2568,7 +2568,7 @@ a = Thing(id=5, value="{{a.id}}")
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
-    
+
     assert "5" == root.lookup("a").get_value().lookup("value").get_value()
 
 

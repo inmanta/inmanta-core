@@ -450,9 +450,10 @@ class RuntimeException(CompilerException):
         self.msg = msg
         self.root_cause_chance = root_cause_chance
 
-    def set_statement(self, stmt: "Locatable"):
-        self.set_location(stmt.get_location())
-        self.stmt = stmt
+    def set_statement(self, stmt: "Locatable", replace: bool = True):
+        if replace or self.stmt is None:
+            self.set_location(stmt.get_location())
+            self.stmt = stmt
 
     def __str__(self) -> str:
         if self.stmt is None and self.location is None:
