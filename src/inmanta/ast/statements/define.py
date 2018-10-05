@@ -26,7 +26,7 @@ from inmanta.ast.entity import Implementation, Entity, Default, Implement
 from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException,\
-    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
+    LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor, IndexException
 from typing import List
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit
 from inmanta.ast.blocks import BasicBlock
@@ -548,13 +548,22 @@ class DefineIndex(DefinitionStatement):
         """
             Add the index to the entity
         """
-        entity_type = self.namespace.get_type(self.type)
+        entity_type = self.namespace.get_type(self.type).get_entity()
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
             if attribute not in allattributes:
                 raise NotFoundException(self, attribute, "Attribute '%s' referenced in index is not defined in entity %s" %
                                         (attribute, entity_type))
+            else:
+                rattribute = entity_type.get_attribute(attribute)
+                if rattribute.is_optional():
+                    raise IndexException(
+                        self, "Index can not contain optional attributes, Attribute ' %s.%s' is optional" %
+                        (attribute, entity_type))
+                if rattribute.is_multi():
+                    raise IndexException(
+                        self, "Index can not contain list attributes, Attribute ' %s.%s' is a list" % (attribute, entity_type))
 
         entity_type.add_index(self.attributes)
 
