@@ -2568,8 +2568,8 @@ def test_749_is_unknown(snippetcompiler):
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
 
-    assert root.lookup("au").get_value() == False
-    assert root.lookup("bu").get_value() == True
+    assert not root.lookup("au").get_value()
+    assert root.lookup("bu").get_value()
 
     assert root.lookup("ax").get_value() == "XX"
     assert root.lookup("bx").get_value() == "XX"
