@@ -49,6 +49,7 @@ class FunctionCall(ReferenceStatement):
     def normalize(self):
         ReferenceStatement.normalize(self)
         self.function = self.namespace.get_type(self.name)
+        self.allow_unknown = self.function.opts["allow_unknown"]
 
     def requires_emit(self, resolver, queue):
         sub = ReferenceStatement.requires_emit(self, resolver, queue)
@@ -65,7 +66,7 @@ class FunctionCall(ReferenceStatement):
         arguments = [a.execute_direct(requires) for a in self.arguments]
         no_unknows = function.check_args(arguments)
 
-        if not no_unknows:
+        if not no_unknows and not self.allow_unknown:
             raise RuntimeException("Received unknown value during direct execution")
 
         if function._context is not -1:
@@ -88,7 +89,7 @@ class FunctionCall(ReferenceStatement):
         arguments = [a.execute(requires, resolver, queue) for a in self.arguments]
         no_unknows = function.check_args(arguments)
 
-        if not no_unknows:
+        if not no_unknows and not self.allow_unknown:
             result.set_value(Unknown(self), self.location)
             return
 

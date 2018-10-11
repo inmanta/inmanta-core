@@ -45,6 +45,7 @@ from inmanta.resources import Id
 from inmanta.server import config as opt
 import json
 from inmanta.util import hash_file
+from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token
 
 LOGGER = logging.getLogger(__name__)
@@ -261,9 +262,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         LOGGER.debug("Updating/setting parameter %s in env %s (for resource %s)", name, env.id, resource_id)
         if not isinstance(value, str):
             value = str(value)
-
-        if value is None or value == "":
-            value = " "
 
         if resource_id is None:
             resource_id = ""
@@ -746,18 +744,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def put_version(self, env, version, resources, resource_state, unknowns, version_info):
         started = datetime.datetime.now()
-        try:
-            cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
-                                         total=len(resources), version_info=version_info)
-            yield cm.insert()
-        except pymongo.errors.DuplicateKeyError:
-            return 500, {"message": "The given version is already defined. Versions should be unique."}
 
         agents = set()
         # lookup for all RV's, lookup by resource id
         rv_dict = {}
+        # reverse dependency tree, Resource.provides [:] -- Resource.requires as resource_id
+        provides_tree = defaultdict(lambda: [])
         # list of all resources which have a cross agent dependency, as a tuple, (dependant,requires)
         cross_agent_dep = []
+        # list of all resources which are undeployable
+        undeployable = []
 
         resource_objects = []
         resource_version_ids = []
@@ -765,6 +761,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             res_obj = data.Resource.new(env.id, res_dict["id"])
             if res_obj.resource_id in resource_state:
                 res_obj.status = const.ResourceState[resource_state[res_obj.resource_id]]
+                if res_obj.status in const.UNDEPLOYABLE_STATES:
+                    undeployable.append(res_obj)
 
             # collect all agents
             agents.add(res_obj.agent)
@@ -787,11 +785,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             # find cross agent dependencies
             agent = res_obj.agent
+            resc_id = res_obj.resource_id
             if "requires" not in attributes:
                 LOGGER.warning("Received resource without requires attribute (%s)" % res_obj.resource_id)
             else:
                 for req in attributes["requires"]:
                     rid = Id.parse_id(req)
+                    provides_tree[rid.resource_str()].append(resc_id)
                     if rid.get_agent_name() != agent:
                         # it is a CAD
                         cross_agent_dep.append((res_obj, rid))
@@ -831,6 +831,27 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
                     req_res.attributes["requires"].append(res_obj.resource_version_id)
                     res_obj.provides.append(req_res.resource_version_id)
+
+        undeployable = [res.resource_id for res in undeployable]
+        # get skipped for undeployable
+        work = list(undeployable)
+        skippeable = set()
+        while len(work) > 0:
+            current = work.pop()
+            if current in skippeable:
+                continue
+            skippeable.add(current)
+            work.extend(provides_tree[current])
+
+        skippeable = sorted(list(skippeable - set(undeployable)))
+
+        try:
+            cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
+                                         total=len(resources), version_info=version_info, undeployable=undeployable,
+                                         skipped_for_undeployable=skippeable)
+            yield cm.insert()
+        except pymongo.errors.DuplicateKeyError:
+            return 500, {"message": "The given version is already defined. Versions should be unique."}
 
         yield data.Resource.insert_many(resource_objects)
         yield cm.update_fields(total=cm.total + len(resources_to_purge))
@@ -875,20 +896,24 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield model.update_fields(released=True, result=const.VersionState.deploying)
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-        resources = yield data.Resource.get_undeployable(env.id, version_id)
+        undep = yield model.get_undeployable()
+        undep = [rid + ",v=%s" % version_id for rid in undep]
 
         now = datetime.datetime.now()
-        for res in resources:
-            yield self.resource_action_update(env, [res.resource_version_id], action_id=uuid.uuid4(), started=now,
-                                              finished=now, status=res.status, action=const.ResourceAction.deploy,
-                                              changes={}, messages=[], change=const.Change.nochange, send_events=False)
 
-            # Skip all resources that depend on this undepoyable resource
-            requires = yield data.Resource.get_requires(env.id, version_id, res.resource_version_id)
-            yield self.resource_action_update(env, [r.resource_version_id for r in requires], action_id=uuid.uuid4(),
-                                              started=now, finished=now, status=const.ResourceState.skipped,
-                                              action=const.ResourceAction.deploy, changes={}, messages=[],
-                                              change=const.Change.nochange, send_events=False)
+        # not checking error conditions
+        yield self.resource_action_update(env, undep, action_id=uuid.uuid4(), started=now,
+                                          finished=now, status=const.ResourceState.undefined,
+                                          action=const.ResourceAction.deploy, changes={}, messages=[],
+                                          change=const.Change.nochange, send_events=False)
+
+        skippable = yield model.get_skipped_for_undeployable()
+        skippable = [rid + ",v=%s" % version_id for rid in skippable]
+        # not checking error conditions
+        yield self.resource_action_update(env, skippable, action_id=uuid.uuid4(),
+                                          started=now, finished=now, status=const.ResourceState.skipped_for_undefined,
+                                          action=const.ResourceAction.deploy, changes={}, messages=[],
+                                          change=const.Change.nochange, send_events=False)
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
@@ -930,23 +955,27 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
 
         # Mark the resources in an undeployable state as done
-        resources = yield data.Resource.get_undeployable(env.id, version_id)
         with (yield self.dryrun_lock.acquire()):
-            for res in resources:
+            undeployableids = yield model.get_undeployable()
+            undeployableids = [rid + ",v=%s" % version_id for rid in undeployableids]
+            undeployable = yield data.Resource.get_resources(environment=env.id,
+                                                             resource_version_ids=undeployableids)
+            for res in undeployable:
                 payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
                                                         "attribute": res.id_attribute_name,
                                                         "attribute_value": res.id_attribute_value,
                                                         "version": res.model}, "id": res.resource_version_id}
                 yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
-                # Also skip all resources that depend on this undepoyable resource
-                requires = yield data.Resource.get_requires(env.id, version_id, res.resource_version_id)
-                for req in requires:
-                    payload = {"changes": {}, "id_fields": {"entity_type": req.resource_type, "agent_name": req.agent,
-                                                            "attribute": req.id_attribute_name,
-                                                            "attribute_value": req.id_attribute_value,
-                                                            "version": req.model}, "id": req.resource_version_id}
-                    yield data.DryRun.update_resource(dryrun.id, req.resource_version_id, payload)
+            skipundeployableids = yield model.get_skipped_for_undeployable()
+            skipundeployableids = [rid + ",v=%s" % version_id for rid in skipundeployableids]
+            skipundeployable = yield data.Resource.get_resources(environment=env.id, resource_version_ids=skipundeployableids)
+            for res in skipundeployable:
+                payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
+                                                        "attribute": res.id_attribute_name,
+                                                        "attribute_value": res.id_attribute_value,
+                                                        "version": res.model}, "id": res.resource_version_id}
+                yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
         return 200, {"dryrun": dryrun}
 
@@ -1090,6 +1119,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
                          "Only %s of %s resources found." % (len(resources), len(resource_ids))}
+
+        if status is not None:
+            if status not in UNDEPLOYABLE_STATES:
+                if any([resource.status in UNDEPLOYABLE_STATES for resource in resources]):
+                    LOGGER.error("Attempting to set undeployable resource to deployable state")
+                    raise AssertionError("Attempting to set undeployable resource to deployable state")
 
         resource_action = yield data.ResourceAction.get(environment=env.id, action_id=action_id)
         if resource_action is None:

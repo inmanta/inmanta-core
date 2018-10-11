@@ -25,6 +25,7 @@ import logging
 import re
 
 import pkg_resources
+from subprocess import CalledProcessError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -41,7 +42,6 @@ class VirtualEnv(object):
         LOGGER.info("Creating new virtual environment in %s", env_path)
         self.env_path = env_path
         self.virtual_python = None
-        self.virtual_pip = None
         self.__cache_done = set()
 
         self._old = {}
@@ -75,7 +75,6 @@ class VirtualEnv(object):
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
-        self.virtual_pip = os.path.join(self.env_path, "bin", "pip")
         return True
 
     def use_virtual_env(self):
@@ -171,10 +170,13 @@ class VirtualEnv(object):
             fd.write(requirements_file)
             fd.close()
 
-            cmd = [self.virtual_pip, "install", "-r", path]
+            cmd = [self.virtual_python, "-m", "pip", "install", "-r", path]
             output = b""
             try:
                 output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+            except CalledProcessError as e:
+                LOGGER.debug("%s: %s", cmd, e.output.decode())
+                LOGGER.debug("requirements: %s", requirements_file)
             except Exception:
                 LOGGER.debug("%s: %s", cmd, output.decode())
                 LOGGER.debug("requirements: %s", requirements_file)

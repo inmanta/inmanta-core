@@ -2619,3 +2619,27 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
     root = scopes.get_child("__config__")
 
     assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
+
+
+def test_749_is_unknown(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        import tests
+
+        a="a"
+        b=tests::unknown()
+
+        au = tests::is_uknown(a)
+        bu = tests::is_uknown(b)
+
+        ax = tests::do_uknown(a)
+        bx = tests::do_uknown(b)
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert not root.lookup("au").get_value()
+    assert root.lookup("bu").get_value()
+
+    assert root.lookup("ax").get_value() == "XX"
+    assert root.lookup("bx").get_value() == "XX"
