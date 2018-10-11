@@ -28,7 +28,7 @@ import unittest
 import pytest
 
 from inmanta import config
-from inmanta.ast import AttributeException
+from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
 from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
@@ -438,6 +438,55 @@ def test_issue_140_index_error(snippetcompiler):
         raise AssertionError("Should get exception")
     except NotFoundException as e:
         assert re.match('.*No index defined on std::Service for this lookup:.*', str(e))
+
+
+def test_issue_745_index_on_nullable(snippetcompiler):
+    with pytest.raises(IndexException):
+        snippetcompiler.setup_for_snippet("""
+entity A:
+    string name
+    string? opt
+end
+
+index A(name,opt)
+""")
+        compiler.do_compile()
+
+
+def test_issue_745_index_on_optional(snippetcompiler):
+    with pytest.raises(IndexException):
+        snippetcompiler.setup_for_snippet("""
+entity A:
+    string name
+end
+
+A.opt [0:1] -- A
+
+index A(name,opt)
+""")
+        compiler.do_compile()
+
+
+def test_issue_745_index_on_multi(snippetcompiler):
+    with pytest.raises(IndexException):
+        snippetcompiler.setup_for_snippet("""
+entity A:
+    string name
+end
+
+A.opt [1:] -- A
+
+index A(name,opt)
+""")
+        compiler.do_compile()
+
+
+def test_issue_index_on_not_existing(snippetcompiler):
+    with pytest.raises(TypeNotFoundException):
+        snippetcompiler.setup_for_snippet("""
+index A(name)
+""")
+        compiler.do_compile()
 
 
 def test_issue_134_colliding_umplementations(snippetcompiler):
