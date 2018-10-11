@@ -28,7 +28,7 @@ from inmanta.execute.util import Unknown, NoneValue
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import RuntimeException, CompilerException, Locatable
+from inmanta.ast import RuntimeException, CompilerException, Locatable, OptionalValueException
 from tornado.ioloop import IOLoop
 from tornado import gen
 from inmanta.execute.runtime import Instance, ResultVariable
@@ -621,7 +621,10 @@ class ModelExporter(object):
             return {"values": [convert(v) for v in rawvalue]}
 
         def convert_attribute(value: ResultVariable):
-            rawvalue = value.get_value()
+            try:
+                rawvalue = value.get_value()
+            except OptionalValueException:
+                return {"nones": [0]}
             if isinstance(rawvalue, Unknown):
                 return {"unknowns": [0]}
             if isinstance(rawvalue, NoneValue):

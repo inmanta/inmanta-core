@@ -250,6 +250,7 @@ import tests
 entity Two:
     string[] odds
     string? b = null
+    string? c
 end
 
 
@@ -277,6 +278,8 @@ implement Two using none
         unknown(2).\
         attribute("b").\
         null().\
+        attribute("c").\
+        null().\
         get_model()
 
     assert model == result
@@ -288,6 +291,7 @@ implement Two using none
         relation("provides", "std::Entity", "internal", 1, [0, -1], "std::Entity.requires").\
         entity("__config__::Two", main, 3, 'std::Entity').\
         attribute("odds", "string", main, 4, multi=True).\
-        attribute("b", "string", main, 5, nullable=True).get_model()
+        attribute("b", "string", main, 5, nullable=True).\
+        attribute("c", "string", main, 6, nullable=True).get_model()
 
     assert result == types

@@ -1378,7 +1378,7 @@ def test_null_unset_hang(snippetcompiler):
             a = A()
             b = a.a
         """)
-    with pytest.raises(UnsetException):
+    with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
@@ -1846,6 +1846,20 @@ def test_index_on_subtype_diamond_3(snippetcompiler):
     b = B(at="ab")
     """)
     compiler.do_compile()
+
+
+def test_index_on_subtype_diamond_4(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = C(at="a")
+    b = C(at="a")
+    a=b
+    """)
+    (types, _) = compiler.do_compile()
+    c = types["__config__::C"]
+    assert len(c.get_indices()) == 1
 
 
 def test_relation_attributes(snippetcompiler):
@@ -2545,3 +2559,27 @@ b.alink = a
     assert get_names(b, "blink") == ["a", "b", "c", "d"]
     assert get_names(c, "blink") == ["a", "b", "c", "d"]
     assert get_names(d, "blink") == ["a", "b", "c", "d"]
+
+
+def test_749_is_unknown(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        import tests
+
+        a="a"
+        b=tests::unknown()
+
+        au = tests::is_uknown(a)
+        bu = tests::is_uknown(b)
+
+        ax = tests::do_uknown(a)
+        bx = tests::do_uknown(b)
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert not root.lookup("au").get_value()
+    assert root.lookup("bu").get_value()
+
+    assert root.lookup("ax").get_value() == "XX"
+    assert root.lookup("bx").get_value() == "XX"

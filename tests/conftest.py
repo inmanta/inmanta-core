@@ -167,6 +167,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     config.Config.set("server", "agent-timeout", "10")
 
     data.use_motor(motor)
+    io_loop.run_sync(data.create_indexes)
 
     ibl = InmantaBootloader()
     ibl.start()
@@ -182,7 +183,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
+def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor):
     IOLoop._instance = io_loop
 
     state_dir = tempfile.mkdtemp()
@@ -230,6 +231,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
+
+    data.use_motor(motor)
+    io_loop.run_sync(data.create_indexes)
 
     ibl = InmantaBootloader()
     ibl.start()

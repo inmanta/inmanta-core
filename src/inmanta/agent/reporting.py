@@ -17,10 +17,6 @@
 """
 import logging
 import os
-
-"""
-File containing auto reporting functionality for the agent
-"""
 import platform
 import resource
 
@@ -44,17 +40,20 @@ def collect_report(agent):
 def report_environment(agent):
     return str(agent._env_id)
 
+
 reports["environment"] = report_environment
 
 
 def report_platform(agent):
     return platform.platform()
 
+
 reports["platform"] = report_platform
 
 
 def report_hostname(agent):
     return platform.node()
+
 
 reports["hostname"] = report_hostname
 
@@ -71,11 +70,13 @@ def report_ips(agent):
         import socket
         return socket.gethostbyname(socket.gethostname())
 
+
 reports["ips"] = report_ips
 
 
 def report_python(agent):
     return "%s %s %s" % (platform.python_implementation(), platform.python_version(), platform.python_build())
+
 
 reports["python"] = report_python
 
@@ -83,11 +84,13 @@ reports["python"] = report_python
 def report_pid(agent):
     return os.getpid()
 
+
 reports["pid"] = report_pid
 
 
 def report_env(agent):
     return {k: v for k, v in os.environ.items()}
+
 
 reports["env"] = report_env
 
@@ -112,5 +115,6 @@ def report_resources(agent):
            "nivcsw": ru.ru_nivcsw
            }
     return out
+
 
 reports["resources"] = report_resources

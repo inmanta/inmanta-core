@@ -66,6 +66,19 @@ def hash_file(content):
     return sha1sum.hexdigest()
 
 
+def is_call_ok(result):
+    if isinstance(result, tuple):
+        if len(result) == 2:
+            code, reply = result
+        else:
+            raise Exception("Handlers for method call can only return a status code and a reply")
+
+    else:
+        code = result
+
+    return code == 200
+
+
 class Scheduler(object):
     """
         An event scheduler class

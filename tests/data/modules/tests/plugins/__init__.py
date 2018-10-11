@@ -18,6 +18,16 @@ def empty(string: "string") -> "bool":
     return len(string) == 0
 
 
+@plugin(allow_unknown=True)
+def is_uknown(inp: "any") -> "bool":
+    return isinstance(inp, Unknown)
+
+
+@plugin(allow_unknown=True)
+def do_uknown(inp: "any") -> "string":
+    return "XX"
+
+
 counter = defaultdict(lambda: 0)
 
 
