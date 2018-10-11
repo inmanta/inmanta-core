@@ -111,11 +111,11 @@ class Type(Locatable):
 
     def type_string(self):
         """get the name of the type """
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def __str__(self):
         """get the string representation of the instance of the type """
-        raise NotImplemented()
+        raise NotImplementedError(type(self))
 
     def normalize(self):
         pass
@@ -505,12 +505,15 @@ class ConstraintType(Type):
         self.basetype.validate(value)
 
         if not self._constraint(value):
-            raise RuntimeException(None, "Invalid value '%s', constraint does not match" % value)
+            raise RuntimeException(self, "Invalid value '%s', constraint does not match" % value)
 
         return True
 
     def type_string(self):
         return "%s::%s" % (self.namespace, self.name)
+
+    def __str__(self):
+        return self.type_string()
 
 
 def create_function(expression):

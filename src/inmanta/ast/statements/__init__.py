@@ -38,7 +38,7 @@ class Statement(Namespaced):
     def __init__(self) -> None:
         Namespaced.__init__(self)
         self.namespace = None  # type: Namespace
-        self.anchors = []
+        self.anchors = []  # type: List[Anchor]
 
     def copy_location(self, statement: Locatable) -> None:
         """
