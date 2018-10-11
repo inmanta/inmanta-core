@@ -1,5 +1,6 @@
 from inmanta.execute.util import Unknown
 from inmanta.plugins import plugin
+from _collections import defaultdict
 
 
 @plugin
@@ -25,3 +26,13 @@ def is_uknown(inp: "any") -> "bool":
 @plugin(allow_unknown=True)
 def do_uknown(inp: "any") -> "string":
     return "XX"
+
+
+counter = defaultdict(lambda: 0)
+
+
+@plugin
+def once(string: "string") -> "number":
+    prev = counter[string]
+    counter[string] = prev + 1
+    return prev

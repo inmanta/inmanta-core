@@ -58,6 +58,7 @@ modules. project.yml defines the following settings:
       requires setting. Similar to the module, version constraints are defined using `PEP440 syntax
       <https://www.python.org/dev/peps/pep-0440/#version-specifiers>`_.
 
+For more information see 'Compiler Configuration Reference'_.
 
 An example project.yml could be:
 

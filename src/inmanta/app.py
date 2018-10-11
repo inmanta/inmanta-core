@@ -14,6 +14,20 @@
     limitations under the License.
 
     Contact: code@inmanta.com
+
+
+    Command line development guidelines
+    ###################################
+
+    do's and don'ts
+    ----------------
+    MUST NOT: sys.exit => use command.CLIException
+    SHOULD NOT: print( => use logger for messages, only print for final output
+
+
+    Entry points
+    ------------
+    \@command annotation to register new command
 """
 
 from argparse import ArgumentParser
@@ -26,13 +40,12 @@ import pwd
 import socket
 
 import colorlog
-from inmanta.command import command, Commander
+from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
-from inmanta import protocol, module
+from inmanta import protocol, module, moduletool
 from inmanta.export import cfg_env, ModelExporter
-from inmanta.ast import CompilerException
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
 
@@ -109,24 +122,18 @@ def compile_project(options):
         Config.set("compiler_rest_transport", "ssl-ca-cert-file", options.ca_cert)
 
     module.Project.get(options.main_file)
-    try:
-        if options.profile:
-            import cProfile
-            import pstats
-            result = cProfile.runctx('do_compile()', globals(), {}, "run.profile")
-            p = pstats.Stats('run.profile')
-            p.strip_dirs().sort_stats("time").print_stats(20)
-        else:
-            t1 = time.time()
-            result = do_compile()
-            LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
-        return result
-    except CompilerException as e:
-        if not options.errors:
-            print(str(e), file=sys.stderr)
-            sys.exit(1)
-        else:
-            raise e
+
+    if options.profile:
+        import cProfile
+        import pstats
+        result = cProfile.runctx('do_compile()', globals(), {}, "run.profile")
+        p = pstats.Stats('run.profile')
+        p.strip_dirs().sort_stats("time").print_stats(20)
+    else:
+        t1 = time.time()
+        result = do_compile()
+        LOGGER.debug("Compile time: %0.03f seconds", time.time() - t1)
+    return result
 
 
 @command("list-commands", help_msg="Print out an overview of all commands")
@@ -136,10 +143,34 @@ def list_commands(options):
         print(" %s: %s" % (cmd, info["help"]))
 
 
+def help_parser_config(parser: ArgumentParser):
+    parser.add_argument("subcommand", help="Output help for a particular subcommand",
+                        nargs="?", default=None)
+
+
+@command("help", help_msg="show a help message and exit", parser_config=help_parser_config)
+def help_command(options):
+    if options.subcommand is None:
+        cmd_parser().print_help()
+    else:
+        subc = options.subcommand
+        parser = cmd_parser()
+        parser.parse_args([subc, "-h"])
+    sys.exit(0)
+
+
 @command("modules", help_msg="Subcommand to manage modules",
-         parser_config=module.ModuleTool.modules_parser_config)
+         parser_config=moduletool.ModuleTool.modules_parser_config,
+         aliases=["module"])
 def modules(options):
-    tool = module.ModuleTool()
+    tool = moduletool.ModuleTool()
+    tool.execute(options.cmd, options)
+
+
+@command("project", help_msg="Subcommand to manage the project",
+         parser_config=moduletool.ProjectTool.parser_config)
+def project(options):
+    tool = moduletool.ProjectTool()
     tool.execute(options.cmd, options)
 
 
@@ -292,9 +323,11 @@ def cmd_parser():
     parser.add_argument('-v', '--verbose', action='count', default=0,
                         help="Log level for messages going to the console. Default is only errors,"
                         "-v warning, -vv info and -vvv debug and -vvvv trace")
+    parser.add_argument("-X", "--extended-errors", dest="errors",
+                        help="Show stack traces for errors", action="store_true", default=False)
     subparsers = parser.add_subparsers(title="commands")
     for cmd_name, cmd_options in Commander.commands().items():
-        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"])
+        cmd_subparser = subparsers.add_parser(cmd_name, help=cmd_options["help"], aliases=cmd_options["aliases"])
         if cmd_options["parser_config"] is not None:
             cmd_options["parser_config"](cmd_subparser)
         cmd_subparser.set_defaults(func=cmd_options["function"])
@@ -390,7 +423,23 @@ def app():
         parser.print_usage()
         return
 
-    options.func(options)
+    def report(e):
+        if not options.errors:
+            print(str(e), file=sys.stderr)
+        else:
+            sys.excepthook(*sys.exc_info())
+
+    try:
+        options.func(options)
+    except CLIException as e:
+        report(e)
+        sys.exit(e.exitcode)
+    except Exception as e:
+        report(e)
+        sys.exit(1)
+    except KeyboardInterrupt as e:
+        report(e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

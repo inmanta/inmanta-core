@@ -16,27 +16,26 @@
     Contact: code@inmanta.com
 """
 
-
-from _io import StringIO
-import logging
 import os
 import shutil
 import subprocess
 import tempfile
-import unittest
 from subprocess import CalledProcessError
 import re
 
 from inmanta import module
 from inmanta.config import Config
-from inmanta.module import ModuleTool, Project, LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
+from inmanta.module import LocalFileRepo, RemoteRepo, gitprovider, INSTALL_MASTER, INSTALL_PRERELEASES
 from inmanta.ast import CompilerException, ModuleNotFoundException
 import pytest
 import yaml
 from pkg_resources import parse_version
+from inmanta.moduletool import ModuleTool
+from test_app_cli import app
+from inmanta.command import CLIException
 
 
-def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None):
+def makemodule(reporoot, name, deps=[], project=False, imports=None, install_mode=None, options=""):
     path = os.path.join(reporoot, name)
     os.makedirs(path)
     mainfile = "module.yml"
@@ -65,8 +64,6 @@ repo: %s""" % reporoot)
             for req in deps:
                 if req[1] is not None:
                     projectfile.write("\n    - {} {}".format(req[0], req[1]))
-                else:
-                    projectfile.write("\n    - {}".format(req[0]))
 
         projectfile.write("\n")
 
@@ -130,6 +127,30 @@ def add_tag(modpath, tag):
     subprocess.check_output(["git", "tag", tag], cwd=modpath, stderr=subprocess.STDOUT)
 
 
+def make_module_simple(reporoot, name, depends=[], version="3.2", project=False):
+    mod = makemodule(reporoot, name, depends, project=project)
+    commitmodule(mod, "first commit")
+    if not project:
+        add_file(mod, "signal", "present", "second commit", version=version)
+    return mod
+
+
+def make_module_simple_deps(reporoot, name, depends=[], project=False, version="3.2"):
+    return make_module_simple(reporoot, "mod" + name, [("mod" + x, None) for x in depends], project=project, version=version)
+
+
+def install_project(modules_dir, name, config=True):
+    subroot = tempfile.mkdtemp()
+    coroot = os.path.join(subroot, name)
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", name)],
+                            cwd=subroot, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    if config:
+        Config.load_config()
+    return coroot
+
+
 class BadModProvider(object):
 
     def __init__(self, parent, badname):
@@ -144,286 +165,325 @@ class BadModProvider(object):
         return delegator
 
 
-class TestModuleTool(unittest.TestCase):
-    tempdir = None
+@pytest.fixture(scope="session")
+def modules_dir():
+    tempdir = tempfile.mkdtemp()
+    yield tempdir
+    shutil.rmtree(tempdir)
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
-        unittest.TestCase.__init__(self, methodName)
 
-        self.stream = None
-        self.handler = None
-        self.log = None
+@pytest.fixture(scope="session")
+def modules_repo(modules_dir):
+    """
++--------+-------------+----------+
+| Name   | Requires    | Versions |
++--------+-------------+----------+
+| std    |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+| mod1   | mod3 ~= 0.1 | 0.0.1    |
++--------+-------------+----------+
+|        | mod3 ~= 0.1 | 3.2      |
++--------+-------------+----------+
+| mod2   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 2016.1   |
++--------+-------------+----------+
+| mod3   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 0.1      |
++--------+-------------+----------+
+| badmod | mod2 < 2016 | 0.0.1    |
++--------+-------------+----------+
+|        |             | 0.1      |
++--------+-------------+----------+
+| mod5   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 0.1      |
++--------+-------------+----------+
+| mod6   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+| mod7   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+|        |             | 3.2.1    |
++--------+-------------+----------+
+|        |             | 3.2.2    |
++--------+-------------+----------+
+|        |             | 4.0      |
++--------+-------------+----------+
+|        |             | 4.2      |
++--------+-------------+----------+
+|        |             | 4.3      |
++--------+-------------+----------+
+| mod8   |             | 0.0.1    |
++--------+-------------+----------+
+|        |             | 3.2      |
++--------+-------------+----------+
+|        |             | 3.3.dev  |
++--------+-------------+----------+
+"""
+    tempdir = modules_dir
 
-    @classmethod
-    def setUpClass(cls):
-        super(TestModuleTool, cls).setUpClass()
-        cls.oldcwd = os.getcwd()
-        cls.tempdir = tempfile.mkdtemp()
+    reporoot = os.path.join(tempdir, "repos")
+    os.makedirs(reporoot)
 
-        reporoot = os.path.join(cls.tempdir, "repos")
-        cls.reporoot = reporoot
-        os.makedirs(reporoot)
+    make_module_simple(reporoot, "std")
 
-        std = makemodule(reporoot, "std", [])
-        commitmodule(std, "first commit")
-        add_file(std, "signal", "present", "second commit", version="3.2")
+    make_module_simple(reporoot, "mod1", depends=[("mod3", "~=0.1")])
 
-        mod1 = makemodule(reporoot, "mod1", [("mod3", "~=0.1")])
-        commitmodule(mod1, "first commit")
-        add_file(mod1, "signal", "present", "second commit", version="3.2")
+    make_module_simple(reporoot, "mod2", version="2016.1")
 
-        mod2 = makemodule(reporoot, "mod2", [])
-        commitmodule(mod2, "first commit")
-        add_file(mod2, "signal", "present", "second commit", version="2016.1")
+    mod3 = make_module_simple(reporoot, "mod3", version="0.1")
+    add_file(mod3, "badsignal", "present", "third commit")
 
-        mod3 = makemodule(reporoot, "mod3", [])
-        commitmodule(mod3, "first commit")
-        add_file(mod3, "signal", "present", "second commit", version="0.1")
-        add_file(mod3, "badsignal", "present", "third commit")
+    mod4 = make_module_simple(reporoot, "badmod", [("mod2", "<2016")])
+    add_file(mod4, "badsignal", "present", "third commit")
 
-        mod4 = makemodule(reporoot, "badmod", [("mod2", "<2016")])
-        commitmodule(mod4, "first commit")
-        add_file(mod4, "signal", "present", "second commit", version="0.1")
-        add_file(mod4, "badsignal", "present", "third commit")
+    mod5 = make_module_simple(reporoot, "mod5", version="0.1")
+    add_file(mod5, "badsignal", "present", "third commit")
 
-        mod5 = makemodule(reporoot, "mod5", [])
-        commitmodule(mod5, "first commit")
-        add_file(mod5, "signal", "present", "second commit", version="0.1")
-        add_file(mod5, "badsignal", "present", "third commit")
+    mod6 = make_module_simple(reporoot, "mod6")
+    add_file(mod6, "badsignal", "present", "third commit")
 
-        mod6 = makemodule(reporoot, "mod6", [])
-        commitmodule(mod6, "first commit")
-        add_file(mod6, "signal", "present", "second commit", version="3.2")
-        add_file(mod6, "badsignal", "present", "third commit")
+    mod7 = make_module_simple(reporoot, "mod7")
+    add_file(mod7, "nsignal", "present", "third commit", version="3.2.1")
+    add_file(mod7, "signal", "present", "fourth commit", version="3.2.2")
+    add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
+                                     version="4.0", compiler_version="1000000.4")
+    add_file(mod7, "badsignal", "present", "sixth commit", version="4.1")
+    add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
+                                     version="4.2", compiler_version="1000000.5")
+    add_file(mod7, "badsignal", "present", "sixth commit", version="4.3")
 
-        mod7 = makemodule(reporoot, "mod7", [])
-        commitmodule(mod7, "first commit")
-        add_file(mod7, "nsignal", "present", "second commit", version="3.2")
-        add_file(mod7, "nsignal", "present", "third commit", version="3.2.1")
-        add_file(mod7, "signal", "present", "fourth commit", version="3.2.2")
-        add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
-                                         version="4.0", compiler_version="1000000.4")
-        add_file(mod7, "badsignal", "present", "sixth commit", version="4.1")
-        add_file_and_compiler_constraint(mod7, "badsignal", "present", "fifth commit",
-                                         version="4.2", compiler_version="1000000.5")
-        add_file(mod7, "badsignal", "present", "sixth commit", version="4.3")
+    mod8 = make_module_simple(reporoot, "mod8", [])
+    add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
+    add_file(mod8, "mastersignal", "present", "last commit")
 
-        mod8 = makemodule(reporoot, "mod8", [])
-        commitmodule(mod8, "first commit")
-        add_file(mod8, "signal", "present", "second commit", version="3.2")
-        add_file(mod8, "devsignal", "present", "third commit", version="3.3.dev2")
-        add_file(mod8, "mastersignal", "present", "last commit")
+    proj = makemodule(reporoot, "testproject",
+                      [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"])
+    # results in loading of 1,2,3,6
+    commitmodule(proj, "first commit")
 
-        proj = makemodule(reporoot, "testproject",
-                          [("mod1", None), ("mod2", ">2016"), ("mod5", None)], True, ["mod1", "mod2", "mod6", "mod7"])
-        # results in loading of 1,2,3,6
-        commitmodule(proj, "first commit")
+    badproject = makemodule(reporoot, "badproject", [("mod15", None)], True)
+    commitmodule(badproject, "first commit")
 
-        badproject = makemodule(reporoot, "badproject", [("mod15", None)], True)
-        commitmodule(badproject, "first commit")
+    baddep = makemodule(reporoot, "baddep", [("badmod", None), ("mod2", ">2016")], True)
+    commitmodule(baddep, "first commit")
 
-        baddep = makemodule(reporoot, "baddep", [("badmod", None), ("mod2", ">2016")], True)
-        commitmodule(baddep, "first commit")
+    devproject = makemodule(reporoot, "devproject", project=True, imports=["mod8"], install_mode=INSTALL_PRERELEASES)
+    commitmodule(devproject, "first commit")
 
-        devproject = makemodule(reporoot, "devproject", project=True, imports=["mod8"], install_mode=INSTALL_PRERELEASES)
-        commitmodule(devproject, "first commit")
+    masterproject = makemodule(reporoot, "masterproject", project=True, imports=["mod8"], install_mode=INSTALL_MASTER)
+    commitmodule(masterproject, "first commit")
 
-        masterproject = makemodule(reporoot, "masterproject", project=True, imports=["mod8"], install_mode=INSTALL_MASTER)
-        commitmodule(masterproject, "first commit")
+    nover = makemodule(reporoot, "nover", [])
+    commitmodule(nover, "first commit")
+    add_file(nover, "signal", "present", "second commit")
 
-        nover = makemodule(reporoot, "nover", [])
-        commitmodule(nover, "first commit")
-        add_file(nover, "signal", "present", "second commit")
+    noverproject = makemodule(reporoot, "noverproject", project=True, imports=["nover"])
+    commitmodule(noverproject, "first commit")
 
-        noverproject = makemodule(reporoot, "noverproject", project=True, imports=["nover"])
-        commitmodule(noverproject, "first commit")
+    """
+    for freeze, test from C
+    A-> B,C,D
+    C-> E,F,E::a
+    C::a -> I
+    E::a -> J
+    E-> H
+    D-> F,G
+    """
+    make_module_simple_deps(reporoot, "A", ["B", "C", "D"], project=True)
+    make_module_simple_deps(reporoot, "B")
+    c = make_module_simple_deps(reporoot, "C", ["E", "F", "E::a"], version="3.0")
+    add_file(c, "model/a.cf", "import modI", "add mod C::a", "3.2")
+    make_module_simple_deps(reporoot, "D", ["F", "G"])
+    e = make_module_simple_deps(reporoot, "E", ["H"], version="3.0")
+    add_file(e, "model/a.cf", "import modJ", "add mod E::a", "3.2")
+    make_module_simple_deps(reporoot, "F")
+    make_module_simple_deps(reporoot, "G")
+    make_module_simple_deps(reporoot, "H")
+    make_module_simple_deps(reporoot, "I")
+    make_module_simple_deps(reporoot, "J")
 
-    @classmethod
-    def tearDownClass(cls):
-        super(TestModuleTool, cls).tearDownClass()
-        shutil.rmtree(cls.tempdir)
-        os.chdir(cls.oldcwd)
+    return reporoot
 
-    def setUp(self):
-        self.stream = StringIO()
-        self.handler = logging.StreamHandler(self.stream)
-        self.log = logging.getLogger(module.__name__)
 
-        for handler in self.log.handlers:
-            self.log.removeHandler(handler)
-
-        self.log.addHandler(self.handler)
-
-        Project._project = None
-
-    def test_file_co(self):
-        result = """name: mod6
+def test_file_co(modules_dir, modules_repo):
+    result = """name: mod6
 license: Apache 2.0
 version: '3.2'
 """
-        module_yaml = gitprovider.get_file_for_version(os.path.join(TestModuleTool.reporoot, "mod6"), "3.2", "module.yml")
-        assert result == module_yaml
+    module_yaml = gitprovider.get_file_for_version(os.path.join(modules_repo, "mod6"), "3.2", "module.yml")
+    assert result == module_yaml
 
-    def test_local_repo_good(self):
-        repo = LocalFileRepo(TestModuleTool.reporoot)
-        coroot = os.path.join(TestModuleTool.tempdir, "clone_local_good")
-        result = repo.clone("mod1", coroot)
-        assert result
-        assert os.path.exists(os.path.join(coroot, "mod1", "module.yml"))
 
-    def test_remote_repo_good(self):
-        repo = RemoteRepo("https://github.com/rmccue/")
-        coroot = os.path.join(TestModuleTool.tempdir, "clone_remote_good")
-        result = repo.clone("test-repository", coroot)
-        assert result
-        assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
+def test_local_repo_good(modules_dir, modules_repo):
+    repo = LocalFileRepo(modules_repo)
+    coroot = os.path.join(modules_dir, "clone_local_good")
+    result = repo.clone("mod1", coroot)
+    assert result
+    assert os.path.exists(os.path.join(coroot, "mod1", "module.yml"))
 
-    def test_local_repo_bad(self):
-        repo = LocalFileRepo(TestModuleTool.reporoot)
-        coroot = os.path.join(TestModuleTool.tempdir, "clone_local_good")
-        result = repo.clone("thatotherthing", coroot)
-        assert not result
 
-    def test_bad_checkout(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "badproject")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "badproject")],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
+def test_remote_repo_good(modules_dir, modules_repo):
+    repo = RemoteRepo("https://github.com/rmccue/")
+    coroot = os.path.join(modules_dir, "clone_remote_good")
+    result = repo.clone("test-repository", coroot)
+    assert result
+    assert os.path.exists(os.path.join(coroot, "test-repository", "README"))
 
-        with pytest.raises(ModuleNotFoundException):
-            ModuleTool().execute("install", [])
 
-    def test_bad_setup(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "badprojectx")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "badproject"), coroot],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
+def test_local_repo_bad(modules_dir, modules_repo):
+    repo = LocalFileRepo(modules_repo)
+    coroot = os.path.join(modules_dir, "clone_local_good")
+    result = repo.clone("thatotherthing", coroot)
+    assert not result
 
-        mod1 = os.path.join(coroot, "libs", "mod1")
-        os.makedirs(mod1)
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "mod2"), mod1],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
 
-        with pytest.raises(ModuleNotFoundException):
-            ModuleTool().execute("verify", [])
+def test_bad_checkout(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "badproject")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "badproject")],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
 
-    def test_complex_checkout(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "testproject")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "testproject")],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
-
+    with pytest.raises(ModuleNotFoundException):
         ModuleTool().execute("install", [])
-        expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
-        for i in expected:
-            dirname = os.path.join(coroot, "libs", i)
-            assert os.path.exists(os.path.join(dirname, "signal"))
-            assert not os.path.exists(os.path.join(dirname, "badsignal"))
 
-        assert not os.path.exists(os.path.join(coroot, "libs", "mod5"))
 
+def test_bad_setup(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "badprojectx")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "badproject"), coroot],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
+
+    mod1 = os.path.join(coroot, "libs", "mod1")
+    os.makedirs(mod1)
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "mod2"), mod1],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+
+    with pytest.raises(ModuleNotFoundException):
+        ModuleTool().execute("verify", [])
+
+
+def test_complex_checkout(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "testproject")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "testproject")],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
+
+    ModuleTool().execute("install", [])
+    expected = ["mod1", "mod2", "mod3", "mod6", "mod7"]
+    for i in expected:
+        dirname = os.path.join(coroot, "libs", i)
+        assert os.path.exists(os.path.join(dirname, "signal"))
+        assert not os.path.exists(os.path.join(dirname, "badsignal"))
+
+    assert not os.path.exists(os.path.join(coroot, "libs", "mod5"))
+
+    # test all tools, perhaps isolate to other test case
+    ModuleTool().execute("list", [])
+    ModuleTool().execute("update", [])
+    ModuleTool().execute("status", [])
+    ModuleTool().execute("push", [])
+
+
+def test_for_git_failures(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "testproject2")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "testproject"), "testproject2"],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
+
+    ModuleTool().execute("install", [])
+
+    gp = module.gitprovider
+    module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
+    try:
         # test all tools, perhaps isolate to other test case
+        ModuleTool().execute("install", [])
         ModuleTool().execute("list", [])
         ModuleTool().execute("update", [])
         ModuleTool().execute("status", [])
         ModuleTool().execute("push", [])
+    finally:
+        module.gitprovider = gp
 
-    def test_for_git_failures(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "testproject2")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "testproject"), "testproject2"],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
 
-        ModuleTool().execute("install", [])
+def test_install_for_git_failures(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "testproject3")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "testproject"), "testproject3"],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
 
-        gp = module.gitprovider
-        module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
-        try:
-            # test all tools, perhaps isolate to other test case
+    gp = module.gitprovider
+    module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
+    try:
+        with pytest.raises(ModuleNotFoundException):
             ModuleTool().execute("install", [])
-            ModuleTool().execute("list", [])
-            ModuleTool().execute("update", [])
-            ModuleTool().execute("status", [])
-            ModuleTool().execute("push", [])
-        finally:
-            module.gitprovider = gp
+    finally:
+        module.gitprovider = gp
 
-    def test_install_for_git_failures(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "testproject3")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "testproject"), "testproject3"],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
 
-        gp = module.gitprovider
-        module.gitprovider = BadModProvider(gp, os.path.join(coroot, "libs", "mod6"))
-        try:
-            with pytest.raises(ModuleNotFoundException):
-                ModuleTool().execute("install", [])
-        finally:
-            module.gitprovider = gp
+def test_for_repo_without_versions(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "noverproject")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "noverproject")],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
 
-    def test_for_repo_without_versions(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "noverproject")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "noverproject")],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
+    ModuleTool().execute("install", [])
 
+
+def test_bad_dep_checkout(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "baddep")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "baddep")],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
+
+    with pytest.raises(CompilerException):
         ModuleTool().execute("install", [])
 
-    def test_bad_dep_checkout(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "baddep")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "baddep")],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
 
-        with pytest.raises(CompilerException):
-            ModuleTool().execute("install", [])
+def test_master_checkout(modules_dir, modules_repo):
+    coroot = install_project(modules_dir, "masterproject")
 
-    def test_master_checkout(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "masterproject")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "masterproject")],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
+    ModuleTool().execute("install", [])
 
-        ModuleTool().execute("install", [])
+    dirname = os.path.join(coroot, "libs", "mod8")
+    assert os.path.exists(os.path.join(dirname, "devsignal"))
+    assert os.path.exists(os.path.join(dirname, "mastersignal"))
 
-        dirname = os.path.join(coroot, "libs", "mod8")
-        assert os.path.exists(os.path.join(dirname, "devsignal"))
-        assert os.path.exists(os.path.join(dirname, "mastersignal"))
 
-    def test_dev_checkout(self):
-        coroot = os.path.join(TestModuleTool.tempdir, "devproject")
-        subprocess.check_output(["git", "clone", os.path.join(TestModuleTool.tempdir, "repos", "devproject")],
-                                cwd=TestModuleTool.tempdir, stderr=subprocess.STDOUT)
-        os.chdir(coroot)
-        os.curdir = coroot
-        Config.load_config()
+def test_dev_checkout(modules_dir, modules_repo):
+    coroot = os.path.join(modules_dir, "devproject")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "devproject")],
+                            cwd=modules_dir, stderr=subprocess.STDOUT)
+    os.chdir(coroot)
+    os.curdir = coroot
+    Config.load_config()
 
-        ModuleTool().execute("install", [])
+    ModuleTool().execute("install", [])
 
-        dirname = os.path.join(coroot, "libs", "mod8")
-        assert os.path.exists(os.path.join(dirname, "devsignal"))
-        assert not os.path.exists(os.path.join(dirname, "mastersignal"))
-
-    def tearDown(self):
-        self.log.removeHandler(self.handler)
-        self.handler.close()
+    dirname = os.path.join(coroot, "libs", "mod8")
+    assert os.path.exists(os.path.join(dirname, "devsignal"))
+    assert not os.path.exists(os.path.join(dirname, "mastersignal"))
 
 
 def test_versioning():
@@ -485,3 +545,167 @@ compiler_version: 2017.2
     mod.rewrite_version("1.3.1")
     assert mod.version == "1.3.1"
     assert mod.compiler_version == "2017.2"
+
+
+def test_freeze_basic(modules_dir, modules_repo):
+    install_project(modules_dir, "modA")
+    modtool = ModuleTool()
+    cmod = modtool.get_module("modC")
+    assert cmod.get_freeze("modC", recursive=False, mode="==") == {"std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2"}
+    assert cmod.get_freeze("modC", recursive=True, mode="==") == {
+        "std": "== 3.2", "modE": "== 3.2", "modF": "== 3.2", "modH": "== 3.2", "modJ": "== 3.2"}
+
+    assert cmod.get_freeze("modC::a", recursive=False, mode="==") == {"std": "== 3.2", "modI": "== 3.2"}
+
+
+def test_project_freeze_basic(modules_dir, modules_repo):
+    install_project(modules_dir, "modA")
+    modtool = ModuleTool()
+    proj = modtool.get_project()
+    assert proj.get_freeze(recursive=False, mode="==") == {"std": "== 3.2",
+                                                           "modB": "== 3.2", "modC": "== 3.2", "modD": "== 3.2"}
+    assert proj.get_freeze(recursive=True, mode="==") == {
+        "std": "== 3.2",
+        "modB": "== 3.2",
+        "modC": "== 3.2",
+        "modD": "== 3.2",
+        "modE": "== 3.2",
+        "modF": "== 3.2",
+        "modG": "== 3.2",
+        "modH": "== 3.2",
+        "modJ": "== 3.2"}
+
+
+def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
+    coroot = install_project(modules_dir, "baddep", config=False)
+
+    with pytest.raises(CLIException) as e:
+        app(["project", "freeze"])
+
+    assert e.value.exitcode == 1
+    assert str(e.value) == "Could not load project"
+
+    out, err = capsys.readouterr()
+
+    assert len(err) == 0
+    assert len(out) == 0
+    assert "requirement mod2<2016 on module mod2 not fullfilled, now at version 2016.1" in caplog.text
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+
+
+def test_project_freeze(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+
+    app(["project", "freeze", "-o", "-"])
+
+    out, err = capsys.readouterr()
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+    assert len(err) == 0
+    assert out == """name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+requires:
+- modB ~= 3.2
+- modC ~= 3.2
+- modD ~= 3.2
+- std ~= 3.2
+""" % modules_repo
+
+
+def test_project_freeze_odd_opperator(modules_dir, modules_repo, capsys, caplog):
+    coroot = install_project(modules_dir, "modA")
+
+    app(["project", "freeze", "-o", "-", "--operator", "xxx"])
+
+    out, err = capsys.readouterr()
+
+    assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+    assert len(err) == 0
+    assert out == """name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+requires:
+- modB xxx 3.2
+- modC xxx 3.2
+- modD xxx 3.2
+- std xxx 3.2
+""" % modules_repo
+
+    assert "Operator xxx is unknown, expecting one of ['==', '~=', '>=']" in caplog.text
+
+
+def test_project_options_in_config(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+    with open("project.yml", "w") as fh:
+        fh.write("""name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+freeze_recursive: true
+freeze_operator: ==
+""" % modules_repo)
+
+    def verify():
+        out, err = capsys.readouterr()
+
+        assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+        assert len(err) == 0
+        assert len(out) == 0
+
+        with open("project.yml", "r") as fh:
+            assert fh.read() == ("""name: modA
+license: Apache 2.0
+version: 0.0.1
+modulepath: libs
+downloadpath: libs
+repo: %s
+freeze_recursive: true
+freeze_operator: ==
+requires:
+- modB == 3.2
+- modC == 3.2
+- modD == 3.2
+- modE == 3.2
+- modF == 3.2
+- modG == 3.2
+- modH == 3.2
+- modJ == 3.2
+- std == 3.2
+""" % modules_repo)
+
+    app(["project", "freeze"])
+    verify()
+    app(["project", "freeze"])
+    verify()
+
+
+def test_module_freeze(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+
+    def verify():
+        out, err = capsys.readouterr()
+
+        assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+        assert len(err) == 0
+        assert out == ("""name: modC
+license: Apache 2.0
+version: '3.2'
+requires:
+- modE ~= 3.2
+- modF ~= 3.2
+- modI ~= 3.2
+- std ~= 3.2
+""")
+
+    app(["module", "modC", "freeze", "-o", "-"])
+    verify()

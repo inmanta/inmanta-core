@@ -18,34 +18,27 @@
 
 import glob
 import imp
-import inspect
 from io import BytesIO
 import logging
 import os
 from os.path import sys
 import re
-import shutil
 from subprocess import CalledProcessError
 import subprocess
 from tarfile import TarFile
-import tempfile
-import time
 
-from argparse import ArgumentParser
 from pkg_resources import parse_version, parse_requirements
-import texttable
 import yaml
 
 from inmanta import env
 from inmanta import plugins
-import inmanta
 from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location, LocatableString
 from inmanta.ast.blocks import BasicBlock
-from inmanta.ast.statements import DefinitionStatement, BiStatement
+from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
-from inmanta.parser.plyInmantaParser import parse
 from inmanta.util import memoize, get_compiler_version
+from typing import Tuple, List, Dict
 
 
 LOGGER = logging.getLogger(__name__)
@@ -144,6 +137,8 @@ class CLIGitProvider(GitProvider):
         tfile = tf.next()
         b = tf.extractfile(tfile)
         return b.read().decode("utf-8")
+
+
 # try:
 #     import pygit2
 #     import re
@@ -333,7 +328,7 @@ class ModuleLike(object):
 
     name = property(get_name)
 
-    def _load_file(self, ns, file):
+    def _load_file(self, ns, file) -> Tuple[List[Statement], BasicBlock]:
         ns.location = Location(file, 1)
         statements = []
         stmts = plyInmantaParser.parse(ns, file)
@@ -367,6 +362,12 @@ class ModuleLike(object):
             req = req[0]
             reqs.append(req)
         return reqs
+
+    def get_config(self, name, default):
+        if name not in self._meta:
+            return default
+        else:
+            return self._meta[name]
 
 
 INSTALL_RELEASES = "release"
@@ -512,15 +513,59 @@ class Project(ModuleLike):
                     self.load_plugins()
 
     @memoize
-    def get_complete_ast(self):
-        # load ast
-        (statements, block) = self.__load_ast()
-        blocks = [block]
-        statements = [x for x in statements]
-        # get imports
+    def get_ast(self) -> Tuple[List[Statement], BasicBlock]:
+        return self.__load_ast()
+
+    @memoize
+    def get_imports(self):
+        (statements, _) = self.get_ast()
         imports = [x for x in statements if isinstance(x, DefineImport)]
         if self.autostd:
             imports.insert(0, DefineImport("std", "std"))
+        return imports
+
+    @memoize
+    def get_complete_ast(self):
+        # load ast
+        (statements, block) = self.get_ast()
+        blocks = [block]
+        statements = [x for x in statements]
+
+        # get imports
+        imports = [x for x in self.get_imports()]
+        for _, nstmt, nb in self.load_module_recursive(imports):
+            statements.extend(nstmt)
+            blocks.append(nb)
+
+        return (statements, blocks)
+
+    def __load_ast(self):
+        main_ns = Namespace("__config__", self.root_ns)
+        return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
+
+    def get_modules(self) -> Dict[str, "Module"]:
+        self.load()
+        return self.modules
+
+    def get_module(self, full_module_name):
+        parts = full_module_name.split("::")
+        module_name = parts[0]
+
+        if module_name in self.modules:
+            return self.modules[module_name]
+        return self.load_module(module_name)
+
+    def load_module_recursive(self, imports: List[DefineImport]) -> List[Tuple[str, List[Statement], BasicBlock]]:
+        """
+            Load a specific module and all submodules into this project
+
+            For each module, return a triple of name, statements, basicblock
+        """
+        out = []
+
+        # get imports
+        imports = [x for x in self.get_imports()]
+
         done = set()
         while len(imports) > 0:
             imp = imports.pop()
@@ -533,33 +578,25 @@ class Project(ModuleLike):
 
             try:
                 # get module
-                if module_name in self.modules:
-                    module = self.modules[module_name]
-                else:
-                    module = self.load_module(module_name)
+                module = self.get_module(module_name)
                 # get NS
                 for i in range(1, len(parts) + 1):
                     subs = '::'.join(parts[0:i])
                     if subs in done:
                         continue
                     (nstmt, nb) = module.get_ast(subs)
-                    done.add(subs)
-                    statements.extend(nstmt)
-                    blocks.append(nb)
 
-                # get imports and add to list
-                    nimp = [x for x in nstmt if isinstance(x, DefineImport)]
-                    imports.extend(nimp)
+                    done.add(subs)
+                    out.append((subs, nstmt, nb))
+
+                    # get imports and add to list
+                    imports.extend(module.get_imports(subs))
             except InvalidModuleException:
                 raise ModuleNotFoundException(ns, imp)
 
-        return (statements, blocks)
+        return out
 
-    def __load_ast(self):
-        main_ns = Namespace("__config__", self.root_ns)
-        return self._load_file(main_ns, os.path.join(self.project_path, self.main_file))
-
-    def load_module(self, module_name):
+    def load_module(self, module_name) -> "Module":
         try:
             path = self.resolver.path_for(module_name)
             if path is not None:
@@ -653,7 +690,7 @@ class Project(ModuleLike):
             version = parse_version(str(module.version))
             for r in spec:
                 if version not in r:
-                    LOGGER.warning("requirement %s on module %s not fullfilled, not at version %s" % (r, name, version))
+                    LOGGER.warning("requirement %s on module %s not fullfilled, now at version %s" % (r, name, version))
                     good = False
 
         return good
@@ -677,6 +714,20 @@ class Project(ModuleLike):
 
     def get_root_namespace(self):
         return self.root_ns
+
+    def get_freeze(self, mode="==", recursive=False):
+        # collect in scope modules
+        if not recursive:
+            modules = {m.name: m for m in (self.get_module(imp.name) for imp in self.get_imports())}
+        else:
+            modules = self.get_modules()
+
+        out = {}
+        for name, mod in modules.items():
+            version = str(mod.version)
+            out[name] = mode + " " + version
+
+        return out
 
 
 class Module(ModuleLike):
@@ -932,7 +983,8 @@ class Module(ModuleLike):
 
         return files
 
-    def get_ast(self, name):
+    @memoize
+    def get_ast(self, name) -> Tuple[List[Statement], BasicBlock]:
         if name == self.name:
             file = os.path.join(self._path, Module.MODEL_DIR, "_init.cf")
         else:
@@ -951,6 +1003,33 @@ class Module(ModuleLike):
         except FileNotFoundError:
             raise InvalidModuleException("could not locate module with name: %s", name)
 
+    def get_freeze(self, submodule, recursive=False, mode=">="):
+        imports = [statement.name for statement in self.get_imports(submodule)]
+
+        out = {}
+
+        todo = imports
+
+        for impor in todo:
+            if impor not in out:
+                mainmod = self._project.get_module(impor)
+                version = mainmod.version
+                # track submodules for cycle avoidance
+                out[impor] = mode + " " + version
+                if recursive:
+                    todo.extend([statement.name for statement in mainmod.get_imports(impor)])
+
+        # drop submodules
+        return {x: v for x, v in out.items() if "::" not in x}
+
+    @memoize
+    def get_imports(self, name):
+        (statements, _) = self.get_ast(name)
+        imports = [x for x in statements if isinstance(x, DefineImport)]
+        if self._project.autostd:
+            imports.insert(0, DefineImport("std", "std"))
+        return imports
+
     def _get_model_files(self, curdir):
         files = []
         init_cf = os.path.join(curdir, "_init.cf")
@@ -967,7 +1046,7 @@ class Module(ModuleLike):
 
         return files
 
-    def get_all_submodules(self):
+    def get_all_submodules(self) -> List[str]:
         """
             Get all submodules of this module
         """
@@ -1095,413 +1174,3 @@ class Module(ModuleLike):
         print("=" * 10)
         subprocess.call(cmd, shell=True, cwd=self._path)
         print("=" * 10)
-
-
-class ModuleTool(object):
-    """
-        A tool to manage configuration modules
-    """
-
-    def __init__(self):
-        self._mod_handled_list = set()
-
-    @classmethod
-    def modules_parser_config(cls, parser: ArgumentParser):
-        subparser = parser.add_subparsers(title="subcommand", dest="cmd")
-        lst = subparser.add_parser("list", help="List all modules used in this project in a table")
-        lst.add_argument("-r", help="Output a list of requires that can be included in project.yml", dest="requires",
-                         action="store_true")
-        do = subparser.add_parser("do", help="Execute a command on all loaded modules")
-        do.add_argument("command", metavar='command', help='the command to  execute')
-        subparser.add_parser("update", help="Update all modules used in this project")
-        subparser.add_parser("install", help="Install all modules required for this this project")
-        subparser.add_parser("status", help="Run a git status on all modules and report")
-        subparser.add_parser("push", help="Run a git push on all modules and report")
-        # not currently working
-        subparser.add_parser("verify", help="Verify dependencies and frozen module versions")
-        validate = subparser.add_parser(
-            "validate", help="Validate the module we are currently in. i.e. try to compile it against an empty main model")
-        validate.add_argument("-r", "--repo", help="Additional repo to load modules from", action="append")
-        validate.add_argument("-n", "--no-clean", help="Do not remove the validation project when finished",
-                              action="store_true")
-        validate.add_argument("-s", "--parse-only", help="Only parse the module", action="store_true")
-        validate.add_argument("-i", "--isolate", help="Move the module to another directory before cloning."
-                              " I.e. remove all other modules in the current directory from the search path",
-                              action="store_true")
-        validate.add_argument("-w", "--workingcopy", help="Use the actual state of the module instead of the latest tag",
-                              action="store_true")
-        commit = subparser.add_parser("commit", help="Commit all changes in the current module.")
-        commit.add_argument("-m", "--message", help="Commit message", required=True)
-        commit.add_argument("-r", "--release", dest="dev", help="make a release", action="store_false")
-        commit.add_argument("--major", dest="major", help="make a major release", action="store_true")
-        commit.add_argument("--minor", dest="minor", help="make a major release", action="store_true")
-        commit.add_argument("--patch", dest="patch", help="make a major release", action="store_true")
-        commit.add_argument("-v", "--version", help="Version to use on tag")
-        commit.add_argument("-a", "--all", dest="commit_all", help="Use commit -a", action="store_true")
-
-        create = subparser.add_parser("create", help="Create a new module")
-        create.add_argument("name", help="The name of the module")
-
-    def create(self, name):
-        project = Project.get()
-        mod_root = project.modulepath[-1]
-        LOGGER.info("Creating new module %s in %s", name, mod_root)
-
-        mod_path = os.path.join(mod_root, name)
-
-        if os.path.exists(mod_path):
-            LOGGER.error("%s already exists.", mod_path)
-            return
-
-        os.mkdir(mod_path)
-        with open(os.path.join(mod_path, "module.yml"), "w+") as fd:
-            fd.write("""name: %(name)s
-license: ASL 2.0
-version: 0.0.1dev0""" % {"name": name})
-
-        os.mkdir(os.path.join(mod_path, "model"))
-        with open(os.path.join(mod_path, "model", "_init.cf"), "w+") as fd:
-            fd.write("\n")
-
-        with open(os.path.join(mod_path, ".gitignore"), "w+") as fd:
-            fd.write("""*.swp
-*.pyc
-*~
-.cache
-            """)
-
-        subprocess.check_output(["git", "init"], cwd=mod_path)
-        subprocess.check_output(["git", "add", ".gitignore", "module.yml", "model/_init.cf"], cwd=mod_path)
-
-        LOGGER.info("Module successfully created.")
-
-    def execute(self, cmd, args):
-        """
-            Execute the given command
-        """
-        if cmd is not None and cmd != '' and hasattr(self, cmd):
-            method = getattr(self, cmd)
-            margs = inspect.getfullargspec(method).args
-            margs.remove("self")
-            outargs = {k: getattr(args, k) for k in margs if hasattr(args, k)}
-            method(**outargs)
-        else:
-            raise Exception("%s not implemented" % cmd)
-
-    def help(self):
-        """
-            Show a list of commands
-        """
-        print("Available commands: list")
-
-    def do(self, command):
-        project = Project.get()
-
-        project.load()
-        for mod in Project.get().sorted_modules():
-            try:
-                mod.execute_command(command)
-            except Exception as e:
-                print(e)
-
-    def list(self, requires=False):
-        """
-            List all modules in a table
-        """
-        table = []
-        name_length = 10
-        version_length = 10
-
-        project = Project.get()
-        project.get_complete_ast()
-
-        names = sorted(project.modules.keys())
-        specs = project.collect_imported_requirements()
-        for name in names:
-
-            name_length = max(len(name), name_length)
-            mod = Project.get().modules[name]
-            version = str(mod.version)
-            if name not in specs:
-                specs[name] = []
-
-            try:
-                if project._install_mode == INSTALL_MASTER:
-                    reqv = "master"
-                else:
-                    release_only = project._install_mode == INSTALL_RELEASES
-                    versions = Module.get_suitable_version_for(
-                        name, specs[name], mod._path, release_only=release_only)
-                    if versions is None:
-                        reqv = "None"
-                    else:
-                        reqv = str(versions)
-            except Exception:
-                LOGGER.exception("Problem getting version for module %s" % name)
-                reqv = "ERROR"
-
-            version_length = max(len(version), len(reqv), version_length)
-
-            table.append((name, version, reqv, version == reqv))
-
-        if requires:
-            print("requires:")
-            for name, version, reqv, _ in table:
-                print("    - %s==%s" % (name, version))
-        else:
-            t = texttable.Texttable()
-            t.set_deco(texttable.Texttable.HEADER | texttable.Texttable.BORDER | texttable.Texttable.VLINES)
-            t.header(("Name", "Installed version", "Expected in project", "Matches"))
-            for row in table:
-                t.add_row(row)
-            print(t.draw())
-
-    def update(self, project=None):
-        """
-            Update all modules from their source
-        """
-
-        if project is None:
-            project = Project.get()
-
-        project.get_complete_ast()
-        specs = project.collect_imported_requirements()
-
-        for name, spec in specs.items():
-            print("updating module: %s" % name)
-            try:
-                Module.update(project, name, spec, install_mode=project._install_mode)
-            except Exception:
-                LOGGER.exception("Failed to update module")
-
-    def install(self, project=None):
-        """
-            Install all modules the project requires
-        """
-        if project is None:
-            project = Project.get()
-
-        project.load()
-
-    def status(self):
-        """
-            Run a git status on all modules and report
-        """
-        project = Project.get()
-
-        project.load()
-        for mod in project.sorted_modules():
-            mod.status()
-
-    def push(self):
-        """
-            Push all modules
-        """
-        project = Project.get()
-
-        project.load()
-        for mod in Project.get().sorted_modules():
-            mod.push()
-
-    def verify(self):
-        """
-            Verify dependencies and frozen module versions
-        """
-        Project.get().verify()
-
-    def _find_module(self):
-        module = Module(None, os.path.realpath(os.curdir))
-        LOGGER.info("Successfully loaded module %s with version %s" % (module.name, module.version))
-        return module
-
-    def determine_new_version(self, old_version, version, major, minor, patch, dev):
-        was_dev = old_version.is_prerelease
-
-        if was_dev:
-            if major or minor or patch:
-                print("WARNING: when releasing a dev version, options --major, --minor and --patch are ignored")
-
-            # determine new version
-            if version is not None:
-                baseversion = version
-            else:
-                baseversion = old_version.base_version
-
-            if not dev:
-                outversion = baseversion
-            else:
-                outversion = "%s.dev%d" % (baseversion, time.time())
-        else:
-            opts = [x for x in [major, minor, patch] if x]
-            if version is not None:
-                if len(opts) > 0:
-                    print("WARNING: when using the --version option, --major, --minor and --patch are ignored")
-                outversion = version
-            else:
-                if len(opts) == 0:
-                    print("One of the following options is required: --major, --minor or --patch")
-                    return None
-                elif len(opts) > 1:
-                    print("You can use only one of the following options: --major, --minor or --patch")
-                    return None
-                parts = old_version.base_version.split(".")
-                while len(parts) < 3:
-                    parts.append("0")
-                parts = [int(x) for x in parts]
-                if patch:
-                    parts[2] += 1
-                if minor:
-                    parts[1] += 1
-                    parts[2] = 0
-                if major:
-                    parts[0] += 1
-                    parts[1] = 0
-                    parts[2] = 0
-                outversion = '.'.join([str(x) for x in parts])
-
-            if dev:
-                outversion = "%s.dev%d" % (outversion, time.time())
-
-        outversion = parse_version(outversion)
-        if outversion <= old_version:
-            print("new versions (%s) is not larger then old version (%s), aborting" % (outversion, old_version))
-            return None
-
-        return outversion
-
-    def commit(self, message, version=None, dev=False, major=False, minor=False, patch=False, commit_all=False):
-        """
-            Commit all current changes.
-        """
-        # find module
-        module = self._find_module()
-        # get version
-        old_version = parse_version(str(module.version))
-
-        outversion = self.determine_new_version(old_version, version, major, minor, patch, dev)
-
-        if outversion is None:
-            return
-
-        module.rewrite_version(str(outversion))
-        print("set version to: " + str(outversion))
-        # commit
-        gitprovider.commit(module._path, message, commit_all, [module.get_config_file_name()])
-        # tag
-        gitprovider.tag(module._path, str(outversion))
-
-    def validate(self, repo=[], no_clean=False, parse_only=False, isolate=False, workingcopy=False):
-        """
-            Validate the module we are currently in
-        """
-        if repo is None:
-            repo = []
-        valid = True
-        module = self._find_module()
-        if not module.is_versioned():
-            LOGGER.error("Module is not versioned correctly, validation will fail")
-            valid = False
-
-        # compile the source files in the module
-        ns_root = Namespace("__root__")
-        ns_mod = Namespace(module.name, ns_root)
-        for model_file in module.get_module_files():
-            try:
-                ns = ns_mod
-                if not model_file.endswith("_init.cf"):
-                    part_name = model_file.split("/")[-1][:-3]
-                    ns = Namespace(part_name, ns_mod)
-
-                parse(ns, model_file)
-                LOGGER.info("Successfully parsed %s" % model_file)
-            except Exception:
-                valid = False
-                LOGGER.exception("Unable to parse %s, validation will fail" % model_file)
-
-        if parse_only:
-            if not valid:
-                sys.exit(1)
-            sys.exit(0)
-        # create a test project
-        LOGGER.info("Creating a new project to test the module")
-        project_dir = tempfile.mkdtemp()
-
-        if isolate:
-            search_root = tempfile.mkdtemp()
-            os.symlink(module._path, os.path.join(search_root, module.name))
-        else:
-            search_root = os.path.split(module._path)[0]
-
-        try:
-            lib_dir = os.path.join(project_dir, "libs")
-            os.mkdir(lib_dir)
-
-            repo.insert(0, search_root)
-            allrepos = ["'%s'" % x for x in repo]
-            allrepos = ','.join(allrepos)
-
-            if len(module.versions()) > 0:
-                version_constraint = "%(name)s: %(name)s == %(version)s" % \
-                                     {"name": module.name, "version": str(module.versions()[0])}
-            else:
-                version_constraint = module.name
-
-            LOGGER.info("Setting up project")
-            with open(os.path.join(project_dir, "project.yml"), "w+") as fd:
-                fd.write("""name: test
-description: Project to validate module %(name)s
-repo: [%(repo)s]
-modulepath: libs
-downloadpath: libs
-requires:
-    %(version)s
-""" % {"name": module.name, "version": version_constraint, "repo": allrepos})
-
-            LOGGER.info("Installing dependencies")
-            test_project = Project(project_dir)
-            test_project.use_virtual_env()
-            Project.set(test_project)
-
-            LOGGER.info("Compiling empty initial model")
-            main_cf = os.path.join(project_dir, "main.cf")
-            with open(main_cf, "w+") as fd:
-                fd.write("import %s" % (module.name))
-
-            if workingcopy:
-                # overwrite with actual
-                modpath = os.path.join(project_dir, "libs", module.name)
-                if os.path.exists(modpath):
-                    shutil.rmtree(modpath)
-                shutil.copytree(module._path, modpath)
-
-            project = Project(project_dir)
-            project.use_virtual_env()
-            Project.set(project)
-            LOGGER.info("Verifying modules")
-            project.verify()
-            LOGGER.info("Loading all plugins")
-            project.load()
-
-            values = inmanta.compiler.do_compile()
-
-            if values is not None:
-                LOGGER.info("Successfully compiled module and its dependencies.")
-            else:
-                LOGGER.error("Unable to compile module and its dependencies, validation will fail")
-                valid = False
-
-        except Exception:
-            LOGGER.exception("An exception occurred during validation")
-            valid = False
-
-        finally:
-            if no_clean:
-                LOGGER.info("Project not cleaned, root at %s", project_dir)
-
-            else:
-                shutil.rmtree(project_dir)
-
-        if not valid:
-            sys.exit(1)
-
-        sys.exit(0)
