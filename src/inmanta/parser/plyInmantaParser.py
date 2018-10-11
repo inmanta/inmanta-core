@@ -22,7 +22,7 @@ import ply.yacc as yacc
 
 # Get the token map from the lexer. This is required.
 from inmanta.parser.plyInmantaLex import tokens, reserved
-from inmanta.ast.statements import Literal
+from inmanta.ast.statements import Literal, Statement
 from inmanta.ast import Location, LocatableString, Range
 from inmanta.ast.statements.generator import For, Constructor
 from inmanta.ast.statements.define import DefineEntity, DefineAttribute, DefineImplement, DefineImplementation, DefineRelation, \
@@ -36,6 +36,7 @@ from inmanta.ast.blocks import BasicBlock
 import re
 import logging
 from inmanta.execute.util import NoneValue
+from typing import List
 
 
 LOGGER = logging.getLogger()
@@ -961,8 +962,7 @@ def myparse(ns, tfile, content):
         return parser.parse(data, lexer=lexer, debug=False)
 
 
-def parse(namespace, filename, content=None):
-
+def parse(namespace, filename, content=None) -> List[Statement]:
     statements = myparse(namespace, filename, content)
     # self.cache(filename, statements)
     return statements

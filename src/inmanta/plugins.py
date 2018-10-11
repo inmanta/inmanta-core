@@ -302,6 +302,9 @@ class Plugin(object, metaclass=PluginMeta):
         """
         return self.new_statement
 
+    def is_accept_unknowns(self):
+        return self.opts["allow_unknown"]
+
     def get_variable(self, name, scope):
         """
             Get the given variable
@@ -328,6 +331,8 @@ class Plugin(object, metaclass=PluginMeta):
         new_args = []
         for arg in args:
             if isinstance(arg, Context):
+                new_args.append(arg)
+            elif isinstance(arg, Unknown) and self.is_accept_unknowns():
                 new_args.append(arg)
             else:
                 new_args.append(DynamicProxy.return_value(arg))
@@ -358,7 +363,7 @@ class Plugin(object, metaclass=PluginMeta):
         return value
 
 
-def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emits_statements: bool=False):  # noqa: H801
+def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emits_statements: bool=False, allow_unknown: bool=False):  # noqa: H801
     """
         Python decorator to register functions with inmanta as plugin
 
@@ -367,8 +372,9 @@ def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emit
                          not available.
         :param emits_statements: Set to true if this plugin emits new statements that the compiler should execute. This is only
                                  required for complex plugins such as integrating a template engine.
+        :param allow_unknown: Set to true if this plugin accepts Unknown values as valid input.
     """
-    def curry_name(name=None, commands=None, emits_statements=False):
+    def curry_name(name=None, commands=None, emits_statements=False, allow_unknown=False):
         """
             Function to curry the name of the function
         """
@@ -391,7 +397,7 @@ def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emit
             dictionary = {}
             dictionary["__module__"] = fnc.__module__
             dictionary["__function_name__"] = name
-            dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements}
+            dictionary["opts"] = {"bin": commands, "emits_statements": emits_statements, "allow_unknown": allow_unknown}
             dictionary["call"] = wrapper
             dictionary["__function__"] = fnc
 
@@ -403,11 +409,11 @@ def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emit
         return call
 
     if function is None:
-        return curry_name(commands=commands, emits_statements=emits_statements)
+        return curry_name(commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
 
     elif isinstance(function, str):
-        return curry_name(function, commands=commands, emits_statements=emits_statements)
+        return curry_name(function, commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
 
     elif function is not None:
-        fnc = curry_name(commands=commands, emits_statements=emits_statements)
+        fnc = curry_name(commands=commands, emits_statements=emits_statements, allow_unknown=allow_unknown)
         return fnc(function)

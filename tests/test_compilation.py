@@ -56,7 +56,6 @@ class CompilerBaseTest(object):
             project.main_file = self.mainfile
         Project.set(project)
         self.state_dir = tempfile.mkdtemp()
-        config.Config.load_config()
         config.Config.set("config", "state-dir", self.state_dir)
 
     def tearDown(self):
@@ -1293,6 +1292,17 @@ class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
         print(text)
         assert text.startswith("Exception in plugin test::badtype caused by Invalid type for value 'a'," +
                                " should be type test::Item (reported in test::badtype(c1.items) (")
+
+
+def test_execute_twice(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+import mod4::other
+import mod4
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    assert scopes.get_child("mod4").lookup("main").get_value() == 0
+    assert scopes.get_child("mod4").get_child("other").lookup("other").get_value() == 0
 
 
 def test_275_default_override(snippetcompiler):
@@ -2598,3 +2608,97 @@ b.alink = a
     assert get_names(b, "blink") == ["a", "b", "c", "d"]
     assert get_names(c, "blink") == ["a", "b", "c", "d"]
     assert get_names(d, "blink") == ["a", "b", "c", "d"]
+
+
+def test_lazy_attibutes(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+   string value
+end
+
+implement Thing using std::none
+
+index Thing(id)
+
+a = Thing(id=5, value="{{a.id}}")
+
+""")
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value()
+
+
+def test_lazy_attibutes2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+   string value
+end
+
+implement Thing using std::none
+
+index Thing(id)
+
+a = Thing(id=5)
+a.value="{{a.id}}"
+
+""")
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value()
+
+
+def test_lazy_attibutes3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+end
+
+Thing.value [1] -- StringWrapper
+
+entity StringWrapper:
+    string value
+end
+
+implement Thing using std::none
+implement StringWrapper using std::none
+
+
+index Thing(id)
+
+a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
+
+""")
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
+
+
+def test_749_is_unknown(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        import tests
+
+        a="a"
+        b=tests::unknown()
+
+        au = tests::is_uknown(a)
+        bu = tests::is_uknown(b)
+
+        ax = tests::do_uknown(a)
+        bx = tests::do_uknown(b)
+    """)
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert not root.lookup("au").get_value()
+    assert root.lookup("bu").get_value()
+
+    assert root.lookup("ax").get_value() == "XX"
+    assert root.lookup("bx").get_value() == "XX"

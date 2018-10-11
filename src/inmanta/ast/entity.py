@@ -29,6 +29,7 @@ from inmanta.execute.runtime import Instance
 from inmanta.execute.util import AnyType
 
 from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set  # noqa: F401
+from abc import abstractmethod
 
 try:
     from typing import TYPE_CHECKING
@@ -42,7 +43,22 @@ if TYPE_CHECKING:
     from inmanta.ast.attribute import Attribute  # noqa: F401
 
 
-class Entity(NamedType):
+class EntityLike(Type):
+
+    @abstractmethod
+    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+        pass
+
+    @abstractmethod
+    def get_default(self, name: str) -> "ExpressionStatement":
+        pass
+
+    @abstractmethod
+    def get_entity(self) -> "Entity":
+        pass
+
+
+class Entity(EntityLike, NamedType):
     """
         This class models a defined entity in the domain model of the configuration model.
 
@@ -540,7 +556,7 @@ class Implement(Locatable):
         self.constraint.normalize()
 
 
-class Default(Type):
+class Default(EntityLike):
     """
         This class models default values for a constructor.
     """
