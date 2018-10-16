@@ -23,9 +23,10 @@ def test_plugin_excn(snippetcompiler):
         import std
         std::template("/tet.tmpl")
 """,
-        "Exception in plugin std::template caused by TemplateNotFound: /tet.tmpl "
-        "(reported in std::template('/tet.tmpl') ({dir}/main.cf:3))"
-    )
+        """Exception in plugin std::template (reported in std::template('/tet.tmpl') ({dir}/main.cf:3))
+caused by:
+  jinja2.exceptions.TemplateNotFound: /tet.tmpl
+""")
 
 
 def test_keyword_excn(snippetcompiler):
@@ -95,9 +96,10 @@ end
 
 Test1(a=3)
 """,
-        "Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` caused by Invalid "
-        "value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6)) "
-        "(reported in Construct(Test1) ({dir}/main.cf:6))"
+        """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` """
+        """(reported in Construct(Test1) ({dir}/main.cf:6))
+caused by:
+  Invalid value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))"""
     )
 
 
@@ -115,8 +117,9 @@ implement Test1 using std::none
 t1 = Test1()
 t1.a=3
 """,
-        "Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` caused by Invalid "
-        "value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11)) (reported in t1.a = 3 ({dir}/main.cf:11))"
+        """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
+caused by:
+  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))"""  # nopep8
     )
 
 
@@ -157,7 +160,7 @@ end
 entity File:
 end
 """,
-        "Entity __config__::File is already defined (reported at ({dir}/main.cf:5:8)) (duplicate at ({dir}/main.cf:2:8))"
+        "Entity __config__::File is already defined (original at ({dir}/main.cf:5:8)) (duplicate at ({dir}/main.cf:2:8))"
     )
 
 
@@ -173,7 +176,7 @@ end
 implementation file for File:
 end
 """,
-        "Implementation __config__::file for type File is already defined (reported at ({dir}/main.cf:8:16))" +
+        "Implementation __config__::file for type File is already defined (original at ({dir}/main.cf:8:16))" +
         " (duplicate at ({dir}/main.cf:5:16))"
     )
 
@@ -214,8 +217,10 @@ def test_null(snippetcompiler):
         a = A()
 
     """,
-        "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`"
-        " caused by Invalid value 'null', expected String (reported in Construct(A) ({dir}/main.cf:6))")
+        """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
+caused by:
+  Invalid value 'null', expected String"""  # nopep8
+  )
 
 
 def test_null_on_list(snippetcompiler):
@@ -226,8 +231,10 @@ def test_null_on_list(snippetcompiler):
         end
         implement A using std::none
         a = A()
-    """, "Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)`"
-        " caused by Invalid value 'null', expected list (reported in Construct(A) ({dir}/main.cf:6))")
+    """, """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
+caused by:
+  Invalid value 'null', expected list"""  # nopep8
+  )
 
 
 def test_null_on_dict(snippetcompiler):
@@ -245,7 +252,7 @@ def test_unknown_type_in_relation(snippetcompiler):
     snippetcompiler.setup_for_error(
         """
         foo::Entity.test [1] -- std::Entity
-        """, "could not find type foo::Entity in namespace __config__ (reported in None ({dir}/main.cf:2))")
+        """, "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2)")
 
 
 def test_for_error(snippetcompiler):
@@ -281,6 +288,7 @@ def test_index_undefined_attribute(snippetcompiler):
 
 
 def test_typedef_in_non_constant(snippetcompiler):
+    # noqa: E501
     snippetcompiler.setup_for_error(
         """
 a = "A"
@@ -294,9 +302,10 @@ implement Test using std::none
 
 Test(value="a")
 """,
-        "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` caused by "
-        "Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41)) "
-        "(reported in Construct(Test) ({dir}/main.cf:11))")
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
+caused by:
+  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))"""  # nopep8
+  )
 
 
 def test_typedef_in_violates(snippetcompiler):
@@ -312,9 +321,10 @@ implement Test using std::none
 
 Test(value="ab")
 """,
-        "Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` "
-        "caused by Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9)) "
-        "(reported in Construct(Test) ({dir}/main.cf:10))")
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
+caused by:
+  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))"""  # nopep8
+  )
 
 
 def test_set_wrong_relation_type(snippetcompiler):
@@ -323,6 +333,7 @@ def test_set_wrong_relation_type(snippetcompiler):
         1) on an instance
         2) in the constructor
     """
+    # noqa: E501
     snippetcompiler.setup_for_error(
         """
         entity Credentials:
@@ -334,9 +345,11 @@ def test_set_wrong_relation_type(snippetcompiler):
 
         creds = Credentials(file=creds)
         """,
-        "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
-        "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
-        "(reported in Construct(Credentials) ({dir}/main.cf:9)) (reported in Construct(Credentials) ({dir}/main.cf:9))")
+        """Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)`"""
+        """ (reported in Construct(Credentials) ({dir}/main.cf:9))
+caused by:
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File """
+        """(reported in Construct(Credentials) ({dir}/main.cf:9))""")
 
     snippetcompiler.setup_for_error(
         """
@@ -350,9 +363,10 @@ def test_set_wrong_relation_type(snippetcompiler):
         creds = Credentials()
         creds.file = creds
         """,
-        "Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` caused by "
-        "Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File "
-        "(reported in creds.file = creds ({dir}/main.cf:10)) (reported in creds.file = creds ({dir}/main.cf:10))")
+        """Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` (reported in creds.file = creds ({dir}/main.cf:10))
+caused by:
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))"""  # nopep8
+  )
 
 
 def test_bad_map_lookup(snippetcompiler):

@@ -1288,10 +1288,12 @@ class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
     def test_compile(self):
         with pytest.raises(RuntimeException) as e:
             compiler.do_compile()
-        text = str(e.value)
+        text = e.value.format_trace(indent="  ")
         print(text)
-        assert text.startswith("Exception in plugin test::badtype caused by Invalid type for value 'a'," +
-                               " should be type test::Item (reported in test::badtype(c1.items) (")
+        assert text == """Exception in plugin test::badtype (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))
+caused by:
+  Invalid type for value 'a', should be type test::Item""".format(
+            dir=self.project_dir)
 
 
 def test_execute_twice(snippetcompiler):

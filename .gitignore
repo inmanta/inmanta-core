@@ -42,4 +42,7 @@ docs/moduleguides
 .idea
 .pytest_cache
 
+.mypy
+.mypy_cache
+mypy
 types

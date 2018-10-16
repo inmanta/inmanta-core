@@ -22,7 +22,7 @@ from inmanta.ast.statements import ReferenceStatement
 from inmanta.execute.runtime import ResultVariable, Waiter
 from inmanta.execute.proxy import UnsetException, UnknownException
 from inmanta.execute.util import Unknown
-from inmanta.ast import RuntimeException, WrappingRuntimeException
+from inmanta.ast import RuntimeException, WrappingRuntimeException, ExternalException
 from inmanta import plugins
 
 
@@ -106,8 +106,10 @@ class FunctionCall(ReferenceStatement):
                 result.set_value(e.unknown, self.location)
             except UnsetException as e:
                 raise e
-            except Exception as e:
+            except RuntimeException as e:
                 raise WrappingRuntimeException(self, "Exception in plugin %s" % self.name, e)
+            except Exception as e:
+                raise ExternalException(self, "Exception in plugin %s" % self.name, e)
 
     def __repr__(self):
         return "%s(%s)" % (self.name, ','.join([repr(a) for a in self.arguments]))
