@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 from io import StringIO
 from itertools import groupby
 import os
@@ -41,40 +40,42 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from utils import assert_graph
 
-
-def test_issue_219_unknows_in_template(snippetcompiler):
+def test_lnr_on_double_is_defined(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
-import tests
+entity Test:
+    string? two
+end
 
-a = tests::unknown()
-b = "abc{{a}}"
+Test.one [0:1] -- Test
+
+implement Test using std::none when self.one.two is defined
+
+a = Test(two="b")
+a.one = a
 """)
-    (_, root) = compiler.do_compile()
-    scope = root.get_child("__config__").scope
-
-    assert isinstance(scope.lookup("a").get_value(), Unknown)
-    assert isinstance(scope.lookup("b").get_value(), Unknown)
-
-
-def test_749_is_unknown(snippetcompiler):
+    compiler.do_compile()
+    
+def test_double_define(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
-        import tests
+entity Test:
+    string test
+    string? test
+    bool test
+end
+""")
+    with pytest.raises(TypingException):
+        compiler.do_compile()
 
-        a="a"
-        b=tests::unknown()
 
-        au = tests::is_uknown(a)
-        bu = tests::is_uknown(b)
+def test_536_number_cast(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Network:
+    number segmentation_id
+end
+implement Network using std::none
+net1 = Network(segmentation_id="10")
+""")
+    with pytest.raises(AttributeException):
+        compiler.do_compile()
 
-        ax = tests::do_uknown(a)
-        bx = tests::do_uknown(b)
-    """)
 
-    (_, scopes) = compiler.do_compile()
-    root = scopes.get_child("__config__")
-
-    assert not root.lookup("au").get_value()
-    assert root.lookup("bu").get_value()
-
-    assert root.lookup("ax").get_value() == "XX"
-    assert root.lookup("bx").get_value() == "XX"

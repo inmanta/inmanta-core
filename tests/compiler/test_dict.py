@@ -15,31 +15,11 @@
 
     Contact: code@inmanta.com
 """
-
-from io import StringIO
-from itertools import groupby
-import os
-import re
-import shutil
-import sys
-import tempfile
-import unittest
-
 import pytest
 
-from inmanta import config
-from inmanta.ast import AttributeException, IndexException
-from inmanta.ast import MultiException
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import TypingException
+from inmanta.ast import RuntimeException, DuplicateException
 import inmanta.compiler as compiler
-from inmanta.execute.proxy import UnsetException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import DependencyCycleException
-from inmanta.module import Project
-from inmanta.parser import ParserException
-from utils import assert_graph
 
 
 def test_dict(snippetcompiler):
@@ -119,3 +99,57 @@ b=Foo(bar={"a":"A"})
 """)
     with pytest.raises(RuntimeException):
         compiler.do_compile()
+
+
+def test_611_dict_access(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+a = "a"
+b = { "a" : a, "b" : "b", "c" : 3}
+c=b[a]
+d=b["c"]
+""")
+
+    (_, root) = compiler.do_compile()
+
+    scope = root.get_child("__config__").scope
+    assert scope.lookup("c").get_value() == "a"
+    assert scope.lookup("d").get_value() == 3
+
+
+def test_632_dict_access_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : {"b":"c"}}
+c=b["a"]["b"]
+""")
+
+    (_, root) = compiler.do_compile()
+
+    scope = root.get_child("__config__").scope
+    assert scope.lookup("c").get_value() == "c"
+
+
+def test_632_dict_access_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+b = { "a" : "b"}
+c=b["a"]["b"]
+""")
+
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_673_in_dict(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    dict attributes
+end
+
+implementation test for Test:
+
+end
+
+implement Test using test when "foo" in self.attributes
+
+Test(attributes={"foo": 42})
+""")
+    compiler.do_compile()

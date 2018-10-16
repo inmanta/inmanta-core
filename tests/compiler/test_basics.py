@@ -15,31 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
-from io import StringIO
-from itertools import groupby
-import os
-import re
-import shutil
-import sys
-import tempfile
-import unittest
-
-import pytest
-
-from inmanta import config
-from inmanta.ast import AttributeException, IndexException
-from inmanta.ast import MultiException
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
 import inmanta.compiler as compiler
-from inmanta.execute.proxy import UnsetException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import DependencyCycleException
-from inmanta.module import Project
-from inmanta.parser import ParserException
-from utils import assert_graph
 
 
 def test_str_on_instance_pos(snippetcompiler):
@@ -94,4 +70,30 @@ end
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 1
+
+
+def test_implements_inheritance(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string a
+end
+
+entity TestC extends Test:
+end
+
+implementation test for Test:
+    self.a = "xx"
+end
+
+
+
+implement Test using test
+implement TestC using parents
+
+a = TestC()
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
 

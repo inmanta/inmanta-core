@@ -16,30 +16,12 @@
     Contact: code@inmanta.com
 """
 
-from io import StringIO
-from itertools import groupby
-import os
-import re
-import shutil
-import sys
-import tempfile
-import unittest
-
 import pytest
 
-from inmanta import config
-from inmanta.ast import AttributeException, IndexException
-from inmanta.ast import MultiException
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import TypingException
+from inmanta.ast import DuplicateException
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import DependencyCycleException
-from inmanta.module import Project
-from inmanta.parser import ParserException
-from utils import assert_graph
 
 
 def test_issue_127_default_overrides(snippetcompiler):
@@ -169,3 +151,21 @@ def test_275_duplicate_parent(snippetcompiler):
     with pytest.raises(TypingException):
         compiler.do_compile()
 
+
+def test_default_remove(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+        bool at = true
+    end
+    implement A using std::none
+
+    entity B extends A:
+        bool at = undef
+    end
+    implement B using std::none
+
+    a = A()
+    b = B()
+    """)
+    with pytest.raises(UnsetException):
+        compiler.do_compile()

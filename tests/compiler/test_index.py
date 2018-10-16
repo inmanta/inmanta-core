@@ -160,3 +160,148 @@ index Test1(x,y)
 """)
     with pytest.raises(RuntimeException):
         compiler.do_compile()
+        
+def test_index_on_subtype(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        host = std::Host(name="a",os=std::linux)
+        a=std::DefaultDirectory(host=host,path="/etc")
+        b=std::DefaultDirectory(host=host,path="/etc")
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    b = root.lookup("b")
+
+    assert a.get_value() == b.get_value()
+
+
+def test_index_on_subtype2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+        host = std::Host(name="a",os=std::linux)
+        a=std::DefaultDirectory(host=host,path="/etc")
+        b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
+    """)
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
+
+
+diamond = """
+entity A:
+    string at = "a"
+end
+implement A using std::none
+
+entity B:
+    string at = "a"
+end
+implement B using std::none
+
+
+entity C extends A,B:
+end
+implement C using std::none
+"""
+
+
+def test_index_on_subtype_diamond(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = C(at="a")
+    """)
+
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()
+
+
+def test_index_on_subtype_diamond_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = B(at="a")
+    """)
+    compiler.do_compile()
+
+
+def test_index_on_subtype_diamond_3(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = A(at="a")
+    b = B(at="ab")
+    """)
+    compiler.do_compile()
+
+
+def test_index_on_subtype_diamond_4(snippetcompiler):
+    snippetcompiler.setup_for_snippet(diamond + """
+    index A(at)
+    index B(at)
+
+    a = C(at="a")
+    b = C(at="a")
+    a=b
+    """)
+    (types, _) = compiler.do_compile()
+    c = types["__config__::C"]
+    assert len(c.get_indices()) == 1
+
+
+def test_394_short_index(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""implementation none for std::Entity:
+
+end
+
+entity Host:
+    string name
+    string blurp
+end
+
+entity File:
+    string name
+end
+
+implement Host using none
+implement File using none
+
+Host host [1] -- [0:] File files
+
+index Host(name)
+index File(host, name)
+
+h1 = Host(name="h1", blurp="blurp1")
+f1h1=File(host=h1,name="f1")
+f2h1=File(host=h1,name="f2")
+
+z = h1.files[name="f1"]
+""")
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+    z = root.lookup("z").get_value()
+    f1h1 = root.lookup("f1h1").get_value()
+    assert z is f1h1
+
+
+def test_511_index_on_default(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string a="a"
+    string b
+end
+
+index Test(a, b)
+
+implement Test using std::none
+
+Test(b="b")
+""")
+    compiler.do_compile()
+
+

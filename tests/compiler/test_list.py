@@ -133,3 +133,277 @@ std::print(t1.tests)
     scope = root.get_child("__config__").scope
 
     assert scope.lookup("t1").get_value().get_attribute("tests").get_value() == []
+
+
+def test_608_list_to_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1:] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+""")
+    (_, scopes) = compiler.do_compile()
+
+
+def test_608_list_to_single(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = c1.a
+""")
+    with pytest.raises(AttributeException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_608_opt_to_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1:] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:1] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+a2 = A(name="a2")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+""")
+    with pytest.raises(OptionalValueException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_608_opt_to_single(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:1] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+""")
+    with pytest.raises(OptionalValueException):
+        (_, scopes) = compiler.do_compile()
+
+
+def test_608_opt_to_single_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+end
+
+entity A:
+    string name
+end
+
+entity B:
+    string name
+end
+
+B.a [1] -- A
+
+entity C:
+    string name
+end
+
+C.a [0:1] -- A
+
+implement A using none
+implement B using none
+implement C using none
+
+a1 = A(name="a1")
+
+b1 = B(name="b1")
+
+c1 = C(name="c1")
+
+b1.a = a1
+b1.a = c1.a
+
+c1.a = a1
+""")
+    (_, scopes) = compiler.do_compile()
+
+
+def test_633_default_on_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Foo:
+   list first=[]
+   list second=["a", "b"]
+   string[] third=["a", "b"]
+end
+
+implementation none for std::Entity:
+end
+
+implement Foo using none
+
+foo = Foo()
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    foo = root.lookup("foo").get_value()
+
+    ab = foo.get_attribute("first").get_value()
+    assert ab == []
+
+    second = foo.get_attribute("second").get_value()
+    assert second == ["a", "b"]
+
+    third = foo.get_attribute("third").get_value()
+    assert third == ["a", "b"]
+
+
+def test_673_in_list(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+    string[] attributes
+end
+
+implementation test for Test:
+
+end
+
+implement Test using test when "foo" in self.attributes
+
+Test(attributes=["blah", "foo"])
+""")
+    compiler.do_compile()
+
+
+def test_552_string_rendering_for_lists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Network:
+    string[] tags=[]
+end
+
+implement Network using std::none
+
+net1 = Network(tags=["vlan"])
+a="Net has tags {{ net1.tags }}"
+""")
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+
+    assert a == """Net has tags ['vlan']"""
+
+
+def test_emptylists(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    implement std::Entity using std::none
+
+    a=std::Entity()
+    b=std::Entity()
+    c=std::Entity()
+
+    a.provides = b.provides
+    b.provides = c.provides
+    """)
+    compiler.do_compile()
+

@@ -100,3 +100,112 @@ implement std::HostConfig using linux when host.os == std::linux
 std::Host(name="vm1", os=std::linux)
 """)
     compiler.do_compile()
+
+
+def test_400_typeloops(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity Test extends Test:
+
+    end
+    """)
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_400_typeloops_2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity Test extends Test2:
+
+    end
+
+    entity Test2 extends Test:
+
+    end
+    """)
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+def test_438_parent_scopes_accessible(snippetcompiler):
+
+    snippetcompiler.setup_for_snippet("""
+entity Host:
+    string name
+end
+
+entity HostConfig:
+    string result
+end
+
+HostConfig.host [1] -- Host
+
+implementation hostDefaults for Host:
+    test="foo"
+    HostConfig(host=self)
+end
+
+implement Host using hostDefaults
+
+implementation test for HostConfig:
+    # fails correctly
+    # std::print(test)
+    # works and should fail
+    self.result = name
+end
+
+implement HostConfig using test
+
+Host(name="bar")
+""", autostd=False)
+    with pytest.raises(NotFoundException):
+        compiler.do_compile()
+
+
+def test_438_parent_scopes_accessible_2(snippetcompiler):
+
+    snippetcompiler.setup_for_snippet("""
+entity Host:
+    string name
+end
+
+entity HostConfig:
+    string result
+end
+
+HostConfig.host [1] -- Host
+
+implementation hostDefaults for Host:
+    test="foo"
+    HostConfig(host=self)
+end
+
+implement Host using hostDefaults
+
+implementation test for HostConfig:
+    self.result = test
+end
+
+implement HostConfig using test
+
+Host(name="bar")
+""", autostd=False)
+    with pytest.raises(NotFoundException):
+        compiler.do_compile()
+
+
+def test_484_attr_redef(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+typedef type as string matching self == "component" or self == "package" or self == "frame"
+
+entity Node:
+    type viz_type
+end
+
+entity Group extends Node:
+end
+
+entity Service extends Group:
+    string viz_type="package"
+end
+""", autostd=False)
+    with pytest.raises(DuplicateException):
+        compiler.do_compile()

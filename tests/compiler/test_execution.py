@@ -16,30 +16,13 @@
     Contact: code@inmanta.com
 """
 
-from io import StringIO
-from itertools import groupby
-import os
-import re
-import shutil
-import sys
-import tempfile
-import unittest
-
 import pytest
 
-from inmanta import config
-from inmanta.ast import AttributeException, IndexException
+from inmanta.ast import AttributeException
 from inmanta.ast import MultiException
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+
 import inmanta.compiler as compiler
-from inmanta.execute.proxy import UnsetException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import DependencyCycleException
-from inmanta.module import Project
-from inmanta.parser import ParserException
-from utils import assert_graph
+
 
 def test_issue_139_scheduler(snippetcompiler):
     snippetcompiler.setup_for_snippet("""import std
@@ -108,4 +91,299 @@ import mod4
     (_, scopes) = compiler.do_compile()
     assert scopes.get_child("mod4").lookup("main").get_value() == 0
     assert scopes.get_child("mod4").get_child("other").lookup("other").get_value() == 0
+
+
+def test_643_cycle_empty(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+end
+
+implementation none for std::Entity:
+end
+
+implement Alpha using none
+
+a = Alpha()
+
+a.requires = a.provides
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+
+    ab = a.get_attribute("requires").get_value()
+    assert ab == []
+
+
+def test_643_cycle(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+implementation none for std::Entity:
+end
+
+implement Alpha using none
+
+a = Alpha(name="a")
+b = Alpha(name="b")
+
+a.requires = b
+a.requires = b.provides
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+
+    # a.requires = b  ==> b.provides = a
+    # a.requires = b.provides => a.requires = a ==> a.provides = a
+
+    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("requires").get_value()]
+    assert sorted(ab) == ["a", "b"]
+
+    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("provides").get_value()]
+    assert sorted(ab) == ["a"]
+
+    ab = [alpha.get_attribute("name").get_value() for alpha in b.get_attribute("provides").get_value()]
+    assert sorted(ab) == ["a"]
+
+
+def test_643_forcycle_complex(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+Alpha.alink [0:] -- Alpha
+
+implementation links for std::Entity:
+    for x in alink:
+        x.alink = self.alink
+    end
+end
+
+implement Alpha using links
+
+a = Alpha(name="a")
+b = Alpha(name="b")
+c = Alpha(name="c")
+d = Alpha(name="d")
+
+a.alink = b
+a.alink = c
+a.alink = d
+
+b.alink = c
+
+b.alink = a
+
+""", autostd=False)
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+    c = root.lookup("c").get_value()
+    d = root.lookup("d").get_value()
+
+    def get_names(a):
+        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute("alink").get_value()])
+
+    assert get_names(a) == ["a", "b", "c", "d"]
+    assert get_names(b) == ["a", "b", "c", "d"]
+    assert get_names(c) == ["a", "b", "c", "d"]
+    assert get_names(d) == ["a", "b", "c", "d"]
+
+
+def test_643_forcycle_complex_reverse(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+Alpha.alink [0:] -- Alpha.blink [0:]
+
+implementation links for std::Entity:
+    for x in alink:
+        x.alink = self.alink
+    end
+end
+
+implement Alpha using links
+
+a = Alpha(name="a")
+b = Alpha(name="b")
+c = Alpha(name="c")
+d = Alpha(name="d")
+
+a.alink = b
+a.alink = c
+a.alink = d
+
+b.alink = c
+
+b.alink = a
+
+""", autostd=False)
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    b = root.lookup("b").get_value()
+    c = root.lookup("c").get_value()
+    d = root.lookup("d").get_value()
+
+    def get_names(a, name="alink"):
+        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute(name).get_value()])
+
+    assert get_names(a) == ["a", "b", "c", "d"]
+    assert get_names(b) == ["a", "b", "c", "d"]
+    assert get_names(c) == ["a", "b", "c", "d"]
+    assert get_names(d) == ["a", "b", "c", "d"]
+
+    assert get_names(a, "blink") == ["a", "b", "c", "d"]
+    assert get_names(b, "blink") == ["a", "b", "c", "d"]
+    assert get_names(c, "blink") == ["a", "b", "c", "d"]
+    assert get_names(d, "blink") == ["a", "b", "c", "d"]
+
+
+def test_lazy_attibutes(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+   string value
+end
+
+implement Thing using std::none
+
+index Thing(id)
+
+a = Thing(id=5, value="{{a.id}}")
+
+""")
+
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value()
+
+
+def test_lazy_attibutes2(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+   string value
+end
+
+implement Thing using std::none
+
+index Thing(id)
+
+a = Thing(id=5)
+a.value="{{a.id}}"
+
+""")
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value()
+
+
+def test_lazy_attibutes3(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity  Thing:
+   number id
+end
+
+Thing.value [1] -- StringWrapper
+
+entity StringWrapper:
+    string value
+end
+
+implement Thing using std::none
+implement StringWrapper using std::none
+
+
+index Thing(id)
+
+a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
+
+""")
+    (_, scopes) = compiler.do_compile()
+    root = scopes.get_child("__config__")
+
+    assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
+
+
+def test_veryhardsequencing(snippetcompiler):
+
+    snippetcompiler.setup_for_snippet("""
+implementation none for std::Entity:
+
+end
+
+implement std::Entity using none
+
+#Volumes
+entity Volume:
+end
+
+implementation create for Volume:
+    backing = std::Entity(requires=self.requires)
+    backing.provides = self.provides
+end
+
+implement Volume using create
+
+entity KafkaNode:
+
+end
+
+
+implementation fromtarball for KafkaNode:
+    install = std::Entity()
+    install.requires = self.requires
+end
+
+implement KafkaNode using fromtarball
+
+
+
+kafka-user = std::Entity()
+kafka-volume = Volume(requires=kafka-user)
+KafkaNode(requires=kafka-volume)
+""", autostd=False)
+
+    compiler.do_compile()
+
+
+def test_lazy_constructor(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity One:
+end
+
+entity Two:
+end
+
+One.two [1] -- Two.one [1]
+
+one = One(two=two)
+two = Two(one=one)
+
+implementation none for std::Entity:
+
+end
+
+implement One using none
+implement Two using none
+""", autostd=False)
+
+    compiler.do_compile()
+
 

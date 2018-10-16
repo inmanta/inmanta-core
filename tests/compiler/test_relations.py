@@ -306,3 +306,147 @@ Test2.xx [1] -- Test1.tests [0:]
         compiler.do_compile()
 
 
+def test_relation_attributes(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+end
+
+entity Foo:
+end
+
+foo = "a"
+bar = Test()
+bar.bar = Foo()
+
+implement Test using std::none
+implement Foo using std::none
+
+
+Test.bar [1] foo,bar Foo
+""")
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    bar = root.lookup("bar")
+    annotations = bar.value.get_attribute("bar").attribute.source_annotations
+    assert len(annotations) == 2
+    assert annotations[0].get_value() == "a"
+    assert annotations[1].get_value() == bar.value
+
+
+def test_relation_attributes_unresolved(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+end
+
+entity Foo:
+end
+
+foo = "a"
+
+implement Test using std::none
+implement Foo using std::none
+
+
+Test.bar [1] foo,bar Foo
+""")
+    with pytest.raises(NotFoundException):
+        compiler.do_compile()
+
+
+def test_relation_attributes_unknown(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Test:
+end
+
+entity Foo:
+end
+
+import tests
+
+foo = tests::unknown()
+bar = "a"
+
+implement Test using std::none
+implement Foo using std::none
+
+
+Test.bar [1] foo,bar Foo
+""")
+    with pytest.raises(TypingException):
+        compiler.do_compile()
+
+
+def test_671_bounds_check(snippetcompiler):
+    snippetcompiler.setup_for_snippet(""" entity Test:
+
+end
+
+entity Foo:
+
+end
+
+Test.foos [2] -- Foo
+
+t = Test()
+t.foos += Foo()
+t.foos += Foo()
+
+a = t.foos
+
+implementation none for std::Entity:
+end
+
+implement Test using none
+implement Foo using none
+""", autostd=False)
+    compiler.do_compile()
+
+
+def test_587_assign_extend_correct(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+    end
+    implement A using std::none
+
+    entity B:
+        string name
+    end
+    implement B using std::none
+
+    A.b [0:] -- B
+
+    a = A()
+    a.b += B(name = "a")
+    a.b += B(name = "b")
+
+    """)
+
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a")
+    ab = a.get_value().get_attribute("b").get_value()
+    assert ["a", "b"] == [v.get_attribute("name").get_value() for v in ab]
+
+
+def test_587_assign_extend_incorrect(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+    entity A:
+    end
+    implement A using std::none
+
+    entity B:
+        string name
+    end
+    implement B using std::none
+
+    A.b [1:1] -- B
+
+    a = A()
+    a.b += B(name = "a")
+
+    """)
+
+    with pytest.raises(TypingException):
+        (_, scopes) = compiler.do_compile()
