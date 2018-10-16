@@ -1024,7 +1024,8 @@ class ResourceAction(BaseDocument):
 
     __indexes__ = [
         dict(keys=[("environment", pymongo.ASCENDING), ("action_id", pymongo.ASCENDING)], unique=True),
-        dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_ids", pymongo.ASCENDING), ("started", pymongo.DESCENDING)]),
+        dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_ids", pymongo.ASCENDING),
+                   ("started", pymongo.DESCENDING)]),
     ]
 
     def __init__(self, from_mongo=False, **kwargs):
