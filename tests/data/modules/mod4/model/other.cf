@@ -1,0 +1,3 @@
+import tests
+
+other = tests::once("other")

@@ -561,6 +561,10 @@ class OptionalValueException(RuntimeException):
         self.attribute = attribute
 
 
+class IndexException(RuntimeException):
+    pass
+
+
 class TypingException(RuntimeException):
     pass
 

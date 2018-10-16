@@ -26,7 +26,7 @@ import socket
 
 
 import pytest
-from inmanta import config, data, command, mongoproc
+from inmanta import config, data, mongoproc
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
@@ -65,15 +65,22 @@ def mongo_db():
 def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
-    command.Commander.reset()
+    # No dynamic loading of commands at the moment, so no need to reset/reload
+    # command.Commander.reset()
     handler.Commander.reset()
+    Project._project = None
 
 
 @pytest.fixture(scope="function", autouse=True)
 def clean_reset(mongo_client):
+    cwd = os.getcwd()
+
     reset_all()
     yield
     reset_all()
+
+    # reset cwd
+    os.chdir(cwd)
 
     for db_name in mongo_client.database_names():
         if db_name != "admin":

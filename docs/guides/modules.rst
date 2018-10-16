@@ -81,6 +81,20 @@ A module can also indicate a minimal compiler version with the *compiler_version
 
 *source* indicates the authoritative repository where the module is maintained.
 
+To automatically freeze all versions to the currently checked out versions 
+
+.. code-block:: bash
+
+	inmanta module freeze --recursive --operator ==
+	
+
+Or for the the current project
+
+.. code-block:: bash
+
+	inmanta project freeze --recursive --operator ==
+
+
 
 Versioning
 ----------
@@ -98,19 +112,18 @@ When done, first use git to add files::
 
 To commit, use the module tool. It will autmatically set the right tags on the module::
 
-    inmanta moduletool commit -m "First commit"
+    inmanta module commit -m "First commit"
 
 This will create a new dev release. To make an actual release::
 
-    inmanta moduletool commit -r -m "First Release"
+    inmanta module commit -r -m "First Release"
 
 To set a specific version::
 
-    inmanta moduletool commit -r -m "First Release" -v 1.0.1
+    inmanta module commit -r -m "First Release" -v 1.0.1
 
 The module tool also support semantic versioning instead of setting versions directly. Use one
 of ``--major``, ``--minor`` or ``--patch`` to update version numbers: <major>.<minor>.<patch>
-
 
 
 Extending Inmanta
