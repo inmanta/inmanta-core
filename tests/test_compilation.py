@@ -2682,6 +2682,30 @@ a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
     assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
 
 
+def test_747_entity_multi_location(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Alpha:
+    string name
+end
+
+implementation none for Alpha:
+end
+implement Alpha using none
+
+index Alpha(name)
+
+a= Alpha(name="A")
+b= Alpha(name="A")
+c= Alpha(name="A")
+""", autostd=False)
+    (_, scopes) = compiler.do_compile()
+
+    root = scopes.get_child("__config__")
+    a = root.lookup("a").get_value()
+    assert len(a.get_locations()) == 3
+    assert sorted([l.lnr for l in a.get_locations()]) == [12, 13, 14]
+
+
 def test_749_is_unknown(snippetcompiler):
     snippetcompiler.setup_for_snippet("""
         import tests

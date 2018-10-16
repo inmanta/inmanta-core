@@ -290,13 +290,12 @@ class Constructor(GeneratorStatement):
                     raise Exception("Inconsistent indexes detected!")
 
             object_instance = first
+            self.copy_location(object_instance)
             for k, v in attributes.items():
                 object_instance.set_attribute(k, v, self.location)
-
         else:
             # create the instance
             object_instance = type_class.get_instance(attributes, resolver, queue, self.location)
-            self.copy_location(object_instance)
 
         # deferred execution for indirect attributes
         for attributename, valueexpression in self._indirect_attributes.items():
