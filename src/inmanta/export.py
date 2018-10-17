@@ -580,7 +580,7 @@ class ModelExporter(object):
         def convert_relation(relation: RelationAttribute):
 
             return model.Relation(relation.type.get_full_name(),
-                                  [relation.low, relation.high],
+                                  (relation.low, relation.high),
                                   relation_name(relation.type, relation.end),
                                   convert_comment(relation.comment), location(relation),
                                   [convert_value_for_type(x.get_value()) for x in relation.source_annotations],

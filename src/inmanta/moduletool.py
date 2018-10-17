@@ -20,7 +20,7 @@ from inmanta.module import INSTALL_MASTER, Project, Module,\
 import inspect
 import logging
 import os
-from os.path import sys
+import sys
 import shutil
 import subprocess
 import tempfile
@@ -268,8 +268,8 @@ class ModuleTool(ModuleLikeTool):
     def get_module(self, module: str=None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
-            module = Module(None, os.path.realpath(os.curdir))
-            return module
+            outmodule = Module(None, os.path.realpath(os.curdir))
+            return outmodule
         else:
             project = self.get_project(load=True)
             return project.get_module(module)

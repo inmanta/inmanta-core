@@ -345,14 +345,14 @@ class ModuleLike(object):
                 block.add(s)
         return (statements, block)
 
-    def requires(self) -> dict:
+    def requires(self) -> "List[List[Requirement]]":
         """
             Get the requires for this module
         """
         # filter on import stmt
 
         if "requires" not in self._meta or self._meta["requires"] is None:
-            return {}
+            return []
 
         reqs = []
         for spec in self._meta["requires"]:
