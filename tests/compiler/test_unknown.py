@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -43,12 +48,14 @@ from utils import assert_graph
 
 
 def test_issue_219_unknows_in_template(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import tests
 
 a = tests::unknown()
 b = "abc{{a}}"
-""")
+"""
+    )
     (_, root) = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -57,7 +64,8 @@ b = "abc{{a}}"
 
 
 def test_749_is_unknown(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         import tests
 
         a="a"
@@ -68,7 +76,8 @@ def test_749_is_unknown(snippetcompiler):
 
         ax = tests::do_uknown(a)
         bx = tests::do_uknown(b)
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")

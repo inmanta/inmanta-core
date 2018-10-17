@@ -23,10 +23,12 @@ import inmanta.compiler as compiler
 
 
 def test_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 a = "a"
 b = { "a" : a, "b" : "b", "c" : 3}
-""")
+"""
+    )
 
     (_, root) = compiler.do_compile()
 
@@ -38,17 +40,20 @@ b = { "a" : a, "b" : "b", "c" : 3}
 
 
 def test_dict_collide(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 a = "a"
 b = { "a" : a, "a" : "b", "c" : 3}
-""")
+"""
+    )
 
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_dict_attr(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Foo:
   dict bar
   dict foo = {}
@@ -61,7 +66,8 @@ a=Foo(bar={})
 b=Foo(bar={"a":z})
 c=Foo(bar={}, blah={"z":"y"})
 z=5
-""")
+"""
+    )
 
     (_, root) = compiler.do_compile()
 
@@ -85,7 +91,8 @@ z=5
 
 
 def test_dict_attr_type_error(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Foo:
   dict bar
   dict foo = {}
@@ -96,18 +103,21 @@ implement Foo using std::none
 
 a=Foo(bar=b)
 b=Foo(bar={"a":"A"})
-""")
+"""
+    )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_611_dict_access(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 a = "a"
 b = { "a" : a, "b" : "b", "c" : 3}
 c=b[a]
 d=b["c"]
-""")
+"""
+    )
 
     (_, root) = compiler.do_compile()
 
@@ -117,10 +127,12 @@ d=b["c"]
 
 
 def test_632_dict_access_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 b = { "a" : {"b":"c"}}
 c=b["a"]["b"]
-""")
+"""
+    )
 
     (_, root) = compiler.do_compile()
 
@@ -129,17 +141,20 @@ c=b["a"]["b"]
 
 
 def test_632_dict_access_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 b = { "a" : "b"}
 c=b["a"]["b"]
-""")
+"""
+    )
 
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_673_in_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     dict attributes
 end
@@ -151,5 +166,6 @@ end
 implement Test using test when "foo" in self.attributes
 
 Test(attributes={"foo": 42})
-""")
+"""
+    )
     compiler.do_compile()

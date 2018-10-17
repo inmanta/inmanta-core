@@ -25,16 +25,19 @@ from inmanta.execute.proxy import UnsetException
 
 
 def test_issue_127_default_overrides(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 f1=std::ConfigFile(host=std::Host(name="jos",os=std::linux), path="/tmp/test", owner="wouter", content="blabla")
-        """)
+        """
+    )
     (types, _) = compiler.do_compile()
     instances = types["std::File"].get_all_instances()
     assert instances[0].get_attribute("owner").get_value() == "wouter"
 
 
 def test_issue_135_duplo_relations(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -46,13 +49,15 @@ implement Test2 using std::none
 
 Test1 test1 [1] -- [0:] Test2 test2
 Test1 test1 [0:1] -- [0:] Test2 test2
-""")
+"""
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_issue_224_default_over_inheritance(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
     string a = "a"
 end
@@ -63,7 +68,8 @@ end
 implement Test3 using std::none
 
 Test3()
-""")
+"""
+    )
     (types, _) = compiler.do_compile()
     instances = types["__config__::Test3"].get_all_instances()
     assert len(instances) == 1
@@ -72,7 +78,8 @@ Test3()
 
 
 def test_275_default_override(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity A:
         bool at = true
     end
@@ -86,7 +93,8 @@ def test_275_default_override(snippetcompiler):
     a = A()
     b = B()
 
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
 
@@ -98,7 +106,8 @@ def test_275_default_override(snippetcompiler):
 
 
 def test_275_default_diamond(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity A:
         bool at = true
     end
@@ -121,7 +130,8 @@ def test_275_default_diamond(snippetcompiler):
     b = B()
     c = C()
     d = D()
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
 
@@ -137,7 +147,8 @@ def test_275_default_diamond(snippetcompiler):
 
 
 def test_275_duplicate_parent(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity A:
         bool at = true
     end
@@ -147,13 +158,15 @@ def test_275_duplicate_parent(snippetcompiler):
         bool at = false
     end
     implement B using std::none
-    """)
+    """
+    )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_default_remove(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     entity A:
         bool at = true
     end
@@ -166,6 +179,7 @@ def test_default_remove(snippetcompiler):
 
     a = A()
     b = B()
-    """)
+    """
+    )
     with pytest.raises(UnsetException):
         compiler.do_compile()

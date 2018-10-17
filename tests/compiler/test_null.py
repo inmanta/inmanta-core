@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -41,15 +46,18 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from utils import assert_graph
 
+
 def test_null(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             string? a = null
         end
         implement A using std::none
         a = A()
 
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -58,14 +66,16 @@ def test_null(snippetcompiler):
 
 
 def test_null_unset(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             string? a
         end
         implement A using std::none
         a = A()
 
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -74,26 +84,30 @@ def test_null_unset(snippetcompiler):
 
 
 def test_null_unset_hang(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
             entity A:
                 string? a
             end
             implement A using std::none
             a = A()
             b = a.a
-        """)
+        """
+    )
     with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
 def test_null_on_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             string[]? a = null
         end
         implement A using std::none
         a = A()
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -102,16 +116,17 @@ def test_null_on_list(snippetcompiler):
 
 
 def test_null_on_dict(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         entity A:
             dict? a = null
         end
         implement A using std::none
         a = A()
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value().get_attribute("a").get_value()
     assert isinstance(a, NoneValue)
-

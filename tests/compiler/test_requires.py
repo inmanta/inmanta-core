@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -41,8 +46,10 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from utils import assert_graph
 
+
 def test_abstract_requires(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -61,14 +68,16 @@ pre = std::ConfigFile(path="host0", host=host, content="")
 post = std::ConfigFile(path="hosts4", host=host, content="")
 
 inter = A(name = "inter")
-""")
+"""
+    )
 
     v, resources = snippetcompiler.do_export()
     assert_graph(resources, """inter2: inter1""")
 
 
 def test_abstract_requires_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -91,15 +100,21 @@ post = std::ConfigFile(path="post", host=host, content="")
 inter = A(name = "inter")
 inter.requires = pre
 post.requires = inter
-""")
+"""
+    )
 
     v, resources = snippetcompiler.do_export()
-    assert_graph(resources, """post: inter2
+    assert_graph(
+        resources,
+        """post: inter2
                                   inter2: inter1
-                                  inter1: pre""")
+                                  inter1: pre""",
+    )
+
 
 def test_abstract_requires_2(snippetcompiler, caplog):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 host = std::Host(name="host", os=std::unix)
 
 entity A:
@@ -120,17 +135,23 @@ post = std::ConfigFile(path="hosts4", host=host, content="")
 inter = A(name = "inter")
 inter.requires = pre
 post.requires = inter
-""")
+"""
+    )
 
     snippetcompiler.do_export()
-    warning = [x for x in caplog.records if x.msg ==
-               "The resource %s had requirements before flattening, but not after flattening."
-               " Initial set was %s. Perhaps provides relation is not wired through correctly?"]
+    warning = [
+        x
+        for x in caplog.records
+        if x.msg
+        == "The resource %s had requirements before flattening, but not after flattening."
+        " Initial set was %s. Perhaps provides relation is not wired through correctly?"
+    ]
     assert len(warning) == 1
 
 
 def test_issue_220_dep_loops(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std
 
 host = std::Host(name="Test", os=std::unix)
@@ -142,9 +163,16 @@ f1.requires = f2
 f2.requires = f3
 f3.requires = f1
 f4.requires = f1
-""")
+"""
+    )
     with pytest.raises(DependencyCycleException) as e:
         snippetcompiler.do_export()
 
     cyclenames = [r.id.resource_str() for r in e.value.cycle]
-    assert set(cyclenames) == set(['std::File[Test,path=/f3]', 'std::File[Test,path=/f2]', 'std::File[Test,path=/f1]'])
+    assert set(cyclenames) == set(
+        [
+            "std::File[Test,path=/f3]",
+            "std::File[Test,path=/f2]",
+            "std::File[Test,path=/f1]",
+        ]
+    )

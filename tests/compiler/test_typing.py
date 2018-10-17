@@ -30,8 +30,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -40,8 +45,10 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from utils import assert_graph
 
+
 def test_lnr_on_double_is_defined(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     string? two
 end
@@ -52,30 +59,34 @@ implement Test using std::none when self.one.two is defined
 
 a = Test(two="b")
 a.one = a
-""")
+"""
+    )
     compiler.do_compile()
-    
+
+
 def test_double_define(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     string test
     string? test
     bool test
 end
-""")
+"""
+    )
     with pytest.raises(TypingException):
         compiler.do_compile()
 
 
 def test_536_number_cast(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Network:
     number segmentation_id
 end
 implement Network using std::none
 net1 = Network(segmentation_id="10")
-""")
+"""
+    )
     with pytest.raises(AttributeException):
         compiler.do_compile()
-
-

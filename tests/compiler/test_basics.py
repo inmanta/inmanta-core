@@ -19,7 +19,8 @@ import inmanta.compiler as compiler
 
 
 def test_str_on_instance_pos(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std
 
 entity Hg:
@@ -39,14 +40,16 @@ end
 for i in hg.hosts:
     std::ConfigFile(host=i, path="/fx", content="")
 end
-""")
+"""
+    )
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 3
 
 
 def test_str_on_instance_neg(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import std
 
 entity Hg:
@@ -66,14 +69,16 @@ end
 for i in hg.hosts:
     std::ConfigFile(host=i, path="/fx", content="")
 end
-""")
+"""
+    )
     (types, _) = compiler.do_compile()
     files = types["std::File"].get_all_instances()
     assert len(files) == 1
 
 
 def test_implements_inheritance(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     string a
 end
@@ -91,9 +96,9 @@ implement Test using test
 implement TestC using parents
 
 a = TestC()
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
-

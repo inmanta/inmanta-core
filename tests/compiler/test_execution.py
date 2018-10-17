@@ -25,7 +25,8 @@ import inmanta.compiler as compiler
 
 
 def test_issue_139_scheduler(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""import std
+    snippetcompiler.setup_for_snippet(
+        """import std
 
 entity Host extends std::Host:
     string attr
@@ -38,13 +39,15 @@ f = std::ConfigFile(host=host, path="", content="{{ host.attr }}")
 std::Service(host=host, name="svc", state="running", onboot=true, requires=[f])
 ref = std::Service[host=host, name="svc"]
 
-""")
+"""
+    )
     with pytest.raises(MultiException):
         compiler.do_compile()
 
 
 def test_issue_201_double_set(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -63,7 +66,8 @@ b.test1 = a
 b.test1 = a
 
 std::print(b.test1)
-""")
+"""
+    )
 
     (types, _) = compiler.do_compile()
     a = types["__config__::Test1"].get_all_instances()[0]
@@ -71,22 +75,26 @@ std::print(b.test1)
 
 
 def test_issue_170_attribute_exception(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
     string a
 end
 
 Test1(a=3)
-""")
+"""
+    )
     with pytest.raises(AttributeException):
         compiler.do_compile()
 
 
 def test_execute_twice(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 import mod4::other
 import mod4
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
     assert scopes.get_child("mod4").lookup("main").get_value() == 0
@@ -94,7 +102,8 @@ import mod4
 
 
 def test_643_cycle_empty(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Alpha:
 end
 
@@ -106,7 +115,8 @@ implement Alpha using none
 a = Alpha()
 
 a.requires = a.provides
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -117,7 +127,8 @@ a.requires = a.provides
 
 
 def test_643_cycle(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Alpha:
     string name
 end
@@ -132,7 +143,8 @@ b = Alpha(name="b")
 
 a.requires = b
 a.requires = b.provides
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -142,18 +154,28 @@ a.requires = b.provides
     # a.requires = b  ==> b.provides = a
     # a.requires = b.provides => a.requires = a ==> a.provides = a
 
-    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("requires").get_value()]
+    ab = [
+        alpha.get_attribute("name").get_value()
+        for alpha in a.get_attribute("requires").get_value()
+    ]
     assert sorted(ab) == ["a", "b"]
 
-    ab = [alpha.get_attribute("name").get_value() for alpha in a.get_attribute("provides").get_value()]
+    ab = [
+        alpha.get_attribute("name").get_value()
+        for alpha in a.get_attribute("provides").get_value()
+    ]
     assert sorted(ab) == ["a"]
 
-    ab = [alpha.get_attribute("name").get_value() for alpha in b.get_attribute("provides").get_value()]
+    ab = [
+        alpha.get_attribute("name").get_value()
+        for alpha in b.get_attribute("provides").get_value()
+    ]
     assert sorted(ab) == ["a"]
 
 
 def test_643_forcycle_complex(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Alpha:
     string name
 end
@@ -181,7 +203,9 @@ b.alink = c
 
 b.alink = a
 
-""", autostd=False)
+""",
+        autostd=False,
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -191,7 +215,12 @@ b.alink = a
     d = root.lookup("d").get_value()
 
     def get_names(a):
-        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute("alink").get_value()])
+        return sorted(
+            [
+                alpha.get_attribute("name").get_value()
+                for alpha in a.get_attribute("alink").get_value()
+            ]
+        )
 
     assert get_names(a) == ["a", "b", "c", "d"]
     assert get_names(b) == ["a", "b", "c", "d"]
@@ -200,7 +229,8 @@ b.alink = a
 
 
 def test_643_forcycle_complex_reverse(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Alpha:
     string name
 end
@@ -228,7 +258,9 @@ b.alink = c
 
 b.alink = a
 
-""", autostd=False)
+""",
+        autostd=False,
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -238,7 +270,12 @@ b.alink = a
     d = root.lookup("d").get_value()
 
     def get_names(a, name="alink"):
-        return sorted([alpha.get_attribute("name").get_value() for alpha in a.get_attribute(name).get_value()])
+        return sorted(
+            [
+                alpha.get_attribute("name").get_value()
+                for alpha in a.get_attribute(name).get_value()
+            ]
+        )
 
     assert get_names(a) == ["a", "b", "c", "d"]
     assert get_names(b) == ["a", "b", "c", "d"]
@@ -252,7 +289,8 @@ b.alink = a
 
 
 def test_lazy_attibutes(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity  Thing:
    number id
    string value
@@ -264,7 +302,8 @@ index Thing(id)
 
 a = Thing(id=5, value="{{a.id}}")
 
-""")
+"""
+    )
 
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
@@ -273,7 +312,8 @@ a = Thing(id=5, value="{{a.id}}")
 
 
 def test_lazy_attibutes2(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity  Thing:
    number id
    string value
@@ -286,7 +326,8 @@ index Thing(id)
 a = Thing(id=5)
 a.value="{{a.id}}"
 
-""")
+"""
+    )
 
     (_, scopes) = compiler.do_compile()
 
@@ -295,7 +336,8 @@ a.value="{{a.id}}"
 
 
 def test_lazy_attibutes3(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity  Thing:
    number id
 end
@@ -314,16 +356,26 @@ index Thing(id)
 
 a = Thing(id=5, value=StringWrapper(value="{{a.id}}"))
 
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
 
-    assert "5" == root.lookup("a").get_value().lookup("value").get_value().lookup("value").get_value()
+    assert (
+        "5"
+        == root.lookup("a")
+        .get_value()
+        .lookup("value")
+        .get_value()
+        .lookup("value")
+        .get_value()
+    )
 
 
 def test_veryhardsequencing(snippetcompiler):
 
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 implementation none for std::Entity:
 
 end
@@ -358,13 +410,16 @@ implement KafkaNode using fromtarball
 kafka-user = std::Entity()
 kafka-volume = Volume(requires=kafka-user)
 KafkaNode(requires=kafka-volume)
-""", autostd=False)
+""",
+        autostd=False,
+    )
 
     compiler.do_compile()
 
 
 def test_lazy_constructor(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity One:
 end
 
@@ -382,8 +437,8 @@ end
 
 implement One using none
 implement Two using none
-""", autostd=False)
+""",
+        autostd=False,
+    )
 
     compiler.do_compile()
-
-

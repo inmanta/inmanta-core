@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -43,11 +48,13 @@ from utils import assert_graph
 
 
 def test_order_of_execution(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 for i in std::sequence(10):
     std::print(i)
 end
-        """)
+        """
+    )
 
     saved_stdout = sys.stdout
     try:
@@ -55,6 +62,6 @@ end
         sys.stdout = out
         compiler.do_compile()
         output = out.getvalue().strip()
-        assert output == '\n'.join([str(x) for x in range(10)])
+        assert output == "\n".join([str(x) for x in range(10)])
     finally:
         sys.stdout = saved_stdout

@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -41,8 +46,10 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from utils import assert_graph
 
+
 def test_list_atributes(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Jos:
   bool[] bar
   std::package_state[] ips = ["installed"]
@@ -58,7 +65,8 @@ b = Jos(bar = [true, false])
 c = Jos(bar = [])
 d = Jos(bar = [], floom=["test","test2"])
 
-""")
+"""
+    )
     (_, root) = compiler.do_compile()
 
     def check_jos(jos, bar, ips=["installed"], floom=[], floomx=["a", "b"], box="a"):
@@ -78,43 +86,50 @@ d = Jos(bar = [], floom=["test","test2"])
 
 
 def test_list_atribute_type_violation_1(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Jos:
   bool[] bar = true
 end
 implement Jos using std::none
 c = Jos()
-""")
+"""
+    )
     with pytest.raises(ParserException):
         compiler.do_compile()
 
 
 def test_list_atribute_type_violation_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Jos:
   bool[] bar = ["x"]
 end
 implement Jos using std::none
 c = Jos()
-""")
+"""
+    )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_list_atribute_type_violation_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Jos:
   bool[] bar
 end
 implement Jos using std::none
 c = Jos(bar = ["X"])
-""")
+"""
+    )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_issue_235_empty_lists(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -128,7 +143,8 @@ Test1 tests [0:] -- [0:] Test2 tests
 
 t1 = Test1(tests=[])
 std::print(t1.tests)
-""")
+"""
+    )
     (_, root) = compiler.do_compile()
     scope = root.get_child("__config__").scope
 
@@ -136,7 +152,8 @@ std::print(t1.tests)
 
 
 def test_608_list_to_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 implementation none for std::Entity:
 end
 
@@ -169,12 +186,14 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
 
 
 def test_608_list_to_single(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 implementation none for std::Entity:
 end
 
@@ -206,13 +225,15 @@ b1 = B(name="b1")
 c1 = C(name="c1")
 
 b1.a = c1.a
-""")
+"""
+    )
     with pytest.raises(AttributeException):
         (_, scopes) = compiler.do_compile()
 
 
 def test_608_opt_to_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 implementation none for std::Entity:
 end
 
@@ -245,13 +266,15 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-""")
+"""
+    )
     with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
 def test_608_opt_to_single(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 implementation none for std::Entity:
 end
 
@@ -283,13 +306,15 @@ c1 = C(name="c1")
 
 b1.a = a1
 b1.a = c1.a
-""")
+"""
+    )
     with pytest.raises(OptionalValueException):
         (_, scopes) = compiler.do_compile()
 
 
 def test_608_opt_to_single_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 implementation none for std::Entity:
 end
 
@@ -323,12 +348,14 @@ b1.a = a1
 b1.a = c1.a
 
 c1.a = a1
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
 
 
 def test_633_default_on_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Foo:
    list first=[]
    list second=["a", "b"]
@@ -341,7 +368,8 @@ end
 implement Foo using none
 
 foo = Foo()
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
@@ -358,7 +386,8 @@ foo = Foo()
 
 
 def test_673_in_list(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     string[] attributes
 end
@@ -370,12 +399,14 @@ end
 implement Test using test when "foo" in self.attributes
 
 Test(attributes=["blah", "foo"])
-""")
+"""
+    )
     compiler.do_compile()
 
 
 def test_552_string_rendering_for_lists(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Network:
     string[] tags=[]
 end
@@ -384,7 +415,8 @@ implement Network using std::none
 
 net1 = Network(tags=["vlan"])
 a="Net has tags {{ net1.tags }}"
-""")
+"""
+    )
 
     (_, scopes) = compiler.do_compile()
 
@@ -395,7 +427,8 @@ a="Net has tags {{ net1.tags }}"
 
 
 def test_emptylists(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     implement std::Entity using std::none
 
     a=std::Entity()
@@ -404,6 +437,6 @@ def test_emptylists(snippetcompiler):
 
     a.provides = b.provides
     b.provides = c.provides
-    """)
+    """
+    )
     compiler.do_compile()
-

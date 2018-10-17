@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -43,7 +48,8 @@ from utils import assert_graph
 
 
 def test_option_values(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -63,13 +69,15 @@ end
 implement Test1 using tt when self.other.flag == false
 
 Test1()
-""")
+"""
+    )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
 
 
 def test_isset(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 
 end
@@ -89,5 +97,6 @@ end
 implement Test1 using tt when self.other is defined and self.other.flag == false
 
 Test1(other=Test2())
-""")
+"""
+    )
     compiler.do_compile()

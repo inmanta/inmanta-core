@@ -30,8 +30,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -42,9 +47,11 @@ from utils import assert_graph
 
 
 def test_issue_121_non_matching_index(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         a=std::Host[name="test"]
-        """)
+        """
+    )
 
     try:
         compiler.do_compile()
@@ -54,7 +61,8 @@ def test_issue_121_non_matching_index(snippetcompiler):
 
 
 def test_issue_122_index_inheritance(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Repository extends std::File:
     string name
     bool gpgcheck=false
@@ -83,7 +91,8 @@ Repository(host=h1, name="flens-demo",
 
 Repository(host=h1, name="flens-demo",
                            baseurl="http://people.cs.kuleuven.be/~wouter.deborger/repo/")
-        """)
+        """
+    )
 
     try:
         compiler.do_compile()
@@ -91,33 +100,39 @@ Repository(host=h1, name="flens-demo",
     except TypingException as e:
         assert e.location.lnr == 25
 
+
 def test_issue_140_index_error(snippetcompiler):
     try:
-        snippetcompiler.setup_for_snippet("""
+        snippetcompiler.setup_for_snippet(
+            """
         h = std::Host(name="test", os=std::linux)
-        test = std::Service[host=h, path="test"]""")
+        test = std::Service[host=h, path="test"]"""
+        )
         compiler.do_compile()
         raise AssertionError("Should get exception")
     except NotFoundException as e:
-        assert re.match('.*No index defined on std::Service for this lookup:.*', str(e))
+        assert re.match(".*No index defined on std::Service for this lookup:.*", str(e))
 
 
 def test_issue_745_index_on_nullable(snippetcompiler):
     with pytest.raises(IndexException):
-        snippetcompiler.setup_for_snippet("""
+        snippetcompiler.setup_for_snippet(
+            """
 entity A:
     string name
     string? opt
 end
 
 index A(name,opt)
-""")
+"""
+        )
         compiler.do_compile()
 
 
 def test_issue_745_index_on_optional(snippetcompiler):
     with pytest.raises(IndexException):
-        snippetcompiler.setup_for_snippet("""
+        snippetcompiler.setup_for_snippet(
+            """
 entity A:
     string name
 end
@@ -125,13 +140,15 @@ end
 A.opt [0:1] -- A
 
 index A(name,opt)
-""")
+"""
+        )
         compiler.do_compile()
 
 
 def test_issue_745_index_on_multi(snippetcompiler):
     with pytest.raises(IndexException):
-        snippetcompiler.setup_for_snippet("""
+        snippetcompiler.setup_for_snippet(
+            """
 entity A:
     string name
 end
@@ -139,34 +156,42 @@ end
 A.opt [1:] -- A
 
 index A(name,opt)
-""")
+"""
+        )
         compiler.do_compile()
 
 
 def test_issue_index_on_not_existing(snippetcompiler):
     with pytest.raises(TypeNotFoundException):
-        snippetcompiler.setup_for_snippet("""
+        snippetcompiler.setup_for_snippet(
+            """
 index A(name)
-""")
+"""
+        )
         compiler.do_compile()
 
 
 def test_issue_212_bad_index_defintion(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
     string x
 end
 index Test1(x,y)
-""")
+"""
+    )
     with pytest.raises(RuntimeException):
         compiler.do_compile()
-        
+
+
 def test_index_on_subtype(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         host = std::Host(name="a",os=std::linux)
         a=std::DefaultDirectory(host=host,path="/etc")
         b=std::DefaultDirectory(host=host,path="/etc")
-    """)
+    """
+    )
 
     (_, scopes) = compiler.do_compile()
 
@@ -178,11 +203,13 @@ def test_index_on_subtype(snippetcompiler):
 
 
 def test_index_on_subtype2(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
         host = std::Host(name="a",os=std::linux)
         a=std::DefaultDirectory(host=host,path="/etc")
         b=std::Directory(host=host,path="/etc",mode=755 ,group="root",owner="root" )
-    """)
+    """
+    )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
@@ -206,56 +233,69 @@ implement C using std::none
 
 
 def test_index_on_subtype_diamond(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond + """
+    snippetcompiler.setup_for_snippet(
+        diamond
+        + """
     index A(at)
     index B(at)
 
     a = A(at="a")
     b = C(at="a")
-    """)
+    """
+    )
 
     with pytest.raises(DuplicateException):
         compiler.do_compile()
 
 
 def test_index_on_subtype_diamond_2(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond + """
+    snippetcompiler.setup_for_snippet(
+        diamond
+        + """
     index A(at)
     index B(at)
 
     a = A(at="a")
     b = B(at="a")
-    """)
+    """
+    )
     compiler.do_compile()
 
 
 def test_index_on_subtype_diamond_3(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond + """
+    snippetcompiler.setup_for_snippet(
+        diamond
+        + """
     index A(at)
     index B(at)
 
     a = A(at="a")
     b = B(at="ab")
-    """)
+    """
+    )
     compiler.do_compile()
 
 
 def test_index_on_subtype_diamond_4(snippetcompiler):
-    snippetcompiler.setup_for_snippet(diamond + """
+    snippetcompiler.setup_for_snippet(
+        diamond
+        + """
     index A(at)
     index B(at)
 
     a = C(at="a")
     b = C(at="a")
     a=b
-    """)
+    """
+    )
     (types, _) = compiler.do_compile()
     c = types["__config__::C"]
     assert len(c.get_indices()) == 1
 
 
 def test_394_short_index(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""implementation none for std::Entity:
+    snippetcompiler.setup_for_snippet(
+        """implementation none for std::Entity:
 
 end
 
@@ -281,7 +321,8 @@ f1h1=File(host=h1,name="f1")
 f2h1=File(host=h1,name="f2")
 
 z = h1.files[name="f1"]
-""")
+"""
+    )
     (_, scopes) = compiler.do_compile()
     root = scopes.get_child("__config__")
     z = root.lookup("z").get_value()
@@ -290,7 +331,8 @@ z = h1.files[name="f1"]
 
 
 def test_511_index_on_default(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test:
     string a="a"
     string b
@@ -301,7 +343,6 @@ index Test(a, b)
 implement Test using std::none
 
 Test(b="b")
-""")
+"""
+    )
     compiler.do_compile()
-
-

@@ -31,8 +31,13 @@ from inmanta import config
 from inmanta.ast import AttributeException, IndexException
 from inmanta.ast import MultiException
 from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import RuntimeException, DuplicateException, TypeNotFoundException, ModuleNotFoundException, \
-    OptionalValueException
+from inmanta.ast import (
+    RuntimeException,
+    DuplicateException,
+    TypeNotFoundException,
+    ModuleNotFoundException,
+    OptionalValueException,
+)
 import inmanta.compiler as compiler
 from inmanta.execute.proxy import UnsetException
 from inmanta.execute.util import Unknown, NoneValue
@@ -41,8 +46,10 @@ from inmanta.module import Project
 from inmanta.parser import ParserException
 from utils import assert_graph
 
+
 def test_issue_261_tracing(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Test1:
 end
 
@@ -64,7 +71,8 @@ end
 implement Test2 using std::none
 
 Test1()
-        """)
+        """
+    )
     (types, _) = compiler.do_compile()
 
     t1s = types["__config__::Test1"].get_all_instances()
@@ -91,8 +99,10 @@ Test1()
         l1 = instance.trackers
         assert l1[0].get_next()[0].namespace.name == "__config__"
 
+
 def test_trackingbug(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity A:
     bool z = true
 end
@@ -141,14 +151,16 @@ end
 implement D using d
 
 D()
-""")
+"""
+    )
     (types, _) = compiler.do_compile()
     files = types["__config__::C"].get_all_instances()
     assert len(files) == 1
 
 
 def test_747_entity_multi_location(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
 entity Alpha:
     string name
 end
@@ -162,13 +174,12 @@ index Alpha(name)
 a= Alpha(name="A")
 b= Alpha(name="A")
 c= Alpha(name="A")
-""", autostd=False)
+""",
+        autostd=False,
+    )
     (_, scopes) = compiler.do_compile()
 
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value()
     assert len(a.get_locations()) == 3
     assert sorted([l.lnr for l in a.get_locations()]) == [12, 13, 14]
-
-
-
