@@ -215,3 +215,28 @@ end
     )
     with pytest.raises(DuplicateException):
         compiler.do_compile()
+
+
+def test_bad_deref(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+h = std::Host(name="test", os=std::linux)
+std::print(h.name.test)
+""",
+        "can not get a attribute test, test not an entity (reported in h.name.test ({dir}/main.cf:3))",
+    )
+
+
+def test_672_missing_type(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+        end
+
+        implementation test for Testt:
+        end
+
+        """,
+        "could not find type Testt in namespace __config__"
+        " (reported in Implementation(test) ({dir}/main.cf:5))",
+    )

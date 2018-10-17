@@ -41,3 +41,28 @@ end
         assert output == "\n".join([str(x) for x in range(10)])
     finally:
         sys.stdout = saved_stdout
+
+
+def test_for_error(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string a = ""
+        end
+        implement A using std::none
+        a = A()
+        for i in a:
+        end
+    """,
+        "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:7))",
+    )
+
+
+def test_for_error_2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        for i in "foo":
+        end
+    """,
+        "A for loop can only be applied to lists and relations (reported in For(i) ({dir}/main.cf:2))",
+    )

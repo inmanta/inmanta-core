@@ -60,3 +60,72 @@ def test_749_is_unknown(snippetcompiler):
 
     assert root.lookup("ax").get_value() == "XX"
     assert root.lookup("bx").get_value() == "XX"
+
+
+def test_doubledefine(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity File:
+end
+
+entity File:
+end
+""",
+        "Entity __config__::File is already defined (original at ({dir}/main.cf:5:8)) (duplicate at ({dir}/main.cf:2:8))",
+    )
+
+
+def test_double_define_implementation(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity File:
+end
+
+implementation file for File:
+end
+
+implementation file for File:
+end
+""",
+        "Implementation __config__::file for type File is already defined (original at ({dir}/main.cf:8:16))"
+        + " (duplicate at ({dir}/main.cf:5:16))",
+    )
+
+
+def test_400_typeloops(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+    entity Test extends Test:
+
+    end
+    """,
+        "Entity can not be its own parent __config__::Test (reported in Entity(Test) ({dir}/main.cf:2))",
+    )
+
+
+def test_400_typeloops_2(snippetcompiler):
+    snippetcompiler.setup_for_error_re(
+        """
+    entity Test3 extends Test2:
+    end
+
+    entity Test1 extends Test2:
+
+    end
+
+    entity Test2 extends Test1:
+
+    end
+    """,
+        "Entity can not be its own parent __config__::Test[1-2],__config__::Test[1-2] "
+        + "\(reported in Entity\(Test[1-2]\) \({dir}/main.cf:[59]\)\)",
+    )
+
+
+def test_unknown_type_in_relation(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        foo::Entity.test [1] -- std::Entity
+        """,
+        "could not find type foo::Entity in namespace __config__ ({dir}/main.cf:2)",
+    )

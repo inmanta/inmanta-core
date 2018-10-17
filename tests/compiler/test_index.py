@@ -325,3 +325,73 @@ Test(b="b")
 """
     )
     compiler.do_compile()
+
+
+def test_index_undefined_attribute(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        index std::Entity(foo, bar)
+    """,
+        "Attribute 'foo' referenced in index is not defined in entity std::Entity (reported in index "
+        "std::Entity(foo, bar) ({dir}/main.cf:2))",
+    )
+
+
+def test_747_index_collisions(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+            string name
+            string value
+        end
+
+        implementation none for Test:
+        end
+
+        implement Test using none
+
+        index Test(name)
+        Test(name="A", value="a")
+        Test(name="A", value="b")
+
+        """,
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:13,{dir}/main.cf:14)` (reported in Construct(Test) ({dir}/main.cf:14))
+caused by:
+  value set twice: 
+\told value: a
+\t\tset at {dir}/main.cf:13
+\tnew value: b
+\t\tset at {dir}/main.cf:14
+ (reported in Construct(Test) ({dir}/main.cf:14))""",  # nopep8
+    )
+
+
+def test_747_index_collisions_invisible(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+            string name
+            string value
+        end
+
+        implementation none for Test:
+        end
+
+        implement Test using none
+
+        index Test(name)
+
+        for v in ["a","b"]:
+            Test(name="A", value=v)
+        end
+
+        """,
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:15,{dir}/main.cf:15)` (reported in Construct(Test) ({dir}/main.cf:15))
+caused by:
+  value set twice: 
+\told value: a
+\t\tset at {dir}/main.cf:15:34
+\tnew value: b
+\t\tset at {dir}/main.cf:15:34
+ (reported in Construct(Test) ({dir}/main.cf:15))""",  # nopep8
+    )

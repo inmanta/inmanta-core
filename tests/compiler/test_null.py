@@ -106,3 +106,47 @@ def test_null_on_dict(snippetcompiler):
     root = scopes.get_child("__config__")
     a = root.lookup("a").get_value().get_attribute("a").get_value()
     assert isinstance(a, NoneValue)
+
+
+def test_null_on_dict_err(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            dict a = null
+        end
+        implement A using std::none
+        a = A()
+    """,
+        'Syntax error null can not be assigned to dict, did you mean "dict? a = null" ({dir}/main.cf:3:18)',
+    )
+
+
+def test_null_err(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string a = null
+        end
+        implement A using std::none
+        a = A()
+
+    """,
+        """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
+caused by:
+  Invalid value 'null', expected String""",  # nopep8
+    )
+
+
+def test_null_on_list_err(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity A:
+            string[] a = null
+        end
+        implement A using std::none
+        a = A()
+    """,
+        """Could not set attribute `a` on instance `__config__::A (instantiated at {dir}/main.cf:6)` (reported in Construct(A) ({dir}/main.cf:6))
+caused by:
+  Invalid value 'null', expected list""",  # nopep8
+    )

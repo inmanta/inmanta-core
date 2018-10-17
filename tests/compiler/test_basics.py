@@ -102,3 +102,137 @@ a = TestC()
 
     root = scopes.get_child("__config__")
     assert "xx" == root.lookup("a").get_value().lookup("a").get_value()
+
+
+def test_keyword_excn(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       index = ""
+""",
+        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:8)",
+    )
+
+
+def test_keyword_excn2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       implementation index for std::Entity:
+       end
+""",
+        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:23)",
+    )
+
+
+def test_keyword_excn3(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       implementation aaa for index::Entity:
+       end
+""",
+        "Syntax error invalid identifier, index is a reserved keyword ({dir}/main.cf:2:31)",
+    )
+
+
+def test_cid_excn(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       entity test:
+       end
+""",
+        "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:15)",
+    )
+
+
+def test_cid_excn2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+       entity Test extends test:
+       end
+""",
+        "Syntax error Invalid identifier: Entity names must start with a capital ({dir}/main.cf:2:28)",
+    )
+
+
+def test_bad_var(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        a=b
+""",
+        "variable b not found (reported in Assign(a, b) ({dir}/main.cf:2))",
+    )
+
+
+def test_bad_type(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+entity Test1:
+    string a
+end
+
+Test1(a=3)
+""",
+        """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:6)` """
+        """(reported in Construct(Test1) ({dir}/main.cf:6))
+caused by:
+  Invalid value '3', expected String (reported in Construct(Test1) ({dir}/main.cf:6))""",
+    )
+
+
+def test_bad_type_2(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import std
+
+entity Test1:
+    string a
+end
+
+implement Test1 using std::none
+
+t1 = Test1()
+t1.a=3
+""",
+        """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
+caused by:
+  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))""",  # nopep8
+    )
+
+
+def test_typedef_in_non_constant(snippetcompiler):
+    # noqa: E501
+    snippetcompiler.setup_for_error(
+        """
+a = "A"
+typedef abc as string matching self in [a,"b","c"]
+
+entity Test:
+    abc value
+end
+
+implement Test using std::none
+
+Test(value="a")
+""",
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
+caused by:
+  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # nopep8
+    )
+
+
+def test_typedef_in_violates(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+typedef abc as string matching self in ["a","b","c"]
+
+entity Test:
+    abc value
+end
+
+implement Test using std::none
+
+Test(value="ab")
+""",
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
+caused by:
+  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # nopep8
+    )

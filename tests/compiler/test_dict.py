@@ -169,3 +169,13 @@ Test(attributes={"foo": 42})
 """
     )
     compiler.do_compile()
+
+
+def test_bad_map_lookup(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        b = {"c" : 3}
+        c=b["a"]
+        """,
+        "key a not found in dict, options are [c] (reported in b['a'] ({dir}/main.cf:3))",
+    )

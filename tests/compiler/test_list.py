@@ -416,3 +416,19 @@ def test_emptylists(snippetcompiler):
     """
     )
     compiler.do_compile()
+
+
+def test_653_list_attribute_unset(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        entity Test:
+            string[] bla
+        end
+
+        Test()
+
+        implement Test using std::none
+        """,
+        "The object __config__::Test (instantiated at {dir}/main.cf:6) is not complete:"
+        " attribute bla ({dir}/main.cf:3) requires 1 values but only 0 are set",
+    )

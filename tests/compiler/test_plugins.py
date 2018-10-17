@@ -16,7 +16,15 @@
     Contact: code@inmanta.com
 """
 
-import pytest
 
-from inmanta.ast import RuntimeException
-import inmanta.compiler as compiler
+def test_plugin_excn(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+        import std
+        std::template("/tet.tmpl")
+""",
+        """Exception in plugin std::template (reported in std::template('/tet.tmpl') ({dir}/main.cf:3))
+caused by:
+  jinja2.exceptions.TemplateNotFound: /tet.tmpl
+""",
+    )

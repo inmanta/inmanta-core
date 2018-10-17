@@ -442,3 +442,21 @@ implement Two using none
     )
 
     compiler.do_compile()
+
+
+def test_incomplete(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """
+import std
+
+entity Test1:
+    string a
+end
+
+implement Test1 using std::none
+
+t1 = Test1()
+""",
+        "The object __config__::Test1 (instantiated at {dir}/main.cf:10) is not complete: "
+        "attribute a ({dir}/main.cf:5) is not set",
+    )
