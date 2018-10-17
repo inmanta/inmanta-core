@@ -16,28 +16,7 @@
     Contact: code@inmanta.com
 """
 
-import sys
+import pytest
 
-from io import StringIO
-
+from inmanta.ast import RuntimeException
 import inmanta.compiler as compiler
-
-
-def test_order_of_execution(snippetcompiler):
-    snippetcompiler.setup_for_snippet(
-        """
-for i in std::sequence(10):
-    std::print(i)
-end
-        """
-    )
-
-    saved_stdout = sys.stdout
-    try:
-        out = StringIO()
-        sys.stdout = out
-        compiler.do_compile()
-        output = out.getvalue().strip()
-        assert output == "\n".join([str(x) for x in range(10)])
-    finally:
-        sys.stdout = saved_stdout

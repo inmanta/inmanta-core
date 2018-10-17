@@ -16,35 +16,8 @@
     Contact: code@inmanta.com
 """
 
-from io import StringIO
-from itertools import groupby
-import os
-import re
-import shutil
-import sys
-import tempfile
-import unittest
-
-import pytest
-
-from inmanta import config
-from inmanta.ast import AttributeException, IndexException
-from inmanta.ast import MultiException
-from inmanta.ast import NotFoundException, TypingException
-from inmanta.ast import (
-    RuntimeException,
-    DuplicateException,
-    TypeNotFoundException,
-    ModuleNotFoundException,
-    OptionalValueException,
-)
+from inmanta.ast import ModuleNotFoundException
 import inmanta.compiler as compiler
-from inmanta.execute.proxy import UnsetException
-from inmanta.execute.util import Unknown, NoneValue
-from inmanta.export import DependencyCycleException
-from inmanta.module import Project
-from inmanta.parser import ParserException
-from utils import assert_graph
 
 
 def test_issue_120_bad_import(snippetcompiler):
