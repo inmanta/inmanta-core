@@ -46,6 +46,7 @@ from typing import List, Tuple, Optional, Dict
 from inmanta.const import ResourceState
 from abc import abstractmethod
 from conftest import environment
+from lxml.html.builder import TR
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -163,9 +164,17 @@ def resource_container():
 
         def process_events(self, ctx, resource, events):
             self.__class__._EVENTS[resource.id.get_agent_name()][resource.key].append(events)
+            super(Provider, self).process_events(ctx, resource, events)
+
+        def can_reload(self) -> bool:
+            return True
+
+        def do_reload(self, ctx, resource):
+            self.__class__._RELOAD_COUNT[resource.id.get_agent_name()][resource.key] += 1
 
         _STATE = defaultdict(dict)
         _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
+        _RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
         _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
@@ -236,12 +245,17 @@ def resource_container():
             return cls._EVENTS[agent][key]
 
         @classmethod
+        def reloadcount(cls, agent, key):
+            return cls._RELOAD_COUNT[agent][key]
+
+        @classmethod
         def reset(cls):
             cls._STATE = defaultdict(dict)
             cls._EVENTS = defaultdict(lambda: defaultdict(lambda: []))
             cls._WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
+            cls._RELOAD_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
 
     @provider("test::Fail", name="test_fail")
     class Fail(ResourceHandler):
@@ -3077,3 +3091,66 @@ def test_deploy_and_events_failed(io_loop, client, server, environment, resource
         yield gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
+
+
+dep_states_reload = [
+    ResourceProvider(0, "skip", lambda p, a, k:p.set_skip(a, k, 1)),
+    ResourceProvider(0, "fail", lambda p, a, k:p.set_fail(a, k, 1)),
+    ResourceProvider(0, "nochange", lambda p, a, k: p.set(a, k, "value1")),
+    ResourceProvider(1, "changed", lambda p, a, k: None)
+]
+
+
+@pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
+@pytest.mark.gen_test(timeout=5000)
+def test_reload(io_loop, client, server, environment, resource_container, dep_state):
+
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    (dep, dep_status) = dep_state.get_resource(resource_container, "agent1", "key1", version, [])
+
+    resources = [{'key': 'key2',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key1],v=%d' % version],
+                  },
+                 dep
+                 ]
+
+    status = {x[0]: x[1] for x in [dep_status] if x is not None}
+    result = yield client.put_version(tid=environment, version=version, resources=resources, resource_state=status,
+                                      unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 2
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")

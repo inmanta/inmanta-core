@@ -85,7 +85,7 @@ def custom_json_encoder(o):
 
 def json_encode(value):
     # see json_encode in tornado.escape
-    return json.dumps(value, default=custom_json_encoder, indent=5).replace("</", "<\\/")
+    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
 
 def gzipped_json(value):
