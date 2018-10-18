@@ -2297,10 +2297,9 @@ def test_send_events(resource_container, io_loop, environment, server, client):
         result = yield client.get_version(environment, version)
         yield gen.sleep(0.1)
 
-    assert res_id_1 in resource_container.Provider._EVENTS
-    event = resource_container.Provider._EVENTS[res_id_1]
-    assert len(event) == 1
-    for res_id, res in event.items():
+    events = resource_container.Provider.getevents("agent1", "key1")
+    assert len(events) == 1
+    for res_id, res in events[0].items():
         assert res_id.agent_name == "agent1"
         assert res_id.attribute_value == "key2"
         assert res["status"] == const.ResourceState.deployed
@@ -2371,10 +2370,9 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent2", "key2") == "value2"
 
-    assert res_id_1 in resource_container.Provider._EVENTS
-    event = resource_container.Provider._EVENTS[res_id_1]
-    assert len(event) == 1
-    for res_id, res in event.items():
+    events = resource_container.Provider.getevents("agent1", "key1")
+    assert len(events) == 1
+    for res_id, res in events[0].items():
         assert res_id.agent_name == "agent2"
         assert res_id.attribute_value == "key2"
         assert res["status"] == const.ResourceState.deployed
@@ -2454,10 +2452,9 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
 
     assert resource_container.Provider.get("agent1", "key1") == "value1"
 
-    assert res_id_1 in resource_container.Provider._EVENTS
-    event = resource_container.Provider._EVENTS[res_id_1]
-    assert len(event) == 1
-    for res_id, res in event.items():
+    events = resource_container.Provider.getevents("agent1", "key1")
+    assert len(events) == 1
+    for res_id, res in events[0].items():
         assert res_id.agent_name == "agent2"
         assert res_id.attribute_value == "key2"
         assert res["status"] == const.ResourceState.deployed
