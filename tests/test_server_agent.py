@@ -652,7 +652,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
 
     assert resource_container.Provider.changecount("agent2", "key4") == 0
     assert resource_container.Provider.changecount("agent2", "key5") == 0
-    assert resource_container.Provider.changecount("agent2", "key1") == 1
+    assert resource_container.Provider.changecount("agent2", "key1") == 0
 
     assert resource_container.Provider.readcount("agent2", "key4") == 0
     assert resource_container.Provider.readcount("agent2", "key5") == 0
@@ -668,7 +668,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     def done():
         return resource_container.Provider.changecount("agent2", "key4") == 0 and \
             resource_container.Provider.changecount("agent2", "key5") == 0 and \
-            resource_container.Provider.changecount("agent2", "key1") == 2 and \
+            resource_container.Provider.changecount("agent2", "key1") == 1 and \
             resource_container.Provider.readcount("agent2", "key4") == 0 and \
             resource_container.Provider.readcount("agent2", "key5") == 0 and \
             resource_container.Provider.readcount("agent2", "key1") == 2
