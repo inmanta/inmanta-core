@@ -25,6 +25,8 @@ import logging
 import os
 import shutil
 import subprocess
+from enum import Enum
+
 
 from tornado import gen
 import pytest
@@ -40,6 +42,10 @@ from inmanta.config import Config
 from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER
+from typing import List, Tuple, Optional, Dict
+from inmanta.const import ResourceState
+from abc import abstractmethod
+from conftest import environment
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -91,6 +97,13 @@ def resource_container():
         """
         fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
 
+    @resource("test::BadEvents", agent="agent", id_attribute="key")
+    class BadeEventR(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
 
@@ -108,10 +121,13 @@ def resource_container():
             return current
 
         def do_changes(self, ctx, resource, changes):
-            self.touch(resource.id.get_agent_name(), resource.key)
-
             if self.skip(resource.id.get_agent_name(), resource.key):
                 raise SkipResource()
+
+            if self.fail(resource.id.get_agent_name(), resource.key):
+                raise Exception("Failed")
+
+            self.touch(resource.id.get_agent_name(), resource.key)
 
             if "purged" in changes:
                 if changes["purged"]["desired"]:
@@ -146,17 +162,23 @@ def resource_container():
             return True
 
         def process_events(self, ctx, resource, events):
-            self.__class__._EVENTS[str(resource.id)] = events
+            self.__class__._EVENTS[resource.id.get_agent_name()][resource.key].append(events)
 
         _STATE = defaultdict(dict)
         _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
         _READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
         _TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
-        _EVENTS = {}
+        _TO_FAIL = defaultdict(lambda: defaultdict(lambda: 0))
+
+        _EVENTS = defaultdict(lambda: defaultdict(lambda: []))
 
         @classmethod
         def set_skip(cls, agent, key, skip):
             cls._TO_SKIP[agent][key] = skip
+
+        @classmethod
+        def set_fail(cls, agent, key, failcount):
+            cls._TO_FAIL[agent][key] = failcount
 
         @classmethod
         def skip(cls, agent, key):
@@ -164,6 +186,14 @@ def resource_container():
             if doskip == 0:
                 return False
             cls._TO_SKIP[agent][key] -= 1
+            return True
+
+        @classmethod
+        def fail(cls, agent, key):
+            doskip = cls._TO_FAIL[agent][key]
+            if doskip == 0:
+                return False
+            cls._TO_FAIL[agent][key] -= 1
             return True
 
         @classmethod
@@ -202,9 +232,13 @@ def resource_container():
             return cls._READ_COUNT[agent][key]
 
         @classmethod
+        def getevents(cls, agent, key):
+            return cls._EVENTS[agent][key]
+
+        @classmethod
         def reset(cls):
             cls._STATE = defaultdict(dict)
-            cls._EVENTS = {}
+            cls._EVENTS = defaultdict(lambda: defaultdict(lambda: []))
             cls._WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._READ_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
             cls._TO_SKIP = defaultdict(lambda: defaultdict(lambda: 0))
@@ -262,6 +296,22 @@ def resource_container():
             elif resource.skipFact:
                 raise SkipResource("Not ready")
             return {"fact": resource.factvalue}
+
+    @provider("test::BadEvents", name="test_bad_events")
+    class BadEvents(ResourceHandler):
+
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            return current
+
+        def do_changes(self, ctx, resource, changes):
+            pass
+
+        def can_process_events(self) -> bool:
+            return True
+
+        def process_events(self, ctx, resource, events):
+            raise Exception()
 
     waiter = Condition()
 
@@ -2806,3 +2856,224 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
     yield client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
     versions = yield wait_for_version(3)
     assert versions["count"] == 3
+
+
+class ResourceProvider:
+
+    def __init__(self, index, name, producer, state=None):
+        self.name = name
+        self.producer = producer
+        self.state = state
+        self.index = index
+
+    def get_resource(self,
+                     resource_container: ResourceContainer,
+                     agent: str,
+                     key: str,
+                     version: str,
+                     requires: List[str]) -> Tuple[Dict[str, str], Optional[ResourceState]]:
+        base = {'key': key,
+                'value': 'value1',
+                'id': 'test::Resource[%s,key=%s],v=%d' % (agent, key, version),
+                'send_event': True,
+                'purged': False,
+                'state_id': '',
+                'allow_restore': True,
+                'allow_snapshot': True,
+                'requires': requires,
+                }
+
+        self.producer(resource_container.Provider, agent, key)
+
+        state = None
+        if self.state is not None:
+            state = ('test::Resource[%s,key=%s]' % (agent, key), self.state)
+
+        return base, state
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.name
+
+
+# for events, self is the consuming node
+# dep is the producer/required node
+self_states = [
+    ResourceProvider(0, "skip", lambda p, a, k:p.set_skip(a, k, 1)),
+    ResourceProvider(1, "fail", lambda p, a, k:p.set_fail(a, k, 1)),
+    ResourceProvider(2, "success", lambda p, a, k: None),
+    ResourceProvider(3, "undefined", lambda p, a, k: None, const.ResourceState.undefined),
+]
+
+dep_states = [
+    ResourceProvider(0, "skip", lambda p, a, k:p.set_skip(a, k, 1)),
+    ResourceProvider(1, "fail", lambda p, a, k:p.set_fail(a, k, 1)),
+    ResourceProvider(2, "success", lambda p, a, k: None),
+]
+
+
+def make_matrix(matrix, valueparser):
+    """
+    Expect matrix of the form
+
+        header1    header2     header3
+    row1    y    y    n
+    """
+    unparsed = [
+        [v for v in row.split()][1:]
+        for row in matrix.strip().split("\n")
+    ][1:]
+
+    return [[valueparser(nsv) for nsv in nv] for nv in unparsed]
+
+
+# self state on X axis
+# dep state on the Y axis
+dorun = make_matrix("""
+        skip    fail    success    undef
+skip    n    n    n    n
+fail    n    n    n    n
+succ    y    y    y    n
+""", lambda x: x == "y")
+
+dochange = make_matrix("""
+        skip    fail    success    undef
+skip    n    n    n    n
+fail    n    n    n    n
+succ    n    n    y    n
+""", lambda x: x == "y")
+
+doevents = make_matrix("""
+        skip    fail    success    undef
+skip    2    2    2    0
+fail    2    2    2    0
+succ    2    2    2    0
+""", lambda x: int(x))
+
+
+@pytest.mark.parametrize("self_state", self_states, ids=lambda x: x.name)
+@pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
+@pytest.mark.gen_test
+def test_deploy_and_events(io_loop, client, server, environment, resource_container, self_state, dep_state):
+
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    (dep, dep_status) = dep_state.get_resource(resource_container, "agent1", "key2", version, [])
+    (own, own_status) = self_state.get_resource(resource_container, "agent1", "key3", version, [
+        'test::Resource[agent1,key=key2],v=%d' % version, 'test::Resource[agent1,key=key1],v=%d' % version])
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': True,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  },
+                 dep,
+                 own
+                 ]
+
+    status = {x[0]: x[1] for x in [dep_status, own_status] if x is not None}
+    result = yield client.put_version(tid=environment, version=version, resources=resources, resource_state=status,
+                                      unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 3
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)
+
+    # verify against result matrices
+    assert dorun[dep_state.index][self_state.index] == (resource_container.Provider.readcount("agent1", "key3") > 0)
+    assert dochange[dep_state.index][self_state.index] == (resource_container.Provider.changecount("agent1", "key3") > 0)
+
+    events = resource_container.Provider.getevents("agent1", "key3")
+    expected_events = doevents[dep_state.index][self_state.index]
+    if expected_events == 0:
+        assert len(events) == 0
+    else:
+        assert len(events) == 1
+        assert len(events[0]) == expected_events
+
+
+@pytest.mark.gen_test
+def test_deploy_and_events_failed(io_loop, client, server, environment, resource_container):
+    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+
+    resource_container.Provider.reset()
+    agent = Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+                  code_loader=False)
+    agent.add_end_point_name("agent1")
+    agent.start()
+    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': True,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': [],
+                  },
+                 {'key': 'key2',
+                  'value': 'value1',
+                  'id': 'test::BadEvents[agent1,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'purged': False,
+                  'state_id': '',
+                  'allow_restore': True,
+                  'allow_snapshot': True,
+                  'requires': ['test::Resource[agent1,key=key1],v=%d' % version],
+                  },
+                 ]
+
+    result = yield client.put_version(tid=environment, version=version, resources=resources, resource_state={},
+                                      unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = yield client.release_version(environment, version, True)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 2
+    assert result.result["model"]["result"] == "deploying"
+
+    result = yield client.get_version(environment, version)
+    assert result.code == 200
+
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = yield client.get_version(environment, version)
+        yield gen.sleep(0.1)
+
+    assert result.result["model"]["done"] == len(resources)

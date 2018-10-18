@@ -115,11 +115,12 @@ class ResourceAction(object):
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=str(self.resource.id))
             return False, False
 
+        success = True
+        # no events by default, i.e. don't send events if you are not executed
+        send_event = False
+
         # main execution
-        if event_only:
-            # no events if no execution
-            send_event = False
-        else:
+        if not event_only:
             send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
 
             try:
@@ -130,9 +131,7 @@ class ResourceAction(object):
                               resource_id=self.resource.id, exception=repr(e))
 
             if ctx.status is not const.ResourceState.deployed:
-                provider.close()
-                cache.close_version(self.resource.id.version)
-                return False, send_event
+                success = False
 
         # event processing
         if len(events) > 0 and provider.can_process_events():
@@ -141,12 +140,14 @@ class ResourceAction(object):
                          resource_id=str(self.resource.id))
                 yield self.scheduler.agent.thread_pool.submit(provider.process_events, ctx, self.resource, events)
             except Exception:
-                ctx.exception("Could not send events for %(resource_id)s", resource_id=str(self.resource.id), events=events)
+                ctx.exception("Could not send events for %(resource_id)s",
+                              resource_id=str(self.resource.id),
+                              events=str(events))
 
         provider.close()
         cache.close_version(self.resource_id.version)
 
-        return True, send_event
+        return success, send_event
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
