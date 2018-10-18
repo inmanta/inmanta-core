@@ -2865,7 +2865,7 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
     assert versions["count"] == 3
 
 
-class ResourceProvider:
+class ResourceProvider(object):
 
     def __init__(self, index, name, producer, state=None):
         self.name = name
