@@ -25,7 +25,6 @@ import logging
 import os
 import shutil
 import subprocess
-from enum import Enum
 
 
 from tornado import gen
@@ -44,9 +43,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER
 from typing import List, Tuple, Optional, Dict
 from inmanta.const import ResourceState
-from abc import abstractmethod
-from conftest import environment
-from lxml.html.builder import TR
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
