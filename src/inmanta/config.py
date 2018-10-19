@@ -296,18 +296,21 @@ class TransportConfig(object):
     """
         A class to register the config options for Client classes
     """
-    def __init__(self, name):
+    def __init__(self, name, port=8888):
         self.prefix = "%s_rest_transport" % name
         self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
-        self.port = Option(self.prefix, "port", 8888, "Server port", is_int)
+        self.port = Option(self.prefix, "port", port, "Server port", is_int)
         self.ssl = Option(self.prefix, "ssl", False, "Connect using SSL?", is_bool)
         self.ssl_ca_cert_file = Option(self.prefix, "ssl_ca_cert_file", None,
                                        "CA cert file used to validate the server certificate against", is_str_opt)
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
 
+
 compiler_transport = TransportConfig("compiler")
 TransportConfig("client")
 cmdline_rest_transport = TransportConfig("cmdline")
+# LCM support should move to a server extension
+service_api_transport = TransportConfig("service_api", port=8889)
 
 
 #############################
