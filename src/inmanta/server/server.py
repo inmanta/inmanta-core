@@ -126,6 +126,7 @@ class Server(protocol.ServerSlice):
         'clientId': '%s'
     }""" % (opt.dash_realm.get(), opt.dash_auth_url.get(), opt.dash_client_id.get())
 
+        # LCM support should move to a server extension
         lcm = ""
         if opt.dash_lcm_enable:
             lcm = """,

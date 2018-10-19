@@ -309,6 +309,7 @@ class TransportConfig(object):
 compiler_transport = TransportConfig("compiler")
 TransportConfig("client")
 cmdline_rest_transport = TransportConfig("cmdline")
+# LCM support should move to a server extension
 service_api_transport = TransportConfig("service_api", port=8889)
 
 
