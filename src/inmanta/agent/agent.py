@@ -90,11 +90,12 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache) -> (bool, bool):
+    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, event_only: bool=False) -> (bool, bool):
         """
             :param ctx The context to use during execution of this deploy
             :param events Possible events that are available for this resource
             :param cache The cache instance to use
+            :param event_only: don't execute, only do event propagation
             :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
                                           to provides of this resource.
         """
@@ -102,6 +103,7 @@ class ResourceAction(object):
                   deploy_id=self.gid, resource_id=self.resource_id)
         provider = None
 
+        # setup provider
         try:
             provider = yield self.scheduler.agent.get_provider(self.resource)
         except Exception:
@@ -113,23 +115,39 @@ class ResourceAction(object):
             ctx.exception("Unable to find a handler for %(resource_id)s", resource_id=str(self.resource.id))
             return False, False
 
-        yield self.scheduler.agent.thread_pool.submit(provider.execute, ctx, self.resource)
+        success = True
+        # no events by default, i.e. don't send events if you are not executed
+        send_event = False
 
-        send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
+        # main execution
+        if not event_only:
+            send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
 
-        if ctx.status is not const.ResourceState.deployed:
-            provider.close()
-            cache.close_version(self.resource.id.version)
-            return False, send_event
+            try:
+                yield self.scheduler.agent.thread_pool.submit(provider.execute, ctx, self.resource)
+            except Exception as e:
+                ctx.set_status(const.ResourceState.failed)
+                ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
+                              resource_id=self.resource.id, exception=repr(e))
 
+            if ctx.status is not const.ResourceState.deployed:
+                success = False
+
+        # event processing
         if len(events) > 0 and provider.can_process_events():
-            ctx.info("Sending events to %(resource_id)s because of modified dependencies", resource_id=str(self.resource.id))
-            yield self.scheduler.agent.thread_pool.submit(provider.process_events, ctx, self.resource, events)
+            try:
+                ctx.info("Sending events to %(resource_id)s because of modified dependencies",
+                         resource_id=str(self.resource.id))
+                yield self.scheduler.agent.thread_pool.submit(provider.process_events, ctx, self.resource, events)
+            except Exception:
+                ctx.exception("Could not send events for %(resource_id)s",
+                              resource_id=str(self.resource.id),
+                              events=str(events))
 
         provider.close()
         cache.close_version(self.resource_id.version)
 
-        return True, send_event
+        return success, send_event
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
@@ -171,6 +189,13 @@ class ResourceAction(object):
                     ctx.set_status(const.ResourceState.cancelled)
                 return
 
+            if result.receive_events:
+                received_events = {x.resource_id: dict(status=x.status, change=x.change,
+                                                       changes=x.changes.get(str(x.resource_id), {}))
+                                   for x in self.dependencies}
+            else:
+                received_events = {}
+
             if self.undeployable is not None:
                 ctx.set_status(self.undeployable)
                 success = False
@@ -179,13 +204,8 @@ class ResourceAction(object):
                 ctx.set_status(const.ResourceState.skipped)
                 success = False
                 send_event = False
+                yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True)
             else:
-                if result.receive_events:
-                    received_events = {x.resource_id: dict(status=x.status, change=x.change,
-                                                           changes=x.changes.get(str(x.resource_id), {}))
-                                       for x in self.dependencies}
-                else:
-                    received_events = {}
                 success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache)
 
             LOGGER.info("end run %s", self.resource)
