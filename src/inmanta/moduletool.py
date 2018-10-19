@@ -75,7 +75,7 @@ class ModuleLikeTool(object):
             method(**outargs)
         else:
             raise Exception("%s not implemented" % cmd)
-
+            
     def get_project(self, load=False) -> Project:
         project = Project.get()
         if load:
@@ -265,10 +265,17 @@ class ModuleTool(ModuleLikeTool):
                             " project.yml is used which defaults to ~=",
                             default=None)
 
+    def get_project_for_module(self, module):
+        try:
+            return self.get_project()
+        except Exception:
+            # see #721
+            return None
+
     def get_module(self, module: str=None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
-            module = Module(None, os.path.realpath(os.curdir))
+            module = Module(self.get_project_for_module(module), os.path.realpath(os.curdir))
             return module
         else:
             project = self.get_project(load=True)

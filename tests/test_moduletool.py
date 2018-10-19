@@ -709,3 +709,28 @@ requires:
 
     app(["module", "modC", "freeze", "-o", "-"])
     verify()
+
+
+def test_module_freeze_self(modules_dir, modules_repo, capsys):
+    coroot = install_project(modules_dir, "modA")
+
+    def verify():
+        out, err = capsys.readouterr()
+
+        assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
+        assert len(err) == 0
+        assert out == ("""name: modC
+license: Apache 2.0
+version: '3.2'
+requires:
+- modE ~= 3.2
+- modF ~= 3.2
+- modI ~= 3.2
+- std ~= 3.2
+""")
+    modp = os.path.join(coroot, "libs/modC")
+    app(["module", "install"])
+    os.chdir(modp)
+    os.curdir = modp
+    app(["module", "freeze", "-o", "-"])
+    verify()
