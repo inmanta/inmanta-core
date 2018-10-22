@@ -707,7 +707,7 @@ requires:
 - std ~= 3.2
 """)
 
-    app(["module", "modC", "freeze", "-o", "-"])
+    app(["module", "-m", "modC", "freeze", "-o", "-"])
     verify()
 
 

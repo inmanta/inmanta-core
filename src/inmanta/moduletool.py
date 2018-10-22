@@ -75,7 +75,7 @@ class ModuleLikeTool(object):
             method(**outargs)
         else:
             raise Exception("%s not implemented" % cmd)
-            
+
     def get_project(self, load=False) -> Project:
         project = Project.get()
         if load:
@@ -205,7 +205,7 @@ class ModuleTool(ModuleLikeTool):
 
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
-        parser.add_argument("module", help="Module to apply this command to", nargs="?", default=None)
+        parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
