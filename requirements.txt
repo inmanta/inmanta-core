@@ -22,4 +22,4 @@ sphinx==1.8.1
 texttable==1.4.0
 tornado==4.5.3
 typing==3.6.6
-virtualenv==16.0.0
+virtualenv==16.1.0
