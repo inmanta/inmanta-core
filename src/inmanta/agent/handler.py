@@ -45,7 +45,7 @@ class provider(object):  # noqa: H801
         :param name: A name to reference this provider.
     """
 
-    def __init__(self, resource_type: str, name: str):
+    def __init__(self, resource_type: str, name: str) -> None:
         self._resource_type = resource_type
         self._name = name
 

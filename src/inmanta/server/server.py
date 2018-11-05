@@ -1479,7 +1479,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             sub_process = process.Subprocess(cmd, stdout=out, stderr=err, cwd=cwd, **kwargs)
 
             returncode = yield sub_process.wait_for_exit(raise_error=False)
-            sub_process.uninitialize()
 
             out.seek(0)
             err.seek(0)

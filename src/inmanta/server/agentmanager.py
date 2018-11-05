@@ -437,8 +437,8 @@ class AgentManager(ServerSlice):
             LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
             for agent in agents:
                 with (yield self.session_lock.acquire()):
-                    agent = self.get_agent_client(env.id, agent)
-                    if agent is None:
+                    myagent = self.get_agent_client(env.id, agent)
+                    if myagent is None:
                         needsstart = True
 
             if needsstart:

@@ -43,6 +43,7 @@ from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
+from tornado import process
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -67,6 +68,7 @@ def mongo_db():
 def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
+    process.Subprocess.uninitialize()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()

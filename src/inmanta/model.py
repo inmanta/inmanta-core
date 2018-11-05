@@ -69,7 +69,7 @@ class Attribute(object):
         :param Location location: source location where this attribute is defined
     """
 
-    def __init__(self, mytype: str, nullable: bool, multi: bool, comment: str, location: Location):
+    def __init__(self, mytype: str, nullable: bool, multi: bool, comment: str, location: Location) -> None:
         self.type = mytype
         self.nullable = nullable
         self.multi = multi
@@ -191,7 +191,7 @@ class Relation(object):
     """
 
     def __init__(self, mytype: str, multi: Tuple[int, int], reverse: str, comment: str, location: Location,
-                 source_annotations: List[Value], target_annotations: List[Value]):
+                 source_annotations: List[Value], target_annotations: List[Value]) -> None:
         self.type = mytype
         lower = multi[0]
         if lower is None:
@@ -259,7 +259,7 @@ class Entity(object):
     """
 
     def __init__(self, parents: List[str], attributes: Dict[str, Attribute],
-                 relations: Dict[str, Relation], location: Location):
+                 relations: Dict[str, Relation], location: Location) -> None:
         self.parents = parents
         self.attributes = attributes
         self.relations = relations
