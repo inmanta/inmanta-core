@@ -125,11 +125,19 @@ class Server(protocol.ServerSlice):
         'url': '%s',
         'clientId': '%s'
     }""" % (opt.dash_realm.get(), opt.dash_auth_url.get(), opt.dash_client_id.get())
+
+        # LCM support should move to a server extension
+        lcm = ""
+        if opt.dash_lcm_enable:
+            lcm = """,
+    'lcm': 'http://' + window.location.hostname + ':8889/'
+"""
+
         content = """
 angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     'backend': window.location.origin+'/'%s
 });
-        """ % auth
+        """ % (lcm + auth)
         self.add_static_content("/dashboard/config.js", content=content)
         self.add_static_handler("/dashboard", dashboard_path, start=True)
 
@@ -1460,7 +1468,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             sub_process = process.Subprocess(cmd, stdout=out, stderr=err, cwd=cwd, **kwargs)
 
             returncode = yield sub_process.wait_for_exit(raise_error=False)
-            sub_process.uninitialize()
 
             out.seek(0)
             err.seek(0)

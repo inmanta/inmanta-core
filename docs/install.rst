@@ -31,7 +31,7 @@ Either checkout of the code or use the releases page: https://github.com/inmanta
 
     git clone https://github.com/inmanta/inmanta.git
     cd inmanta
-    pip install .
+    pip install -c requirements.txt .
 
 
 Fedora and CentOS 7

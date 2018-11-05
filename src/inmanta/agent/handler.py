@@ -395,7 +395,12 @@ class ResourceHandler(object):
                          Each value is a dict with the items status (const.ResourceState), changes (dict) and
                          change (const.Change).
         """
-        if self.can_reload():
+
+        # ctx.status == const.ResourceState.deployed is only true if
+        # 1- this resource was deployed (i.e. this is not a run to process events of failed dependencies)
+        # 2- this resource was deployed successfully
+
+        if self.can_reload() and ctx.status == const.ResourceState.deployed:
             reload = False
             for res, result in events.items():
                 ctx.debug("Processing changes of %(res)s", res=res, result=result)
