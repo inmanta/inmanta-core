@@ -334,7 +334,7 @@ class SnippetCompilationTest(object):
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
-    def tearDown_func(self):
+    def tear_down_func(self):
         shutil.rmtree(self.project_dir)
 
     def setup_for_snippet(self, snippet, autostd=True):
@@ -420,7 +420,7 @@ def snippetcompiler_global():
 def snippetcompiler(snippetcompiler_global):
     snippetcompiler_global.setup_func()
     yield snippetcompiler_global
-    snippetcompiler_global.tearDown_func()
+    snippetcompiler_global.tear_down_func()
 
 
 class CLI(object):
