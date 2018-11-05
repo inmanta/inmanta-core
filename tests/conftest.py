@@ -330,15 +330,14 @@ class SnippetCompilationTest(object):
         os.chdir(self.cwd)
 
     def setup_func(self):
+        # init project
         self.project_dir = tempfile.mkdtemp()
+        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tearDown_func(self):
         shutil.rmtree(self.project_dir)
 
     def setup_for_snippet(self, snippet, autostd=True):
-        # init project
-        os.symlink(self.env, os.path.join(self.project_dir, ".env"))
-
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
