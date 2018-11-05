@@ -205,7 +205,7 @@ class ModuleTool(ModuleLikeTool):
 
     @classmethod
     def modules_parser_config(cls, parser: ArgumentParser):
-        parser.add_argument("module", help="Module to apply this command to", nargs="?", default=None)
+        parser.add_argument("-m", "--module", help="Module to apply this command to", nargs="?", default=None)
 
         subparser = parser.add_subparsers(title="subcommand", dest="cmd")
 
@@ -265,10 +265,17 @@ class ModuleTool(ModuleLikeTool):
                             " project.yml is used which defaults to ~=",
                             default=None)
 
+    def get_project_for_module(self, module):
+        try:
+            return self.get_project()
+        except Exception:
+            # see #721
+            return None
+
     def get_module(self, module: str=None, project=None) -> Module:
         """Finds and loads a module, either based on the CWD or based on the name passed in as an argument and the project"""
         if module is None:
-            module = Module(None, os.path.realpath(os.curdir))
+            module = Module(self.get_project_for_module(module), os.path.realpath(os.curdir))
             return module
         else:
             project = self.get_project(load=True)
