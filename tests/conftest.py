@@ -84,7 +84,7 @@ def clean_reset(mongo_client):
     # reset cwd
     os.chdir(cwd)
 
-    for db_name in mongo_client.database_names():
+    for db_name in mongo_client.list_database_names():
         if db_name != "admin":
             try:
                 mongo_client.drop_database(db_name)

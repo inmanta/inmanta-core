@@ -87,7 +87,7 @@ class ModuleLikeTool(object):
 
         if was_dev:
             if major or minor or patch:
-                LOGGER.warn("when releasing a dev version, options --major, --minor and --patch are ignored")
+                LOGGER.warning("when releasing a dev version, options --major, --minor and --patch are ignored")
 
             # determine new version
             if version is not None:
