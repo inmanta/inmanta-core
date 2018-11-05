@@ -39,6 +39,7 @@ from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
+from typing import Tuple
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -90,7 +91,7 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, event_only: bool=False) -> (bool, bool):
+    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, event_only: bool=False) -> Tuple[bool, bool]:
         """
             :param ctx The context to use during execution of this deploy
             :param events Possible events that are available for this resource
@@ -362,7 +363,7 @@ class ResourceScheduler(object):
 
 class AgentInstance(object):
 
-    def __init__(self, process, name: str, uri: str):
+    def __init__(self, process, name: str, uri: str) -> None:
         self.process = process
         self.name = name
         self._uri = uri

@@ -569,7 +569,7 @@ if __name__ == '__channelexec__':
     global channel
 
     if os.getuid() == 0:
-        local_io = LocalIO(uri="local:", config={})
+        local_io = LocalIO(uri="local:", config={})  # type: IOBase
     else:
         local_io = BashIO(uri="local:", config={}, run_as="root")
 

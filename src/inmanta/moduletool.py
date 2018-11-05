@@ -20,7 +20,7 @@ from inmanta.module import INSTALL_MASTER, Project, Module,\
 import inspect
 import logging
 import os
-from os.path import sys
+import sys
 import shutil
 import subprocess
 import tempfile

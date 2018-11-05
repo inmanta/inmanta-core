@@ -52,7 +52,7 @@ class Location(object):
             return False
         return self.file == other.file and self.lnr == other.lnr
 
-    def merge(self, other):
+    def merge(self, other: "Location") -> "Location":
         if other is None:
             return self
 
@@ -70,7 +70,7 @@ class Range(Location):
         self.end_lnr = end_lnr
         self.end_char = end_char
 
-    def merge(self, other):
+    def merge(self, other: Location) -> Location:
         if other is None:
             return self
 
@@ -107,10 +107,10 @@ class Range(Location):
 
 class Locatable(object):
 
-    def __init__(self):
-        self._location = None  # type: Location
+    def __init__(self) -> None:
+        self._location = None  # type: Optional[Location]
 
-    def set_location(self, location: Location):
+    def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
         self._location = location
 
@@ -135,7 +135,7 @@ class LocatableString(object):
         2. in the constructors of other statements
     """
 
-    def __init__(self, value, location: Range, lexpos, namespace):
+    def __init__(self, value, location: Range, lexpos: "int", namespace: "Namespace") -> None:
         self.value = value
         self.location = location
 
@@ -159,7 +159,7 @@ class LocatableString(object):
 
 class Anchor(object):
 
-    def __init__(self, range: Range):
+    def __init__(self, range: Range) -> None:
         self.range = range
 
     def get_range(self) -> Range:
@@ -169,31 +169,31 @@ class Anchor(object):
         return self.range
 
     @abstractmethod
-    def resolve(self):
+    def resolve(self) -> Location:
         raise NotImplementedError()
 
 
 class TypeReferenceAnchor(Anchor):
 
-    def __init__(self, range: Range, namespace: "Namespace", type: str):
+    def __init__(self, range: Range, namespace: "Namespace", type: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
         self.type = type
 
-    def resolve(self):
+    def resolve(self) -> Location:
         t = self.namespace.get_type(self.type)
         return t.get_location()
 
 
 class AttributeReferenceAnchor(Anchor):
 
-    def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str):
+    def __init__(self, range: Range, namespace: "Namespace", type: str, attribute: str) -> None:
         Anchor.__init__(self, range=range)
         self.namespace = namespace
         self.type = type
         self.attribute = attribute
 
-    def resolve(self):
+    def resolve(self) -> Location:
         return self.namespace.get_type(self.type).get_attribute(self.attribute).get_location()
 
 
@@ -234,9 +234,10 @@ class Namespace(Namespaced):
             self.visible_namespaces = {self.get_full_name(): MockImport(self)}
             self.__parent.add_child(self)
         else:
+            # type: Dict[str,Union[DefineImport, MockImport]]
             self.visible_namespaces = {name: MockImport(self)}
-        self.primitives = None  # type: Dict[str,Type]
-        self.scope = None  # type: ExecutionContext
+        self.primitives = None  # type: Optional[Dict[str,Type]]
+        self.scope = None  # type:  Optional[ExecutionContext]
 
     def set_primitives(self, primitives: "Dict[str,Type]") -> None:
         self.primitives = primitives
