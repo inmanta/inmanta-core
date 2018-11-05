@@ -322,13 +322,18 @@ class SnippetCompilationTest(object):
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
         self.cwd = os.getcwd()
-        self.project_dir = tempfile.mkdtemp()
 
     def tearDownClass(self):
         shutil.rmtree(self.libs)
         shutil.rmtree(self.env)
         # reset cwd
         os.chdir(self.cwd)
+
+    def setup_func(self):
+        self.project_dir = tempfile.mkdtemp()
+
+    def tearDown_func(self):
+        shutil.rmtree(self.project_dir)
 
     def setup_for_snippet(self, snippet, autostd=True):
         # init project
@@ -405,12 +410,18 @@ class SnippetCompilationTest(object):
 
 
 @pytest.fixture(scope="session")
-def snippetcompiler():
+def snippetcompiler_global():
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
-    shutil.rmtree(ast.project_dir)
     ast.tearDownClass()
+
+
+@pytest.fixture(scope="function")
+def snippetcompiler(snippetcompiler_global):
+    snippetcompiler_global.setup_func()
+    yield snippetcompiler_global
+    snippetcompiler_global.tearDown_func()
 
 
 class CLI(object):
