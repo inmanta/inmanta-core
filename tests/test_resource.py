@@ -19,8 +19,6 @@
 from inmanta import resources
 import pytest
 from inmanta.resources import resource, ResourceException
-from conftest import SnippetCompilationTest
-import shutil
 
 
 class Base(resources.Resource):
