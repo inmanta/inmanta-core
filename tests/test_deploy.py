@@ -59,4 +59,3 @@ def test_fork(server, io_loop):
         i += 1
         sub_process = process.Subprocess(["true"])
         yield sub_process.wait_for_exit(raise_error=False)
-        sub_process.uninitialize()
