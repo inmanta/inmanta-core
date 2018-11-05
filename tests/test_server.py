@@ -30,6 +30,8 @@ from datetime import datetime
 from uuid import UUID
 from inmanta.export import upload_code
 from inmanta.util import hash_file
+from inmanta.export import unknown_parameters
+from threading import Thread
 
 LOGGER = logging.getLogger(__name__)
 
@@ -562,6 +564,42 @@ def test_purge_on_delete_requires(io_loop, client, server, environment):
 
     assert len(file2["attributes"]["requires"]) == 0
     assert file1["id"] in file2["provides"]
+
+
+@pytest.mark.gen_test
+def test_purge_on_delete_compile_failed_with_compile(io_loop, client, server, environment, snippetcompiler):
+    # run in threads to allow run_sync to work
+
+    def i1():
+        snippetcompiler.setup_for_snippet("""
+        h = std::Host(name="test", os=std::linux)
+        f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
+        """)
+        version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
+        result = yield client.get_version(environment, version)
+        assert result.code == 200
+        assert result.result["model"]["total"] == 1
+
+    def i2():
+        snippetcompiler.setup_for_snippet("""
+        h = std::Host(name="test")
+        """)
+
+        # force deploy by having unknown
+        unknown_parameters.append({})
+
+        version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
+        result = yield client.get_version(environment, version)
+        assert result.code == 200
+        assert result.result["model"]["total"] == 0
+
+    t1 = Thread(target=i1)
+    t1.start()
+    t1.join()
+
+    t1 = Thread(target=i2)
+    t1.start()
+    t1.join()
 
 
 @pytest.mark.gen_test

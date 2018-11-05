@@ -41,6 +41,8 @@ from tornado import gen
 import re
 from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.export import cfg_env, unknown_parameters
+import traceback
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -69,6 +71,7 @@ def reset_all():
     # command.Commander.reset()
     handler.Commander.reset()
     Project._project = None
+    unknown_parameters.clear()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -286,6 +289,8 @@ def environment(client, server, io_loop):
     result = io_loop.run_sync(create_env)
     env_id = result.result["environment"]["id"]
 
+    cfg_env.set(env_id)
+
     yield env_id
 
 
@@ -317,6 +322,7 @@ class SnippetCompilationTest(object):
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
         self.cwd = os.getcwd()
+        self.project_dir = tempfile.mkdtemp()
 
     def tearDownClass(self):
         shutil.rmtree(self.libs)
@@ -326,7 +332,6 @@ class SnippetCompilationTest(object):
 
     def setup_for_snippet(self, snippet, autostd=True):
         # init project
-        self.project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
@@ -347,23 +352,34 @@ class SnippetCompilationTest(object):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self, deploy=False, include_status=False):
+    def do_export(self, deploy=False, include_status=False, do_raise=True):
         templfile = mktemp("json", "dump", self.project_dir)
-
-        from inmanta.export import Exporter
-
-        (types, scopes) = compiler.do_compile()
 
         class Options(object):
             pass
+
         options = Options()
         options.json = templfile if not deploy else None
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
 
-        export = Exporter(options=options)
-        return export.run(types, scopes, include_status=include_status)
+        from inmanta.export import Exporter  # noqa: H307
+
+        try:
+            (types, scopes) = compiler.do_compile()
+        except Exception:
+            types, scopes = (None, None)
+            if do_raise:
+                raise
+            else:
+                traceback.print_exc()
+
+        # Even if the compile failed we might have collected additional data such as unknowns. So
+        # continue the export
+
+        export = Exporter(options)
+        return export.run(types, scopes, model_export=False, include_status=include_status)
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)
