@@ -809,36 +809,47 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             res_obj = rv_dict[t.resource_str()]
             res_obj.provides.append(f.resource_version_id)
 
-        # search for deleted resources
-        resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
-        previous_requires = {}
-        for res in resources_to_purge:
-            LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, res.resource_version_id))
+        # detect failed compiles
+        def safe_get(input, key, default):
+            if not isinstance(input, dict):
+                return default
+            if key not in input:
+                return default
+            return input[key]
+        metadata = safe_get(version_info, const.EXPORT_META_DATA, {})
+        compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
+        failed = compile_state == const.Compilestate.failed.name
 
-            attributes = res.attributes.copy()
-            attributes["purged"] = "true"
-            attributes["requires"] = []
+        if not failed:
+            # search for deleted resources
+            resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
+            previous_requires = {}
+            for res in resources_to_purge:
+                LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, res.resource_version_id))
 
-            res_obj = data.Resource.new(env.id, resource_version_id="%s,v=%s" % (res.resource_id, version),
-                                        attributes=attributes)
-            resource_objects.append(res_obj)
+                attributes = res.attributes.copy()
+                attributes["purged"] = "true"
+                attributes["requires"] = []
+                res_obj = data.Resource.new(env.id, resource_version_id="%s,v=%s" % (res.resource_id, version),
+                                            attributes=attributes)
+                resource_objects.append(res_obj)
 
-            previous_requires[res_obj.resource_id] = res.attributes["requires"]
-            resource_version_ids.append(res_obj.resource_version_id)
-            agents.add(res_obj.agent)
-            rv_dict[res_obj.resource_id] = res_obj
+                previous_requires[res_obj.resource_id] = res.attributes["requires"]
+                resource_version_ids.append(res_obj.resource_version_id)
+                agents.add(res_obj.agent)
+                rv_dict[res_obj.resource_id] = res_obj
 
-        # invert dependencies on purges
-        for res_id, requires in previous_requires.items():
-            res_obj = rv_dict[res_id]
-            for require in requires:
-                req_id = Id.parse_id(require)
+            # invert dependencies on purges
+            for res_id, requires in previous_requires.items():
+                res_obj = rv_dict[res_id]
+                for require in requires:
+                    req_id = Id.parse_id(require)
 
-                if req_id.resource_str() in rv_dict:
-                    req_res = rv_dict[req_id.resource_str()]
+                    if req_id.resource_str() in rv_dict:
+                        req_res = rv_dict[req_id.resource_str()]
 
-                    req_res.attributes["requires"].append(res_obj.resource_version_id)
-                    res_obj.provides.append(req_res.resource_version_id)
+                        req_res.attributes["requires"].append(res_obj.resource_version_id)
+                        res_obj.provides.append(req_res.resource_version_id)
 
         undeployable = [res.resource_id for res in undeployable]
         # get skipped for undeployable
@@ -1797,7 +1808,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 "message": "Decommission of environment",
                 "type": "api"
             }
-        result = yield self.put_version(env, version, [], {}, [], {"export_metadata": metadata})
+        result = yield self.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
         return result, {"version": version}
 
     @protocol.handle(methods.Decommision.clear_environment, env="id")

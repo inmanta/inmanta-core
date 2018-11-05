@@ -266,6 +266,9 @@ class Exporter(object):
 
             # call dependency managers
             self._call_dep_manager(types)
+            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.success.name
+        else:
+            metadata[const.META_DATA_COMPILE_STATE] = const.Compilestate.failed.name
 
         # validate the dependency graph
         self._validate_graph()
@@ -440,7 +443,7 @@ class Exporter(object):
                 LOGGER.debug("Uploaded file with hash %s" % hash_id)
 
         # Collecting version information
-        version_info = {"export_metadata": metadata,
+        version_info = {const.EXPORT_META_DATA: metadata,
                         "model": model}
 
         # TODO: start transaction

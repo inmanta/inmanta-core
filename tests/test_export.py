@@ -158,7 +158,6 @@ def test_empty_server_export(snippetcompiler, server, client):
 
 @pytest.mark.gen_test
 def test_server_export(snippetcompiler, server, client, environment):
-    config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet("""
             h = std::Host(name="test", os=std::linux)
             f = std::ConfigFile(host=h, path="/etc/motd", content="test")

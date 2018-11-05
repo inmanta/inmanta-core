@@ -19,8 +19,6 @@
 from inmanta import resources
 import pytest
 from inmanta.resources import resource, ResourceException
-from conftest import SnippetCompilationTest
-import shutil
 
 
 class Base(resources.Resource):
@@ -56,7 +54,7 @@ def test_fields_parent_type():
             fields = ("z",)
 
 
-def test_resource_base():
+def test_resource_base(snippetcompiler):
 
     import inmanta.resources
 
@@ -67,37 +65,31 @@ def test_resource_base():
         """
         fields = ("key", "value", "agent")
 
-    snippetcompiler = SnippetCompilationTest()
-    snippetcompiler.setUpClass()
-    try:
-        snippetcompiler.setup_for_snippet("""
-            entity XResource:
-                string key
-                string agent
-                string value
-            end
+    snippetcompiler.setup_for_snippet("""
+        entity XResource:
+            string key
+            string agent
+            string value
+        end
 
-            implement XResource using none
+        implement XResource using none
 
-            implementation none for XResource:
-            end
+        implementation none for XResource:
+        end
 
-            XResource(key="key", agent="agent", value="value")
-            """, autostd=False)
-        _version, json_value = snippetcompiler.do_export()
+        XResource(key="key", agent="agent", value="value")
+        """, autostd=False)
+    _version, json_value = snippetcompiler.do_export()
 
-        assert len(json_value) == 1
-        myresource = next(json_value.values().__iter__())
+    assert len(json_value) == 1
+    myresource = next(json_value.values().__iter__())
 
-        assert myresource.key == "key"
-        assert myresource.agent == "agent"
-        assert myresource.value == "value"
-    finally:
-        shutil.rmtree(snippetcompiler.project_dir)
-        snippetcompiler.tearDownClass()
+    assert myresource.key == "key"
+    assert myresource.agent == "agent"
+    assert myresource.value == "value"
 
 
-def test_resource_base_with_method_key():
+def test_resource_base_with_method_key(snippetcompiler):
 
     import inmanta.resources
 
@@ -112,31 +104,25 @@ def test_resource_base_with_method_key():
         def get_serialize(_, resource):
             return resource.key
 
-    snippetcompiler = SnippetCompilationTest()
-    snippetcompiler.setUpClass()
-    try:
-        snippetcompiler.setup_for_snippet("""
-            entity XResource:
-                string key
-                string agent
-                string value
-            end
+    snippetcompiler.setup_for_snippet("""
+        entity XResource:
+            string key
+            string agent
+            string value
+        end
 
-            implement XResource using none
+        implement XResource using none
 
-            implementation none for XResource:
-            end
+        implementation none for XResource:
+        end
 
-            XResource(key="key", agent="agent", value="value")
-            """, autostd=False)
-        with pytest.raises(ResourceException):
-            snippetcompiler.do_export()
-    finally:
-        shutil.rmtree(snippetcompiler.project_dir)
-        snippetcompiler.tearDownClass()
+        XResource(key="key", agent="agent", value="value")
+        """, autostd=False)
+    with pytest.raises(ResourceException):
+        snippetcompiler.do_export()
 
 
-def test_resource_with_keyword():
+def test_resource_with_keyword(snippetcompiler):
 
     import inmanta.resources
 
@@ -151,32 +137,26 @@ def test_resource_with_keyword():
         def get_model(_, resource):
             return resource.key
 
-    snippetcompiler = SnippetCompilationTest()
-    snippetcompiler.setUpClass()
-    try:
-        snippetcompiler.setup_for_snippet("""
-            entity YResource:
-                string key
-                string agent
-                string value
-            end
+    snippetcompiler.setup_for_snippet("""
+         entity YResource:
+             string key
+             string agent
+             string value
+         end
 
-            implement YResource using none
+         implement YResource using none
 
-            implementation none for YResource:
-            end
+         implementation none for YResource:
+         end
 
-            YResource(key="key", agent="agent", value="value")
-            """, autostd=False)
+         YResource(key="key", agent="agent", value="value")
+         """, autostd=False)
 
-        with pytest.raises(ResourceException):
-            snippetcompiler.do_export()
-    finally:
-        shutil.rmtree(snippetcompiler.project_dir)
-        snippetcompiler.tearDownClass()
+    with pytest.raises(ResourceException):
+        snippetcompiler.do_export()
 
 
-def test_resource_with_private_method():
+def test_resource_with_private_method(snippetcompiler):
 
     import inmanta.resources
 
@@ -187,26 +167,20 @@ def test_resource_with_private_method():
         """
         fields = ("__setattr__", "key", "value", "agent")
 
-    snippetcompiler = SnippetCompilationTest()
-    snippetcompiler.setUpClass()
-    try:
-        snippetcompiler.setup_for_snippet("""
-            entity YResource:
-                string key
-                string agent
-                string value
-            end
+    snippetcompiler.setup_for_snippet("""
+        entity YResource:
+            string key
+            string agent
+            string value
+        end
 
-            implement YResource using none
+        implement YResource using none
 
-            implementation none for YResource:
-            end
+        implementation none for YResource:
+        end
 
-            YResource(key="key", agent="agent", value="value")
-            """, autostd=False)
+        YResource(key="key", agent="agent", value="value")
+        """, autostd=False)
 
-        with pytest.raises(ResourceException):
-            snippetcompiler.do_export()
-    finally:
-        shutil.rmtree(snippetcompiler.project_dir)
-        snippetcompiler.tearDownClass()
+    with pytest.raises(ResourceException):
+        snippetcompiler.do_export()

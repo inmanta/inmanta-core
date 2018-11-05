@@ -112,3 +112,12 @@ class LogLevel(Enum):
 
 
 INMANTA_URN = "urn:inmanta:"
+
+
+class Compilestate(Enum):
+    success = 1
+    failed = 2
+
+
+EXPORT_META_DATA = "export_metadata"
+META_DATA_COMPILE_STATE = "inmanta:compile:state"

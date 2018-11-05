@@ -41,6 +41,8 @@ from tornado import gen
 import re
 from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.export import cfg_env, unknown_parameters
+import traceback
 from tornado import process
 
 
@@ -71,6 +73,7 @@ def reset_all():
     # command.Commander.reset()
     handler.Commander.reset()
     Project._project = None
+    unknown_parameters.clear()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -288,6 +291,8 @@ def environment(client, server, io_loop):
     result = io_loop.run_sync(create_env)
     env_id = result.result["environment"]["id"]
 
+    cfg_env.set(env_id)
+
     yield env_id
 
 
@@ -326,11 +331,15 @@ class SnippetCompilationTest(object):
         # reset cwd
         os.chdir(self.cwd)
 
-    def setup_for_snippet(self, snippet, autostd=True):
+    def setup_func(self):
         # init project
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
+    def tear_down_func(self):
+        shutil.rmtree(self.project_dir)
+
+    def setup_for_snippet(self, snippet, autostd=True):
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
@@ -349,23 +358,34 @@ class SnippetCompilationTest(object):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self, deploy=False, include_status=False):
+    def do_export(self, deploy=False, include_status=False, do_raise=True):
         templfile = mktemp("json", "dump", self.project_dir)
-
-        from inmanta.export import Exporter
-
-        (types, scopes) = compiler.do_compile()
 
         class Options(object):
             pass
+
         options = Options()
         options.json = templfile if not deploy else None
         options.depgraph = False
         options.deploy = deploy
         options.ssl = False
 
-        export = Exporter(options=options)
-        return export.run(types, scopes, include_status=include_status)
+        from inmanta.export import Exporter  # noqa: H307
+
+        try:
+            (types, scopes) = compiler.do_compile()
+        except Exception:
+            types, scopes = (None, None)
+            if do_raise:
+                raise
+            else:
+                traceback.print_exc()
+
+        # Even if the compile failed we might have collected additional data such as unknowns. So
+        # continue the export
+
+        export = Exporter(options)
+        return export.run(types, scopes, model_export=False, include_status=include_status)
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)
@@ -391,12 +411,18 @@ class SnippetCompilationTest(object):
 
 
 @pytest.fixture(scope="session")
-def snippetcompiler():
+def snippetcompiler_global():
     ast = SnippetCompilationTest()
     ast.setUpClass()
     yield ast
-    shutil.rmtree(ast.project_dir)
     ast.tearDownClass()
+
+
+@pytest.fixture(scope="function")
+def snippetcompiler(snippetcompiler_global):
+    snippetcompiler_global.setup_func()
+    yield snippetcompiler_global
+    snippetcompiler_global.tear_down_func()
 
 
 class CLI(object):
