@@ -38,9 +38,8 @@ from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, 
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
 from inmanta.util import get_compiler_version
-from typing import Tuple, List, Dict, Set
+from typing import Tuple, List, Dict
 from typing import Optional
-from typing import Iterable
 from typing import Union
 from typing import Any
 from functools import lru_cache
@@ -52,9 +51,9 @@ except ImportError:
 
 
 if TYPE_CHECKING:
-    from pkg_resources.packaging.version import Version
-    from pkg_resources import Requirement
-
+    from typing import Iterable, Set  # noqa: F401
+    from pkg_resources.packaging.version import Version  # noqa: F401
+    from pkg_resources import Requirement  # noqa: F401
 
 
 LOGGER = logging.getLogger(__name__)
