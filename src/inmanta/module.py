@@ -28,7 +28,6 @@ import subprocess
 from tarfile import TarFile
 
 from pkg_resources import parse_version, parse_requirements
-from packaging.version import Version
 import yaml
 
 from inmanta import env
@@ -38,14 +37,24 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, DynamicStatement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
-from inmanta.util import memoize, get_compiler_version
+from inmanta.util import get_compiler_version
 from typing import Tuple, List, Dict, Set
 from typing import Optional
-from pkg_resources import Requirement
 from typing import Iterable
 from typing import Union
 from typing import Any
 from functools import lru_cache
+
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+
+if TYPE_CHECKING:
+    from pkg_resources.packaging.version import Version
+    from pkg_resources import Requirement
+
 
 
 LOGGER = logging.getLogger(__name__)
@@ -231,7 +240,7 @@ def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, Rem
         return LocalFileRepo(path, parent_root=root)
 
 
-def merge_specs(mainspec: Dict[str, List[Requirement]], new: List[Requirement]) -> None:
+def merge_specs(mainspec: "Dict[str, List[Requirement]]", new: "List[Requirement]") -> None:
     """Merge two maps str->[T] by concatting their lists."""
     for req in new:
         key = req.project_name
@@ -582,7 +591,7 @@ class Project(ModuleLike):
 
         return mod_list
 
-    def collect_requirements(self) -> Dict[str, List[Requirement]]:
+    def collect_requirements(self) -> "Dict[str, List[Requirement]]":
         """
             Collect the list of all requirements of all modules in the project.
         """
@@ -596,12 +605,12 @@ class Project(ModuleLike):
             merge_specs(specs, reqs)
         return specs
 
-    def collect_imported_requirements(self) -> Dict[str, Iterable[Requirement]]:
+    def collect_imported_requirements(self) -> "Dict[str, Iterable[Requirement]]":
         imports = set([x.name.split("::")[0] for x in self.get_complete_ast()[0] if isinstance(x, DefineImport)])
         imports.add("std")
         specs = self.collect_requirements()
 
-        def get_spec(name: str) -> Iterable[Requirement]:
+        def get_spec(name: str) -> "Iterable[Requirement]":
             if name in specs:
                 return specs[name]
             return parse_requirements(name)
@@ -758,7 +767,7 @@ class Module(ModuleLike):
     def install(cls,
                 project: Project,
                 modulename: str,
-                requirements: List[Requirement],
+                requirements: "List[Requirement]",
                 install: bool = True,
                 install_mode: str = INSTALL_RELEASES) -> "Module":
         """
@@ -783,7 +792,7 @@ class Module(ModuleLike):
     def update(cls,
                project: Project,
                modulename: str,
-               requirements: List[Requirement],
+               requirements: "List[Requirement]",
                path: str = None,
                fetch: bool = True,
                install_mode: str = INSTALL_RELEASES) -> "Module":
@@ -813,12 +822,12 @@ class Module(ModuleLike):
     @classmethod
     def get_suitable_version_for(cls,
                                  modulename: str,
-                                 requirements: List[Requirement],
+                                 requirements: "List[Requirement]",
                                  path: str,
-                                 release_only: bool = True) -> Optional[Version]:
+                                 release_only: bool = True) -> "Optional[Version]":
         versions = gitprovider.get_all_tags(path)
 
-        def try_parse(x: str) -> Version:
+        def try_parse(x: str) -> "Version":
             try:
                 return parse_version(x)
             except Exception:
@@ -842,10 +851,10 @@ class Module(ModuleLike):
     @classmethod
     def __best_for_compiler_version(cls,
                                     modulename: str,
-                                    versions: List[Version],
+                                    versions: "List[Version]",
                                     path: str,
-                                    comp_version: Version) -> Optional[Version]:
-        def get_cv_for(best: Version) -> Optional[Version]:
+                                    comp_version: "Version") -> "Optional[Version]":
+        def get_cv_for(best: "Version") -> "Optional[Version]":
             cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
             cfg = yaml.load(cfg)
             if "compiler_version" not in cfg:
