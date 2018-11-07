@@ -331,7 +331,7 @@ class ResourceHandler(object):
             self._io = io
 
         self._client = None
-        self._ioloop = ioloop.IOLoop.current(instance=True)
+        self._ioloop = agent.process._io_loop
 
     def run_sync(self, func: typing.Callable) -> typing.Any:
         """

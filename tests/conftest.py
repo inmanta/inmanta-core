@@ -442,7 +442,7 @@ class CLI(object):
         cmd_args.extend(args)
         result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
                                                 catch_exceptions=False)
-        yield result
+        return result
 
 
 @pytest.fixture
