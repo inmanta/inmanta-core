@@ -23,7 +23,6 @@ import difflib
 import logging
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import time
@@ -1530,12 +1529,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             # verify if branch is correct
             LOGGER.debug("Verifying correct branch")
-            sub_process = process.Subprocess(["git", "branch"], stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM,
+            sub_process = process.Subprocess(["git", "branch"],
+                                             stdout=process.Subprocess.STREAM,
+                                             stderr=process.Subprocess.STREAM,
                                              cwd=project_dir)
 
-            out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
-                                              gen.Task(sub_process.stderr.read_until_close),
-                                              sub_process.wait_for_exit(raise_error=False)]
+            out, _, _ = yield [gen.Task(sub_process.stdout.read_until_close),
+                               gen.Task(sub_process.stderr.read_until_close),
+                               sub_process.wait_for_exit(raise_error=False)]
 
             o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
             if o is not None and env.repo_branch != o.group(1):
