@@ -44,7 +44,10 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
+import asyncio
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -439,7 +442,7 @@ class CLI(object):
         cmd_args.extend(args)
         result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
                                                 catch_exceptions=False)
-        return result
+        yield result
 
 
 @pytest.fixture
