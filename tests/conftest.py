@@ -44,7 +44,10 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
+import asyncio
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 
+asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
