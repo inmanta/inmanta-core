@@ -24,6 +24,7 @@ import traceback
 from concurrent.futures import Future
 from collections import defaultdict
 import typing
+import tornado.concurrent
 
 
 from inmanta.agent.io import get_io
@@ -342,20 +343,13 @@ class ResourceHandler(object):
         """
         f = Future()
 
-        def future_to_future(future):
-            exc = future.exception()
-            if exc is not None:
-                f.set_exception(exc)
-            else:
-                f.set_result(future.result())
-
         def run():
             try:
                 result = func()
                 if result is not None:
                     from tornado.gen import convert_yielded
                     result = convert_yielded(result)
-                    result.add_done_callback(future_to_future)
+                    tornado.concurrent.chain_future(result, f)
             except Exception as e:
                 f.set_exception(e)
         self._ioloop.add_callback(run)
