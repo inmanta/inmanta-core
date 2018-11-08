@@ -392,7 +392,7 @@ class AgentManager(ServerSlice):
 
     @protocol.handle(methods.AgentRecovery.get_state, env="tid")
     @gen.coroutine
-    def get_state(self, env: uuid.UUID, sid: uuid.UUID, agent: str):
+    def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str):
         tid = env.id
         if isinstance(tid, str):
             tid = uuid.UUID(tid)

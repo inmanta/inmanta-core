@@ -374,7 +374,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.FormMethod.put_form, form_id="id", env="tid")
     @gen.coroutine
-    def put_form(self, env: uuid.UUID, form_id: str, form: dict):
+    def put_form(self, env: data.Environment, form_id: str, form: dict):
         form_doc = yield data.Form.get_form(environment=env.id, form_type=form_id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}

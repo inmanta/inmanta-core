@@ -37,11 +37,13 @@ from inmanta import config as inmanta_config
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 import jwt
+from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable  # noqa: F401
+
 
 from inmanta.util import Scheduler
 
 
-LOGGER = logging.getLogger(__name__)
+LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 """
@@ -56,7 +58,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 # Util functions
-def custom_json_encoder(o):
+def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     """
         A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
@@ -83,12 +85,12 @@ def custom_json_encoder(o):
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def json_encode(value):
+def json_encode(value: object) -> str:
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
 
-def gzipped_json(value):
+def gzipped_json(value: object) -> Tuple[bool, Union[bytes, str]]:
     value = json_encode(value)
     if len(value) < web.GZipContentEncoding.MIN_LENGTH:
         return False, value
@@ -102,13 +104,13 @@ def gzipped_json(value):
     return True, gzip_value.getvalue()
 
 
-def sh(msg, max_len=10):
+def sh(msg: str, max_len: int=10) -> str:
     if len(msg) < max_len:
         return msg
     return msg[0:max_len - 3] + "..."
 
 
-def encode_token(client_types, environment=None, idempotent=False, expire=None):
+def encode_token(client_types: List[str], environment=None, idempotent: bool=False, expire=None):
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
 
     payload = {
@@ -131,7 +133,7 @@ def encode_token(client_types, environment=None, idempotent=False, expire=None):
     return jwt.encode(payload, cfg.key, cfg.algo).decode()
 
 
-def decode_token(token):
+def decode_token(token: str) -> Dict[str, str]:
     try:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
@@ -171,7 +173,7 @@ def decode_token(token):
     return payload
 
 
-def authorize_request(auth_data, metadata, message, config):
+def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: str, config: List[Dict[str, str]]) -> None:
     """
         Authorize a request based on the given data
     """
@@ -197,8 +199,6 @@ def authorize_request(auth_data, metadata, message, config):
     if not ok:
         raise UnauhorizedError("The authorization token does not have a valid client type for this call." +
                                " (%s provided, %s expected" % (auth_data[ct_key], config[0]["client_types"]))
-
-    return
 
 
 # API
@@ -279,7 +279,7 @@ class Result(object):
 # Shared
 class RESTBase(object):
 
-    def _create_base_url(self, properties, msg=None, versioned=True):
+    def _create_base_url(self, properties: Dict[str, str], msg: Dict[str, str]=None, versioned: bool=True) -> str:
         """
             Create a url for the given protocol properties
         """
@@ -297,7 +297,7 @@ class RESTBase(object):
 
         return url
 
-    def _decode(self, body):
+    def _decode(self, body: str) -> Dict:
         """
             Decode a response body
         """
@@ -466,7 +466,7 @@ class RESTTransport(RESTBase):
     """
     __transport_name__ = "rest"
 
-    def __init__(self, endpoint, connection_timout=120):
+    def __init__(self, endpoint: "Endpoint", connection_timout: int=120) -> None:
         self.__end_point = endpoint
         self.daemon = True
         self._connected = False
@@ -474,10 +474,12 @@ class RESTTransport(RESTBase):
         self._handlers = []
         self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
+        self.headers: Set[str] = set()
         self.request_timeout = inmanta_config.Config.get(self.id, "request_timeout", 120)
-        self.headers = set()
 
-    endpoint = property(lambda x: x.__end_point)
+    @property
+    def endpoint(self):
+        return self.__end_point
 
     def get_id(self):
         """
@@ -493,42 +495,42 @@ class RESTTransport(RESTBase):
         """
         self.start()
 
-    def stop_client(self):
+    def stop_client(self) -> None:
         """
             Stop this transport as client
         """
         self.stop()
 
-    def start(self):
+    def start(self) -> None:
         """
             Start the transport as a new thread
         """
         pass
 
-    def stop(self):
+    def stop(self) -> None:
         """
             Stop the transport
         """
         self._connected = False
 
-    def set_connected(self):
+    def set_connected(self) -> None:
         """
             Mark this transport as connected
         """
         LOGGER.debug("Transport %s is connected", self.get_id())
         self._connected = True
 
-    def is_connected(self):
+    def is_connected(self) -> bool:
         """
             Is this transport connected
         """
         return self._connected
 
-    def create_op_mapping(self):
+    def create_op_mapping(self) -> Dict[str, Dict[str, Callable]]:
         """
             Build a mapping between urls, ops and methods
         """
-        url_map = defaultdict(dict)
+        url_map: Dict[str, Dict[str, Callable]] = defaultdict(dict)
         headers = set()
         for method, method_handlers in self.endpoint.__methods__.items():
             properties = method.__protocol_properties__
@@ -552,7 +554,7 @@ class RESTTransport(RESTBase):
         self.headers = headers
         return url_map
 
-    def match_call(self, url, method):
+    def match_call(self, url: str, method: str) -> Tuple[Optional[Dict], Optional[Callable]]:
         """
             Get the method call for the given url and http method
         """
@@ -566,14 +568,13 @@ class RESTTransport(RESTBase):
 
         return None, None
 
-    def _get_client_config(self):
+    def _get_client_config(self) -> str:
         """
             Load the configuration for the client
         """
         LOGGER.debug("Getting config in section %s", self.id)
 
         port = inmanta_config.Config.get(self.id, "port", 8888)
-
         host = inmanta_config.Config.get(self.id, "host", "localhost")
 
         if inmanta_config.Config.getboolean(self.id, "ssl", False):
@@ -583,7 +584,7 @@ class RESTTransport(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    def build_call(self, properties, args, kwargs={}):
+    def build_call(self, properties: Dict[str, str], args: List, kwargs: Dict[str, Any]={}) -> Tuple[str, str, Dict, Optional[Dict[str, Any]]]:
         """
             Build a call from the given arguments. This method returns the url, headers, method and body for the call.
         """
@@ -627,7 +628,7 @@ class RESTTransport(RESTBase):
         return url, method, headers, body
 
     @gen.coroutine
-    def call(self, properties, args, kwargs={}):
+    def call(self, properties: Dict[str, str], args: List, kwargs: Dict[str, Any]={}) -> Result:
         url, method, headers, body = self.build_call(properties, args, kwargs)
 
         url_host = self._get_client_config()
@@ -675,7 +676,7 @@ class handle(object):  # noqa: H801
         :param method A subclass of method that defines the method
     """
 
-    def __init__(self, method, **kwargs):
+    def __init__(self, method: str, **kwargs: Dict[str, Any]) -> None:
         self.method = method
         self.mapping = kwargs
 
@@ -733,7 +734,7 @@ class Endpoint(object):
         self._node_name = inmanta_config.nodename.get()
         self._end_point_names = []
 
-    def add_future(self, future):
+    def add_future(self, future) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
@@ -745,10 +746,10 @@ class Endpoint(object):
 
         IOLoop.current().add_future(future, handle_result)
 
-    def get_end_point_names(self):
+    def get_end_point_names(self) -> List[str]:
         return self._end_point_names
 
-    def add_end_point_name(self, name):
+    def add_end_point_name(self, name: str) -> None:
         """
             Add an additional name to this endpoint to which it reacts and sends out in heartbeats
         """
@@ -1009,7 +1010,7 @@ class ReturnClient(Client, metaclass=ClientMeta):
         back to clients over the heartbeat channel.
     """
 
-    def __init__(self, name, session):
+    def __init__(self, name, session) -> None:
         super().__init__(name)
         self.session = session
 
