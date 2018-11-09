@@ -1260,20 +1260,6 @@ class Resource(BaseDocument):
             return cls(from_mongo=True, **value)
 
     @classmethod
-    @gen.coroutine
-    def get_with_state(cls, environment, version):
-        """
-            Get all resources from the given version that have "state_id" defined
-        """
-        cursor = cls._coll.find({"environment": environment, "model": version, "attributes.state_id": {"$exists": True}})
-
-        resources = []
-        while (yield cursor.fetch_next):
-            resources.append(cls(from_mongo=True, **cursor.next_object()))
-
-        return resources
-
-    @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
         vid = Id.parse_id(resource_version_id)
 
@@ -1476,9 +1462,6 @@ class ConfigurationModel(BaseDocument):
         resources = yield Resource.get_list(environment=self.environment, model=self.version)
         for res in resources:
             yield res.delete_cascade()
-        snaps = yield Snapshot.get_list(environment=self.environment, model=self.version)
-        for snap in snaps:
-            yield snap.delete_cascade()
         yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
         yield Code.delete_all(environment=self.environment, model=self.version)
         yield DryRun.delete_all(environment=self.environment, model=self.version)
@@ -1623,111 +1606,8 @@ class DryRun(BaseDocument):
         return dict_result
 
 
-class ResourceSnapshot(BaseDocument):
-    """
-        Snapshot of a resource
-
-        :param error Indicates if an error made the snapshot fail
-    """
-    environment = Field(field_type=uuid.UUID, required=True)
-    snapshot = Field(field_type=uuid.UUID, required=True)
-    resource_id = Field(field_type=str, required=True)
-    state_id = Field(field_type=str, required=True)
-    started = Field(field_type=datetime.datetime, default=None)
-    finished = Field(field_type=datetime.datetime, default=None)
-    content_hash = Field(field_type=str)
-    success = Field(field_type=bool)
-    error = Field(field_type=bool)
-    msg = Field(field_type=str)
-    size = Field(field_type=int)
-
-
-class ResourceRestore(BaseDocument):
-    """
-        A restore of a resource from a snapshot
-    """
-    environment = Field(field_type=uuid.UUID, required=True)
-    restore = Field(field_type=uuid.UUID, required=True)
-    state_id = Field(field_type=str)
-    resource_id = Field(field_type=str)
-    started = Field(field_type=datetime.datetime, default=None)
-    finished = Field(field_type=datetime.datetime, default=None)
-    success = Field(field_type=bool)
-    error = Field(field_type=bool)
-    msg = Field(field_type=str)
-
-
-class SnapshotRestore(BaseDocument):
-    """
-        Information about a snapshot restore
-    """
-    environment = Field(field_type=uuid.UUID, required=True)
-    snapshot = Field(field_type=uuid.UUID, required=True)
-    started = Field(field_type=datetime.datetime, default=None)
-    finished = Field(field_type=datetime.datetime, default=None)
-    resources_todo = Field(field_type=int, default=0)
-
-    @gen.coroutine
-    def delete_cascade(self):
-        yield ResourceRestore.delete_all(restore=self.id)
-        yield self.delete()
-
-    @gen.coroutine
-    def resource_updated(self):
-        yield SnapshotRestore._coll.update_one({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
-        self.resources_todo -= 1
-
-        now = datetime.datetime.now()
-        result = yield SnapshotRestore._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
-            # modified_count is None for mongodb < 2.6
-            self.finished = now
-
-
-class Snapshot(BaseDocument):
-    """
-        A snapshot of an environment
-
-        :param id The id of the snapshot
-        :param environment A reference to the environment
-        :param started When was this snapshot started
-        :param finished When was this snapshot finished
-        :param total_size The total size of this snapshot
-    """
-    environment = Field(field_type=uuid.UUID, required=True)
-    model = Field(field_type=int, required=True)
-    name = Field(field_type=str)
-    started = Field(field_type=datetime.datetime, default=None)
-    finished = Field(field_type=datetime.datetime, default=None)
-    total_size = Field(field_type=int, default=0)
-    resources_todo = Field(field_type=int, default=0)
-
-    @gen.coroutine
-    def delete_cascade(self):
-        yield ResourceSnapshot.delete_all(snapshot=self.id)
-        restores = yield SnapshotRestore.get_list(snapshot=self.id)
-        for restore in restores:
-            yield restore.delete_cascade()
-
-        yield self.delete()
-
-    @gen.coroutine
-    def resource_updated(self, size):
-        yield Snapshot._coll.update_one({"_id": self.id},
-                                        {"$inc": {"resources_todo": int(-1), "total_size": size}})
-        self.total_size += size
-        self.resources_todo -= 1
-
-        now = datetime.datetime.now()
-        result = yield Snapshot._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-        if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
-            # modified_count is None for mongodb < 2.6
-            self.finished = now
-
-
 _classes = [Project, Environment, Parameter, UnknownParameter, AgentProcess, AgentInstance, Agent, Report, Compile, Form,
-            FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun, ResourceSnapshot, ResourceRestore,
-            SnapshotRestore, Snapshot]
+            FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun]
 
 
 def use_motor(motor):

@@ -16,10 +16,8 @@
     Contact: code@inmanta.com
 """
 
-import base64
 from concurrent.futures.thread import ThreadPoolExecutor
 import datetime
-import hashlib
 import logging
 import os
 import random
@@ -599,144 +597,6 @@ class AgentInstance(object):
                 self._cache.close_version(version)
 
     @gen.coroutine
-    def do_restore(self, restore_id, snapshot_id, resources):
-        with (yield self.ratelimiter.acquire()):
-
-            LOGGER.info("Start a restore %s", restore_id)
-
-            yield self.process._ensure_code(self._env_id, resources[0][1]["model"],
-                                            [res[1]["resource_type"] for res in resources])
-
-            version = resources[0][1]["model"]
-            self._cache.open_version(version)
-
-            for restore, resource in resources:
-                start = datetime.datetime.now()
-                provider = None
-                try:
-                    data = resource["attributes"]
-                    data["id"] = resource["id"]
-                    resource_obj = Resource.deserialize(data)
-                    provider = yield self.get_provider(resource_obj)
-                    if not hasattr(resource_obj, "allow_restore") or not resource_obj.allow_restore:
-                        yield self.get_client().update_restore(tid=self._env_id,
-                                                               id=restore_id,
-                                                               resource_id=str(resource_obj.id),
-                                                               start=start,
-                                                               stop=datetime.datetime.now(),
-                                                               success=False,
-                                                               error=False,
-                                                               msg="Resource %s does not allow restore" % resource["id"])
-                        continue
-
-                    try:
-                        yield self.thread_pool.submit(provider.restore, resource_obj, restore["content_hash"])
-                        yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
-                                                               resource_id=str(resource_obj.id),
-                                                               success=True, error=False,
-                                                               start=start, stop=datetime.datetime.now(), msg="")
-                    except NotImplementedError:
-                        yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
-                                                               resource_id=str(resource_obj.id),
-                                                               success=False, error=False,
-                                                               start=start, stop=datetime.datetime.now(),
-                                                               msg="The handler for resource "
-                                                               "%s does not support restores" % resource["id"])
-
-                except Exception:
-                    LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                    yield self.get_client().update_restore(tid=self._env_id, id=restore_id,
-                                                           resource_id=resource_obj.id.resource_str(),
-                                                           success=False, error=False,
-                                                           start=start, stop=datetime.datetime.now(),
-                                                           msg="Unable to find a handler to restore a snapshot of resource %s" %
-                                                           resource["id"])
-                finally:
-                    if provider is not None:
-                        provider.close()
-            self._cache.close_version(version)
-
-            return 200
-
-    @gen.coroutine
-    def do_snapshot(self, snapshot_id, resources):
-        with (yield self.ratelimiter.acquire()):
-            LOGGER.info("Start snapshot %s", snapshot_id)
-
-            yield self.process._ensure_code(self._env_id, resources[0]["model"],
-                                            [res["resource_type"] for res in resources])
-
-            version = resources[0]["model"]
-            self._cache.open_version(version)
-
-            for resource in resources:
-                start = datetime.datetime.now()
-                provider = None
-                try:
-                    data = resource["attributes"]
-                    data["id"] = resource["id"]
-                    resource_obj = Resource.deserialize(data)
-                    provider = yield self.get_provider(resource_obj)
-
-                    if not hasattr(resource_obj, "allow_snapshot") or not resource_obj.allow_snapshot:
-                        yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id,
-                                                                resource_id=resource_obj.id.resource_str(), snapshot_data="",
-                                                                start=start, stop=datetime.datetime.now(), size=0,
-                                                                success=False, error=False,
-                                                                msg="Resource %s does not allow snapshots" % resource["id"])
-                        continue
-
-                    try:
-                        result = yield self.thread_pool.submit(provider.snapshot, resource_obj)
-                        if result is not None:
-                            sha1sum = hashlib.sha1()
-                            sha1sum.update(result)
-                            content_id = sha1sum.hexdigest()
-                            yield self.get_client().upload_file(id=content_id, content=base64.b64encode(result).decode("ascii"))
-
-                            yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id,
-                                                                    resource_id=resource_obj.id.resource_str(),
-                                                                    snapshot_data=content_id,
-                                                                    start=start, stop=datetime.datetime.now(),
-                                                                    size=len(result), success=True, error=False,
-                                                                    msg="")
-                        else:
-                            raise Exception("Snapshot returned no data")
-
-                    except NotImplementedError:
-                        yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, error=False,
-                                                                resource_id=resource_obj.id.resource_str(),
-                                                                snapshot_data="",
-                                                                start=start, stop=datetime.datetime.now(),
-                                                                size=0, success=False,
-                                                                msg="The handler for resource "
-                                                                "%s does not support snapshots" % resource["id"])
-                    except Exception:
-                        LOGGER.exception("An exception occurred while creating the snapshot of %s", resource["id"])
-                        yield self.get_client().update_snapshot(tid=self._env_id, id=snapshot_id, snapshot_data="",
-                                                                resource_id=resource_obj.id.resource_str(), error=True,
-                                                                start=start,
-                                                                stop=datetime.datetime.now(),
-                                                                size=0, success=False,
-                                                                msg="The handler for resource "
-                                                                "%s does not support snapshots" % resource["id"])
-
-                except Exception:
-                    LOGGER.exception("Unable to find a handler for %s", resource["id"])
-                    yield self.get_client().update_snapshot(tid=self._env_id,
-                                                            id=snapshot_id, snapshot_data="",
-                                                            resource_id=resource_obj.id.resource_str(), error=False,
-                                                            start=start, stop=datetime.datetime.now(),
-                                                            size=0, success=False,
-                                                            msg="Unable to find a handler for %s" % resource["id"])
-                finally:
-                    if provider is not None:
-                        provider.close()
-
-            self._cache.close_version(version)
-            return 200
-
-    @gen.coroutine
     def get_facts(self, resource):
         with (yield self.ratelimiter.acquire()):
             yield self.process._ensure_code(self._env_id, resource["model"], [resource["resource_type"]])
@@ -976,28 +836,6 @@ class Agent(AgentEndPoint):
             os.mkdir(env_dir)
 
         return dir_map
-
-    @protocol.handle(methods.AgentRestore.do_restore, env="tid")
-    @gen.coroutine
-    def do_restore(self, env, agent, restore_id, snapshot_id, resources):
-        """
-            Restore a snapshot
-        """
-        if agent not in self._instances:
-            return 200
-
-        return (yield self._instances[agent].do_restore(restore_id, snapshot_id, resources))
-
-    @protocol.handle(methods.AgentSnapshot.do_snapshot, env="tid")
-    @gen.coroutine
-    def do_snapshot(self, env, agent, snapshot_id, resources):
-        """
-            Create a snapshot of stateful resources managed by this agent
-        """
-        if agent not in self._instances:
-            return 200
-
-        return (yield self._instances[agent].do_snapshot(snapshot_id, resources))
 
     @protocol.handle(methods.AgentParameterMethod.get_parameter, env="tid")
     @gen.coroutine

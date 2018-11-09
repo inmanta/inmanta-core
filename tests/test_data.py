@@ -432,29 +432,6 @@ def test_get_latest_resource(data_module):
 
 
 @pytest.mark.gen_test
-def test_snapshot(data_module):
-    env_id = uuid.uuid4()
-
-    snap = data.Snapshot(environment=env_id, model=1, name="a", started=datetime.datetime.now(), resources_todo=1)
-    yield snap.insert()
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    yield s.resource_updated(10)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    yield s.delete_cascade()
-    result = yield data.Snapshot.get_list()
-    assert len(result) == 0
-
-
-@pytest.mark.gen_test
 def test_resource_action(data_module):
     env_id = uuid.uuid4()
     action_id = uuid.uuid4()
