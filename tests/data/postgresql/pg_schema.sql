@@ -17,7 +17,7 @@ CREATE TABLE public.project (
 CREATE TABLE public.environment (
     _id uuid PRIMARY KEY,
     name varchar NOT NULL,
-    project uuid NOT NULL REFERENCES project(_id) ON DELETE RESTRICT,
+    project uuid NOT NULL REFERENCES project(_id) ON DELETE CASCADE,
     repo_url varchar DEFAULT '',
     repo_branch varchar DEFAULT '',
     settings JSONB DEFAULT '{}'
@@ -29,7 +29,7 @@ CREATE UNIQUE INDEX environment_name_project_index ON environment (name, project
 CREATE TABLE public.configurationmodel (
     _id uuid PRIMARY KEY,
     version integer NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     date timestamp,
     released boolean DEFAULT false,
     deployed boolean DEFAULT false,
@@ -46,7 +46,7 @@ CREATE UNIQUE INDEX configurationmodel_env_version_index ON configurationmodel (
 -- Table: public.resources
 CREATE TABLE public.resource (
     _id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     model integer NOT NULL,
     resource_id varchar NOT NULL,
     resource_version_id varchar NOT NULL,
@@ -68,7 +68,7 @@ CREATE UNIQUE INDEX resource_env_resourceversionid_index ON resource (environmen
 CREATE TABLE public.resourceaction (
     _id uuid PRIMARY KEY,
     resource_version_ids varchar[] NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     action_id uuid NOT NULL REFERENCES resource(_id) ON DELETE CASCADE,
     action resourceaction_type NOT NULL,
     started timestamp NOT NULL,
@@ -86,7 +86,7 @@ CREATE INDEX resourceaction_env_resourceversionid__started_index ON resourceacti
 -- Table: public.code
 CREATE TABLE public.code (
     _id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     resource varchar NOT NULL,
     version integer NOT NULL,
     sources JSONB,
@@ -99,7 +99,7 @@ CREATE INDEX code_env_version_resource_index ON code (environment, version, reso
 CREATE TABLE public.unknownparameter (
     _id uuid PRIMARY KEY,
     name varchar NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     source varchar NOT NULL,
     resource_id varchar DEFAULT '',
     version integer NOT NULL,
@@ -121,12 +121,12 @@ CREATE TABLE public.agentinstance (
 -- Table: public.agent
 CREATE TABLE public.agent (
     _id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     name varchar NOT NULL,
     last_failover timestamp,
     paused boolean DEFAULT false,
 -- primary is a reserved keyword in postgresql ==> hange to id_primary
-    id_primary uuid REFERENCES agentinstance(_id)
+    id_primary uuid REFERENCES agentinstance(_id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX agent_env_name_index ON agent (environment, name);
@@ -135,7 +135,7 @@ CREATE UNIQUE INDEX agent_env_name_index ON agent (environment, name);
 CREATE TABLE public.agentprocess (
     _id uuid PRIMARY KEY,
     hostname varchar NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE RESTRICT,
+    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
     first_seen timestamp,
     last_seen timestamp,
     expired timestamp,

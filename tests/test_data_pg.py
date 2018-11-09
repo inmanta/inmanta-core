@@ -1,7 +1,7 @@
 import pytest
 import asyncpg
 
-SCHEMA_FILE="pg_schema.sql"
+SCHEMA_FILE="tests/data/postgresql/pg_schema.sql"
 
 
 @pytest.fixture
