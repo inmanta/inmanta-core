@@ -9,27 +9,25 @@ CREATE type change AS ENUM('nochange', 'created', 'purged', 'updated');
 
 -- Table: public.projects
 CREATE TABLE public.project (
-    _id uuid PRIMARY KEY,
-    name varchar NOT NULL UNIQUE
+    name varchar PRIMARY KEY
 );
 
 -- Table: public.environments
 CREATE TABLE public.environment (
-    _id uuid PRIMARY KEY,
-    name varchar NOT NULL,
-    project uuid NOT NULL REFERENCES project(_id) ON DELETE CASCADE,
+    name varchar,
+    project varchar NOT NULL,
     repo_url varchar DEFAULT '',
     repo_branch varchar DEFAULT '',
-    settings JSONB DEFAULT '{}'
+    settings JSONB DEFAULT '{}',
+    PRIMARY KEY (name, project),
+    FOREIGN KEY (project) REFERENCES project (name) ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX environment_name_project_index ON environment (name, project);
 
 -- Table: public.configurationmodels
 CREATE TABLE public.configurationmodel (
-    _id uuid PRIMARY KEY,
-    version integer NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
+    version integer,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
     date timestamp,
     released boolean DEFAULT false,
     deployed boolean DEFAULT false,
@@ -38,15 +36,15 @@ CREATE TABLE public.configurationmodel (
     version_info JSONB,
     total integer DEFAULT 0,
     undeployable varchar[],
-    skipped_for_undeployable varchar[]
+    skipped_for_undeployable varchar[],
+    PRIMARY KEY (environment, version),
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX configurationmodel_env_version_index ON configurationmodel (environment, version);
 
 -- Table: public.resources
 CREATE TABLE public.resource (
-    _id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
     model integer NOT NULL,
     resource_id varchar NOT NULL,
     resource_version_id varchar NOT NULL,
@@ -57,19 +55,20 @@ CREATE TABLE public.resource (
     last_deploy timestamp,
     attributes JSONB,
     status resourcestate DEFAULT 'available',
-    provides varchar[] DEFAULT array[]::varchar[]
+    provides varchar[] DEFAULT array[]::varchar[],
+    PRIMARY KEY (environment, resource_version_id),
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE
 );
 
 CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
 CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id);
-CREATE UNIQUE INDEX resource_env_resourceversionid_index ON resource (environment, resource_version_id);
 
 -- Table: public.resourceaction
 CREATE TABLE public.resourceaction (
-    _id uuid PRIMARY KEY,
     resource_version_ids varchar[] NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
-    action_id uuid NOT NULL REFERENCES resource(_id) ON DELETE CASCADE,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
+    action_id uuid NOT NULL,
     action resourceaction_type NOT NULL,
     started timestamp NOT NULL,
     finished timestamp,
@@ -77,42 +76,60 @@ CREATE TABLE public.resourceaction (
     status resourcestate,
     changes JSONB[],
     change change,
-    send_event boolean
+    send_event boolean,
+    PRIMARY KEY (environment, action_id),
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX resourceaction_env_resourceversionid_index ON resourceaction (environment, action_id);
 CREATE INDEX resourceaction_env_resourceversionid__started_index ON resourceaction (environment, resource_version_ids, started DESC);
 
 -- Table: public.code
 CREATE TABLE public.code (
-    _id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
+    id uuid PRIMARY KEY,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
     resource varchar NOT NULL,
     version integer NOT NULL,
     sources JSONB,
-    source_refs JSONB
+    source_refs JSONB,
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE
 );
 
 CREATE INDEX code_env_version_resource_index ON code (environment, version, resource);
 
 -- Table: public.unknownparameter
 CREATE TABLE public.unknownparameter (
-    _id uuid PRIMARY KEY,
+    id uuid PRIMARY KEY,
     name varchar NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
     source varchar NOT NULL,
     resource_id varchar DEFAULT '',
     version integer NOT NULL,
     metadata JSONB,
-    resolved boolean DEFAULT false
+    resolved boolean DEFAULT false,
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE
 );
 
-CREATE INDEX unknownparameter_env_version_index ON code (environment, version);
+CREATE INDEX unknownparameter_env_version_index ON unknownparameter (environment, version);
+
+-- Table: public.agentprocess
+CREATE TABLE public.agentprocess (
+    id uuid PRIMARY KEY,
+    hostname varchar NOT NULL,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
+    first_seen timestamp,
+    last_seen timestamp,
+    expired timestamp,
+    sid uuid NOT NULL,
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE
+);
 
 -- Table: public.agentinstance
 CREATE TABLE public.agentinstance (
-    _id uuid PRIMARY KEY,
-    process uuid NOT NULL,
+    id uuid PRIMARY KEY,
+    process uuid NOT NULL REFERENCES agentprocess (id),
     name varchar NOT NULL,
     expired timestamp,
     tid uuid NOT NULL
@@ -120,24 +137,14 @@ CREATE TABLE public.agentinstance (
 
 -- Table: public.agent
 CREATE TABLE public.agent (
-    _id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
+    environment varchar NOT NULL,
+    project varchar NOT NULL,
     name varchar NOT NULL,
     last_failover timestamp,
     paused boolean DEFAULT false,
 -- primary is a reserved keyword in postgresql ==> hange to id_primary
-    id_primary uuid REFERENCES agentinstance(_id) ON DELETE CASCADE
-);
-
-CREATE UNIQUE INDEX agent_env_name_index ON agent (environment, name);
-
--- Table: public.agentprocess
-CREATE TABLE public.agentprocess (
-    _id uuid PRIMARY KEY,
-    hostname varchar NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(_id) ON DELETE CASCADE,
-    first_seen timestamp,
-    last_seen timestamp,
-    expired timestamp,
-    sid uuid NOT NULL
+    id_primary uuid,
+    PRIMARY KEY (environment, name),
+    FOREIGN KEY (environment, project) REFERENCES environment (name, project) ON DELETE CASCADE,
+    FOREIGN KEY (id_primary) REFERENCES agentinstance (id) ON DELETE CASCADE
 );
