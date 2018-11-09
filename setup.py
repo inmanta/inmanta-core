@@ -16,7 +16,8 @@ requires = [
         'virtualenv',
         'typing',
         'PyJWT',
-        'cryptography'
+        'cryptography',
+        'asyncpg'
     ]
 
 setup(
