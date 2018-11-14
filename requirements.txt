@@ -15,7 +15,7 @@ pytest==3.10.0
 python-dateutil==2.7.5
 pyyaml==3.13
 six==1.11.0
-sphinx-argparse==0.2.3
+sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.4.2
 sphinx==1.8.1
