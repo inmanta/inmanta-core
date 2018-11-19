@@ -23,7 +23,7 @@ import sys
 import time
 import socket
 
-from inmanta import module, config, protocol, const, data, mongoproc
+from inmanta import module, config, protocol, const, data_pg as data, mongoproc
 
 
 LOGGER = logging.getLogger(__name__)

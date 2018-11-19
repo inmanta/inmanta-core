@@ -20,7 +20,7 @@ from functools import wraps
 import uuid
 import datetime
 
-from inmanta import data
+from inmanta import data_pg as data
 from inmanta import const
 from tornado import gen
 

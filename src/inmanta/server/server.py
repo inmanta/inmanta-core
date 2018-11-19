@@ -37,7 +37,7 @@ from tornado import locks
 from tornado import process
 
 from inmanta import const
-from inmanta import data, config
+from inmanta import data_pg as data, config
 from inmanta import methods
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
@@ -77,7 +77,7 @@ class Server(protocol.ServerSlice):
         data.connect(database_host, database_port, opt.db_name.get(), self._io_loop)
         LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
-        self._io_loop.add_callback(data.create_indexes)
+        self._io_loop.add_callback(data.load_schema)
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
