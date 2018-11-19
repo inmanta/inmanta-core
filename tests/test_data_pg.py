@@ -5,7 +5,6 @@ import uuid
 import time
 import logging
 from inmanta import data_pg as data, const
-from inmanta.data import BaseDocument
 
 SCHEMA_FILE="misc/postgresql/pg_schema.sql"
 
@@ -298,29 +297,6 @@ async def test_get_latest_resource(init_dataclasses):
 
     res = await data.Resource.get_latest_version(env.id, key)
     assert res.model == 2
-
-
-# @pytest.mark.asyncio
-# async def test_snapshot(init_dataclasses):
-#     env_id = uuid.uuid4()
-#
-#     snap = data.Snapshot(environment=env_id, model=1, name="a", started=datetime.datetime.now(), resources_todo=1)
-#     await snap.insert()
-#
-#     s = await data.Snapshot.get_by_id(snap.id)
-#     await s.resource_updated(10)
-#     assert s.resources_todo == 0
-#     assert s.total_size == 10
-#     assert s.finished is not None
-#
-#     s = await data.Snapshot.get_by_id(snap.id)
-#     assert s.resources_todo == 0
-#     assert s.total_size == 10
-#     assert s.finished is not None
-#
-#     await s.delete_cascade()
-#     result = await data.Snapshot.get_list()
-#     assert len(result) == 0
 
 
 @pytest.mark.asyncio

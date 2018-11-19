@@ -25,9 +25,6 @@ import uuid
 import json
 import re
 
-from psycopg2 import sql
-import aiopg
-
 from tornado import gen
 
 from inmanta import const
@@ -1779,6 +1776,5 @@ def set_connection(connection):
 @gen.coroutine
 def connect(host, port, database, io_loop):
     # TODO: Set username and password via /etc/inmanta.cfg
-    # connection = yield asyncpg.connect(user="postgres", password=None, database=database, host=host, port=port)
-    connection = yield from aiopg.connect(database=database, user='postgres', password=None, host=host)
+    connection = yield asyncpg.connect(user="postgres", password=None, database=database, host=host, port=port)
     set_connection(connection)
