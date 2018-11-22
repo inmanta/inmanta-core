@@ -234,9 +234,11 @@ def test_project_unique(data_module):
     with pytest.raises(pymongo.errors.DuplicateKeyError):
         yield project.insert()
 
+
 def test_project_no_project_name(data_module):
     with pytest.raises(AttributeError):
         data.Project()
+
 
 @pytest.mark.gen_test
 def test_environment(data_module):
@@ -261,6 +263,7 @@ def test_environment_no_environment_name(data_module):
     yield project.insert()
     with pytest.raises(AttributeError):
         data.Environment(project=project.id, repo_url="", repo_branch="")
+
 
 @pytest.mark.gen_test
 def test_environment_no_project_id(data_module):
@@ -310,8 +313,8 @@ def test_environment_cascade_content_only(data_module):
     code = data.Code(version=version, resource="std::File", environment=env.id)
     yield code.insert()
 
-    unknownParameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
-    yield unknownParameter.insert()
+    unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+    yield unknown_parameter.insert()
 
     yield env.set(data.AUTO_DEPLOY, True)
 
@@ -324,10 +327,10 @@ def test_environment_cascade_content_only(data_module):
     for current_id in resource_ids:
         assert (yield data.Resource.get_by_id(current_id)) is not None
     assert (yield data.Code.get_by_id(code.id)) is not None
-    assert (yield data.UnknownParameter.get_by_id(unknownParameter.id)) is not None
+    assert (yield data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (yield env.get(data.AUTO_DEPLOY)) is True
 
-    yield  env.delete_cascade(only_content=True)
+    yield env.delete_cascade(only_content=True)
 
     assert (yield data.Project.get_by_id(project.id)) is not None
     assert (yield data.Environment.get_by_id(env.id)) is not None
@@ -338,8 +341,9 @@ def test_environment_cascade_content_only(data_module):
     for current_id in resource_ids:
         assert (yield data.Resource.get_by_id(current_id)) is None
     assert (yield data.Code.get_by_id(code.id)) is None
-    assert (yield data.UnknownParameter.get_by_id(unknownParameter.id)) is None
+    assert (yield data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
     assert (yield env.get(data.AUTO_DEPLOY)) is True
+
 
 @pytest.mark.gen_test
 def test_environment_set_setting_parameter(data_module):
@@ -361,6 +365,7 @@ def test_environment_set_setting_parameter(data_module):
         yield env.get("get_non_existing_parameter")
     with pytest.raises(AttributeError):
         yield env.set(data.AUTO_DEPLOY, 5)
+
 
 @pytest.mark.gen_test
 def test_agent_process(data_module):
@@ -482,7 +487,8 @@ def test_agent(data_module):
     agi1 = data.AgentInstance(process=agent_proc.id, name=agi1_name, tid=env.id)
     yield agi1.insert()
 
-    agent1 = data.Agent(environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
+    agent1 = data.Agent(environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False,
+                        primary=agi1.id)
     yield agent1.insert()
     agent2 = data.Agent(environment=env.id, name="agi1_agent2", paused=False)
     yield agent2.insert()
@@ -504,7 +510,7 @@ def test_agent(data_module):
     assert agent3.get_status() == "paused"
 
     for agent in [agent1, agent2, agent3]:
-        agent.to_dict()["state"] == agent.get_status()
+        assert agent.to_dict()["state"] == agent.get_status()
 
     yield agent1.update_fields(paused=True)
     assert agent1.get_status() == "paused"
@@ -655,15 +661,15 @@ def test_model_delete_cascade(data_module):
     code = data.Code(version=version, resource="std::File", environment=env.id)
     yield code.insert()
 
-    unknownParameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
-    yield unknownParameter.insert()
+    unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+    yield unknown_parameter.insert()
 
     yield cm.delete_cascade()
 
     assert (yield data.ConfigurationModel.get_by_id(cm.id)) is None
     assert (yield data.Resource.get_by_id(resource.id)) is None
     assert (yield data.Code.get_by_id(code.id)) is None
-    assert (yield data.UnknownParameter.get_by_id(unknownParameter.id)) is None
+    assert (yield data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
 @pytest.mark.gen_test
@@ -683,19 +689,19 @@ def test_undeployable_cache_lazy(data_module):
     assert cm1.undeployable is None
 
     undep = yield cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
 
     assert cm1.undeployable is not None
 
     undep = yield cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
 
     cm1 = yield data.ConfigurationModel.get_version(env.id, version)
 
     assert cm1.undeployable is not None
 
     undep = yield cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
 
 
 @pytest.mark.gen_test
@@ -719,19 +725,19 @@ def test_undeployable_skip_cache_lazy(data_module):
     assert cm1.skipped_for_undeployable is None
 
     undep = yield cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
 
     assert cm1.skipped_for_undeployable is not None
 
     undep = yield cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
 
     cm1 = yield data.ConfigurationModel.get_version(env.id, version)
 
     assert cm1.skipped_for_undeployable is not None
 
     undep = yield cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
 
 
 @gen.coroutine
@@ -1217,6 +1223,7 @@ def test_resource_action(data_module):
     assert ra.changes["rid"]["field2"]["new"] == "d"
     assert ra.changes["rid"]["field3"] == {}
 
+
 @pytest.mark.gen_test
 def test_resource_action_get_logs(data_module):
     project = data.Project(name="test")
@@ -1252,11 +1259,10 @@ def test_resource_action_get_logs(data_module):
     assert len(resource_actions) == 1
     assert resource_actions[0].action == const.ResourceAction.dryrun
     assert sorted(resource_actions[0].messages) == sorted(["log", "message"])
-    resource_actions= yield data.ResourceAction.get_log(env.id, uuid.UUID(int=1), const.ResourceAction.deploy.name, limit=2)
+    resource_actions = yield data.ResourceAction.get_log(env.id, uuid.UUID(int=1), const.ResourceAction.deploy.name, limit=2)
     assert len(resource_actions) == 2
     assert resource_actions[0].messages == ["test10"]
     assert resource_actions[1].messages == ["test9"]
-
 
 
 @pytest.mark.gen_test
