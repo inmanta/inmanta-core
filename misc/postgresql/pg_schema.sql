@@ -61,7 +61,7 @@ CREATE UNIQUE INDEX configurationmodel_env_version_index ON configurationmodel (
 -- Table: public.resources
 CREATE TABLE IF NOT EXISTS public.resource (
     id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
+    environment uuid NOT NULL,
     model integer NOT NULL,
     resource_id varchar NOT NULL,
     resource_version_id varchar NOT NULL,
@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS public.resource (
     last_deploy timestamp,
     attributes JSONB,
     status resourcestate DEFAULT 'available',
-    provides varchar[] DEFAULT array[]::varchar[]
+    provides varchar[] DEFAULT array[]::varchar[],
+    FOREIGN KEY (environment, model) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
 CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
@@ -90,7 +91,7 @@ CREATE TABLE IF NOT EXISTS public.resourceaction (
     finished timestamp,
     messages JSONB[],
     status resourcestate,
-    changes JSONB,
+    changes JSONB DEFAULT '{}'::jsonb,
     change change,
     send_event boolean
 );
@@ -101,11 +102,12 @@ CREATE INDEX resourceaction_env_resourceversionid__started_index ON resourceacti
 -- Table: public.code
 CREATE TABLE IF NOT EXISTS public.code (
     id uuid PRIMARY KEY,
-    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
+    environment uuid NOT NULL,
     resource varchar NOT NULL,
     version integer NOT NULL,
     sources JSONB,
-    source_refs JSONB
+    source_refs JSONB,
+    FOREIGN KEY (environment, version) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
 CREATE INDEX code_env_version_resource_index ON code (environment, version, resource);
@@ -114,12 +116,13 @@ CREATE INDEX code_env_version_resource_index ON code (environment, version, reso
 CREATE TABLE IF NOT EXISTS public.unknownparameter (
     id uuid PRIMARY KEY,
     name varchar NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
+    environment uuid NOT NULL,
     source varchar NOT NULL,
     resource_id varchar DEFAULT '',
     version integer NOT NULL,
     metadata JSONB,
-    resolved boolean DEFAULT false
+    resolved boolean DEFAULT false,
+    FOREIGN KEY (environment, version) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
 CREATE INDEX unknownparameter_env_version_index ON code (environment, version);
@@ -139,7 +142,7 @@ CREATE TABLE IF NOT EXISTS public.agentprocess (
 -- Table: public.agentinstance
 CREATE TABLE IF NOT EXISTS public.agentinstance (
     id uuid PRIMARY KEY,
-    process uuid NOT NULL REFERENCES agentprocess (id),
+    process uuid NOT NULL REFERENCES agentprocess (id) ON DELETE CASCADE,
     name varchar NOT NULL,
     expired timestamp,
     tid uuid NOT NULL

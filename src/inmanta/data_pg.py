@@ -20,17 +20,16 @@ from configparser import RawConfigParser
 import copy
 import datetime
 import enum
-import logging
 import uuid
 import json
 import re
+import logging
 
 from tornado import gen
 
 from inmanta import const
 from inmanta.resources import Id
 import asyncpg
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,11 +41,10 @@ DBLIMIT = 100000
 
 class Field(object):
 
-    def __init__(self, field_type, required=False, unique=False, primary_key=False, **kwargs):
+    def __init__(self, field_type, required=False, unique=False, **kwargs):
 
         self._field_type = field_type
         self._required = required
-        self._is_primary_key = primary_key
 
         if "default" in kwargs:
             self._default = True
@@ -81,9 +79,6 @@ class Field(object):
         return self._unique
 
     unique = property(is_unique)
-
-    def is_primary_key(self):
-        return self._is_primary_key
 
 
 class DataDocument(object):
@@ -127,7 +122,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    id = Field(field_type=uuid.UUID, required=True, primary_key=True)
+    id = Field(field_type=uuid.UUID, required=True)
 
     _connection = None
 
@@ -139,14 +134,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return cls.__name__.lower()
 
     def __init__(self, from_postgres=False, **kwargs):
-        self.__fields = self._create_dict(from_postgres, kwargs)
+        self.__fields = self._create_dict_wrapper(from_postgres, kwargs)
 
     @classmethod
     def _create_dict(cls, from_postgres, kwargs):
         result = {}
-        # if from_postgres:
-            # kwargs = BaseDocument._decode_dict(kwargs)
-        # else:
         if not from_postgres:
             if "id" in kwargs:
                 raise AttributeError("The id attribute is generated per collection by the document class.")
@@ -170,7 +162,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                     value = fields[name].field_type[value]
                 else:
                     raise TypeError("Field %s should have the correct type (%s instead of %s)" %
-                                   (name, fields[name].field_type.__name__, type(value).__name__))
+                                    (name, fields[name].field_type.__name__, type(value).__name__))
 
             if value is not None:
                 result[name] = value
@@ -194,12 +186,15 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return result
 
     @classmethod
+    def _create_dict_wrapper(cls, from_postgres, kwargs):
+        return cls._create_dict(from_postgres, kwargs)
+
+    @classmethod
     def _new_id(cls):
         """
             Generate a new ID. Override to use something else than uuid4
         """
         return uuid.uuid4()
-
 
     @classmethod
     def set_connection(cls, connection):
@@ -260,7 +255,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-
     @gen.coroutine
     def insert(self):
         """
@@ -289,14 +283,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
             raise e
         yield tr.commit()
 
-    @classmethod
-    def _get_set_expression(cls, **kwargs):
-        filter_statements = []
-        for key, value in kwargs.items():
-            statement = cls._get_filter(key, value)
-            filter_statements.append(statement)
-        return ','.join(filter_statements)
-
     def add_default_values_when_undefined(self, **kwargs):
         result = dict(kwargs)
         for name, field in self._fields.items():
@@ -304,7 +290,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 default_value = field.default_value
                 result[name] = default_value
         return result
-
 
     @gen.coroutine
     def update(self, **kwargs):
@@ -315,6 +300,18 @@ class BaseDocument(object, metaclass=DocumentMeta):
         kwargs = self.add_default_values_when_undefined(**kwargs)
         self.update_fields(**kwargs)
 
+    def _get_set_statement(self, **kwargs):
+        counter = 1
+        parts_of_set_statement = []
+        values = []
+        for name, value in kwargs.items():
+            setattr(self, name, value)
+            parts_of_set_statement.append(name + "=$" + str(counter))
+            values.append(self._get_value(value))
+            counter += 1
+        set_statement = ','.join(parts_of_set_statement)
+        return (set_statement, values)
+
     @gen.coroutine
     def update_fields(self, **kwargs):
         """
@@ -324,19 +321,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
         if len(kwargs) == 0:
             return
 
-        counter = 1
-        parts_of_set_expression = []
-        values = []
-        for name, value in kwargs.items():
-            setattr(self, name, value)
-            parts_of_set_expression.append(name + "=$" + str(counter))
-            values.append(self._get_value(value))
-            counter += 1
-        set_expression = ','.join(parts_of_set_expression)
-        (filter_statement, values_for_filter) = self._get_filter_on_primary_key(offset=len(kwargs) + 1)
-        values = values + values_for_filter
-        query = "UPDATE " + self.table_name() + " SET " + set_expression + \
-                                                " WHERE " + filter_statement
+        (set_statement, values_set_statement) = self._get_set_statement(**kwargs)
+        (filter_statement, values_for_filter) = self._get_composed_filter(id=self.id, offset=len(kwargs) + 1)
+        values = values_set_statement + values_for_filter
+        query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
         yield self._connection.execute(query, *values)
 
     @classmethod
@@ -390,39 +378,43 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return record_count
 
     @classmethod
-    def _get_composed_filter(cls, **query):
+    def _get_composed_filter(cls, offset=1, **query):
         filter_statements = []
         values = []
-        index_count = 1
+        index_count = max(1, offset)
         for key, value in query.items():
             (filter_statement, value) = cls._get_filter(key, value, index_count)
             filter_statements.append(filter_statement)
-            values.append(value)
-            index_count += 1
+            if value is not None:
+                values.append(value)
+                index_count += 1
         filter_as_string = ' AND '.join(filter_statements)
         return (filter_as_string, values)
 
-
     @classmethod
     def _get_filter(cls, name, value, index):
-        if value is None or isinstance(value, bool):
-            filter_statement = name + " IS $" + str(index)
-        else:
-            filter_statement = name + "=$" + str(index)
+        if value is None:
+            return (name + " IS NULL", None)
+        filter_statement = name + "=$" + str(index)
         value = cls._get_value(value)
         return (filter_statement, value)
-
 
     @classmethod
     def _get_value(cls, value):
         if isinstance(value, dict):
             return json.dumps(cls._get_value_of_dict(value))
+
         if isinstance(value, DataDocument) or issubclass(value.__class__, DataDocument):
             return json.dumps(cls._get_value_of_dict(value.to_dict()))
+
         if isinstance(value, list):
             return [cls._get_value(x) for x in value]
+
         if isinstance(value, enum.Enum):
             return value.name
+
+        if isinstance(value, uuid.UUID):
+            return str(value)
         return value
 
     @classmethod
@@ -431,31 +423,18 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for key, value in dct.items():
             if isinstance(value, datetime.datetime):
                 result[key] = value.strftime("%Y-%m-%d %H:%M:%S.%f")
+            elif isinstance(value, dict):
+                result[key] = cls._get_value_of_dict(value)
             else:
                 result[key] = cls._get_value(value)
         return result
-
-    def _get_filter_on_primary_key(self, offset=1):
-        filter_statements=[]
-        values = []
-        for name, typing in self._fields.items():
-            if typing.is_primary_key():
-                if name not in self.__fields:
-                    raise Exception("Primary key field " + name + " is not set")
-                value = self.__fields[name]
-                (filter_statement, value) = self._get_filter(name, value, offset)
-                filter_statements.append(filter_statement)
-                values.append(value)
-                offset += 1
-        filter_as_string = ' AND '.join(filter_statements)
-        return (filter_as_string, values)
 
     @gen.coroutine
     def delete(self):
         """
             Delete this document
         """
-        (filter_as_string, values) = self._get_filter_on_primary_key()
+        (filter_as_string, values) = self._get_composed_filter(id=self.id)
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         yield self._connection.execute(query, *values)
 
@@ -474,6 +453,33 @@ class BaseDocument(object, metaclass=DocumentMeta):
             objects.append(cls(from_postgres=True, **result))
         return objects
 
+    def _to_dict(self, mongo_pk=False):
+        """
+            Return a dict representing the document
+        """
+        result = {}
+        for name, typing in self._fields.items():
+            value = None
+            if name in self.__fields:
+                value = self.__fields[name]
+
+            if typing.required and value is None:
+                raise TypeError("%s should have field '%s'" % (self.__name__, name))
+
+            if value is not None:
+                if not isinstance(value, typing.field_type):
+                    raise TypeError("Value of field %s does not have the correct type" % name)
+
+                result[name] = self._get_value(value)
+
+            elif typing.default:
+                result[name] = self._get_value(typing.default_value)
+
+        return result
+
+    def to_dict(self):
+        return self._to_dict()
+
 
 class Project(BaseDocument):
     """
@@ -481,9 +487,7 @@ class Project(BaseDocument):
 
         :param name The name of the configuration project.
     """
-    name = Field(field_type=str, required=True, unique=True, primary_key=True)
-
-
+    name = Field(field_type=str, required=True, unique=True)
 
     @gen.coroutine
     def delete_cascade(self):
@@ -579,8 +583,8 @@ class Environment(BaseDocument):
         :param repo_url The repository branch that contains the configuration model code for this environment
         :param settings Key/value settings for this environment
     """
-    name = Field(field_type=str, required=True, primary_key=True)
-    project = Field(field_type=uuid.UUID, required=True, primary_key=True)
+    name = Field(field_type=str, required=True)
+    project = Field(field_type=uuid.UUID, required=True)
     repo_url = Field(field_type=str, default="")
     repo_branch = Field(field_type=str, default="")
     settings = Field(field_type=dict, default={})
@@ -636,14 +640,15 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
+        # TODO: convert this to a string
         if callable(self._settings[key].validator):
             value = self._settings[key].validator(value)
 
-        (filter_statement, values) = self._get_filter_on_primary_key(offset=2)
+        (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=3)
         query = "UPDATE " + self.table_name() + \
-                " SET settings=jsonb_set(settings, '{$1}', $2, TRUE)" + \
+                " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::boolean), TRUE)" + \
                 " WHERE " + filter_statement
-        values = [self._get_value(key), self._get_value(value)] + values
+        values = [self._get_value([key]), self._get_value(value)] + values
         yield self._connection.execute(query, *values)
         self.settings[key] = value
 
@@ -658,7 +663,7 @@ class Environment(BaseDocument):
             raise KeyError()
 
         if self._settings[key].default is None:
-            (filter_statement, values) = self._get_filter_on_primary_key(offset=2)
+            (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=2)
             query = "UPDATE " + self.table_name() + \
                     " SET settings=settings - $1" + \
                     " WHERE " + filter_statement
@@ -790,7 +795,7 @@ class AgentProcess(BaseDocument):
     @classmethod
     @gen.coroutine
     def get_by_sid(cls, sid):
-        objects = cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
+        objects = yield cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
 
         if len(objects) == 0:
             return None
@@ -842,8 +847,8 @@ class Agent(BaseDocument):
         :param paused is this agent paused (if so, skip it)
         :param primary what is the current active instance (if none, state is down)
     """
-    environment = Field(field_type=uuid.UUID, required=True, primary_key=True)
-    name = Field(field_type=str, required=True, primary_key=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    name = Field(field_type=str, required=True)
     last_failover = Field(field_type=datetime.datetime)
     paused = Field(field_type=bool, default=False)
     id_primary = Field(field_type=uuid.UUID)  # AgentInstance
@@ -851,7 +856,7 @@ class Agent(BaseDocument):
     def get_status(self):
         if self.paused:
             return "paused"
-        if self.primary is not None:
+        if self.id_primary is not None:
             return "up"
         return "down"
 
@@ -860,7 +865,7 @@ class Agent(BaseDocument):
         if self.last_failover is None:
             base["last_failover"] = ""
 
-        if self.primary is None:
+        if self.id_primary is None:
             base["primary"] = ""
 
         base["state"] = self.get_status()
@@ -1017,6 +1022,7 @@ class LogLine(DataDocument):
         log_line = msg % kwargs
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
+
 class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
@@ -1035,9 +1041,9 @@ class ResourceAction(BaseDocument):
         :param change The change result of an action
     """
     resource_version_ids = Field(field_type=list, required=True)
-    environment = Field(field_type=uuid.UUID, required=True, primary_key=True)
+    environment = Field(field_type=uuid.UUID, required=True)
 
-    action_id = Field(field_type=uuid.UUID, required=True, primary_key=True)
+    action_id = Field(field_type=uuid.UUID, required=True)
     action = Field(field_type=const.ResourceAction, required=True)
 
     started = Field(field_type=datetime.datetime, required=True)
@@ -1054,18 +1060,33 @@ class ResourceAction(BaseDocument):
         self._updates = {}
 
     @classmethod
+    def _create_dict_wrapper(cls, from_postgres, kwargs):
+        result = cls._create_dict(from_postgres, kwargs)
+        new_messages = []
+        if from_postgres and "messages" in result:
+            for message in result["messages"]:
+                message = json.loads(message)
+                if "timestamp" in message:
+                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
+                new_messages.append(message)
+            result["messages"] = new_messages
+        return result
+
+    @classmethod
     @gen.coroutine
     def get_log(cls, environment, resource_version_id, action=None, limit=0):
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
         query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
-                " AND $2 IN (resource_version_ids)"
-        values.append(cls._get_value(resource_version_id))
+                " AND resource_version_ids @> $2"
+        values.append(cls._get_value([resource_version_id]))
         if action is not None:
             query += " AND action=$3"
             values.append(cls._get_value(action))
+        query += " ORDER BY started DESC"
         if limit is not None and limit > 0:
-            query += " ORDER BY started DESC"
-        log = cls.select_query(query, *values)
+            query += " LIMIT $" + str(len(values) + 1)
+            values.append(cls._get_value(limit))
+        log = yield cls.select_query(query, values)
         return log
 
     @classmethod
@@ -1075,38 +1096,61 @@ class ResourceAction(BaseDocument):
         return resource
 
     def set_field(self, name, value):
-        self._updates[name] = name + "=" + self._get_value(value)
+        self._updates[name] = value
 
     def add_logs(self, messages):
+        if "messages" not in self._updates:
+            self._updates["messages"] = []
+        self._updates["messages"] += messages
+
+    def add_changes(self, changes):
+        if "changes" not in self._updates:
+            self._updates["changes"] = {}
+        for resource, values in changes.items():
+            for field, change in values.items():
+                if resource not in self._updates["changes"]:
+                    self._updates["changes"][resource] = {}
+                self._updates["changes"][resource][field] = change
+
+    def _get_set_statement_for_messages(self, messages, offset):
         set_statement = ""
+        values = []
         for message in messages:
             if set_statement == "":
                 jsonb_to_update = "messages"
             else:
                 jsonb_to_update = set_statement
-            set_statement = "array_append(" + jsonb_to_update + ", " + self._get_value(message) + ")"
+            set_statement = "array_append(" + jsonb_to_update + ", $" + str(offset) + ")"
+            values.append(self._get_value(message))
+            offset += 1
         set_statement = "messages=" + set_statement
-        self._updates["messages"] = set_statement
+        return (set_statement, values)
 
-    # TODO: FIX
-    def add_changes(self, changes):
+    def _get_set_statement_for_changes(self, changes, offset):
         set_statement = ""
-        for resource, values in changes.items():
-            for field, change in values.items():
-                value_to_set = self._get_value(change)
+        values = []
+        for resource, field_to_change_dict in changes.items():
+            for field, change in field_to_change_dict.items():
                 if set_statement == "":
-                    jsonb_to_update = "changes" if self.changes is not None else "jsonb_build_object()"
+                    jsonb_to_update = "changes"  # if self.changes is not None else "jsonb_build_object()"
                 else:
                     jsonb_to_update = set_statement
+                dollarmark_resource = "$" + str(offset)
+                dollarmark_resource_and_field = "$" + str(offset + 1)
+                dollarmark_change = "$" + str(offset + 2)
                 set_statement = "jsonb_set(" + \
                                 "CASE" + \
-                                    " WHEN " + jsonb_to_update + " ? '" + resource + "'" + \
-                                    " THEN " + jsonb_to_update + \
-                                    " ELSE jsonb_build_object('" + resource + "', jsonb_build_object())" + \
+                                " WHEN " + jsonb_to_update + " ? " + dollarmark_resource + "::text" +  \
+                                " THEN " + jsonb_to_update + \
+                                " ELSE jsonb_build_object(" + dollarmark_resource + ", jsonb_build_object())" + \
                                 " END," + \
-                                "'{" + resource + "," + field + "}'::text[], " + value_to_set + ", TRUE)"
+                                dollarmark_resource_and_field + ", " + dollarmark_change + ", TRUE)"
+                values = values + [self._get_value(resource),
+                                   self._get_value([resource, field]),
+                                   self._get_value(change)]
+                offset += 3
         set_statement = "changes=" + set_statement
-        self._updates["changes.%s.%s" % (resource, field)] = set_statement
+        return (set_statement, values)
 
     @gen.coroutine
     def save(self):
@@ -1116,12 +1160,34 @@ class ResourceAction(BaseDocument):
         if len(self._updates) == 0:
             return
 
-        (filter_statement, values) = self._get_filter_on_primary_key()
+        (set_statement, values_set_statement) = self._get_set_statement_for_updates()
+        (filter_statement, values_of_filter) = self._get_composed_filter(resource_version_ids=self.resource_version_ids,
+                                                                         environment=self.environment,
+                                                                         action_id=self.action_id,
+                                                                         offset=len(values_set_statement) + 1)
+        values = values_set_statement + values_of_filter
         query = "UPDATE " + self.table_name() + \
-                " SET " + ', '.join(self._updates.values()) + \
+                " SET " + set_statement + \
                 " WHERE " + filter_statement
         yield self._connection.execute(query, *values)
         self._updates = {}
+
+    def _get_set_statement_for_updates(self):
+        parts_set_statement = []
+        values = []
+        for key, update in self._updates.items():
+            offset = len(values) + 1
+            if key == "messages":
+                (new_statement, new_values) = self._get_set_statement_for_messages(update, offset=offset)
+            elif key == "changes":
+                (new_statement, new_values) = self._get_set_statement_for_changes(update, offset=offset)
+            else:
+                new_statement = key + "=$" + str(offset)
+                new_values = [self._get_value(update)]
+            values += new_values
+            parts_set_statement.append(new_statement)
+        set_statement = ','.join(parts_set_statement)
+        return (set_statement, values)
 
 
 class Resource(BaseDocument):
@@ -1134,12 +1200,12 @@ class Resource(BaseDocument):
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
     """
-    environment = Field(field_type=uuid.UUID, required=True, primary_key=True)
+    environment = Field(field_type=uuid.UUID, required=True)
     model = Field(field_type=int, required=True)
 
     # ID related
     resource_id = Field(field_type=str, required=True)
-    resource_version_id = Field(field_type=str, required=True, primary_key=True)
+    resource_version_id = Field(field_type=str, required=True)
 
     resource_type = Field(field_type=str, required=True)
     agent = Field(field_type=str, required=True)
@@ -1158,14 +1224,15 @@ class Resource(BaseDocument):
     # the list contains full rv id's
     provides = Field(field_type=list, default=[])  # List of resource versions
 
-
     @classmethod
     @gen.coroutine
     def get_resources(cls, environment, resource_version_ids):
         """
             Get all resources listed in resource_version_ids
         """
-        resource_version_ids_statement = ', '.join(["$" + str(i) for i in range(2, len(resource_version_ids)+2)])
+        if resource_version_ids == []:
+            return []
+        resource_version_ids_statement = ', '.join(["$" + str(i) for i in range(2, len(resource_version_ids) + 2)])
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
         values = values + cls._get_value(resource_version_ids)
         query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
@@ -1186,7 +1253,7 @@ class Resource(BaseDocument):
             Returns a list of resources with an undeployable state
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        undeployable_states = ', '.join(['$' + str(i+3) for i in range(len(const.UNDEPLOYABLE_STATES))])
+        undeployable_states = ', '.join(['$' + str(i + 3) for i in range(len(const.UNDEPLOYABLE_STATES))])
         values = values + [cls._get_value(s) for s in const.UNDEPLOYABLE_STATES]
         query = "SELECT * FROM " + cls.table_name() + \
                 " WHERE " + filter_statement + " AND status IN (" + undeployable_states + ")"
@@ -1225,22 +1292,22 @@ class Resource(BaseDocument):
                 }
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        resources = yield cls._connection.execute("SELECT DISTINCT resource_id "
-                                                  "FROM " + cls.table_name() + " "
-                                                  "WHERE " + filter_statement, *values)
+        resources = yield cls._connection.fetch("SELECT DISTINCT resource_id "
+                                                "FROM " + cls.table_name() + " "
+                                                "WHERE " + filter_statement, *values)
         resources = [x["resource_id"] for x in resources]
         result = []
         for res in resources:
-            latest = yield cls.get_list(order_by_column="version", order="DESC", limit=1,
-                                        environment=environment, resource_id=res, no_obj=True)[0]
-            if latest["status"] != const.ResourceState.available.name:
+            latest = (yield cls.get_list(order_by_column="model", order="DESC", limit=1,
+                                         environment=environment, resource_id=res, no_obj=True))[0]
+            if latest["status"] == const.ResourceState.available.name:
                 (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=res)
                 query = "SELECT * FROM " + cls.table_name() + \
                         " WHERE " + filter_statement + \
-                        " AND status != $" + str(len(values)+1) + \
-                        " ORDER BY version DESC LIMIT 1"
+                        " AND status != $" + str(len(values) + 1) + \
+                        " ORDER BY model DESC LIMIT 1"
                 values.append(cls._get_value(const.ResourceState.available))
-                deployed = yield cls._connection.fetch(query, *values)[0]
+                deployed = (yield cls._connection.fetch(query, *values))[0]
             else:
                 deployed = latest
 
@@ -1294,7 +1361,7 @@ class Resource(BaseDocument):
         """
             Get a resource with the given resource version id
         """
-        value = cls.get_one(environment=environment, resource_version_id=resource_version_id)
+        value = yield cls.get_one(environment=environment, resource_version_id=resource_version_id)
         return value
 
     @classmethod
@@ -1410,8 +1477,8 @@ class ConfigurationModel(BaseDocument):
         :param version_info: Version metadata
         :param total: The total number of resources
     """
-    version = Field(field_type=int, required=True, primary_key=True)
-    environment = Field(field_type=uuid.UUID, required=True, primary_key=True)
+    version = Field(field_type=int, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
     date = Field(field_type=datetime.datetime)
 
     released = Field(field_type=bool, default=False)
@@ -1485,13 +1552,13 @@ class ConfigurationModel(BaseDocument):
             Mark a resource as deployed in the configuration model status
         """
         entry_uuid = uuid.uuid5(resource_uuid, resource_id)
-        value_entry = {"status": cls._value_to_dict(status), "id": resource_id}
+        value_entry = {"status": cls._get_value(status), "id": resource_id}
 
-        (filter_statement, values) = cls._get_filter_on_primary_key(offset=3)
+        (filter_statement, values) = cls._get_composed_filter(version=version, environment=environment, offset=3)
         query = "UPDATE " + cls.table_name() + \
-                " SET status=jsonb_set(status, '{$1}', $2, TRUE)" \
+                " SET status=jsonb_set(status, $1::text[], $2, TRUE)" \
                 " WHERE " + filter_statement
-        values = [cls._get_value(entry_uuid), cls._get_value(value_entry)] + values
+        values = [[cls._get_value(entry_uuid)], cls._get_value(value_entry)] + values
         yield cls._connection.execute(query, *values)
 
     @gen.coroutine
@@ -1502,8 +1569,8 @@ class ConfigurationModel(BaseDocument):
         # snaps = yield Snapshot.get_list(environment=self.environment, model=self.version)
         # for snap in snaps:
         #     yield snap.delete_cascade()
-        yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
-        yield Code.delete_all(environment=self.environment, model=self.version)
+        yield UnknownParameter.delete_all(environment=self.environment, version=self.version)
+        yield Code.delete_all(environment=self.environment, version=self.version)
         # yield DryRun.delete_all(environment=self.environment, model=self.version)
         yield self.delete()
 
@@ -1752,6 +1819,7 @@ _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance,
 
 SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 
+
 @gen.coroutine
 def load_schema(connection):
     result = yield connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
@@ -1768,13 +1836,13 @@ def load_schema(connection):
                 yield connection.execute(query)
                 query = ""
 
+
 def set_connection(connection):
     for cls in _classes:
         cls.set_connection(connection)
 
 
-@gen.coroutine
-def connect(host, port, database, io_loop):
+async def connect(host, port, database, io_loop):
     # TODO: Set username and password via /etc/inmanta.cfg
-    connection = yield asyncpg.connect(user="postgres", password=None, database=database, host=host, port=port)
+    connection = await asyncpg.connect(host=host, port=port, user="postgres", password=None, database=database)
     set_connection(connection)

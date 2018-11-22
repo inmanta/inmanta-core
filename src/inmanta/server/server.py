@@ -23,7 +23,6 @@ import difflib
 import logging
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import time
@@ -74,7 +73,7 @@ class Server(protocol.ServerSlice):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        data.connect(database_host, database_port, opt.db_name.get(), self._io_loop)
+        self._io_loop.add_callback(data.connect(database_host, database_port, opt.db_name.get(), self._io_loop))
         LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
         self._io_loop.add_callback(data.load_schema)
@@ -1530,7 +1529,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             # verify if branch is correct
             LOGGER.debug("Verifying correct branch")
-            sub_process = process.Subprocess(["git", "branch"], stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM,
+            sub_process = process.Subprocess(["git", "branch"], stdout=process.Subprocess.STREAM,
+                                             stderr=process.Subprocess.STREAM,
                                              cwd=project_dir)
 
             out, log_err, returncode = yield [gen.Task(sub_process.stdout.read_until_close),
