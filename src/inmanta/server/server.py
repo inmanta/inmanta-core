@@ -73,8 +73,9 @@ class Server(protocol.ServerSlice):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        self._io_loop.add_callback(data.connect(database_host, database_port, opt.db_name.get(), self._io_loop))
-        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+        self._io_loop.add_callback(data.connect(database_host, database_port, opt.db_name.get(), opt.db_username.get(),
+                                                opt.db_password.get(), self._io_loop))
+        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
         self._io_loop.add_callback(data.load_schema)
 

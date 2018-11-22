@@ -1842,7 +1842,6 @@ def set_connection(connection):
         cls.set_connection(connection)
 
 
-async def connect(host, port, database, io_loop):
-    # TODO: Set username and password via /etc/inmanta.cfg
-    connection = await asyncpg.connect(host=host, port=port, user="postgres", password=None, database=database)
+async def connect(host, port, database, username, password, io_loop):
+    connection = await asyncpg.connect(host=host, port=port, database=database, user=username, password=password)
     set_connection(connection)
