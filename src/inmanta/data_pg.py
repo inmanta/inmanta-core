@@ -1815,7 +1815,7 @@ class Code(BaseDocument):
 #             FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun, ResourceSnapshot, ResourceRestore,
 #             SnapshotRestore, Snapshot]
 _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent,
-            Resource, ResourceAction, ConfigurationModel, Code, ConfigurationModel]
+            Resource, ResourceAction, ConfigurationModel, Code]
 
 SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 

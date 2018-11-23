@@ -680,7 +680,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
 
 
 @pytest.mark.gen_test(timeout=30)
-def test_server_restart(resource_container, io_loop, server, mongo_db, client):
+def test_server_restart(resource_container, io_loop, server, postgres_db, client):
     """
         dryrun and deploy a configuration model
     """

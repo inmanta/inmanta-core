@@ -25,7 +25,7 @@ import pytest
 
 @pytest.mark.skip(reason="very unstable test")
 @pytest.mark.gen_test(timeout=60)
-def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
+def test_deploy(io_loop, snippetcompiler, tmpdir, postgres_db, motor):
     file_name = tmpdir.join("test_file")
     snippetcompiler.setup_for_snippet("""
     host = std::Host(name="test", os=std::linux)
@@ -36,7 +36,7 @@ def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
-    run = deploy.Deploy(io_loop, mongoport=mongo_db.port)
+    run = deploy.Deploy(io_loop, mongoport=postgres_db.port)
     try:
         run.run(options, only_setup=True)
         yield run.do_deploy(False, "")

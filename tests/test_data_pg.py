@@ -28,32 +28,6 @@ from inmanta.const import LogLevel
 SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 
 
-@pytest.fixture
-async def postgresql_client(postgresql_proc):
-    connection = await asyncpg.connect(host=postgresql_proc.host, port=postgresql_proc.port, user=postgresql_proc.user,
-                                       password=None, database=None)
-    yield connection
-    await connection.close()
-
-
-@pytest.fixture(scope="function", autouse=True)
-async def reset(postgresql_client):
-    await _drop_all_tables(postgresql_client)
-    yield
-    await _drop_all_tables(postgresql_client)
-
-
-@pytest.fixture
-async def init_dataclasses(postgresql_client):
-    await data.load_schema(postgresql_client)
-    data.set_connection(postgresql_client)
-
-
-async def _drop_all_tables(postgresql_client):
-    await postgresql_client.execute("DROP SCHEMA public CASCADE")
-    await postgresql_client.execute("CREATE SCHEMA public")
-
-
 @pytest.mark.asyncio
 async def test_postgres_client(postgresql_client):
     await postgresql_client.execute("CREATE TABLE test(id serial PRIMARY KEY, name VARCHAR (25) NOT NULL)")
@@ -73,10 +47,11 @@ async def test_load_schema(postgresql_client):
     await data.load_schema(postgresql_client)
     table_names = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables "
                                                 "WHERE table_schema='public'")
-    table_names = [x["table_name"] for x in table_names]
-    for table_name in ["project", "environment", "configurationmodel", "resource", "resourceaction",
-                       "code", "unknownparameter", "agentprocess", "agentinstance", "agent"]:
-        assert table_name in table_names
+    table_names_in_database = [x["table_name"] for x in table_names]
+    table_names_in_classes_list = [x.__name__.lower() for x in data._classes]
+    assert len(table_names_in_classes_list) == len(table_names_in_database)
+    for item in table_names_in_classes_list:
+        assert item in table_names_in_database
 
 
 @pytest.mark.asyncio

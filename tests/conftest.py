@@ -26,7 +26,8 @@ import socket
 
 
 import pytest
-from inmanta import config, data, mongoproc
+from inmanta import config, mongoproc
+from inmanta import data_pg as data
 import inmanta.compiler as compiler
 import pymongo
 from motor import motor_tornado
@@ -46,6 +47,7 @@ import traceback
 from tornado import process
 import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+import asyncpg
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -53,19 +55,51 @@ DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mongo_db():
-    db_path = tempfile.mkdtemp(dir="/dev/shm")
-    mproc = mongoproc.MongoProc(db_path=db_path, port=get_free_tcp_port())
-    port_envvar = DEFAULT_PORT_ENVVAR
+def postgres_db(postgresql_proc):
+    yield postgresql_proc
 
-    mproc.start()
-    os.environ[port_envvar] = str(mproc.port)
+# @pytest.fixture(scope="session", autouse=True)
+# def mongo_db():
+#     db_path = tempfile.mkdtemp(dir="/dev/shm")
+#     mproc = mongoproc.MongoProc(db_path=db_path, port=get_free_tcp_port())
+#     port_envvar = DEFAULT_PORT_ENVVAR
+#
+#     mproc.start()
+#     os.environ[port_envvar] = str(mproc.port)
+#
+#     yield mproc
+#
+#     mproc.stop()
+#     del os.environ[port_envvar]
+#     shutil.rmtree(db_path)
 
-    yield mproc
 
-    mproc.stop()
-    del os.environ[port_envvar]
-    shutil.rmtree(db_path)
+@pytest.fixture
+async def postgresql_client(postgres_db, database_name):
+    connection_postgres = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    await connection_postgres.execute("DROP DATABASE IF EXISTS " + database_name)
+    await connection_postgres.execute("CREATE DATABASE " + database_name)
+    connection_inmanta_db = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port,
+                                                  user=postgres_db.user, database=database_name)
+    data.set_connection(connection_inmanta_db)
+    yield connection_inmanta_db
+    await connection_inmanta_db.close()
+    await connection_postgres.execute("DROP DATABASE " + database_name)
+    await connection_postgres.close()
+
+# @pytest.fixture(scope="session")
+# def mongo_client(mongo_db):
+#     '''Returns an instance of :class:`pymongo.MongoClient` connected
+#     to MongoBox database instance.
+#     '''
+#     port = int(mongo_db.port)
+#     return pymongo.MongoClient(port=port)
+
+
+@pytest.fixture(scope="function")
+async def init_dataclasses(postgresql_client):
+    await data.load_schema(postgresql_client)
+    data.set_connection(postgresql_client)
 
 
 def reset_all():
@@ -78,46 +112,52 @@ def reset_all():
     Project._project = None
     unknown_parameters.clear()
 
+# def reset_all():
+#     resources.resource.reset()
+#     export.Exporter.reset()
+#     process.Subprocess.uninitialize()
+#     # No dynamic loading of commands at the moment, so no need to reset/reload
+#     # command.Commander.reset()
+#     handler.Commander.reset()
+#     Project._project = None
+#     unknown_parameters.clear()
+
 
 @pytest.fixture(scope="function", autouse=True)
-def clean_reset(mongo_client):
-    cwd = os.getcwd()
-
+async def clean_reset(postgresql_client, database_name):
     reset_all()
+    await data.load_schema(postgresql_client)
     yield
     reset_all()
 
-    # reset cwd
-    os.chdir(cwd)
+# @pytest.fixture(scope="function", autouse=True)
+# def clean_reset(mongo_client):
+#     cwd = os.getcwd()
+#
+#     reset_all()
+#     yield
+#     reset_all()
+#
+#     # reset cwd
+#     os.chdir(cwd)
+#
+#     for db_name in mongo_client.list_database_names():
+#         if db_name != "admin":
+#             try:
+#                 mongo_client.drop_database(db_name)
+#             except Exception:
+#                 pass
+#                 pass
 
-    for db_name in mongo_client.list_database_names():
-        if db_name != "admin":
-            try:
-                mongo_client.drop_database(db_name)
-            except Exception:
-                pass
 
-
-@pytest.fixture(scope="session")
-def mongo_client(mongo_db):
-    '''Returns an instance of :class:`pymongo.MongoClient` connected
-    to MongoBox database instance.
-    '''
-    port = int(mongo_db.port)
-    return pymongo.MongoClient(port=port)
-
-
+# @pytest.fixture(scope="function")
+# def motor(mongo_db, mongo_client, io_loop):
+#     client = motor_tornado.MotorClient('localhost', int(postgres_db.port), io_loop=io_loop)
+#     db = client["inmanta"]
+#     yield db
 @pytest.fixture(scope="function")
-def motor(mongo_db, mongo_client, io_loop):
-    client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
-    db = client["inmanta"]
-    yield db
-
-
-@pytest.fixture(scope="function")
-def data_module(io_loop, motor):
-    data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+def motor():
+    pass
 
 
 def get_free_tcp_port():
@@ -153,7 +193,13 @@ def inmanta_config():
 
 
 @pytest.fixture(scope="function")
-def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
+def database_name():
+    ten_random_ascii_letters = ''.join(random.choice(string.ascii_letters) for _ in range(10))
+    yield "inmanta"
+
+
+@pytest.fixture(scope="function")
+async def server(inmanta_config, io_loop, postgres_db, postgresql_client, database_name, motor):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
     IOLoop._instance = io_loop
@@ -161,9 +207,9 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     state_dir = tempfile.mkdtemp()
 
     port = get_free_tcp_port()
-    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(mongo_db.port))
+    config.Config.set("database", "port", str(postgres_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -174,8 +220,9 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
 
-    data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    # TODO:
+    # data.use_motor(motor)
+    # io_loop.run_sync(data.create_indexes)
 
     ibl = InmantaBootloader()
     ibl.start()
@@ -191,7 +238,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor):
+async def server_multi(inmanta_config, io_loop, postgres_db, postgresql_client, database_name, request, motor):
     IOLoop._instance = io_loop
 
     state_dir = tempfile.mkdtemp()
@@ -227,9 +274,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
             config.Config.set(x, "token", token)
 
     port = get_free_tcp_port()
-    config.Config.set("database", "name", "inmanta-" + ''.join(random.choice(string.ascii_letters) for _ in range(10)))
+    config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
-    config.Config.set("database", "port", str(mongo_db.port))
+    config.Config.set("database", "port", str(postgres_db.port))
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -240,8 +287,9 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
 
-    data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    # TODO:
+    # data.use_motor(motor)
+    # io_loop.run_sync(data.create_indexes)
 
     ibl = InmantaBootloader()
     ibl.start()
