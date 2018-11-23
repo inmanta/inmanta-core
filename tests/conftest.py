@@ -26,11 +26,9 @@ import socket
 
 
 import pytest
-from inmanta import config, mongoproc
+from inmanta import config
 from inmanta import data_pg as data
 import inmanta.compiler as compiler
-import pymongo
-from motor import motor_tornado
 from inmanta.module import Project
 from inmanta import resources, export
 from inmanta.agent import handler
@@ -194,8 +192,8 @@ def inmanta_config():
 
 @pytest.fixture(scope="function")
 def database_name():
-    ten_random_ascii_letters = ''.join(random.choice(string.ascii_letters) for _ in range(10))
-    yield "inmanta"
+    ten_random_digits = ''.join(random.choice(string.digits) for _ in range(10))
+    yield "inmanta" + ten_random_digits
 
 
 @pytest.fixture(scope="function")

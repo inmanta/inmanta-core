@@ -531,7 +531,7 @@ def convert_agent_map(value):
 
 
 def translate_to_postgres_type(type):
-    if not type in TYPE_MAP:
+    if type not in TYPE_MAP:
         raise Exception("Type \'" + type + "\' is not a valid type for a settings entry")
     return TYPE_MAP[type]
 
