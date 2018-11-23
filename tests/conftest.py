@@ -325,21 +325,21 @@ def client_multi(server_multi):
 
 
 @pytest.fixture(scope="function")
-def environment(client, server, io_loop):
+async def environment(client, server, io_loop):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
     def create_project():
         return client.create_project("env-test")
 
-    result = io_loop.run_sync(create_project)
+    result = await client.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
     def create_env():
         return client.create_environment(project_id=project_id, name="dev")
 
-    result = io_loop.run_sync(create_env)
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     cfg_env.set(env_id)
@@ -348,21 +348,21 @@ def environment(client, server, io_loop):
 
 
 @pytest.fixture(scope="function")
-def environment_multi(client_multi, server_multi, io_loop):
+async def environment_multi(client_multi, server_multi, io_loop):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
     def create_project():
         return client_multi.create_project("env-test")
 
-    result = io_loop.run_sync(create_project)
+    result = await client_multi.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
     def create_env():
         return client_multi.create_environment(project_id=project_id, name="dev")
 
-    result = io_loop.run_sync(create_env)
+    result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     yield env_id

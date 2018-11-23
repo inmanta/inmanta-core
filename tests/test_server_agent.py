@@ -380,8 +380,9 @@ def resource_container():
     return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters, waiter=waiter)
 
 
-@pytest.mark.gen_test(timeout=150)
-def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_container):
+# @pytest.mark.gen_test(timeout=150)
+@pytest.mark.asyncio
+async def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_container):
     """
         dryrun and deploy a configuration model
 
@@ -392,10 +393,10 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = yield client_multi.create_project("env-test")
+    result = await client_multi.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client_multi.create_environment(project_id=project_id, name="dev")
+    result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
@@ -403,7 +404,7 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     agent.add_end_point_name("agent1")
     agent.start()
 
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -473,34 +474,34 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                  ]
 
     status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined}
-    result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
+    result = await client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                             unknowns=[], version_info={})
     assert result.code == 200
 
-    mod_db = yield data.ConfigurationModel.get_version(uuid.UUID(env_id), version)
-    undep = yield mod_db.get_undeployable()
+    mod_db = await data.ConfigurationModel.get_version(uuid.UUID(env_id), version)
+    undep = await mod_db.get_undeployable()
     assert undep == ['test::Resource[agent2,key=key4]']
 
-    undep = yield mod_db.get_skipped_for_undeployable()
+    undep = await mod_db.get_skipped_for_undeployable()
     assert undep == ['test::Resource[agent2,key=key5]', 'test::Resource[agent2,key=key6]']
 
     # request a dryrun
-    result = yield client_multi.dryrun_request(env_id, version)
+    result = await client_multi.dryrun_request(env_id, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
 
     # get the dryrun results
-    result = yield client_multi.dryrun_list(env_id, version)
+    result = await client_multi.dryrun_list(env_id, version)
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
     while result.result["dryruns"][0]["todo"] > 0:
-        result = yield client_multi.dryrun_list(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client_multi.dryrun_list(env_id, version)
+        await gen.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
-    result = yield client_multi.dryrun_report(env_id, dry_run_id)
+    result = await client_multi.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
@@ -516,19 +517,19 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
-    result = yield client_multi.release_version(env_id, version, True)
+    result = await client_multi.release_version(env_id, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 6
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client_multi.get_version(env_id, version)
+    result = await client_multi.get_version(env_id, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client_multi.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client_multi.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -537,15 +538,16 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
 
-    actions = yield data.ResourceAction.get_list()
+    actions = await data.ResourceAction.get_list()
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
 
     agent.stop()
 
 
-@pytest.mark.gen_test(timeout=100)
-def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_container):
+# @pytest.mark.gen_test(timeout=100)
+@pytest.mark.asyncio
+async def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_container):
     """
          Test deploy of resource with undefined
     """
@@ -559,10 +561,10 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     Config.set("config", "agent-interval", "100")
 
     resource_container.Provider.reset()
-    result = yield client_multi.create_project("env-test")
+    result = await client_multi.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client_multi.create_environment(project_id=project_id, name="dev")
+    result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     resource_container.Provider.set_skip("agent2", "key1", 1)
@@ -572,7 +574,7 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     agent.add_end_point_name("agent2")
     agent.start()
 
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -621,12 +623,12 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
 
     status = {'test::Resource[agent2,key=key4]': const.ResourceState.undefined,
               'test::Resource[agent2,key=key2]': const.ResourceState.undefined}
-    result = yield client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
+    result = await client_multi.put_version(tid=env_id, version=version, resources=resources, resource_state=status,
                                             unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client_multi.release_version(env_id, version, True)
+    result = await client_multi.release_version(env_id, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
@@ -634,20 +636,20 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     assert result.result["model"]["result"] == "deploying"
 
     # The server will mark the full version as deployed even though the agent has not done anything yet.
-    result = yield client_multi.get_version(env_id, version)
+    result = await client_multi.get_version(env_id, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client_multi.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client_multi.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
     assert result.code == 200
 
-    actions = yield data.ResourceAction.get_list()
+    actions = await data.ResourceAction.get_list()
     assert len([x for x in actions if x.status == const.ResourceState.undefined]) >= 1
 
-    result = yield client_multi.get_version(env_id, version)
+    result = await client_multi.get_version(env_id, version)
     assert result.code == 200
 
     assert resource_container.Provider.changecount("agent2", "key4") == 0
@@ -659,9 +661,9 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
     assert resource_container.Provider.readcount("agent2", "key1") == 1
 
     # Do a second deploy of the same model on agent2 with undefined resources
-    yield agent.trigger_update("env_id", "agent2")
+    await agent.trigger_update("env_id", "agent2")
 
-    result = yield client_multi.get_version(env_id, version, include_logs=True)
+    result = await client_multi.get_version(env_id, version, include_logs=True)
     import pprint
     pprint.pprint(result.result)
 
@@ -673,31 +675,32 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
             resource_container.Provider.readcount("agent2", "key5") == 0 and \
             resource_container.Provider.readcount("agent2", "key1") == 2
 
-    yield retry_limited(done, 100)
+    await retry_limited(done, 100)
 
     agent.stop()
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_server_restart(resource_container, io_loop, server, postgres_db, client):
+# @pytest.mark.gen_test(timeout=30)
+@pytest.mark.asyncio
+async def test_server_restart(resource_container, io_loop, server, postgres_db, client):
     """
         dryrun and deploy a configuration model
     """
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -709,7 +712,7 @@ def test_server_restart(resource_container, io_loop, server, postgres_db, client
     ibl.start()
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -745,26 +748,26 @@ def test_server_restart(resource_container, io_loop, server, postgres_db, client
                   }
                  ]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
-    result = yield client.dryrun_request(env_id, version)
+    result = await client.dryrun_request(env_id, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
 
     # get the dryrun results
-    result = yield client.dryrun_list(env_id, version)
+    result = await client.dryrun_list(env_id, version)
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
     while result.result["dryruns"][0]["todo"] > 0:
-        result = yield client.dryrun_list(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.dryrun_list(env_id, version)
+        await gen.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
-    result = yield client.dryrun_report(env_id, dry_run_id)
+    result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
@@ -780,19 +783,19 @@ def test_server_restart(resource_container, io_loop, server, postgres_db, client
     assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 3
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -805,18 +808,19 @@ def test_server_restart(resource_container, io_loop, server, postgres_db, client
     ibl.stop()
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_spontaneous_deploy(resource_container, io_loop, server, client):
+# @pytest.mark.gen_test(timeout=30)
+@pytest.mark.asyncio
+async def test_spontaneous_deploy(resource_container, io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     Config.set("config", "agent-interval", "2")
@@ -826,7 +830,7 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -865,23 +869,23 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   }
                  ]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(env_id, version, False)
+    result = await client.release_version(env_id, version, False)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 3
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -893,24 +897,25 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
     agent.stop()
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_failing_deploy_no_handler(resource_container, io_loop, server, client):
+# @pytest.mark.gen_test(timeout=30)
+@pytest.mark.asyncio
+async def test_failing_deploy_no_handler(resource_container, io_loop, server, client):
     """
         dryrun and deploy a configuration model
     """
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -926,24 +931,24 @@ def test_failing_deploy_no_handler(resource_container, io_loop, server, client):
                   }
                  ]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
     assert result.result["model"]["total"] == 1
 
-    result = yield client.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
-    result = yield client.get_version(env_id, version, include_logs=True)
+    result = await client.get_version(env_id, version, include_logs=True)
 
     final_log = result.result["resources"][0]["actions"][0]["messages"][-1]
     assert "traceback" in final_log["kwargs"]
@@ -951,8 +956,8 @@ def test_failing_deploy_no_handler(resource_container, io_loop, server, client):
     agent.stop()
 
 
-@pytest.mark.gen_test
-def test_dual_agent(resource_container, io_loop, server, client, environment):
+@pytest.mark.asyncio
+async def test_dual_agent(resource_container, io_loop, server, client, environment):
     """
         dryrun and deploy a configuration model
     """
@@ -963,7 +968,7 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     myagent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -1011,28 +1016,28 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
                   'requires': ['test::Wait[agent2,key=key1],v=%d' % version]
                   }]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # expire rate limiting
-    yield gen.sleep(0.5)
+    await gen.sleep(0.5)
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 4
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
+        result = await client.get_version(environment, version)
         resource_container.waiter.acquire()
         resource_container.waiter.notifyAll()
         resource_container.waiter.release()
-        yield gen.sleep(0.1)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["result"] == const.VersionState.success.name
@@ -1046,23 +1051,24 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
     myagent.stop()
 
 
-@pytest.mark.gen_test(timeout=60)
-def test_snapshot_restore(resource_container, client, server, io_loop):
+# @pytest.mark.gen_test(timeout=60)
+@pytest.mark.asyncio
+async def test_snapshot_restore(resource_container, client, server, io_loop):
     """
         create a snapshot and restore it again
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1089,79 +1095,79 @@ def test_snapshot_restore(resource_container, client, server, io_loop):
                   'allow_snapshot': True,
                   }]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # deploy and wait until done
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
     # create a snapshot
-    result = yield client.create_snapshot(env_id, "snap1")
+    result = await client.create_snapshot(env_id, "snap1")
     assert result.code == 200
     snapshot_id = result.result["snapshot"]["id"]
 
-    result = yield client.list_snapshots(env_id)
+    result = await client.list_snapshots(env_id)
     assert result.code == 200
     assert len(result.result["snapshots"]) == 1
     assert result.result["snapshots"][0]["id"] == snapshot_id
 
     while result.result["snapshots"][0]["finished"] is None:
-        result = yield client.list_snapshots(env_id)
+        result = await client.list_snapshots(env_id)
         assert result.code == 200
-        yield gen.sleep(0.1)
+        await gen.sleep(0.1)
 
     # Change the value of the resource
     resource_container.Provider.set("agent1", "key", "other")
 
     # try to do a restore
-    result = yield client.restore_snapshot(env_id, snapshot_id)
+    result = await client.restore_snapshot(env_id, snapshot_id)
     assert result.code == 200
     restore_id = result.result["restore"]["id"]
 
-    result = yield client.list_restores(env_id)
+    result = await client.list_restores(env_id)
     assert result.code == 200
     assert len(result.result["restores"]) == 1
 
-    result = yield client.get_restore_status(env_id, restore_id)
+    result = await client.get_restore_status(env_id, restore_id)
     assert result.code == 200
     while result.result["restore"]["finished"] is None:
-        result = yield client.get_restore_status(env_id, restore_id)
+        result = await client.get_restore_status(env_id, restore_id)
         assert result.code == 200
-        yield gen.sleep(0.1)
+        await gen.sleep(0.1)
 
     assert resource_container.Provider.get("agent1", "key") == "value"
 
     # get a snapshot
-    result = yield client.get_snapshot(env_id, snapshot_id)
+    result = await client.get_snapshot(env_id, snapshot_id)
     assert result.code == 200
     assert result.result["snapshot"]["id"] == snapshot_id
 
     # delete the restore
-    result = yield client.delete_restore(env_id, restore_id)
+    result = await client.delete_restore(env_id, restore_id)
     assert result.code == 200
 
     # delete the snapshot
-    result = yield client.delete_snapshot(env_id, snapshot_id)
+    result = await client.delete_snapshot(env_id, snapshot_id)
     assert result.code == 200
 
 
-@pytest.mark.gen_test
-def test_server_agent_api(resource_container, client, server, io_loop):
+@pytest.mark.asyncio
+async def test_server_agent_api(resource_container, client, server, io_loop):
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
     agent = Agent(io_loop, environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
                   code_loader=False)
@@ -1171,16 +1177,16 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   code_loader=False)
     agent.start()
 
-    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
     assert len(agentmanager.sessions) == 2
 
-    result = yield client.list_agent_processes(env_id)
+    result = await client.list_agent_processes(env_id)
     assert result.code == 200
 
     while len(result.result["processes"]) != 2:
-        result = yield client.list_agent_processes(env_id)
+        result = await client.list_agent_processes(env_id)
         assert result.code == 200
-        yield gen.sleep(0.1)
+        await gen.sleep(0.1)
 
     assert len(result.result["processes"]) == 2
     agents = ["agent1", "agent2"]
@@ -1202,10 +1208,10 @@ def test_server_agent_api(resource_container, client, server, io_loop):
     agentid = result.result["processes"][0]["id"]
     endpointid = [x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == "agent1"][0]
 
-    result = yield client.get_agent_process(id=agentid)
+    result = await client.get_agent_process(id=agentid)
     assert result.code == 200
 
-    result = yield client.get_agent_process(id=uuid.uuid4())
+    result = await client.get_agent_process(id=uuid.uuid4())
     assert result.code == 404
 
     version = int(time.time())
@@ -1231,10 +1237,10 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   'allow_snapshot': True,
                   }]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
-    result = yield client.list_agents(tid=env_id)
+    result = await client.list_agents(tid=env_id)
     assert result.code == 200
 
     shouldbe = {'agents': [
@@ -1243,27 +1249,27 @@ def test_server_agent_api(resource_container, client, server, io_loop):
 
     assert_equal_ish(shouldbe, result.result)
 
-    result = yield client.list_agents(tid=uuid.uuid4())
+    result = await client.list_agents(tid=uuid.uuid4())
     assert result.code == 404
 
 
-@pytest.mark.gen_test
-def test_get_facts(resource_container, client, server, io_loop):
+@pytest.mark.asyncio
+async def test_get_facts(resource_container, client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1283,26 +1289,26 @@ def test_get_facts(resource_container, client, server, io_loop):
                   'allow_snapshot': True,
                   }]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
 
-    result = yield client.get_param(env_id, "length", resource_id_wov)
+    result = await client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 503
 
     env_uuid = uuid.UUID(env_id)
-    params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        yield gen.sleep(0.1)
+        params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+        await gen.sleep(0.1)
 
-    result = yield client.get_param(env_id, "key1", resource_id_wov)
+    result = await client.get_param(env_id, "key1", resource_id_wov)
     assert result.code == 200
 
 
-@pytest.mark.gen_test
-def test_purged_facts(resource_container, client, server, io_loop, environment):
+@pytest.mark.asyncio
+async def test_purged_facts(resource_container, client, server, io_loop, environment):
     """
         Test if facts are purged when the resource is purged.
     """
@@ -1311,7 +1317,7 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1330,47 +1336,47 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
                   'allow_snapshot': True,
                   }]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = yield client.get_param(environment, "length", resource_id_wov)
+    result = await client.get_param(environment, "length", resource_id_wov)
     assert result.code == 503
 
     env_uuid = uuid.UUID(environment)
-    params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
-        yield gen.sleep(0.1)
+        params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+        await gen.sleep(0.1)
 
-    result = yield client.get_param(environment, "key1", resource_id_wov)
+    result = await client.get_param(environment, "key1", resource_id_wov)
     assert result.code == 200
 
     # Purge the resource
     version = 2
     resources[0]["id"] = "%s,v=%d" % (resource_id_wov, version)
     resources[0]["purged"] = True
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
     # The resource facts should be purged
-    result = yield client.get_param(environment, "length", resource_id_wov)
+    result = await client.get_param(environment, "length", resource_id_wov)
     assert result.code == 503
 
 
-@pytest.mark.gen_test
-def test_get_facts_extended(io_loop, server, client, resource_container, environment):
+@pytest.mark.asyncio
+async def test_get_facts_extended(io_loop, server, client, resource_container, environment):
     """
         dryrun and deploy a configuration model automatically
     """
@@ -1383,7 +1389,7 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -1484,7 +1490,7 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
         assert result.code == result_code
         return result
 
-    result = yield client.put_version(tid=environment,
+    result = await client.put_version(tid=environment,
                                       version=version,
                                       resources=resources,
                                       unknowns=[],
@@ -1492,74 +1498,74 @@ def test_get_facts_extended(io_loop, server, client, resource_container, environ
                                       resource_state=resource_states)
     assert result.code == 200
 
-    yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
-    yield get_fact('test::Fact[agent1,key=key2]')  # normal
-    yield get_fact('test::Fact[agent1,key=key3]', 503)  # not present
-    yield get_fact('test::Fact[agent1,key=key4]')  # unknown
-    yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
-    f6 = yield get_fact('test::Fact[agent1,key=key6]')  # normal
-    f7 = yield get_fact('test::Fact[agent1,key=key7]')  # normal
+    await get_fact('test::Fact[agent1,key=key1]')  # undeployable
+    await get_fact('test::Fact[agent1,key=key2]')  # normal
+    await get_fact('test::Fact[agent1,key=key3]', 503)  # not present
+    await get_fact('test::Fact[agent1,key=key4]')  # unknown
+    await get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+    f6 = await get_fact('test::Fact[agent1,key=key6]')  # normal
+    f7 = await get_fact('test::Fact[agent1,key=key7]')  # normal
 
     assert f6.result["parameter"]["value"] == 'None'
     assert f7.result["parameter"]["value"] == ""
 
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
-    yield get_fact('test::Fact[agent1,key=key1]')  # undeployable
-    yield get_fact('test::Fact[agent1,key=key2]')  # normal
-    yield get_fact('test::Fact[agent1,key=key3]')  # not present -> present
-    yield get_fact('test::Fact[agent1,key=key4]')  # unknown
-    yield get_fact('test::Fact[agent1,key=key5]', 503)  # broken
+    await get_fact('test::Fact[agent1,key=key1]')  # undeployable
+    await get_fact('test::Fact[agent1,key=key2]')  # normal
+    await get_fact('test::Fact[agent1,key=key3]')  # not present -> present
+    await get_fact('test::Fact[agent1,key=key4]')  # unknown
+    await get_fact('test::Fact[agent1,key=key5]', 503)  # broken
 
     agent.stop()
 
 
-@pytest.mark.gen_test
-def test_get_set_param(resource_container, client, server, io_loop):
+@pytest.mark.asyncio
+async def test_get_set_param(resource_container, client, server, io_loop):
     """
         Test getting and setting params
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    result = yield client.set_param(tid=env_id, id="key10", value="value10", source="user")
+    result = await client.set_param(tid=env_id, id="key10", value="value10", source="user")
     assert result.code == 200
 
-    result = yield client.get_param(tid=env_id, id="key10")
+    result = await client.get_param(tid=env_id, id="key10")
     assert result.code == 200
     assert result.result["parameter"]["value"] == "value10"
 
-    result = yield client.delete_param(tid=env_id, id="key10")
+    result = await client.delete_param(tid=env_id, id="key10")
     assert result.code == 200
 
 
-@pytest.mark.gen_test
-def test_unkown_parameters(resource_container, client, server, io_loop):
+@pytest.mark.asyncio
+async def test_unkown_parameters(resource_container, client, server, io_loop):
     """
         Test retrieving facts from the agent
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1580,42 +1586,42 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
                   }]
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=unknowns,
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=unknowns,
                                       version_info={})
     assert result.code == 200
 
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
 
-    yield server.get_endpoint("server").renew_expired_facts()
+    await server.get_endpoint("server").renew_expired_facts()
 
     env_id = uuid.UUID(env_id)
-    params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
+    params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
     while len(params) < 3:
-        params = yield data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
-        yield gen.sleep(0.1)
+        params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
+        await gen.sleep(0.1)
 
-    result = yield client.get_param(env_id, "length", resource_id_wov)
+    result = await client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 200
 
 
-@pytest.mark.gen_test()
-def test_fail(resource_container, client, server, io_loop):
+@pytest.mark.asyncio
+async def test_fail(resource_container, client, server, io_loop):
     """
         Test results when a step fails
     """
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1673,18 +1679,18 @@ def test_fail(resource_container, client, server, io_loop):
                   'allow_snapshot': True,
                   }]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # deploy and wait until done
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(env_id, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -1697,8 +1703,9 @@ def test_fail(resource_container, client, server, io_loop):
     assert states['test::Resource[agent1,key=key5],v=%d' % version] == "skipped"
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_wait(resource_container, client, server, io_loop):
+# @pytest.mark.gen_test(timeout=15)
+@pytest.mark.asyncio
+async def test_wait(resource_container, client, server, io_loop):
     """
         If this test fail due to timeout,
         this is probably due to the mechanism in the agent that prevents pulling resources in very rapid succession.
@@ -1711,11 +1718,11 @@ def test_wait(resource_container, client, server, io_loop):
     resource_container.Provider.reset()
 
     # setup project
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
     # setup env
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     # setup agent
@@ -1725,7 +1732,7 @@ def test_wait(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1799,47 +1806,47 @@ def test_wait(resource_container, client, server, io_loop):
     logger.info("setup done")
 
     version1, resources = make_version()
-    result = yield client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     logger.info("first version pushed")
 
     # deploy and wait until one is ready
-    result = yield client.release_version(env_id, version1, True)
+    result = await client.release_version(env_id, version1, True)
     assert result.code == 200
 
     logger.info("first version released")
 
-    yield wait_for_resources(version1, 2)
+    await wait_for_resources(version1, 2)
 
     logger.info("first version, 2 resources deployed")
 
     version2, resources = make_version(3)
-    result = yield client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version2, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     logger.info("second version pushed %f", time.time())
 
-    yield gen.sleep(1)
+    await gen.sleep(1)
 
     logger.info("wait to expire load limiting%f", time.time())
 
     # deploy and wait until done
-    result = yield client.release_version(env_id, version2, True)
+    result = await client.release_version(env_id, version2, True)
     assert result.code == 200
 
     logger.info("second version released")
 
-    yield resource_container.wait_for_done_with_waiters(client, env_id, version2)
+    await resource_container.wait_for_done_with_waiters(client, env_id, version2)
 
     logger.info("second version complete")
 
-    result = yield client.get_version(env_id, version2)
+    result = await client.get_version(env_id, version2)
     assert result.code == 200
     for x in result.result["resources"]:
         assert x["status"] == const.ResourceState.deployed.name
 
-    result = yield client.get_version(env_id, version1)
+    result = await client.get_version(env_id, version1)
     assert result.code == 200
     states = {x["id"]: x["status"] for x in result.result["resources"]}
 
@@ -1850,19 +1857,20 @@ def test_wait(resource_container, client, server, io_loop):
     assert states['test::Resource[agent1,key=key5],v=%d' % version1] == const.ResourceState.available.name
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_multi_instance(resource_container, client, server, io_loop):
+# @pytest.mark.gen_test(timeout=15)
+@pytest.mark.asyncio
+async def test_multi_instance(resource_container, client, server, io_loop):
     """
        Test for multi threaded deploy
     """
     resource_container.Provider.reset()
 
     # setup project
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
     # setup env
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     # setup agent
@@ -1876,7 +1884,7 @@ def test_multi_instance(resource_container, client, server, io_loop):
     agent.start()
 
     # wait for agent
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1964,26 +1972,26 @@ def test_multi_instance(resource_container, client, server, io_loop):
     logger.info("setup done")
 
     version1, resources = make_version()
-    result = yield client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version1, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     logger.info("first version pushed")
 
     # deploy and wait until one is ready
-    result = yield client.release_version(env_id, version1, True)
+    result = await client.release_version(env_id, version1, True)
     assert result.code == 200
 
     logger.info("first version released")
     # timeout on single thread!
-    yield wait_for_resources(version1, 1)
+    await wait_for_resources(version1, 1)
 
-    yield resource_container.wait_for_done_with_waiters(client, env_id, version1)
+    await resource_container.wait_for_done_with_waiters(client, env_id, version1)
 
     logger.info("first version complete")
 
 
-@pytest.mark.gen_test
-def test_cross_agent_deps(resource_container, io_loop, server, client):
+@pytest.mark.asyncio
+async def test_cross_agent_deps(resource_container, io_loop, server, client):
     """
         deploy a configuration model with cross host dependency
     """
@@ -1992,23 +2000,23 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     resource_container.Provider.reset()
     # config for recovery mechanism
     Config.set("config", "agent-interval", "10")
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(io_loop, hostname="node2", environment=env_id, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -2057,25 +2065,25 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   }
                  ]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(env_id, version, True)
+    result = await client.release_version(env_id, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 4
     assert result.result["model"]["result"] == const.VersionState.deploying.name
 
-    result = yield client.get_version(env_id, version)
+    result = await client.get_version(env_id, version)
     assert result.code == 200
 
     while result.result["model"]["done"] == 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(env_id, version)
+        await gen.sleep(0.1)
 
-    result = yield resource_container.wait_for_done_with_waiters(client, env_id, version)
+    result = await resource_container.wait_for_done_with_waiters(client, env_id, version)
 
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["result"] == const.VersionState.success.name
@@ -2089,25 +2097,26 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
     agent2.stop()
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_dryrun_scale(resource_container, io_loop, server, client):
+# @pytest.mark.gen_test(timeout=30)
+@pytest.mark.asyncio
+async def test_dryrun_scale(resource_container, io_loop, server, client):
     """
         test dryrun scaling
     """
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -2124,50 +2133,51 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
                           'requires': [],
                           })
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
-    result = yield client.dryrun_request(env_id, version)
+    result = await client.dryrun_request(env_id, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
 
     # get the dryrun results
-    result = yield client.dryrun_list(env_id, version)
+    result = await client.dryrun_list(env_id, version)
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
     while result.result["dryruns"][0]["todo"] > 0:
-        result = yield client.dryrun_list(env_id, version)
-        yield gen.sleep(0.1)
+        result = await client.dryrun_list(env_id, version)
+        await gen.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
-    result = yield client.dryrun_report(env_id, dry_run_id)
+    result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     agent.stop()
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_dryrun_failures(resource_container, io_loop, server, client):
+# @pytest.mark.gen_test(timeout=30)
+@pytest.mark.asyncio
+async def test_dryrun_failures(resource_container, io_loop, server, client):
     """
         test dryrun scaling
     """
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
     agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -2203,27 +2213,27 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
                   }
                  ]
 
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
-    result = yield client.dryrun_request(env_id, version)
+    result = await client.dryrun_request(env_id, version)
     assert result.code == 200
     assert result.result["dryrun"]["total"] == len(resources)
     assert result.result["dryrun"]["todo"] == len(resources)
 
     # get the dryrun results
-    result = yield client.dryrun_list(env_id, version)
+    result = await client.dryrun_list(env_id, version)
     assert result.code == 200
     assert len(result.result["dryruns"]) == 1
 
     while result.result["dryruns"][0]["todo"] > 0:
-        result = yield client.dryrun_list(env_id, version)
+        result = await client.dryrun_list(env_id, version)
         print(result.result)
-        yield gen.sleep(0.1)
+        await gen.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
-    result = yield client.dryrun_report(env_id, dry_run_id)
+    result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
     resources = result.result["dryrun"]["resources"]
@@ -2244,8 +2254,8 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
     agent.stop()
 
 
-@pytest.mark.gen_test
-def test_send_events(resource_container, io_loop, environment, server, client):
+@pytest.mark.asyncio
+async def test_send_events(resource_container, io_loop, environment, server, client):
     """
         Send and receive events within one agent
     """
@@ -2256,7 +2266,7 @@ def test_send_events(resource_container, io_loop, environment, server, client):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -2283,19 +2293,19 @@ def test_send_events(resource_container, io_loop, environment, server, client):
                   }
                  ]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     events = resource_container.Provider.getevents("agent1", "key1")
     assert len(events) == 1
@@ -2308,8 +2318,8 @@ def test_send_events(resource_container, io_loop, environment, server, client):
     agent.stop()
 
 
-@pytest.mark.gen_test
-def test_send_events_cross_agent(resource_container, io_loop, environment, server, client):
+@pytest.mark.asyncio
+async def test_send_events_cross_agent(resource_container, io_loop, environment, server, client):
     """
         Send and receive events over agents
     """
@@ -2320,13 +2330,13 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(io_loop, hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     version = int(time.time())
 
@@ -2353,19 +2363,19 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
                   }
                  ]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent2", "key2") == "value2"
@@ -2382,8 +2392,9 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
     agent2.stop()
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_send_events_cross_agent_restart(resource_container, io_loop, environment, server, client):
+# @pytest.mark.gen_test(timeout=15)
+@pytest.mark.asyncio
+async def test_send_events_cross_agent_restart(resource_container, io_loop, environment, server, client):
     """
         Send and receive events over agents with agents starting after deploy
     """
@@ -2394,7 +2405,7 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                    code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -2421,20 +2432,20 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                   }
                  ]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     # wait for agent 2 to finish
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 1:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(1)
 
     assert resource_container.Provider.get("agent2", "key2") == "value2"
 
@@ -2444,11 +2455,11 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(1)
 
     assert resource_container.Provider.get("agent1", "key1") == "value1"
 
@@ -2464,8 +2475,8 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
     agent2.stop()
 
 
-@pytest.mark.gen_test
-def test_auto_deploy(io_loop, server, client, resource_container, environment):
+@pytest.mark.asyncio
+async def test_auto_deploy(io_loop, server, client, resource_container, environment):
     """
         dryrun and deploy a configuration model automatically
     """
@@ -2476,7 +2487,7 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
@@ -2516,24 +2527,24 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
                  ]
 
     # set auto deploy and push
-    result = yield client.set_setting(environment, data.AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
     assert result.code == 200
-    result = yield client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
     assert result.code == 200
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 3
     assert result.result["model"]["result"] == "deploying"
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -2545,15 +2556,16 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
     agent.stop()
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_auto_deploy_no_splay(io_loop, server, client, resource_container, environment):
+# @pytest.mark.gen_test(timeout=15)
+@pytest.mark.asyncio
+async def test_auto_deploy_no_splay(io_loop, server, client, resource_container, environment):
     """
         dryrun and deploy a configuration model automatically with agent autostart
     """
     resource_container.Provider.reset()
-    env = yield data.Environment.get_by_id(uuid.UUID(environment))
-    yield env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
-    yield env.set(data.AUTOSTART_ON_START, True)
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTOSTART_ON_START, True)
 
     version = int(time.time())
 
@@ -2570,18 +2582,18 @@ def test_auto_deploy_no_splay(io_loop, server, client, resource_container, envir
                  ]
 
     # set auto deploy and push
-    result = yield client.set_setting(environment, data.AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.AUTO_DEPLOY, True)
     assert result.code == 200
-    result = yield client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
+    result = await client.set_setting(environment, data.PUSH_ON_AUTO_DEPLOY, True)
     assert result.code == 200
-    result = yield client.set_setting(environment, data.AUTOSTART_SPLAY, 0)
+    result = await client.set_setting(environment, data.AUTOSTART_SPLAY, 0)
     assert result.code == 200
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
@@ -2589,29 +2601,30 @@ def test_auto_deploy_no_splay(io_loop, server, client, resource_container, envir
 
     # check if agent 1 is started by the server
     # deploy will fail because handler code is not uploaded to the server
-    result = yield client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
 
     while len(result.result["agents"]) == 0 or result.result["agents"][0]["state"] == "down":
-        result = yield client.list_agents(tid=environment)
-        yield gen.sleep(0.1)
+        result = await client.list_agents(tid=environment)
+        await gen.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
     assert result.result["agents"][0]["name"] == "agent1"
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_autostart_mapping(io_loop, server, client, resource_container, environment):
+# @pytest.mark.gen_test(timeout=15)
+@pytest.mark.asyncio
+async def test_autostart_mapping(io_loop, server, client, resource_container, environment):
     """
         Test autostart mapping and restart agents when the map is modified
     """
     resource_container.Provider.reset()
-    env = yield data.Environment.get_by_id(uuid.UUID(environment))
-    yield env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
-    yield env.set(data.AUTO_DEPLOY, True)
-    yield env.set(data.PUSH_ON_AUTO_DEPLOY, True)
-    yield env.set(data.AUTOSTART_SPLAY, 0)
-    yield env.set(data.AUTOSTART_ON_START, True)
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTO_DEPLOY, True)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    await env.set(data.AUTOSTART_SPLAY, 0)
+    await env.set(data.AUTOSTART_ON_START, True)
 
     version = int(time.time())
 
@@ -2637,48 +2650,49 @@ def test_autostart_mapping(io_loop, server, client, resource_container, environm
                   },
                  ]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = yield client.list_agents(tid=environment)
-        yield gen.sleep(0.1)
+        result = await client.list_agents(tid=environment)
+        await gen.sleep(0.1)
 
     assert len(result.result["agents"]) == 2
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
-    result = yield client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"agent1": "", "agent2": ""})
+    result = await client.set_setting(environment, data.AUTOSTART_AGENT_MAP, {"agent1": "", "agent2": ""})
     assert result.code == 200
 
-    result = yield client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 2:
-        result = yield client.list_agents(tid=environment)
-        yield gen.sleep(0.1)
+        result = await client.list_agents(tid=environment)
+        await gen.sleep(0.1)
 
 
-@pytest.mark.gen_test(timeout=15)
-def test_autostart_clear_environment(io_loop, server_multi, client_multi, resource_container, environment):
+# @pytest.mark.gen_test(timeout=15)
+@pytest.mark.asyncio
+async def test_autostart_clear_environment(io_loop, server_multi, client_multi, resource_container, environment):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
     resource_container.Provider.reset()
-    env = yield data.Environment.get_by_id(uuid.UUID(environment))
-    yield env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
-    yield env.set(data.AUTO_DEPLOY, True)
-    yield env.set(data.PUSH_ON_AUTO_DEPLOY, True)
-    yield env.set(data.AUTOSTART_SPLAY, 0)
-    yield env.set(data.AUTOSTART_ON_START, True)
+    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTO_DEPLOY, True)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    await env.set(data.AUTOSTART_SPLAY, 0)
+    await env.set(data.AUTOSTART_ON_START, True)
 
     version = int(time.time())
 
@@ -2695,42 +2709,42 @@ def test_autostart_clear_environment(io_loop, server_multi, client_multi, resour
                  ]
 
     client = client_multi
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = yield client.list_agents(tid=environment)
-        yield gen.sleep(0.1)
+        result = await client.list_agents(tid=environment)
+        await gen.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     # clear environment
-    yield client.clear_environment(environment)
+    await client.clear_environment(environment)
 
-    items = yield data.ConfigurationModel.get_list()
+    items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
-    items = yield data.Resource.get_list()
+    items = await data.Resource.get_list()
     assert len(items) == 0
-    items = yield data.ResourceAction.get_list()
+    items = await data.ResourceAction.get_list()
     assert len(items) == 0
-    items = yield data.Code.get_list()
+    items = await data.Code.get_list()
     assert len(items) == 0
-    items = yield data.Agent.get_list()
+    items = await data.Agent.get_list()
     assert len(items) == 0
-    items = yield data.AgentInstance.get_list()
+    items = await data.AgentInstance.get_list()
     assert len(items) == 0
-    items = yield data.AgentProcess.get_list()
+    items = await data.AgentProcess.get_list()
     assert len(items) == 0
 
     # Do a deploy again
@@ -2748,29 +2762,29 @@ def test_autostart_clear_environment(io_loop, server_multi, client_multi, resour
                   }
                  ]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = yield client.list_agents(tid=environment)
-        yield gen.sleep(0.1)
+        result = await client.list_agents(tid=environment)
+        await gen.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
 
-@pytest.mark.gen_test
-def test_export_duplicate(resource_container, snippetcompiler):
+@pytest.mark.asyncio
+async def test_export_duplicate(resource_container, snippetcompiler):
     """
         The exported should provide a compilation error when a resource is defined twice in a model
     """
@@ -2787,8 +2801,9 @@ def test_export_duplicate(resource_container, snippetcompiler):
     assert "exists more than once in the configuration model" in str(exc.value)
 
 
-@pytest.mark.gen_test(timeout=90)
-def test_server_recompile(server_multi, client_multi, environment_multi):
+# @pytest.mark.gen_test(timeout=90)
+@pytest.mark.asyncio
+async def test_server_recompile(server_multi, client_multi, environment_multi):
     """
         Test a recompile on the server and verify recompile triggers
     """
@@ -2835,38 +2850,38 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
 """)
 
     logger.info("request a compile")
-    yield client.notify_change(environment)
+    await client.notify_change(environment)
 
     logger.info("wait for 1")
-    versions = yield wait_for_version(1)
+    versions = await wait_for_version(1)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
 
     # get compile reports
-    reports = yield client.get_reports(environment)
+    reports = await client.get_reports(environment)
     assert len(reports.result["reports"]) == 1
 
     # set a parameter without requesting a recompile
-    yield client.set_param(environment, id="param1", value="test", source="plugin")
-    versions = yield wait_for_version(1)
+    await client.set_param(environment, id="param1", value="test", source="plugin")
+    versions = await wait_for_version(1)
     assert versions["count"] == 1
 
     logger.info("request second compile")
     # set a new parameter and request a recompile
-    yield client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
     logger.info("wait for 2")
-    versions = yield wait_for_version(2)
+    versions = await wait_for_version(2)
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 2
 
     # update the parameter to the same value -> no compile
-    yield client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
-    versions = yield wait_for_version(2)
+    await client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    versions = await wait_for_version(2)
     assert versions["count"] == 2
 
     # update the parameter to a new value
-    yield client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
-    versions = yield wait_for_version(3)
+    await client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
+    versions = await wait_for_version(3)
     logger.info("wait for 3")
     assert versions["count"] == 3
 
@@ -2968,8 +2983,8 @@ succ    2    2    2    0
 
 @pytest.mark.parametrize("self_state", self_states, ids=lambda x: x.name)
 @pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
-@pytest.mark.gen_test
-def test_deploy_and_events(io_loop, client, server, environment, resource_container, self_state, dep_state):
+@pytest.mark.asyncio
+async def test_deploy_and_events(io_loop, client, server, environment, resource_container, self_state, dep_state):
 
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
@@ -2978,7 +2993,7 @@ def test_deploy_and_events(io_loop, client, server, environment, resource_contai
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -3001,24 +3016,24 @@ def test_deploy_and_events(io_loop, client, server, environment, resource_contai
                  ]
 
     status = {x[0]: x[1] for x in [dep_status, own_status] if x is not None}
-    result = yield client.put_version(tid=environment, version=version, resources=resources, resource_state=status,
+    result = await client.put_version(tid=environment, version=version, resources=resources, resource_state=status,
                                       unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 3
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -3035,8 +3050,8 @@ def test_deploy_and_events(io_loop, client, server, environment, resource_contai
         assert len(events[0]) == expected_events
 
 
-@pytest.mark.gen_test
-def test_deploy_and_events_failed(io_loop, client, server, environment, resource_container):
+@pytest.mark.asyncio
+async def test_deploy_and_events_failed(io_loop, client, server, environment, resource_container):
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
@@ -3044,7 +3059,7 @@ def test_deploy_and_events_failed(io_loop, client, server, environment, resource
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -3070,24 +3085,24 @@ def test_deploy_and_events_failed(io_loop, client, server, environment, resource
                   },
                  ]
 
-    result = yield client.put_version(tid=environment, version=version, resources=resources, resource_state={},
+    result = await client.put_version(tid=environment, version=version, resources=resources, resource_state={},
                                       unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 
@@ -3101,8 +3116,9 @@ dep_states_reload = [
 
 
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
-@pytest.mark.gen_test(timeout=5000)
-def test_reload(io_loop, client, server, environment, resource_container, dep_state):
+# @pytest.mark.gen_test(timeout=5000)
+@pytest.mark.asyncio
+async def test_reload(io_loop, client, server, environment, resource_container, dep_state):
 
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
@@ -3111,7 +3127,7 @@ def test_reload(io_loop, client, server, environment, resource_container, dep_st
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
-    yield retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -3131,24 +3147,24 @@ def test_reload(io_loop, client, server, environment, resource_container, dep_st
                  ]
 
     status = {x[0]: x[1] for x in [dep_status] if x is not None}
-    result = yield client.put_version(tid=environment, version=version, resources=resources, resource_state=status,
+    result = await client.put_version(tid=environment, version=version, resources=resources, resource_state=status,
                                       unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = yield client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, True)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 2
     assert result.result["model"]["result"] == "deploying"
 
-    result = yield client.get_version(environment, version)
+    result = await client.get_version(environment, version)
     assert result.code == 200
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(environment, version)
-        yield gen.sleep(0.1)
+        result = await client.get_version(environment, version)
+        await gen.sleep(0.1)
 
     assert result.result["model"]["done"] == len(resources)
 

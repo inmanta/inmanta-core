@@ -148,30 +148,30 @@ def test_unknown_in_attribute_requires(snippetcompiler, caplog):
     assert len(warning) == 0
 
 
-@pytest.mark.gen_test
-def test_empty_server_export(snippetcompiler, server, client):
+@pytest.mark.asyncio
+async def test_empty_server_export(snippetcompiler, server, client):
     snippetcompiler.setup_for_snippet("""
             h = std::Host(name="test", os=std::linux)
         """)
     snippetcompiler.do_export(deploy=True)
 
 
-@pytest.mark.gen_test
-def test_server_export(snippetcompiler, server, client, environment):
+@pytest.mark.asyncio
+async def test_server_export(snippetcompiler, server, client, environment):
     snippetcompiler.setup_for_snippet("""
             h = std::Host(name="test", os=std::linux)
             f = std::ConfigFile(host=h, path="/etc/motd", content="test")
         """)
     snippetcompiler.do_export(deploy=True)
 
-    result = yield client.list_versions(tid=environment)
+    result = await client.list_versions(tid=environment)
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1
 
 
-@pytest.mark.gen_test
-def test_dict_export_server(snippetcompiler, server, client, environment):
+@pytest.mark.asyncio
+async def test_dict_export_server(snippetcompiler, server, client, environment):
     config.Config.set("config", "environment", environment)
     snippetcompiler.setup_for_snippet("""
 import exp
@@ -181,7 +181,7 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 
     snippetcompiler.do_export(deploy=True)
 
-    result = yield client.list_versions(tid=environment)
+    result = await client.list_versions(tid=environment)
     assert result.code == 200
     assert len(result.result["versions"]) == 1
     assert result.result["versions"][0]["total"] == 1

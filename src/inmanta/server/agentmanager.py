@@ -286,13 +286,13 @@ class AgentManager(ServerSlice):
                 yield self._set_primary(env, agent, instance, self.sessions[sid])
                 return
 
-        yield agent.update_fields(primary=None, last_failover=datetime.now())
+        yield agent.update_fields(id_primary=None, last_failover=datetime.now())
 
     @gen.coroutine
     def _set_primary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: protocol.Session):
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
-        yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
+        yield agent.update_fields(last_failover=datetime.now(), id_primary=instance.id)
         self.add_future(session.get_client().set_state(agent.name, True))
 
     @gen.coroutine
@@ -311,7 +311,7 @@ class AgentManager(ServerSlice):
 
             agents = yield data.Agent.get_list()
             for agent in agents:
-                yield agent.update_fields(primary=None)
+                yield agent.update_fields(id_primary=None)
 
     # utils
     def _fork_inmanta(self, args, outfile, errfile, cwd=None):

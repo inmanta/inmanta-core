@@ -422,7 +422,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         result = {}
         for key, value in dct.items():
             if isinstance(value, datetime.datetime):
-                result[key] = value.strftime("%Y-%m-%d %H:%M:%S.%f")
+                result[key] = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
             elif isinstance(value, dict):
                 result[key] = cls._get_value_of_dict(value)
             else:
@@ -470,10 +470,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 if not isinstance(value, typing.field_type):
                     raise TypeError("Value of field %s does not have the correct type" % name)
 
-                result[name] = self._get_value(value)
+                result[name] = value
 
             elif typing.default:
-                result[name] = self._get_value(typing.default_value)
+                result[name] = typing.default_value
 
         return result
 
@@ -529,6 +529,14 @@ def convert_agent_map(value):
 
     return value
 
+
+def translate_to_postgres_type(type):
+    if not type in TYPE_MAP:
+        raise Exception("Type \'" + type + "\' is not a valid type for a settings entry")
+    return TYPE_MAP[type]
+
+
+TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar"}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
@@ -644,9 +652,10 @@ class Environment(BaseDocument):
         if callable(self._settings[key].validator):
             value = self._settings[key].validator(value)
 
+        type = translate_to_postgres_type(self._settings[key].typ)
         (filter_statement, values) = self._get_composed_filter(name=self.name, project=self.project, offset=3)
         query = "UPDATE " + self.table_name() + \
-                " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::boolean), TRUE)" + \
+                " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::" + type + "), TRUE)" + \
                 " WHERE " + filter_statement
         values = [self._get_value([key]), self._get_value(value)] + values
         yield self._connection.execute(query, *values)
@@ -1067,9 +1076,11 @@ class ResourceAction(BaseDocument):
             for message in result["messages"]:
                 message = json.loads(message)
                 if "timestamp" in message:
-                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
+                    message["timestamp"] = datetime.datetime.strptime(message["timestamp"], "%Y-%m-%dT%H:%M:%S.%f")
                 new_messages.append(message)
             result["messages"] = new_messages
+        if "changes" in result and result["changes"] == {}:
+            result["changes"] = None
         return result
 
     @classmethod
@@ -1307,7 +1318,8 @@ class Resource(BaseDocument):
                         " AND status != $" + str(len(values) + 1) + \
                         " ORDER BY model DESC LIMIT 1"
                 values.append(cls._get_value(const.ResourceState.available))
-                deployed = (yield cls._connection.fetch(query, *values))[0]
+                deployed = (yield cls._connection.fetch(query, *values))
+                deployed = deployed[0] if deployed else {}
             else:
                 deployed = latest
 
@@ -1341,7 +1353,10 @@ class Resource(BaseDocument):
         resources = []
         for res in result:
             if no_obj:
-                resources.append(dict(res))
+                res = dict(res)
+                res["attributes"] = json.loads(res["attributes"])
+                res["id"] = res["resource_version_id"]
+                resources.append(res)
             else:
                 resources.append(cls(from_postgres=True, **res))
 
@@ -1418,7 +1433,7 @@ class Resource(BaseDocument):
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=latest_version)
         query = "SELECT DISTINCT resource_id FROM " + cls.table_name() + \
                 " WHERE " + filter_statement + \
-                " AND attributes @> $3"
+                " AND attributes @> $" + str(len(values) + 1)
         values.append(cls._get_value({"purge_on_delete": True}))
         resources = yield cls._connection.fetch(query, *values)
         resources = [r["resource_id"] for r in resources]
@@ -1441,7 +1456,7 @@ class Resource(BaseDocument):
             query = "SELECT *" + \
                     " FROM " + cls.table_name() + \
                     " WHERE " + filter_statement + \
-                    " AND model < $3" + \
+                    " AND model < $" + str(len(values) + 1) + \
                     " ORDER BY model DESC"
             values.append(cls._get_value(current_version))
             result = yield cls._connection.fetch(query, *values)
@@ -1461,6 +1476,13 @@ class Resource(BaseDocument):
         dct = BaseDocument.to_dict(self)
         dct["id"] = dct["resource_version_id"]
         return dct
+
+    # @classmethod
+    # def _create_dict_wrapper(cls, from_postgres, kwargs):
+    #     result = cls._create_dict(from_postgres, kwargs)
+    #     result["id"] = result["resource_version_id"]
+    #     print(result)
+    #     return result
 
 
 class ConfigurationModel(BaseDocument):
@@ -1501,6 +1523,12 @@ class ConfigurationModel(BaseDocument):
         dct = BaseDocument.to_dict(self)
         dct["done"] = self.done
         return dct
+
+    @classmethod
+    def _create_dict_wrapper(cls, from_postgres, kwargs):
+        result = cls._create_dict(from_postgres, kwargs)
+        result["done"] = len(result["status"])
+        return result
 
     @classmethod
     @gen.coroutine
