@@ -19,8 +19,6 @@
 import functools
 import logging
 
-from pkg_resources import DistributionNotFound
-import pkg_resources
 import itertools
 import hashlib
 
@@ -43,6 +41,8 @@ def memoize(obj):
 
 
 def get_compiler_version():
+    import pkg_resources
+    from pkg_resources import DistributionNotFound
     try:
         return pkg_resources.get_distribution("inmanta").version
     except DistributionNotFound:
