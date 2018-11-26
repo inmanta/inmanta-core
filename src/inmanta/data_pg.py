@@ -124,7 +124,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     id = Field(field_type=uuid.UUID, required=True)
 
-    _connection = None
+    _connection_pool = None
 
     @classmethod
     def table_name(cls):
@@ -197,8 +197,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return uuid.uuid4()
 
     @classmethod
-    def set_connection(cls, connection):
-        cls._connection = connection
+    def set_connection_pool(cls, pool):
+        cls._connection_pool = pool
 
     def _get_field(self, name):
         if hasattr(self.__class__, name):
@@ -255,6 +255,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
+
+
     @gen.coroutine
     def insert(self):
         """
@@ -265,23 +267,33 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values_as_parameterize_sql_string = ','.join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = "INSERT INTO " + self.table_name() + " (" + column_names_as_sql_string + ") " + \
                 "VALUES (" + values_as_parameterize_sql_string + ")"
-        yield self._connection.execute(query, *values)
+        yield self._execute_query(query, *values)
 
     @classmethod
-    @gen.coroutine
-    def insert_many(cls, documents):
+    async def _fetch_query(cls, query, *values):
+        async with cls._connection_pool.acquire() as con:
+            return await con.fetch(query, *values)
+
+    @classmethod
+    async def _execute_query(cls, query, *values):
+        async with cls._connection_pool.acquire() as con:
+            return await con.execute(query, *values)
+
+    @classmethod
+    async def insert_many(cls, documents):
         """
             Insert multiple objects at once
         """
-        tr = cls._connection.transaction()
-        yield tr.start()
-        try:
-            for doc in documents:
-                yield doc.insert()
-        except Exception as e:
-            yield tr.rollback()
-            raise e
-        yield tr.commit()
+        async with cls._connection_pool.acquire() as con:
+            tr = con.transaction()
+            await tr.start()
+            try:
+                for doc in documents:
+                    await doc.insert()
+            except Exception as e:
+                await tr.rollback()
+                raise e
+            await tr.commit()
 
     def add_default_values_when_undefined(self, **kwargs):
         result = dict(kwargs)
@@ -325,7 +337,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values_for_filter) = self._get_composed_filter(id=self.id, offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
-        yield self._connection.execute(query, *values)
+        yield self._execute_query(query, *values)
 
     @classmethod
     @gen.coroutine
@@ -373,7 +385,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (filter_statement, values) = cls._get_composed_filter(**query)
         query = "DELETE FROM " + cls.table_name() + " WHERE " + filter_statement
-        result = yield cls._connection.execute(query, *values)
+        result = yield cls._execute_query(query, *values)
         record_count = int(result.split(' ')[1])
         return record_count
 
@@ -436,7 +448,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         (filter_as_string, values) = self._get_composed_filter(id=self.id)
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
-        yield self._connection.execute(query, *values)
+        yield self._execute_query(query, *values)
 
     @gen.coroutine
     def delete_cascade(self):
@@ -445,7 +457,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     @gen.coroutine
     def select_query(cls, query, values, no_obj=False):
-        results = yield cls._connection.fetch(query, *values)
+        results = yield cls._fetch_query(query, *values)
         if no_obj:
             return results
         objects = []
@@ -658,7 +670,7 @@ class Environment(BaseDocument):
                 " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::" + type + "), TRUE)" + \
                 " WHERE " + filter_statement
         values = [self._get_value([key]), self._get_value(value)] + values
-        yield self._connection.execute(query, *values)
+        yield self._execute_query(query, *values)
         self.settings[key] = value
 
     @gen.coroutine
@@ -677,7 +689,7 @@ class Environment(BaseDocument):
                     " SET settings=settings - $1" + \
                     " WHERE " + filter_statement
             values = [self._get_value(key)] + values
-            yield self._connection.execute(query, *values)
+            yield self._execute_query(query, *values)
             del self.settings[key]
         else:
             yield self.set(key, self._settings[key].default)
@@ -1110,15 +1122,17 @@ class ResourceAction(BaseDocument):
         self._updates[name] = value
 
     def add_logs(self, messages):
+        if not messages:
+            return
         if "messages" not in self._updates:
             self._updates["messages"] = []
         self._updates["messages"] += messages
 
     def add_changes(self, changes):
-        if "changes" not in self._updates:
-            self._updates["changes"] = {}
         for resource, values in changes.items():
             for field, change in values.items():
+                if "changes" not in self._updates:
+                    self._updates["changes"] = {}
                 if resource not in self._updates["changes"]:
                     self._updates["changes"][resource] = {}
                 self._updates["changes"][resource][field] = change
@@ -1180,7 +1194,7 @@ class ResourceAction(BaseDocument):
         query = "UPDATE " + self.table_name() + \
                 " SET " + set_statement + \
                 " WHERE " + filter_statement
-        yield self._connection.execute(query, *values)
+        yield self._execute_query(query, *values)
         self._updates = {}
 
     def _get_set_statement_for_updates(self):
@@ -1254,7 +1268,7 @@ class Resource(BaseDocument):
     @gen.coroutine
     def delete_cascade(self):
         query = "DELETE FROM " + ResourceAction.__name__ + " WHERE environment=$1 AND $2=ANY(resource_version_ids)"
-        yield self._connection.execute(query, self.environment, self.resource_version_id)
+        yield self._execute_query(query, self.environment, self.resource_version_id)
         yield self.delete()
 
     @classmethod
@@ -1303,7 +1317,7 @@ class Resource(BaseDocument):
                 }
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        resources = yield cls._connection.fetch("SELECT DISTINCT resource_id "
+        resources = yield cls._fetch_query("SELECT DISTINCT resource_id "
                                                 "FROM " + cls.table_name() + " "
                                                 "WHERE " + filter_statement, *values)
         resources = [x["resource_id"] for x in resources]
@@ -1318,7 +1332,7 @@ class Resource(BaseDocument):
                         " AND status != $" + str(len(values) + 1) + \
                         " ORDER BY model DESC LIMIT 1"
                 values.append(cls._get_value(const.ResourceState.available))
-                deployed = (yield cls._connection.fetch(query, *values))
+                deployed = (yield cls._fetch_query(query, *values))
                 deployed = deployed[0] if deployed else {}
             else:
                 deployed = latest
@@ -1347,7 +1361,7 @@ class Resource(BaseDocument):
         else:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
-        result = yield cls._connection.fetch("SELECT " + projection +
+        result = yield cls._fetch_query("SELECT " + projection +
                                              " FROM " + cls.table_name() +
                                              " WHERE " + filter_statement, *values)
         resources = []
@@ -1418,7 +1432,7 @@ class Resource(BaseDocument):
         # get all models that have been released
         query = "SELECT version FROM " + ConfigurationModel.table_name() + \
                 " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT " + str(DBLIMIT)
-        models = yield ConfigurationModel._connection.fetch(query, cls._get_value(environment))
+        models = yield ConfigurationModel._fetch_query(query, cls._get_value(environment))
         versions = set()
         latest_version = None
         for model in models:
@@ -1435,7 +1449,7 @@ class Resource(BaseDocument):
                 " WHERE " + filter_statement + \
                 " AND attributes @> $" + str(len(values) + 1)
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources = yield cls._connection.fetch(query, *values)
+        resources = yield cls._fetch_query(query, *values)
         resources = [r["resource_id"] for r in resources]
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
@@ -1459,7 +1473,7 @@ class Resource(BaseDocument):
                     " AND model < $" + str(len(values) + 1) + \
                     " ORDER BY model DESC"
             values.append(cls._get_value(current_version))
-            result = yield cls._connection.fetch(query, *values)
+            result = yield cls._fetch_query(query, *values)
             for obj in result:
                 # if a resource is part of a released version and it is deployed (this last condition is actually enough
                 # at the moment), we have found the last status of the resource. If it was not purged in that version,
@@ -1560,7 +1574,7 @@ class ConfigurationModel(BaseDocument):
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
-        agents = yield cls._connection.fetch(query, *values)
+        agents = yield cls._fetch_query(query, *values)
         return [x["agent"] for x in agents]
 
     @classmethod
@@ -1587,7 +1601,7 @@ class ConfigurationModel(BaseDocument):
                 " SET status=jsonb_set(status, $1::text[], $2, TRUE)" \
                 " WHERE " + filter_statement
         values = [[cls._get_value(entry_uuid)], cls._get_value(value_entry)] + values
-        yield cls._connection.execute(query, *values)
+        yield cls._execute_query(query, *values)
 
     @gen.coroutine
     def delete_cascade(self):
@@ -1865,11 +1879,11 @@ def load_schema(connection):
                 query = ""
 
 
-def set_connection(connection):
+def set_connection_pool(pool):
     for cls in _classes:
-        cls.set_connection(connection)
+        cls.set_connection_pool(pool)
 
 
-async def connect(host, port, database, username, password, io_loop):
-    connection = await asyncpg.connect(host=host, port=port, database=database, user=username, password=password)
-    set_connection(connection)
+async def connect(host, port, database, username, password):
+    pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
+    set_connection_pool(pool)

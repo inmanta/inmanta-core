@@ -28,6 +28,7 @@ import tempfile
 import time
 from uuid import UUID
 import uuid
+import asyncio
 
 import dateutil
 import pymongo
@@ -46,6 +47,7 @@ import json
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token
+from integration.integration import run_async, wait_async
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -73,8 +75,9 @@ class Server(protocol.ServerSlice):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        self._io_loop.add_callback(data.connect(database_host, database_port, opt.db_name.get(), opt.db_username.get(),
-                                                opt.db_password.get(), self._io_loop))
+        if not asyncio.get_event_loop().is_running():
+            asyncio.get_event_loop().run_until_complete(data.connect(database_host, database_port, opt.db_name.get(),
+                                                    opt.db_username.get(), opt.db_password.get()))
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
         # TODO:

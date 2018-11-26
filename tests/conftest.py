@@ -73,17 +73,12 @@ def postgres_db(postgresql_proc):
 
 
 @pytest.fixture
-async def postgresql_client(postgres_db, database_name):
-    connection_postgres = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
-    await connection_postgres.execute("DROP DATABASE IF EXISTS " + database_name)
-    await connection_postgres.execute("CREATE DATABASE " + database_name)
+async def postgresql_client(postgres_db, database_name, init_dataclasses):
     connection_inmanta_db = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port,
                                                   user=postgres_db.user, database=database_name)
-    data.set_connection(connection_inmanta_db)
     yield connection_inmanta_db
     await connection_inmanta_db.close()
-    await connection_postgres.execute("DROP DATABASE " + database_name)
-    await connection_postgres.close()
+
 
 # @pytest.fixture(scope="session")
 # def mongo_client(mongo_db):
@@ -95,9 +90,21 @@ async def postgresql_client(postgres_db, database_name):
 
 
 @pytest.fixture(scope="function")
-async def init_dataclasses(postgresql_client):
-    await data.load_schema(postgresql_client)
-    data.set_connection(postgresql_client)
+async def init_dataclasses(postgres_db, database_name):
+    connection_postgres = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    await connection_postgres.execute("DROP DATABASE IF EXISTS " + database_name)
+    await connection_postgres.execute("CREATE DATABASE " + database_name)
+
+    pool = await asyncpg.create_pool(host=postgres_db.host, port=postgres_db.port,
+                                     user=postgres_db.user, database=database_name)
+    async with pool.acquire() as con:
+        await data.load_schema(con)
+    data.set_connection_pool(pool)
+    yield
+    await pool.close()
+
+    await connection_postgres.execute("DROP DATABASE " + database_name)
+    await connection_postgres.close()
 
 
 def reset_all():

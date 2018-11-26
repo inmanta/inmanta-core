@@ -106,8 +106,8 @@ CREATE TABLE IF NOT EXISTS public.code (
     resource varchar NOT NULL,
     version integer NOT NULL,
     sources JSONB,
-    source_refs JSONB,
-    FOREIGN KEY (environment, version) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
+    source_refs JSONB
+--FOREIGN KEY (environment, version) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
 CREATE INDEX code_env_version_resource_index ON code (environment, version, resource);
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS public.unknownparameter (
     FOREIGN KEY (environment, version) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
-CREATE INDEX unknownparameter_env_version_index ON code (environment, version);
+CREATE INDEX unknownparameter_env_version_index ON unknownparameter (environment, version);
 
 -- Table: public.agentprocess
 CREATE TABLE IF NOT EXISTS public.agentprocess (
