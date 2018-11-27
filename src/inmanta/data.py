@@ -1198,12 +1198,13 @@ class Resource(BaseDocument):
         result = []
         for res in resources:
             latest = (yield cls._coll.find({"environment": environment,
-                                            "resource_id": res}).sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
-            if latest["status"] != const.ResourceState.available.name:
+                                            "resource_id": res}).sort("model", pymongo.DESCENDING).limit(1).to_list(1))[0]
+
+            if latest["status"] == const.ResourceState.available.name:
                 cursor = cls._coll.find({"environment": environment, "resource_id": res,
                                          "status": {"$ne": const.ResourceState.available.name}})
-                deployed = (yield cursor.sort("version", pymongo.DESCENDING).limit(1).to_list(1))[0]
-
+                deployed = (yield cursor.sort("model", pymongo.DESCENDING).limit(1).to_list(1))
+                deployed = deployed[0] if deployed else {}
             else:
                 deployed = latest
 
@@ -1479,8 +1480,8 @@ class ConfigurationModel(BaseDocument):
         snaps = yield Snapshot.get_list(environment=self.environment, model=self.version)
         for snap in snaps:
             yield snap.delete_cascade()
-        yield UnknownParameter.delete_all(environment=self.environment, model=self.version)
-        yield Code.delete_all(environment=self.environment, model=self.version)
+        yield UnknownParameter.delete_all(environment=self.environment, version=self.version)
+        yield Code.delete_all(environment=self.environment, version=self.version)
         yield DryRun.delete_all(environment=self.environment, model=self.version)
         yield self.delete()
 
