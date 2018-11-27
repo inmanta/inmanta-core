@@ -1,7 +1,7 @@
 PyJWT==1.6.4
 click==7.0
 colorlog==3.1.4
-cryptography==2.3.1
+cryptography==2.4.2
 execnet==1.4.1
 inmanta-sphinx==0.8
 motor==2.0.0
@@ -18,7 +18,7 @@ pytest==3.10.0
 python-dateutil==2.7.5
 pyyaml==3.13
 six==1.11.0
-sphinx-argparse==0.2.3
+sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
 sphinx-rtd-theme==0.4.2
 sphinx==1.8.1
