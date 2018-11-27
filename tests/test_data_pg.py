@@ -173,7 +173,7 @@ async def test_environment_cascade_content_only(init_dataclasses):
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
-    await  env.delete_cascade(only_content=True)
+    await env.delete_cascade(only_content=True)
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
@@ -1123,7 +1123,9 @@ async def test_resource_action_get_logs(init_dataclasses):
 
     for i in range(1, 11):
         action_id = uuid.uuid4()
-        resource_action = data.ResourceAction(environment=env.id, resource_version_ids=[uuid.UUID(int=1)], action_id=action_id,
+        resource_action = data.ResourceAction(environment=env.id,
+                                              resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
+                                              action_id=action_id,
                                               action=const.ResourceAction.deploy, started=datetime.datetime.now())
         await resource_action.insert()
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
@@ -1131,14 +1133,15 @@ async def test_resource_action_get_logs(init_dataclasses):
 
     action_id = uuid.uuid4()
 
-    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=[uuid.UUID(int=1)], action_id=action_id,
+    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
+                                          action_id=action_id,
                                           action=const.ResourceAction.dryrun, started=datetime.datetime.now())
     await resource_action.insert()
     times = datetime.datetime.now()
     resource_action.add_logs([data.LogLine.log(logging.WARNING, "warning version %(version)d", version=100, timestamp=times)])
     await resource_action.save()
 
-    resource_actions = await data.ResourceAction.get_log(env.id, uuid.UUID(int=1))
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent1,path=/etc/motd],v=%1")
     assert len(resource_actions) == 11
     for i in range(len(resource_actions)):
         action = resource_actions[i]
@@ -1146,13 +1149,15 @@ async def test_resource_action_get_logs(init_dataclasses):
             assert action.action == const.ResourceAction.dryrun
         else:
             assert action.action == const.ResourceAction.deploy
-    resource_actions = await data.ResourceAction.get_log(env.id, uuid.UUID(int=1), const.ResourceAction.dryrun.name)
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent1,path=/etc/motd],v=%1",
+                                                         const.ResourceAction.dryrun.name)
     assert len(resource_actions) == 1
     action = resource_actions[0]
     assert action.action == const.ResourceAction.dryrun
     assert action.messages[0]["level"] == LogLevel.WARNING.name
     assert action.messages[0]["timestamp"] == times
-    resource_actions = await data.ResourceAction.get_log(env.id, uuid.UUID(int=1), const.ResourceAction.deploy.name, limit=2)
+    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent1,path=/etc/motd],v=%1",
+                                                         const.ResourceAction.deploy.name, limit=2)
     assert len(resource_actions) == 2
     for action in resource_actions:
         assert len(action.messages) == 1
@@ -1168,8 +1173,41 @@ async def test_data_document_recursion(init_dataclasses):
     await env.insert()
 
     now = datetime.datetime.now()
-    ra = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+    ra = data.ResourceAction(environment=env.id, resource_version_ids=["test"], action_id=uuid.uuid4(),
                              action=const.ResourceAction.store, started=now, finished=now,
                              messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                         version=2)])
     await ra.insert()
+
+
+@pytest.mark.asyncio
+async def test_parameter(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    updated1 = datetime.datetime(2018, 7, 14, 12, 30)
+    parameter1 = data.Parameter(name="test", value="test_val", environment=env.id, source="source", updated=updated1)
+    await parameter1.insert()
+
+    updated2 = datetime.datetime(2018, 7, 14, 15, 30)
+    parameter2 = data.Parameter(name="test", value="test_val", environment=env.id, source="source", updated=updated2)
+    await parameter2.insert()
+
+    reference_timestamp = datetime.datetime(2018, 7, 14, 11, 30)
+    result = await data.Parameter.get_updated_before(reference_timestamp)
+    assert len(result) == 0
+
+    reference_timestamp = datetime.datetime(2018, 7, 14, 14, 30)
+    result = await data.Parameter.get_updated_before(reference_timestamp)
+    assert len(result) == 1
+    assert parameter1.id == result[0].id
+
+    reference_timestamp = datetime.datetime(2018, 7, 14, 16, 30)
+    result = await data.Parameter.get_updated_before(reference_timestamp)
+    assert len(result) == 2
+
+    result = await data.Parameter.get_updated_before(updated1)
+    assert len(result) == 0

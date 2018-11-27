@@ -83,7 +83,6 @@ CREATE UNIQUE INDEX resource_env_resourceversionid_index ON resource (environmen
 -- Table: public.resourceaction
 CREATE TABLE IF NOT EXISTS public.resourceaction (
     id uuid PRIMARY KEY,
-    resource_version_ids varchar[] NOT NULL,
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     action_id uuid NOT NULL,
     action resourceaction_type NOT NULL,
@@ -93,11 +92,22 @@ CREATE TABLE IF NOT EXISTS public.resourceaction (
     status resourcestate,
     changes JSONB DEFAULT '{}'::jsonb,
     change change,
-    send_event boolean
+    send_event boolean,
+    UNIQUE (environment, action_id)
 );
 
 CREATE UNIQUE INDEX resourceaction_env_resourceversionid_index ON resourceaction (environment, action_id);
-CREATE INDEX resourceaction_env_resourceversionid__started_index ON resourceaction (environment, resource_version_ids, started DESC);
+-- TODO: CHECK INDEX
+CREATE INDEX resourceaction_env_resourceversionid__started_index ON resourceaction (environment, action_id, started DESC);
+
+-- Table: public.resourceversionid
+CREATE TABLE IF NOT EXISTS public.resourceversionid (
+    id uuid PRIMARY KEY,
+    environment uuid NOT NULL,
+    action_id uuid NOT NULL,
+    resource_version_id varchar NOT NULL,
+    FOREIGN KEY (environment, action_id) REFERENCES resourceaction (environment, action_id) ON DELETE CASCADE
+);
 
 -- Table: public.code
 CREATE TABLE IF NOT EXISTS public.code (
@@ -160,3 +170,15 @@ CREATE TABLE IF NOT EXISTS public.agent (
 );
 
 CREATE UNIQUE INDEX agent_env_name_index ON agent (environment, name);
+
+-- Table: public.parameter
+CREATE TABLE IF NOT EXISTS public.parameter (
+    id uuid PRIMARY KEY,
+    name varchar NOT NULL,
+    value varchar NOT NULL DEFAULT '',
+    environment uuid NOT NULL,
+    source varchar NOT NULL,
+    resource_id varchar DEFAULT '',
+    updated timestamp,
+    metadata JSONB
+);

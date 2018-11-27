@@ -41,10 +41,11 @@ DBLIMIT = 100000
 
 class Field(object):
 
-    def __init__(self, field_type, required=False, unique=False, **kwargs):
+    def __init__(self, field_type, required=False, unique=False, reference=False, **kwargs):
 
         self._field_type = field_type
         self._required = required
+        self._reference = reference
 
         if "default" in kwargs:
             self._default = True
@@ -79,6 +80,11 @@ class Field(object):
         return self._unique
 
     unique = property(is_unique)
+
+    def is_reference(self):
+        return self._reference
+
+    reference = property(is_reference)
 
 
 class DataDocument(object):
@@ -152,8 +158,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if value is None and fields[name].required:
                 raise TypeError("%s field is required" % name)
 
-            if value is not None and not (value.__class__ is fields[name].field_type or
-                                          isinstance(value, fields[name].field_type)):
+            if not fields[name].reference and value is not None and not (value.__class__ is fields[name].field_type or
+                                                                         isinstance(value, fields[name].field_type)):
                 # pgasync does not convert a jsonb field to a dict
                 if from_postgres and isinstance(value, str) and fields[name].field_type is dict:
                     value = json.loads(value)
@@ -240,6 +246,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
         column_names = []
         values = []
         for name, typing in self._fields.items():
+            if self._fields[name].reference:
+                continue
             value = None
             if name in self.__fields:
                 value = self.__fields[name]
@@ -254,8 +262,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 values.append(self._get_value(value))
 
         return (column_names, values)
-
-
 
     @gen.coroutine
     def insert(self):
@@ -390,12 +396,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return record_count
 
     @classmethod
-    def _get_composed_filter(cls, offset=1, **query):
+    def _get_composed_filter(cls, offset=1, col_name_prefix=None, **query):
         filter_statements = []
         values = []
         index_count = max(1, offset)
         for key, value in query.items():
-            (filter_statement, value) = cls._get_filter(key, value, index_count)
+            (filter_statement, value) = cls._get_filter(key, value, index_count, col_name_prefix=col_name_prefix)
             filter_statements.append(filter_statement)
             if value is not None:
                 values.append(value)
@@ -404,10 +410,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name, value, index):
+    def _get_filter(cls, name, value, index, col_name_prefix=None):
         if value is None:
             return (name + " IS NULL", None)
         filter_statement = name + "=$" + str(index)
+        if col_name_prefix is not None:
+            filter_statement = col_name_prefix + '.' + filter_statement
         value = cls._get_value(value)
         return (filter_statement, value)
 
@@ -724,37 +732,34 @@ class Environment(BaseDocument):
 SOURCE = ("fact", "plugin", "user", "form", "report")
 
 
-# class Parameter(BaseDocument):
-#     """
-#         A parameter that can be used in the configuration model
-#
-#         :param name The name of the parameter
-#         :param value The value of the parameter
-#         :param environment The environment this parameter belongs to
-#         :param source The source of the parameter
-#         :param resource_id An optional resource id
-#         :param updated When was the parameter updated last
-#
-#         :todo Add history
-#     """
-#     name = Field(field_type=str, required=True)
-#     value = Field(field_type=str, default="", required=True)
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     source = Field(field_type=str, required=True)
-#     resource_id = Field(field_type=str, default="")
-#     updated = Field(field_type=datetime.datetime)
-#     metadata = Field(field_type=dict)
-#
-#     @classmethod
-#     @gen.coroutine
-#     def get_updated_before(cls, updated_before):
-#         cursor = cls._coll.find({"updated": {"$lt": updated_before}})
-#
-#         params = []
-#         while (yield cursor.fetch_next):
-#             params.append(cls(from_mongo=True, **cursor.next_object()))
-#
-#         return params
+class Parameter(BaseDocument):
+    """
+        A parameter that can be used in the configuration model
+
+        :param name The name of the parameter
+        :param value The value of the parameter
+        :param environment The environment this parameter belongs to
+        :param source The source of the parameter
+        :param resource_id An optional resource id
+        :param updated When was the parameter updated last
+
+        :todo Add history
+    """
+    name = Field(field_type=str, required=True)
+    value = Field(field_type=str, default="", required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    source = Field(field_type=str, required=True)
+    resource_id = Field(field_type=str, default="")
+    updated = Field(field_type=datetime.datetime)
+    metadata = Field(field_type=dict)
+
+    @classmethod
+    @gen.coroutine
+    def get_updated_before(cls, updated_before):
+        query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
+        values = [cls._get_value(updated_before)]
+        result = yield cls.select_query(query, values)
+        return result
 
 
 class UnknownParameter(BaseDocument):
@@ -1044,6 +1049,13 @@ class LogLine(DataDocument):
         return cls(level=const.LogLevel(level), msg=log_line, args=[], kwargs=kwargs, timestamp=timestamp)
 
 
+class ResourceVersionId(BaseDocument):
+
+    resource_version_id = Field(field_type=str, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    action_id = Field(field_type=uuid.UUID, required=True)
+
+
 class ResourceAction(BaseDocument):
     """
         Log related to actions performed on a specific resource version by Inmanta.
@@ -1061,7 +1073,7 @@ class ResourceAction(BaseDocument):
                        was changed but not data was provided by the agent.
         :param change The change result of an action
     """
-    resource_version_ids = Field(field_type=list, required=True)
+    resource_version_ids = Field(field_type=list, required=True, reference=True, default=[])
     environment = Field(field_type=uuid.UUID, required=True)
 
     action_id = Field(field_type=uuid.UUID, required=True)
@@ -1079,6 +1091,44 @@ class ResourceAction(BaseDocument):
     def __init__(self, from_postgres=False, **kwargs):
         super().__init__(from_postgres, **kwargs)
         self._updates = {}
+
+    @gen.coroutine
+    def insert(self):
+        yield super(ResourceAction, self).insert()
+        for resource_version_id in self.resource_version_ids:
+            new_obj = ResourceVersionId(resource_version_id=resource_version_id, environment=self.environment,
+                                        action_id=self.action_id)
+            yield new_obj.insert()
+
+    @gen.coroutine
+    def update_fields(self, **kwargs):
+        super(ResourceAction, self).update_fields(**kwargs)
+
+    @classmethod
+    @gen.coroutine
+    def get_by_id(cls, doc_id: uuid.UUID):
+        query = cls._get_select_star_statement() + " WHERE r.id=$1"
+        values = [cls._get_value(doc_id)]
+        result = yield cls._get_resource_action_objects(query, values)
+        if len(result) > 0:
+            return result[0]
+
+    @classmethod
+    @gen.coroutine
+    def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+        (filter_statement, values) = cls._get_composed_filter(**query, col_name_prefix='r')
+        sql_query = cls._get_select_star_statement() + " WHERE " + filter_statement
+        result = yield cls._get_resource_action_objects(sql_query, values)
+        return result
+
+    @classmethod
+    def _get_select_star_statement(cls):
+        ra_table_name = cls.table_name()
+        rvid_table_name = ResourceVersionId.table_name()
+        return "SELECT " + \
+               ','.join(['r.' + x for x in cls._fields.keys() if x != "resource_version_ids"]) + ", i.resource_version_id" + \
+               " FROM " + ra_table_name + " r LEFT OUTER JOIN " + rvid_table_name + " i" + \
+               " ON (r.environment = i.environment AND r.action_id= i.action_id)"
 
     @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
@@ -1098,10 +1148,9 @@ class ResourceAction(BaseDocument):
     @classmethod
     @gen.coroutine
     def get_log(cls, environment, resource_version_id, action=None, limit=0):
-        (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
-                " AND resource_version_ids @> $2"
-        values.append(cls._get_value([resource_version_id]))
+        query = cls._get_select_star_statement()
+        query += " WHERE r.environment=$1 AND i.resource_version_id=$2"
+        values = [cls._get_value(environment), cls._get_value(resource_version_id)]
         if action is not None:
             query += " AND action=$3"
             values.append(cls._get_value(action))
@@ -1109,8 +1158,42 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $" + str(len(values) + 1)
             values.append(cls._get_value(limit))
-        log = yield cls.select_query(query, values)
-        return log
+        result = yield cls._get_resource_action_objects(query, values)
+        return result
+
+    @classmethod
+    @gen.coroutine
+    def _get_resource_action_objects(cls, query, values):
+        records = yield cls._fetch_query(query, *values)
+        grouped_records = cls.group_records_with_same_primary_key(records)
+        result = []
+        for id_resource_action, records_with_same_id in grouped_records.items():
+            resource_version_ids = cls._get_resource_version_ids(records_with_same_id)
+            resource_action_dct = dict(records_with_same_id[0])
+            del resource_action_dct["resource_version_id"]
+            resource_action_dct["resource_version_ids"] = resource_version_ids
+            resource_action = cls(**resource_action_dct, from_postgres=True)
+            result.append(resource_action)
+        return result
+
+    @classmethod
+    def _get_resource_version_ids(cls, records):
+        result = []
+        for record in records:
+            resource_version_id = record["resource_version_id"]
+            result.append(resource_version_id)
+        return result
+
+    @classmethod
+    def group_records_with_same_primary_key(cls, records):
+        result = {}
+        for record in records:
+            record_id = record["id"]
+            if record_id not in result:
+                result[record_id] = [record]
+            else:
+                result[record_id].append(record)
+        return result
 
     @classmethod
     @gen.coroutine
@@ -1186,10 +1269,7 @@ class ResourceAction(BaseDocument):
             return
 
         (set_statement, values_set_statement) = self._get_set_statement_for_updates()
-        (filter_statement, values_of_filter) = self._get_composed_filter(resource_version_ids=self.resource_version_ids,
-                                                                         environment=self.environment,
-                                                                         action_id=self.action_id,
-                                                                         offset=len(values_set_statement) + 1)
+        (filter_statement, values_of_filter) = self._get_composed_filter(id=self.id, offset=len(values_set_statement) + 1)
         values = values_set_statement + values_of_filter
         query = "UPDATE " + self.table_name() + \
                 " SET " + set_statement + \
@@ -1267,7 +1347,12 @@ class Resource(BaseDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        query = "DELETE FROM " + ResourceAction.__name__ + " WHERE environment=$1 AND $2=ANY(resource_version_ids)"
+        ra_table_name = ResourceAction.table_name()
+        rvid_table_name = ResourceVersionId.table_name()
+        sub_query = "SELECT r.action_id FROM " + ra_table_name + " r INNER JOIN " + rvid_table_name + " i" + \
+                    " ON (r.environment = i.environment AND r.action_id= i.action_id)" + \
+                    " WHERE r.environment=$1 AND i.resource_version_id=$2"
+        query = "DELETE FROM " + ra_table_name + " WHERE environment=$1 AND action_id=ANY(" + sub_query + ")"
         yield self._execute_query(query, self.environment, self.resource_version_id)
         yield self.delete()
 
@@ -1318,8 +1403,8 @@ class Resource(BaseDocument):
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment)
         resources = yield cls._fetch_query("SELECT DISTINCT resource_id "
-                                                "FROM " + cls.table_name() + " "
-                                                "WHERE " + filter_statement, *values)
+                                           "FROM " + cls.table_name() + " "
+                                           "WHERE " + filter_statement, *values)
         resources = [x["resource_id"] for x in resources]
         result = []
         for res in resources:
@@ -1362,8 +1447,8 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
         result = yield cls._fetch_query("SELECT " + projection +
-                                             " FROM " + cls.table_name() +
-                                             " WHERE " + filter_statement, *values)
+                                        " FROM " + cls.table_name() +
+                                        " WHERE " + filter_statement, *values)
         resources = []
         for res in result:
             if no_obj:
@@ -1857,7 +1942,7 @@ class Code(BaseDocument):
 #             FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun, ResourceSnapshot, ResourceRestore,
 #             SnapshotRestore, Snapshot]
 _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent,
-            Resource, ResourceAction, ConfigurationModel, Code]
+            Resource, ResourceAction, ResourceVersionId, ConfigurationModel, Code, Parameter]
 
 SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 
