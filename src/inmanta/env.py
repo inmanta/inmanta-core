@@ -177,6 +177,7 @@ class VirtualEnv(object):
             except CalledProcessError as e:
                 LOGGER.debug("%s: %s", cmd, e.output.decode())
                 LOGGER.debug("requirements: %s", requirements_file)
+                raise
             except Exception:
                 LOGGER.debug("%s: %s", cmd, output.decode())
                 LOGGER.debug("requirements: %s", requirements_file)
