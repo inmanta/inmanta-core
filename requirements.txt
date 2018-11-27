@@ -13,7 +13,7 @@ pytest-instafail
 pytest-randomly==1.2.3
 pytest-sugar
 pytest-tornado==0.5.0
-pytest-xdist
+pytest-xdist==1.24.1
 pytest==3.10.0
 python-dateutil==2.7.5
 pyyaml==3.13
