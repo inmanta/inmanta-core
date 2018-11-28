@@ -52,17 +52,14 @@ class VirtualEnv(object):
         """
             Init the virtual environment
         """
-        python_exec = sys.executable
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
         python_bin = os.path.join(self.env_path, "bin", python_name)
 
         if not os.path.exists(python_bin):
-            venv_call = [python_exec, "-m", "venv"]
-
             # venv requires some care when the .env folder already exists
-
+            # https://docs.python.org/3/library/venv.html
             if not os.path.exists(self.env_path):
                 path = self.env_path
             else:
@@ -70,7 +67,6 @@ class VirtualEnv(object):
                 path = os.path.realpath(self.env_path)
 
             # --clear is required in python prior to 3.4 if the folder already exists
-            # https://docs.python.org/3/library/venv.html
             try:
                 venv.create(path, clear=True, with_pip=True)
             except CalledProcessError as e:

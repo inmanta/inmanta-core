@@ -13,8 +13,6 @@ requires = [
         'texttable',
         'tornado < 5',
         'typing',
-        'virtualenv',
-        'typing',
         'PyJWT',
         'cryptography'
     ]
@@ -28,7 +26,7 @@ setup(
     author="Inmanta",
     author_email="code@inmanta.com",
     license="Apache Software License 2",
-
+    python_requires='>=3.4',
     package_data={"" : ["misc/*", "docs/*"]},
     include_package_data=True,
 
