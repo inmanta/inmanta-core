@@ -48,6 +48,7 @@ from inmanta import protocol, module, moduletool
 from inmanta.export import cfg_env, ModelExporter
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.ast import CompilerException
 
 LOGGER = logging.getLogger()
 
@@ -425,7 +426,10 @@ def app():
 
     def report(e):
         if not options.errors:
-            print(str(e), file=sys.stderr)
+            if isinstance(e, CompilerException):
+                print(e.format_trace(indent="  "), file=sys.stderr)
+            else:
+                print(str(e), file=sys.stderr)
         else:
             sys.excepthook(*sys.exc_info())
 
