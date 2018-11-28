@@ -905,135 +905,120 @@ class Agent(BaseDocument):
         return obj
 
 
-# class Report(BaseDocument):
-#     """
-#         A report of a substep of compilation
-#
-#         :param started when the substep started
-#         :param completed when it ended
-#         :param command the command that was executed
-#         :param name The name of this step
-#         :param errstream what was reported on system err
-#         :param outstream what was reported on system out
-#     """
-#     started = Field(field_type=datetime.datetime, required=True)
-#     completed = Field(field_type=datetime.datetime, required=True)
-#     command = Field(field_type=str, required=True)
-#     name = Field(field_type=str, required=True)
-#     errstream = Field(field_type=str, default="")
-#     outstream = Field(field_type=str, default="")
-#     returncode = Field(field_type=int)
-#
-#     compile = Field(field_type=uuid.UUID)
-#
-#     __indexes__ = [
-#         dict(keys=[("compile", pymongo.ASCENDING)])
-#     ]
-#
-#
-# class Compile(BaseDocument):
-#     """
-#         A run of the compiler
-#
-#         :param environment The environment this resource is defined in
-#         :param started Time the compile started
-#         :param completed Time to compile was completed
-#         :param reports Per stage reports
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     started = Field(field_type=datetime.datetime)
-#     completed = Field(field_type=datetime.datetime)
-#
-#     __indexes__ = [
-#         dict(keys=[("environment", pymongo.ASCENDING), ("started", pymongo.ASCENDING)])
-#     ]
-#
-#     @classmethod
-#     @gen.coroutine
-#     def get_reports(cls, queryparts, limit, start, end):
-#         if limit is not None and end is not None:
-#             cursor = Compile._coll.find(queryparts).sort("started").limit(int(limit))
-#             models = []
-#             while (yield cursor.fetch_next):
-#                 models.append(cls(from_mongo=True, **cursor.next_object()))
-#
-#             models.reverse()
-#         else:
-#             cursor = Compile._coll.find(queryparts).sort("started", pymongo.DESCENDING)
-#             if limit is not None:
-#                 cursor = cursor.limit(int(limit))
-#             models = []
-#             while (yield cursor.fetch_next):
-#                 models.append(cls(from_mongo=True, **cursor.next_object()))
-#
-#         # load the report stages
-#         result = []
-#         for model in models:
-#             dict_model = model.to_dict()
-#             result.append(dict_model)
-#
-#         return result
-#
-#     @classmethod
-#     @gen.coroutine
-#     def get_report(cls, compile_id: uuid.UUID) -> "Compile":
-#         """
-#             Get the compile and the associated reports from the database
-#         """
-#         result = yield cls.get_by_id(compile_id)
-#         if result is None:
-#             return None
-#
-#         dict_model = result.to_dict()
-#         cursor = Report._coll.find({"compile": result.id})
-#
-#         dict_model["reports"] = []
-#         while (yield cursor.fetch_next):
-#             obj = Report(from_mongo=True, **cursor.next_object())
-#             dict_model["reports"].append(obj.to_dict())
-#
-#         return dict_model
-#
-#     @gen.coroutine
-#     def delete_cascade(self):
-#         yield Report.delete_all(compile=self.id)
-#         yield self.delete()
-#
-#
-# class Form(BaseDocument):
-#     """
-#         A form in the dashboard defined by the configuration model
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     form_type = Field(field_type=str, required=True)
-#     options = Field(field_type=dict)
-#     fields = Field(field_type=dict)
-#     defaults = Field(field_type=dict)
-#     field_options = Field(field_type=dict)
-#
-#     @classmethod
-#     @gen.coroutine
-#     def get_form(cls, environment, form_type):
-#         """
-#             Get a form based on its typed and environment
-#         """
-#         forms = yield cls.get_list(environment=environment, form_type=form_type)
-#         if len(forms) == 0:
-#             return None
-#         else:
-#             return forms[0]
-#
-#
-# class FormRecord(BaseDocument):
-#     """
-#         A form record
-#     """
-#     form = Field(field_type=uuid.UUID, required=True)
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     fields = Field(field_type=dict)
-#     changed = Field(field_type=datetime.datetime)
-#
-#
+class Report(BaseDocument):
+    """
+        A report of a substep of compilation
+
+        :param started when the substep started
+        :param completed when it ended
+        :param command the command that was executed
+        :param name The name of this step
+        :param errstream what was reported on system err
+        :param outstream what was reported on system out
+    """
+    started = Field(field_type=datetime.datetime, required=True)
+    completed = Field(field_type=datetime.datetime, required=True)
+    command = Field(field_type=str, required=True)
+    name = Field(field_type=str, required=True)
+    errstream = Field(field_type=str, default="")
+    outstream = Field(field_type=str, default="")
+    returncode = Field(field_type=int)
+    compile = Field(field_type=uuid.UUID)
+
+
+class Compile(BaseDocument):
+    """
+        A run of the compiler
+
+        :param environment The environment this resource is defined in
+        :param started Time the compile started
+        :param completed Time to compile was completed
+        :param reports Per stage reports
+    """
+    environment = Field(field_type=uuid.UUID, required=True)
+    started = Field(field_type=datetime.datetime)
+    completed = Field(field_type=datetime.datetime)
+
+    @classmethod
+    @gen.coroutine
+    # TODO: Remove queryparts parameter
+    # TODO: Also fix in data.py
+    def get_reports(cls, queryparts, limit=None, start=None, end=None):
+        query = "SELECT * FROM " + cls.table_name()
+        conditions_in_where_clause = []
+        values = []
+        if start:
+            conditions_in_where_clause.append("started > $" + str(len(values) + 1))
+            values.append(cls._get_value(start))
+        if end:
+            conditions_in_where_clause.append("started < $" + str(len(values) + 1))
+            values.append(cls._get_value(end))
+        if len(conditions_in_where_clause) > 0:
+            query += " WHERE " + 'AND'.join(conditions_in_where_clause)
+        if limit:
+            query += " LIMIT $" + str(len(values) + 1)
+            values.append(cls._get_value(limit))
+        query += " ORDER BY started DESC"
+        models = yield cls.select_query(query, values)
+        # load the report stages
+        result = []
+        for model in models:
+            dict_model = model.to_dict()
+            result.append(dict_model)
+        return result
+
+    @classmethod
+    @gen.coroutine
+    # TODO: Use join
+    def get_report(cls, compile_id: uuid.UUID) -> "Compile":
+        """
+            Get the compile and the associated reports from the database
+        """
+        result = yield cls.get_by_id(compile_id)
+        if result is None:
+            return None
+
+        dict_model = result.to_dict()
+        reports = yield Report.get_list(compile=result.id)
+        dict_model["reports"] = [r.to_dict() for r in reports]
+
+        return dict_model
+
+
+class Form(BaseDocument):
+    """
+        A form in the dashboard defined by the configuration model
+    """
+    environment = Field(field_type=uuid.UUID, required=True)
+    form_type = Field(field_type=str, required=True)
+    options = Field(field_type=dict)
+    fields = Field(field_type=dict)
+    defaults = Field(field_type=dict)
+    field_options = Field(field_type=dict)
+
+    @classmethod
+    @gen.coroutine
+    def get_form(cls, environment, form_type):
+        """
+            Get a form based on its typed and environment
+        """
+        forms = yield cls.get_list(environment=environment, form_type=form_type)
+        if len(forms) == 0:
+            return None
+        else:
+            return forms[0]
+
+
+class FormRecord(BaseDocument):
+    """
+        A form record
+    """
+    form = Field(field_type=uuid.UUID, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    fields = Field(field_type=dict)
+    changed = Field(field_type=datetime.datetime)
+
+
 class LogLine(DataDocument):
 
     @property
@@ -1777,65 +1762,64 @@ class Code(BaseDocument):
         return codes
 
 
-# class DryRun(BaseDocument):
-#     """
-#         A dryrun of a model version
-#
-#         :param id The id of this dryrun
-#         :param environment The environment this code belongs to
-#         :param model The configuration model
-#         :param date The date the run was requested
-#         :param resource_total The number of resources that do a dryrun for
-#         :param resource_todo The number of resources left to do
-#         :param resources Changes for each of the resources in the version
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     model = Field(field_type=int, required=True)
-#     date = Field(field_type=datetime.datetime)
-#     total = Field(field_type=int, default=0)
-#     todo = Field(field_type=int, default=0)
-#     resources = Field(field_type=dict, default={})
-#
-#     __indexes__ = [
-#         dict(keys=[("environment", pymongo.ASCENDING), ("model", pymongo.DESCENDING)])
-#     ]
-#
-#     @classmethod
-#     @gen.coroutine
-#     def update_resource(cls, dryrun_id, resource_id, dryrun_data):
-#         """
-#             Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
-#             if the resource has not been saved yet.
-#         """
-#         entry_uuid = uuid.uuid5(dryrun_id, resource_id)
-#         resource_key = "resources.%s" % entry_uuid
-#
-#         query = {"_id": dryrun_id, resource_key: {"$exists": False}}
-#         update = {"$inc": {"todo": int(-1)}, "$set": {resource_key: cls._value_to_dict(dryrun_data)}}
-#
-#         yield cls._coll.update_one(query, update)
-#
-#     @classmethod
-#     @gen.coroutine
-#     def create(cls, environment, model, total, todo):
-#         obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
-#         obj.insert()
-#         return obj
-#
-#     @classmethod
-#     def mongo_to_dict(cls, **kwargs):
-#         dct = super(DryRun, cls).mongo_to_dict(**kwargs)
-#         resources = {r["id"]: r for r in dct["resources"].values()}
-#         dct["resources"] = resources
-#         return dct
-#
-#     def to_dict(self):
-#         dict_result = BaseDocument.to_dict(self)
-#         resources = {r["id"]: r for r in dict_result["resources"].values()}
-#         dict_result["resources"] = resources
-#         return dict_result
-#
-#
+class DryRun(BaseDocument):
+    """
+        A dryrun of a model version
+
+        :param id The id of this dryrun
+        :param environment The environment this code belongs to
+        :param model The configuration model
+        :param date The date the run was requested
+        :param resource_total The number of resources that do a dryrun for
+        :param resource_todo The number of resources left to do
+        :param resources Changes for each of the resources in the version
+    """
+    environment = Field(field_type=uuid.UUID, required=True)
+    model = Field(field_type=int, required=True)
+    date = Field(field_type=datetime.datetime)
+    total = Field(field_type=int, default=0)
+    todo = Field(field_type=int, default=0)
+    resources = Field(field_type=dict, default={})
+
+    @classmethod
+    @gen.coroutine
+    def update_resource(cls, dryrun_id, resource_id, dryrun_data):
+        """
+            Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
+            if the resource has not been saved yet.
+        """
+        jsonb_key = uuid.uuid5(dryrun_id, resource_id)
+        jsonb_value = cls._value_to_dict(dryrun_data)
+        query = "UPDATE " + cls.table_name() + " SET todo = todo - 1, resources=jsonb_set(resources, $1::text[], $2) " + \
+                "WHERE id=$3 and resources ? $4"
+        values = [cls._get_value([jsonb_key]),
+                  cls._get_value(jsonb_value),
+                  cls._get_value(dryrun_id),
+                  cls._get_value(jsonb_key)]
+        yield cls._execute_query(query, *values)
+
+    @classmethod
+    @gen.coroutine
+    def create(cls, environment, model, total, todo):
+        obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
+        obj.insert()
+        return obj
+
+    @classmethod
+    def _create_dict_wrapper(cls, from_postgres, kwargs):
+        result = cls._create_dict(from_postgres, kwargs)
+        resources = {r["id"]: r for r in result["resources"].values()}
+        result["resources"] = resources
+        return result
+        return result
+
+    def to_dict(self):
+        dict_result = BaseDocument.to_dict(self)
+        resources = {r["id"]: r for r in dict_result["resources"].values()}
+        dict_result["resources"] = resources
+        return dict_result
+
+
 # class ResourceSnapshot(BaseDocument):
 #     """
 #         Snapshot of a resource
@@ -1941,8 +1925,8 @@ class Code(BaseDocument):
 # _classes = [Project, Environment, Parameter, UnknownParameter, AgentProcess, AgentInstance, Agent, Report, Compile, Form,
 #             FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun, ResourceSnapshot, ResourceRestore,
 #             SnapshotRestore, Snapshot]
-_classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent,
-            Resource, ResourceAction, ResourceVersionId, ConfigurationModel, Code, Parameter]
+_classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent, Resource, ResourceAction,
+            ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report]
 
 SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 

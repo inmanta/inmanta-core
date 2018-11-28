@@ -1,15 +1,22 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-DROP TABLE IF EXISTS public.project CASCADE;
-DROP TABLE IF EXISTS public.environment CASCADE;
-DROP TABLE IF EXISTS public.configurationmodel;
-DROP TABLE IF EXISTS public.resource;
-DROP TABLE IF EXISTS public.resourceaction;
-DROP TABLE IF EXISTS public.code;
-DROP TABLE IF EXISTS public.unknownparameter;
-DROP TABLE IF EXISTS public.agentprocess CASCADE;
-DROP TABLE IF EXISTS public.agentinstance CASCADE;
-DROP TABLE IF EXISTS public.agent;
+DROP TABLE IF EXISTS project CASCADE;
+DROP TABLE IF EXISTS environment CASCADE;
+DROP TABLE IF EXISTS configurationmodel CASCADE;
+DROP TABLE IF EXISTS resource CASCADE;
+DROP TABLE IF EXISTS resourceaction CASCADE;
+DROP TABLE IF EXISTS resourceversionid CASCADE;
+DROP TABLE IF EXISTS code CASCADE;
+DROP TABLE IF EXISTS unknownparameter CASCADE;
+DROP TABLE IF EXISTS agentprocess CASCADE;
+DROP TABLE IF EXISTS agentinstance CASCADE;
+DROP TABLE IF EXISTS agent CASCADE;
+DROP TABLE IF EXISTS parameter CASCADE;
+DROP TABLE IF EXISTS form CASCADE;
+DROP TABLE IF EXISTS formrecord CASCADE;
+DROP TABLE IF EXISTS compile CASCADE;
+DROP TABLE IF EXISTS report CASCADE;
+DROP TABLE IF EXISTS dryrun CASCADE;
 DROP TYPE IF EXISTS versionstate;
 DROP TYPE IF EXISTS resourcestate;
 DROP TYPE IF EXISTS resourceaction_type;
@@ -176,9 +183,68 @@ CREATE TABLE IF NOT EXISTS public.parameter (
     id uuid PRIMARY KEY,
     name varchar NOT NULL,
     value varchar NOT NULL DEFAULT '',
-    environment uuid NOT NULL,
+    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     source varchar NOT NULL,
     resource_id varchar DEFAULT '',
     updated timestamp,
     metadata JSONB
 );
+
+-- Table: public.form
+CREATE TABLE IF NOT EXISTS public.form (
+    id uuid PRIMARY KEY,
+    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
+    form_type varchar NOT NULL,
+    options JSONB,
+    fields JSONB,
+    defaults JSONB,
+    field_options JSONB
+);
+
+-- Table: public.formrecord
+CREATE TABLE IF NOT EXISTS public.formrecord(
+    id uuid PRIMARY KEY,
+    form uuid NOT NULL REFERENCES form(id) ON DELETE CASCADE,
+    environment uuid NOT NULL,
+    fields JSONB,
+    changed timestamp
+);
+
+-- Table: public.compile
+CREATE TABLE IF NOT EXISTS public.compile(
+    id uuid PRIMARY KEY,
+    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
+    started timestamp,
+    completed timestamp
+);
+
+CREATE INDEX compile_env_started ON compile (environment, started DESC);
+
+-- Table: public.report
+CREATE TABLE IF NOT EXISTS public.report(
+    id uuid PRIMARY KEY,
+    started timestamp NOT NULL,
+    completed timestamp NOT NULL,
+    command varchar NOT NULL,
+    name varchar NOT NULL,
+    errstream varchar DEFAULT '',
+    outstream varchar DEFAULT '',
+    returncode integer,
+    compile uuid REFERENCES compile(id) ON DELETE CASCADE
+);
+
+CREATE INDEX report_compile ON report (compile);
+
+-- Table: public.dryrun
+CREATE TABLE IF NOT EXISTS public.dryrun(
+    id uuid PRIMARY KEY,
+    environment uuid NOT NULL,
+    model integer NOT NULL,
+    date timestamp,
+    total integer DEFAULT 0,
+    todo integer DEFAULT 0,
+    resources JSONB DEFAULT '{}'::jsonb,
+    FOREIGN KEY (environment, model) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
+);
+
+CREATE INDEX dryrun_env_model ON dryrun (environment, model DESC);
