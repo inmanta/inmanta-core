@@ -25,4 +25,5 @@ sphinx==1.8.1
 texttable==1.5.0
 tornado==4.5.3
 tox==3.5.3
+tox-venv
 typing==3.6.6
