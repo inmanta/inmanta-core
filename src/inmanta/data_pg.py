@@ -25,8 +25,6 @@ import json
 import re
 import logging
 
-from tornado import gen
-
 from inmanta import const
 from inmanta.resources import Id
 import asyncpg
@@ -263,8 +261,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-    @gen.coroutine
-    def insert(self):
+    async def insert(self):
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -273,7 +270,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values_as_parameterize_sql_string = ','.join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = "INSERT INTO " + self.table_name() + " (" + column_names_as_sql_string + ") " + \
                 "VALUES (" + values_as_parameterize_sql_string + ")"
-        yield self._execute_query(query, *values)
+        await self._execute_query(query, *values)
 
     @classmethod
     async def _fetch_query(cls, query, *values):
@@ -309,14 +306,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = default_value
         return result
 
-    @gen.coroutine
-    def update(self, **kwargs):
+    async def update(self, **kwargs):
         """
             Update this document in the database. It will update the fields in this object and send a full update to mongodb.
             Use update_fields to only update specific fields.
         """
         kwargs = self.add_default_values_when_undefined(**kwargs)
-        self.update_fields(**kwargs)
+        await self.update_fields(**kwargs)
 
     def _get_set_statement(self, **kwargs):
         counter = 1
@@ -330,8 +326,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         set_statement = ','.join(parts_of_set_statement)
         return (set_statement, values)
 
-    @gen.coroutine
-    def update_fields(self, **kwargs):
+    async def update_fields(self, **kwargs):
         """
             Update the given fields of this document in the database. It will update the fields in this object and do a specific
             $set in the mongodb on this document.
@@ -343,30 +338,27 @@ class BaseDocument(object, metaclass=DocumentMeta):
         (filter_statement, values_for_filter) = self._get_composed_filter(id=self.id, offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
-        yield self._execute_query(query, *values)
+        await self._execute_query(query, *values)
 
     @classmethod
-    @gen.coroutine
-    def get_by_id(cls, doc_id: uuid.UUID):
+    async def get_by_id(cls, doc_id: uuid.UUID):
         """
             Get a specific document based on its ID
 
             :return: An instance of this class with its fields filled from the database.
         """
-        result = yield cls.get_list(id=doc_id)
+        result = await cls.get_list(id=doc_id)
         if len(result) > 0:
             return result[0]
 
     @classmethod
-    @gen.coroutine
-    def get_one(cls, **query):
-        results = yield cls.get_list(**query)
+    async def get_one(cls, **query):
+        results = await cls.get_list(**query)
         if results:
             return results[0]
 
     @classmethod
-    @gen.coroutine
-    def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
         """
             Get a list of documents matching the filter args
         """
@@ -380,18 +372,17 @@ class BaseDocument(object, metaclass=DocumentMeta):
             sql_query += " LIMIT " + str(limit)
         if offset is not None and offset > 0:
             sql_query += " OFFSET " + str(offset)
-        result = yield cls.select_query(sql_query, values, no_obj=no_obj)
+        result = await cls.select_query(sql_query, values, no_obj=no_obj)
         return result
 
     @classmethod
-    @gen.coroutine
-    def delete_all(cls, **query):
+    async def delete_all(cls, **query):
         """
             Delete all documents that match the given query
         """
         (filter_statement, values) = cls._get_composed_filter(**query)
         query = "DELETE FROM " + cls.table_name() + " WHERE " + filter_statement
-        result = yield cls._execute_query(query, *values)
+        result = await cls._execute_query(query, *values)
         record_count = int(result.split(' ')[1])
         return record_count
 
@@ -449,18 +440,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[key] = cls._get_value(value)
         return result
 
-    @gen.coroutine
-    def delete(self):
+    async def delete(self):
         """
             Delete this document
         """
         (filter_as_string, values) = self._get_composed_filter(id=self.id)
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
-        yield self._execute_query(query, *values)
+        await self._execute_query(query, *values)
 
-    @gen.coroutine
-    def delete_cascade(self):
-        yield self.delete()
+    async def delete_cascade(self):
+        await self.delete()
 
     @classmethod
     async def select_query(cls, query, values, no_obj=False):
@@ -510,10 +499,9 @@ class Project(BaseDocument):
     """
     name = Field(field_type=str, required=True, unique=True)
 
-    @gen.coroutine
-    def delete_cascade(self):
+    async def delete_cascade(self):
         # Cascade is done by PostgreSQL
-        yield self.delete()
+        await self.delete()
 
 
 def convert_boolean(value):
@@ -639,8 +627,7 @@ class Environment(BaseDocument):
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
     }
 
-    @gen.coroutine
-    def get(self, key):
+    async def get(self, key):
         """
             Get a setting in this environment.
 
@@ -656,11 +643,10 @@ class Environment(BaseDocument):
             raise KeyError()
 
         value = self._settings[key].default
-        yield self.set(key, value)
+        await self.set(key, value)
         return value
 
-    @gen.coroutine
-    def set(self, key, value):
+    async def set(self, key, value):
         """
             Set a new setting in this environment.
 
@@ -679,11 +665,10 @@ class Environment(BaseDocument):
                 " SET settings=jsonb_set(settings, $1::text[], to_jsonb($2::" + type + "), TRUE)" + \
                 " WHERE " + filter_statement
         values = [self._get_value([key]), self._get_value(value)] + values
-        yield self._execute_query(query, *values)
+        await self._execute_query(query, *values)
         self.settings[key] = value
 
-    @gen.coroutine
-    def unset(self, key):
+    async def unset(self, key):
         """
             Unset a setting in this environment. If a default value is provided, this value will replace the current value.
 
@@ -698,28 +683,27 @@ class Environment(BaseDocument):
                     " SET settings=settings - $1" + \
                     " WHERE " + filter_statement
             values = [self._get_value(key)] + values
-            yield self._execute_query(query, *values)
+            await self._execute_query(query, *values)
             del self.settings[key]
         else:
-            yield self.set(key, self._settings[key].default)
+            await self.set(key, self._settings[key].default)
 
-    @gen.coroutine
-    def delete_cascade(self, only_content=False):
+    async def delete_cascade(self, only_content=False):
         if only_content:
-            yield Agent.delete_all(environment=self.id)
+            await Agent.delete_all(environment=self.id)
 
-            procs = yield AgentProcess.get_list(environment=self.id)
+            procs = await AgentProcess.get_list(environment=self.id)
             for proc in procs:
-                yield proc.delete_cascade()
+                await proc.delete_cascade()
 
             # TODO: uncomment when missing documents are implemented
             # compile_list = yield Compile.get_list(environment=self.id)
             # for cl in compile_list:
             #     yield cl.delete_cascade()
 
-            models = yield ConfigurationModel.get_list(environment=self.id)
+            models = await ConfigurationModel.get_list(environment=self.id)
             for model in models:
-                yield model.delete_cascade()
+                await model.delete_cascade()
 
             # TODO: uncomment when missing documents are implemented
             # yield Parameter.delete_all(environment=self.id)
@@ -727,7 +711,7 @@ class Environment(BaseDocument):
             # yield FormRecord.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
-            yield self.delete()
+            await self.delete()
 
 
 SOURCE = ("fact", "plugin", "user", "form", "report")
@@ -755,11 +739,10 @@ class Parameter(BaseDocument):
     metadata = Field(field_type=dict)
 
     @classmethod
-    @gen.coroutine
-    def get_updated_before(cls, updated_before):
+    async def get_updated_before(cls, updated_before):
         query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
         values = [cls._get_value(updated_before)]
-        result = yield cls.select_query(query, values)
+        result = await cls.select_query(query, values)
         return result
 
 
@@ -799,30 +782,26 @@ class AgentProcess(BaseDocument):
     sid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    @gen.coroutine
-    def get_live(cls, environment=None):
+    async def get_live(cls, environment=None):
         if environment is not None:
-            result = yield cls.get_list(limit=DBLIMIT, expired=None, environment=environment)
+            result = await cls.get_list(limit=DBLIMIT, expired=None, environment=environment)
         else:
-            result = yield cls.get_list(limit=DBLIMIT, expired=None)
+            result = await cls.get_list(limit=DBLIMIT, expired=None)
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_live_by_env(cls, env):
-        result = yield cls.get_live(env)
+    async def get_live_by_env(cls, env):
+        result = await cls.get_live(env)
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_by_env(cls, env):
-        nodes = yield cls.get_list(environment=env)
+    async def get_by_env(cls, env):
+        nodes = await cls.get_list(environment=env)
         return nodes
 
     @classmethod
-    @gen.coroutine
-    def get_by_sid(cls, sid):
-        objects = yield cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
+    async def get_by_sid(cls, sid):
+        objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
 
         if len(objects) == 0:
             return None
@@ -832,10 +811,9 @@ class AgentProcess(BaseDocument):
         else:
             return objects[0]
 
-    @gen.coroutine
-    def delete_cascade(self):
+    async def delete_cascade(self):
         # Cascade is done by PostgreSQL
-        yield self.delete()
+        await self.delete()
 
 
 class AgentInstance(BaseDocument):
@@ -852,15 +830,13 @@ class AgentInstance(BaseDocument):
     tid = Field(field_type=uuid.UUID, required=True)
 
     @classmethod
-    @gen.coroutine
-    def active_for(cls, tid, endpoint):
-        objects = yield cls.get_list(expired=None, tid=tid, name=endpoint)
+    async def active_for(cls, tid, endpoint):
+        objects = await cls.get_list(expired=None, tid=tid, name=endpoint)
         return objects
 
     @classmethod
-    @gen.coroutine
-    def active(cls):
-        objects = yield cls.get_list(expired=None)
+    async def active(cls):
+        objects = await cls.get_list(expired=None)
         return objects
 
 
@@ -900,9 +876,8 @@ class Agent(BaseDocument):
         return base
 
     @classmethod
-    @gen.coroutine
-    def get(cls, env, endpoint):
-        obj = yield cls.get_one(environment=env, name=endpoint)
+    async def get(cls, env, endpoint):
+        obj = await cls.get_one(environment=env, name=endpoint)
         return obj
 
 
@@ -941,10 +916,9 @@ class Compile(BaseDocument):
     completed = Field(field_type=datetime.datetime)
 
     @classmethod
-    @gen.coroutine
     # TODO: Remove queryparts parameter
     # TODO: Also fix in data.py
-    def get_reports(cls, queryparts, limit=None, start=None, end=None):
+    async def get_reports(cls, queryparts, limit=None, start=None, end=None):
         query = "SELECT * FROM " + cls.table_name()
         conditions_in_where_clause = []
         values = []
@@ -960,7 +934,7 @@ class Compile(BaseDocument):
             query += " LIMIT $" + str(len(values) + 1)
             values.append(cls._get_value(limit))
         query += " ORDER BY started DESC"
-        models = yield cls.select_query(query, values)
+        models = await cls.select_query(query, values)
         # load the report stages
         result = []
         for model in models:
@@ -969,18 +943,17 @@ class Compile(BaseDocument):
         return result
 
     @classmethod
-    @gen.coroutine
     # TODO: Use join
-    def get_report(cls, compile_id: uuid.UUID) -> "Compile":
+    async def get_report(cls, compile_id: uuid.UUID) -> "Compile":
         """
             Get the compile and the associated reports from the database
         """
-        result = yield cls.get_by_id(compile_id)
+        result = await cls.get_by_id(compile_id)
         if result is None:
             return None
 
         dict_model = result.to_dict()
-        reports = yield Report.get_list(compile=result.id)
+        reports = await Report.get_list(compile=result.id)
         dict_model["reports"] = [r.to_dict() for r in reports]
 
         return dict_model
@@ -998,12 +971,11 @@ class Form(BaseDocument):
     field_options = Field(field_type=dict)
 
     @classmethod
-    @gen.coroutine
-    def get_form(cls, environment, form_type):
+    async def get_form(cls, environment, form_type):
         """
             Get a form based on its typed and environment
         """
-        forms = yield cls.get_list(environment=environment, form_type=form_type)
+        forms = await cls.get_list(environment=environment, form_type=form_type)
         if len(forms) == 0:
             return None
         else:
@@ -1078,33 +1050,30 @@ class ResourceAction(BaseDocument):
         super().__init__(from_postgres, **kwargs)
         self._updates = {}
 
-    @gen.coroutine
-    def insert(self):
-        yield super(ResourceAction, self).insert()
+    async def insert(self):
+        # TODO: Make this a transaction
+        await super(ResourceAction, self).insert()
         for resource_version_id in self.resource_version_ids:
             new_obj = ResourceVersionId(resource_version_id=resource_version_id, environment=self.environment,
                                         action_id=self.action_id)
-            yield new_obj.insert()
+            await new_obj.insert()
 
-    @gen.coroutine
-    def update_fields(self, **kwargs):
-        super(ResourceAction, self).update_fields(**kwargs)
+    # async def update_fields(self, **kwargs):
+    #     await super(ResourceAction, self).update_fields(**kwargs)
 
     @classmethod
-    @gen.coroutine
-    def get_by_id(cls, doc_id: uuid.UUID):
+    async def get_by_id(cls, doc_id: uuid.UUID):
         query = cls._get_select_star_statement() + " WHERE r.id=$1"
         values = [cls._get_value(doc_id)]
-        result = yield cls._get_resource_action_objects(query, values)
+        result = await cls._get_resource_action_objects(query, values)
         if len(result) > 0:
             return result[0]
 
     @classmethod
-    @gen.coroutine
-    def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
         (filter_statement, values) = cls._get_composed_filter(**query, col_name_prefix='r')
         sql_query = cls._get_select_star_statement() + " WHERE " + filter_statement
-        result = yield cls._get_resource_action_objects(sql_query, values)
+        result = await cls._get_resource_action_objects(sql_query, values)
         return result
 
     @classmethod
@@ -1132,8 +1101,7 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_log(cls, environment, resource_version_id, action=None, limit=0):
+    async def get_log(cls, environment, resource_version_id, action=None, limit=0):
         query = cls._get_select_star_statement()
         query += " WHERE r.environment=$1 AND i.resource_version_id=$2"
         values = [cls._get_value(environment), cls._get_value(resource_version_id)]
@@ -1144,7 +1112,7 @@ class ResourceAction(BaseDocument):
         if limit is not None and limit > 0:
             query += " LIMIT $" + str(len(values) + 1)
             values.append(cls._get_value(limit))
-        result = yield cls._get_resource_action_objects(query, values)
+        result = await cls._get_resource_action_objects(query, values)
         return result
 
     @classmethod
@@ -1187,9 +1155,8 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    @gen.coroutine
-    def get(cls, environment, action_id):
-        resource = yield ResourceAction.get_one(environment=environment, action_id=action_id)
+    async def get(cls, environment, action_id):
+        resource = await ResourceAction.get_one(environment=environment, action_id=action_id)
         return resource
 
     def set_field(self, name, value):
@@ -1251,8 +1218,7 @@ class ResourceAction(BaseDocument):
         set_statement = "changes=" + set_statement
         return (set_statement, values)
 
-    @gen.coroutine
-    def save(self):
+    async def save(self):
         """
             Save the accumulated changes
         """
@@ -1265,7 +1231,7 @@ class ResourceAction(BaseDocument):
         query = "UPDATE " + self.table_name() + \
                 " SET " + set_statement + \
                 " WHERE " + filter_statement
-        yield self._execute_query(query, *values)
+        await self._execute_query(query, *values)
         self._updates = {}
 
     def _get_set_statement_for_updates(self):
@@ -1321,8 +1287,7 @@ class Resource(BaseDocument):
     provides = Field(field_type=list, default=[])  # List of resource versions
 
     @classmethod
-    @gen.coroutine
-    def get_resources(cls, environment, resource_version_ids):
+    async def get_resources(cls, environment, resource_version_ids):
         """
             Get all resources listed in resource_version_ids
         """
@@ -1333,23 +1298,21 @@ class Resource(BaseDocument):
         values = values + cls._get_value(resource_version_ids)
         query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
                 " AND resource_version_id IN (" + resource_version_ids_statement + ")"
-        resources = yield cls.select_query(query, values)
+        resources = await cls.select_query(query, values)
         return resources
 
-    @gen.coroutine
-    def delete_cascade(self):
+    async def delete_cascade(self):
         ra_table_name = ResourceAction.table_name()
         rvid_table_name = ResourceVersionId.table_name()
         sub_query = "SELECT r.action_id FROM " + ra_table_name + " r INNER JOIN " + rvid_table_name + " i" + \
                     " ON (r.environment = i.environment AND r.action_id= i.action_id)" + \
                     " WHERE r.environment=$1 AND i.resource_version_id=$2"
         query = "DELETE FROM " + ra_table_name + " WHERE environment=$1 AND action_id=ANY(" + sub_query + ")"
-        yield self._execute_query(query, self.environment, self.resource_version_id)
-        yield self.delete()
+        await self._execute_query(query, self.environment, self.resource_version_id)
+        await self.delete()
 
     @classmethod
-    @gen.coroutine
-    def get_undeployable(cls, environment, version):
+    async def get_undeployable(cls, environment, version):
         """
             Returns a list of resources with an undeployable state
         """
@@ -1358,12 +1321,11 @@ class Resource(BaseDocument):
         values = values + [cls._get_value(s) for s in const.UNDEPLOYABLE_STATES]
         query = "SELECT * FROM " + cls.table_name() + \
                 " WHERE " + filter_statement + " AND status IN (" + undeployable_states + ")"
-        resources = yield cls.select_query(query, values)
+        resources = await cls.select_query(query, values)
         return resources
 
     @classmethod
-    @gen.coroutine
-    def get_requires(cls, environment, version, resource_version_id):
+    async def get_requires(cls, environment, version, resource_version_id):
         """
             Return all resource that have the given resource_version_id as requires
         """
@@ -1371,7 +1333,7 @@ class Resource(BaseDocument):
         query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
                 " AND attributes @> $3::jsonb"
         values.append(cls._get_value({"requires": [resource_version_id]}))
-        resources = yield cls.select_query(query, values)
+        resources = await cls.select_query(query, values)
         return resources
 
     @classmethod
@@ -1450,32 +1412,29 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    @gen.coroutine
-    def get_latest_version(cls, environment, resource_id):
-        resources = yield cls.get_list(order_by_column="model", order="DESC", limit=1,
+    async def get_latest_version(cls, environment, resource_id):
+        resources = await cls.get_list(order_by_column="model", order="DESC", limit=1,
                                        environment=environment, resource_id=resource_id)
         if len(resources) > 0:
             return resources[0]
 
     @classmethod
-    @gen.coroutine
-    def get(cls, environment, resource_version_id):
+    async def get(cls, environment, resource_version_id):
         """
             Get a resource with the given resource version id
         """
-        value = yield cls.get_one(environment=environment, resource_version_id=resource_version_id)
+        value = await cls.get_one(environment=environment, resource_version_id=resource_version_id)
         return value
 
     @classmethod
-    @gen.coroutine
-    def get_with_state(cls, environment, version):
+    async def get_with_state(cls, environment, version):
         """
             Get all resources from the given version that have "state_id" defined
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT * FROM " + cls.table_name() + " WHERE " + \
                 filter_statement + " AND attributes::jsonb ? 'state_id'"
-        resources = yield cls.select_query(query, values)
+        resources = await cls.select_query(query, values)
         return resources
 
     @classmethod
@@ -1621,21 +1580,19 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_version(cls, environment, version):
+    async def get_version(cls, environment, version):
         """
             Get a specific version
         """
-        result = yield cls.get_one(environment=environment, version=version)
+        result = await cls.get_one(environment=environment, version=version)
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_latest_version(cls, environment):
+    async def get_latest_version(cls, environment):
         """
             Get the latest released (most recent) version for the given environment
         """
-        versions = yield cls.get_list(order_by_column="version", order="DESC", limit=1,
+        versions = await cls.get_list(order_by_column="version", order="DESC", limit=1,
                                       environment=environment, released=True)
         if len(versions) == 0:
             return None
@@ -1657,18 +1614,16 @@ class ConfigurationModel(BaseDocument):
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_versions(cls, environment, start=0, limit=DBLIMIT):
+    async def get_versions(cls, environment, start=0, limit=DBLIMIT):
         """
             Get all versions for an environment ordered descending
         """
-        versions = yield cls.get_list(order_by_column="version", order="DESC", limit=limit, offset=start,
+        versions = await cls.get_list(order_by_column="version", order="DESC", limit=limit, offset=start,
                                       environment=environment)
         return versions
 
     @classmethod
-    @gen.coroutine
-    def set_ready(cls, environment, version, resource_uuid, resource_id, status):
+    async def set_ready(cls, environment, version, resource_uuid, resource_id, status):
         """
             Mark a resource as deployed in the configuration model status
         """
@@ -1680,43 +1635,40 @@ class ConfigurationModel(BaseDocument):
                 " SET status=jsonb_set(status, $1::text[], $2, TRUE)" \
                 " WHERE " + filter_statement
         values = [[cls._get_value(entry_uuid)], cls._get_value(value_entry)] + values
-        yield cls._execute_query(query, *values)
+        await cls._execute_query(query, *values)
 
-    @gen.coroutine
-    def delete_cascade(self):
-        resources = yield Resource.get_list(environment=self.environment, model=self.version)
+    async def delete_cascade(self):
+        resources = await Resource.get_list(environment=self.environment, model=self.version)
         for res in resources:
-            yield res.delete_cascade()
+            await res.delete_cascade()
         # snaps = yield Snapshot.get_list(environment=self.environment, model=self.version)
         # for snap in snaps:
         #     yield snap.delete_cascade()
-        yield UnknownParameter.delete_all(environment=self.environment, version=self.version)
-        yield Code.delete_all(environment=self.environment, version=self.version)
+        await  UnknownParameter.delete_all(environment=self.environment, version=self.version)
+        await  Code.delete_all(environment=self.environment, version=self.version)
         # yield DryRun.delete_all(environment=self.environment, model=self.version)
-        yield self.delete()
+        await  self.delete()
 
-    @gen.coroutine
-    def get_undeployable(self):
+    async def get_undeployable(self):
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
         if self.undeployable is None:
             # Fallback if not cached
-            resources = yield Resource.get_undeployable(self.environment, self.version)
+            resources = await Resource.get_undeployable(self.environment, self.version)
             self.undeployable = [resource.resource_id for resource in resources]
-            yield self.update_fields(undeployable=self.undeployable)
+            await self.update_fields(undeployable=self.undeployable)
 
         return self.undeployable
 
-    @gen.coroutine
-    def get_skipped_for_undeployable(self):
+    async def get_skipped_for_undeployable(self):
         """
             Returns a list of resource ids (NOT resource version ids)
             of resources which should get a skipped_for_undeployable state
         """
 
         if self.skipped_for_undeployable is None:
-            undeployable = yield Resource.get_undeployable(self.environment, self.version)
+            undeployable = await Resource.get_undeployable(self.environment, self.version)
 
             work = list(undeployable)
             skipped = set()
@@ -1726,14 +1678,14 @@ class ConfigurationModel(BaseDocument):
                 if current.resource_id in skipped:
                     continue
                 skipped.add(current.resource_id)
-                others = yield Resource.get_requires(self.environment, self.version, current.resource_version_id)
+                others = await Resource.get_requires(self.environment, self.version, current.resource_version_id)
                 work.extend(others)
 
             # get ids
             undeployable = set([resource.resource_id for resource in undeployable])
             self.skipped_for_undeployable = sorted(list(skipped - undeployable))
 
-            yield self.update_fields(skipped_for_undeployable=self.skipped_for_undeployable)
+            await self.update_fields(skipped_for_undeployable=self.skipped_for_undeployable)
         return self.skipped_for_undeployable
 
 
@@ -1756,18 +1708,16 @@ class Code(BaseDocument):
     source_refs = Field(field_type=dict)
 
     @classmethod
-    @gen.coroutine
-    def get_version(cls, environment, version, resource):
-        codes = yield cls.get_list(environment=environment, version=version, resource=resource)
+    async def get_version(cls, environment, version, resource):
+        codes = await cls.get_list(environment=environment, version=version, resource=resource)
         if len(codes) == 0:
             return None
 
         return codes[0]
 
     @classmethod
-    @gen.coroutine
-    def get_versions(cls, environment, version):
-        codes = yield cls.get_list(environment=environment, version=version)
+    async def get_versions(cls, environment, version):
+        codes = await cls.get_list(environment=environment, version=version)
         return codes
 
 
@@ -1791,8 +1741,7 @@ class DryRun(BaseDocument):
     resources = Field(field_type=dict, default={})
 
     @classmethod
-    @gen.coroutine
-    def update_resource(cls, dryrun_id, resource_id, dryrun_data):
+    async def update_resource(cls, dryrun_id, resource_id, dryrun_data):
         """
             Register a resource update with a specific query that sets the dryrun_data and decrements the todo counter, only
             if the resource has not been saved yet.
@@ -1805,13 +1754,12 @@ class DryRun(BaseDocument):
                   cls._get_value(jsonb_value),
                   cls._get_value(dryrun_id),
                   cls._get_value(jsonb_key)]
-        yield cls._execute_query(query, *values)
+        await cls._execute_query(query, *values)
 
     @classmethod
-    @gen.coroutine
-    def create(cls, environment, model, total, todo):
+    async def create(cls, environment, model, total, todo):
         obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
-        obj.insert()
+        await obj.insert()
         return obj
 
     @classmethod
@@ -1940,9 +1888,8 @@ _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance,
 SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 
 
-@gen.coroutine
-def load_schema(connection):
-    result = yield connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+async def load_schema(connection):
+    result = await connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     if len(result) != 0:
         return
     prog = re.compile('.*; *')
@@ -1953,7 +1900,7 @@ def load_schema(connection):
                 line = line.strip('\n ')
                 query += line
             if re.match(prog, query):
-                yield connection.execute(query)
+                await connection.execute(query)
                 query = ""
 
 
