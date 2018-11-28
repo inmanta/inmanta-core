@@ -45,6 +45,7 @@ from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
 import sys
+import pkg_resources
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -77,6 +78,7 @@ def deactive_venv():
     os.environ["PATH"] = old_os_path
     sys.prefix = old_prefix
     sys.path = old_path
+    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
 def reset_all():
