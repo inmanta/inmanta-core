@@ -75,6 +75,13 @@ class VirtualEnv(object):
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
+
+        # fix bug in virtualenv fixlib64
+        # causing broken symlinks
+        lib64 = os.path.join(self.env_path, "lib64")
+        if not os.path.exists(lib64) and os.path.lexists(lib64):
+            os.remove(lib64)
+            os.symlink(os.path.realpath(os.path.join(self.env_path, "lib")),lib64)
         return True
 
     def use_virtual_env(self):
