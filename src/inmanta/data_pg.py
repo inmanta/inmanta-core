@@ -463,15 +463,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
         yield self.delete()
 
     @classmethod
-    @gen.coroutine
-    def select_query(cls, query, values, no_obj=False):
-        results = yield cls._fetch_query(query, *values)
-        if no_obj:
-            return results
-        objects = []
-        for result in results:
-            objects.append(cls(from_postgres=True, **result))
-        return objects
+    async def select_query(cls, query, values, no_obj=False):
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                result = []
+                async for record in con.cursor(query, *values):
+                    if no_obj:
+                        result.append(record)
+                    else:
+                        result.append(cls(from_postgres=True, **record))
+                return result
 
     def _to_dict(self, mongo_pk=False):
         """
@@ -1147,19 +1148,24 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    @gen.coroutine
-    def _get_resource_action_objects(cls, query, values):
-        records = yield cls._fetch_query(query, *values)
-        grouped_records = cls.group_records_with_same_primary_key(records)
-        result = []
-        for id_resource_action, records_with_same_id in grouped_records.items():
-            resource_version_ids = cls._get_resource_version_ids(records_with_same_id)
-            resource_action_dct = dict(records_with_same_id[0])
-            del resource_action_dct["resource_version_id"]
-            resource_action_dct["resource_version_ids"] = resource_version_ids
-            resource_action = cls(**resource_action_dct, from_postgres=True)
-            result.append(resource_action)
-        return result
+    async def _get_resource_action_objects(cls, query, values):
+        result = {}
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    record_id = record["id"]
+                    resource_version_id = record["resource_version_id"]
+                    if record_id in result:
+                        resource_action = result[record_id]
+                        if resource_version_id:
+                            resource_action.resource_version_ids.append(resource_version_id)
+                    else:
+                        resource_action_dct = dict(record)
+                        del resource_action_dct["resource_version_id"]
+                        resource_action_dct["resource_version_ids"] = [resource_version_id] if resource_version_id else []
+                        resource_action = cls(**resource_action_dct, from_postgres=True)
+                        result[record_id] = resource_action
+        return list(result.values())
 
     @classmethod
     def _get_resource_version_ids(cls, records):
@@ -1369,8 +1375,7 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    @gen.coroutine
-    def get_resources_report(cls, environment):
+    async def get_resources_report(cls, environment):
         """
             This method generates a report of all resources in the database, with their latest version, if they are deleted
             and when they are last deployed.
@@ -1386,41 +1391,41 @@ class Resource(BaseDocument):
                 "holds_state": self.holds_state,
                 }
         """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        resources = yield cls._fetch_query("SELECT DISTINCT resource_id "
-                                           "FROM " + cls.table_name() + " "
-                                           "WHERE " + filter_statement, *values)
-        resources = [x["resource_id"] for x in resources]
-        result = []
-        for res in resources:
-            latest = (yield cls.get_list(order_by_column="model", order="DESC", limit=1,
-                                         environment=environment, resource_id=res, no_obj=True))[0]
-            if latest["status"] == const.ResourceState.available.name:
-                (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=res)
-                query = "SELECT * FROM " + cls.table_name() + \
-                        " WHERE " + filter_statement + \
-                        " AND status != $" + str(len(values) + 1) + \
-                        " ORDER BY model DESC LIMIT 1"
-                values.append(cls._get_value(const.ResourceState.available))
-                deployed = (yield cls._fetch_query(query, *values))
-                deployed = deployed[0] if deployed else {}
-            else:
-                deployed = latest
 
-            result.append({"resource_id": res,
-                           "resource_type": latest["resource_type"],
-                           "agent": latest["agent"],
-                           "id_attribute_name": latest["id_attribute_name"],
-                           "id_attribute_value": latest["id_attribute_value"],
-                           "latest_version": latest["model"],
-                           "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
-                           "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
+        (filter_statement, values) = cls._get_composed_filter(environment=environment)
+        query = "SELECT DISTINCT resource_id FROM " + cls.table_name() + " WHERE " + filter_statement
+        result = []
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    resource_id = record["resource_id"]
+                    latest = (await cls.get_list(order_by_column="model", order="DESC", limit=1,
+                                                 environment=environment, resource_id=resource_id, no_obj=True))[0]
+                    if latest["status"] == const.ResourceState.available.name:
+                        (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=resource_id)
+                        query = "SELECT * FROM " + cls.table_name() + \
+                                " WHERE " + filter_statement + \
+                                " AND status != $" + str(len(values) + 1) + \
+                                " ORDER BY model DESC LIMIT 1"
+                        values.append(cls._get_value(const.ResourceState.available))
+                        deployed = (await cls._fetch_query(query, *values))
+                        deployed = deployed[0] if deployed else {}
+                    else:
+                        deployed = latest
+
+                    result.append({"resource_id": resource_id,
+                                   "resource_type": latest["resource_type"],
+                                   "agent": latest["agent"],
+                                   "id_attribute_name": latest["id_attribute_name"],
+                                   "id_attribute_value": latest["id_attribute_value"],
+                                   "latest_version": latest["model"],
+                                   "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
+                                   "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
 
         return result
 
     @classmethod
-    @gen.coroutine
-    def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False):
+    async def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False):
         projection = "*"
         if not include_attributes:
             projection = ','.join(["environment", "model", "resource_id", "resource_version_id",
@@ -1430,20 +1435,18 @@ class Resource(BaseDocument):
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-
-        result = yield cls._fetch_query("SELECT " + projection +
-                                        " FROM " + cls.table_name() +
-                                        " WHERE " + filter_statement, *values)
+        query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resources = []
-        for res in result:
-            if no_obj:
-                res = dict(res)
-                res["attributes"] = json.loads(res["attributes"])
-                res["id"] = res["resource_version_id"]
-                resources.append(res)
-            else:
-                resources.append(cls(from_postgres=True, **res))
-
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    if no_obj:
+                        record = dict(record)
+                        record["attributes"] = json.loads(record["attributes"])
+                        record["id"] = record["resource_version_id"]
+                        resources.append(record)
+                    else:
+                        resources.append(cls(from_postgres=True, **record))
         return resources
 
     @classmethod
@@ -1487,8 +1490,7 @@ class Resource(BaseDocument):
         return cls(**attr)
 
     @classmethod
-    @gen.coroutine
-    def get_deleted_resources(cls, environment, current_version, current_resources):
+    async def get_deleted_resources(cls, environment, current_version, current_resources):
         """
             This method returns all resources that have been deleted from the model and are not yet marked as purged. It returns
             the latest version of the resource from a released model.
@@ -1502,13 +1504,15 @@ class Resource(BaseDocument):
         # get all models that have been released
         query = "SELECT version FROM " + ConfigurationModel.table_name() + \
                 " WHERE environment=$1 AND released=TRUE ORDER BY version DESC LIMIT " + str(DBLIMIT)
-        models = yield ConfigurationModel._fetch_query(query, cls._get_value(environment))
         versions = set()
         latest_version = None
-        for model in models:
-            versions.add(model["version"])
-            if latest_version is None:
-                latest_version = model["version"]
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, cls._get_value(environment)):
+                    version = record["version"]
+                    versions.add(version)
+                    if latest_version is None:
+                        latest_version = version
 
         LOGGER.debug("  All released versions: %s", versions)
         LOGGER.debug("  Latest released version: %s", latest_version)
@@ -1519,7 +1523,7 @@ class Resource(BaseDocument):
                 " WHERE " + filter_statement + \
                 " AND attributes @> $" + str(len(values) + 1)
         values.append(cls._get_value({"purge_on_delete": True}))
-        resources = yield cls._fetch_query(query, *values)
+        resources = await cls._fetch_query(query, *values)
         resources = [r["resource_id"] for r in resources]
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
@@ -1543,16 +1547,18 @@ class Resource(BaseDocument):
                     " AND model < $" + str(len(values) + 1) + \
                     " ORDER BY model DESC"
             values.append(cls._get_value(current_version))
-            result = yield cls._fetch_query(query, *values)
-            for obj in result:
-                # if a resource is part of a released version and it is deployed (this last condition is actually enough
-                # at the moment), we have found the last status of the resource. If it was not purged in that version,
-                # add it to the should purge list.
-                if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
-                    attributes = json.loads(obj["attributes"])
-                    if not attributes["purged"]:
-                        should_purge.append(cls(from_postgres=True, **obj))
-                    break
+
+            async with cls._connection_pool.acquire() as con:
+                async with con.transaction():
+                    async for obj in con.cursor(query, *values):
+                        # if a resource is part of a released version and it is deployed (this last condition is actually enough
+                        # at the moment), we have found the last status of the resource. If it was not purged in that version,
+                        # add it to the should purge list.
+                        if obj["model"] in versions and obj["status"] == const.ResourceState.deployed.name:
+                            attributes = json.loads(obj["attributes"])
+                            if not attributes["purged"]:
+                                should_purge.append(cls(from_postgres=True, **obj))
+                            break
 
         return should_purge
 
@@ -1637,15 +1643,18 @@ class ConfigurationModel(BaseDocument):
         return versions[0]
 
     @classmethod
-    @gen.coroutine
-    def get_agents(cls, environment, version):
+    async def get_agents(cls, environment, version):
         """
             Returns a list of all agents that have resources defined in this configuration model
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
         query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
-        agents = yield cls._fetch_query(query, *values)
-        return [x["agent"] for x in agents]
+        result = []
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                async for record in con.cursor(query, *values):
+                    result.append(record["agent"])
+        return result
 
     @classmethod
     @gen.coroutine
