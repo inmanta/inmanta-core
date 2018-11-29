@@ -1330,31 +1330,31 @@ async def test_compile_get_reports(init_dataclasses):
         await compile.insert()
         compiles.append(compile)
 
-    retrieved_compiles = await data.Compile.get_reports(None, None, None, None)
+    retrieved_compiles = await data.Compile.get_reports(env.id, None, None, None)
     assert len(retrieved_compiles) == 3
     assert retrieved_compiles[0]["id"] == compiles[1].id
     assert retrieved_compiles[1]["id"] == compiles[0].id
     assert retrieved_compiles[2]["id"] == compiles[2].id
 
     limit = 1
-    retrieved_compiles = await data.Compile.get_reports(None, 1, None, None)
+    retrieved_compiles = await data.Compile.get_reports(env.id, 1, None, None)
     assert len(retrieved_compiles) == 1
     assert retrieved_compiles[0]["id"] == compiles[1].id
 
     start_time = datetime.datetime(2018, 7, 13, 12, 30)
-    retrieved_compiles = await data.Compile.get_reports(None, None, start_time, None)
+    retrieved_compiles = await data.Compile.get_reports(env.id, None, start_time, None)
     assert len(retrieved_compiles) == 2
     assert retrieved_compiles[0]["id"] == compiles[1].id
     assert retrieved_compiles[1]["id"] == compiles[0].id
 
     end_time = datetime.datetime(2018, 7, 15, 12, 30)
-    retrieved_compiles = await data.Compile.get_reports(None, None, None, end_time)
+    retrieved_compiles = await data.Compile.get_reports(env.id, None, None, end_time)
     assert len(retrieved_compiles) == 2
     assert retrieved_compiles[0]["id"] == compiles[0].id
     assert retrieved_compiles[1]["id"] == compiles[2].id
 
     # TODO: start_time and end_time are not supported at the same time
-    retrieved_compiles = await data.Compile.get_reports(None, limit, start_time, end_time)
+    retrieved_compiles = await data.Compile.get_reports(env.id, limit, start_time, end_time)
     assert len(retrieved_compiles) == 1
     assert retrieved_compiles[0]["id"] == compiles[0].id
 

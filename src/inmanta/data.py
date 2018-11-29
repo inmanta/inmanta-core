@@ -892,21 +892,20 @@ class Compile(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_reports(cls, queryparts, limit, start, end):
-        if limit is not None and end is not None:
-            cursor = Compile._coll.find(queryparts).sort("started").limit(int(limit))
-            models = []
-            while (yield cursor.fetch_next):
-                models.append(cls(from_mongo=True, **cursor.next_object()))
+    def get_reports(cls, environment_id, limit=None, start=None, end=None):
+        conditions_on_started = {}
+        if start is not None:
+            conditions_on_started["$gt"] = start
+        if end is not None:
+            conditions_on_started["$lt"] = end
+        mongodb_query = {"environment": environment_id, "started": conditions_on_started}
 
-            models.reverse()
-        else:
-            cursor = Compile._coll.find(queryparts).sort("started", pymongo.DESCENDING)
-            if limit is not None:
-                cursor = cursor.limit(int(limit))
-            models = []
-            while (yield cursor.fetch_next):
-                models.append(cls(from_mongo=True, **cursor.next_object()))
+        cursor = Compile._coll.find(mongodb_query).sort("started", pymongo.DESCENDING)
+        if limit is not None:
+            cursor = cursor.limit(int(limit))
+        models = []
+        while (yield cursor.fetch_next):
+            models.append(cls(from_mongo=True, **cursor.next_object()))
 
         # load the report stages
         result = []

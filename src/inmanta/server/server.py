@@ -30,7 +30,7 @@ from uuid import UUID
 import uuid
 import asyncio
 
-import dateutil
+import dateutil.parser
 import pymongo
 from tornado import gen
 from tornado import locks
@@ -1589,8 +1589,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for stage in stages:
                 stage.compile = comp.id
 
-            yield data.Report.insert_many(stages)
             yield comp.insert()
+            yield data.Report.insert_many(stages)
 
     @protocol.handle(methods.CompileReport.get_reports, env="tid")
     @gen.coroutine
@@ -1598,21 +1598,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set together"}
-
-        queryparts = {}
-
         if env is None:
             return 404, {"message": "The given environment id does not exist!"}
 
-        queryparts["environment"] = env.id
-
         if start is not None:
-            queryparts["started"] = {"$gt": dateutil.parser.parse(start)}
-
+            start = dateutil.parser.parse(start)
         if end is not None:
-            queryparts["started"] = {"$lt": dateutil.parser.parse(end)}
-
-        models = yield data.Compile.get_reports(queryparts, limit, start, end)
+            end = dateutil.parser.parse(end)
+        models = yield data.Compile.get_reports(env.id, limit, start, end)
 
         return 200, {"reports": models}
 

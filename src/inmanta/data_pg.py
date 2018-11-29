@@ -907,12 +907,10 @@ class Compile(BaseDocument):
     completed = Field(field_type=datetime.datetime)
 
     @classmethod
-    # TODO: Remove queryparts parameter
-    # TODO: Also fix in data.py
-    async def get_reports(cls, queryparts, limit=None, start=None, end=None):
+    async def get_reports(cls, environment_id, limit=None, start=None, end=None):
         query = "SELECT * FROM " + cls.table_name()
-        conditions_in_where_clause = []
-        values = []
+        conditions_in_where_clause = ["environment=$1"]
+        values = [cls._get_value(environment_id)]
         if start:
             conditions_in_where_clause.append("started > $" + str(len(values) + 1))
             values.append(cls._get_value(start))
