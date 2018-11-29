@@ -1,7 +1,31 @@
-v 2018.2 (2018-04-xx)
+v 2018.2 (2018-07-30)
 Change in this release:
-- The internal storage format for code is optimized. This introduces API and schema changes. 
+- Various bugfixes and performance enhancements
+- Dependency updates
+- The internal storage format for code is optimized. This introduces API and schema changes.
   This release supports both storage versions. The old version will be removed in the next release.
+- Support formatter in repo url
+- Make export of complete model configurable
+- Use id of loopvar instead of hash to support iteration over list returned by plugins
+- Fix error in default args for list attribute (#633)
+- Add multi level map lookup (#622 and #632)
+- Improved deploy, make deploy sync
+- Added improved error message for lower bound violations on relations (#610)
+- Fixes for empty optionals  (#609)
+- Added improved logging to context handler (#602)
+- Added fix for string representation (#552)
+- Added support for single quotes (#589)
+- Fix in operator in typedefs (#596)
+- Fixed line numbers on MLS (#601)
+- Added += operator for assignment to lists (#587)
+- Add a synchronous protocol client
+- Fix error message for wrong type in ctor
+- Improve index error reporting
+- Fix validate on modules with no commited version
+- Set purged=false on clone in CRUDHandler (#582)
+- Add gzip encoding support to protocol (#576)
+- added anchormap functions to compiler
+- Improved error reporting on for loops (#553)
 
 v 2018.1 (2018-02-09)
 Changes in this release:
