@@ -81,12 +81,12 @@ A module can also indicate a minimal compiler version with the *compiler_version
 
 *source* indicates the authoritative repository where the module is maintained.
 
-To automatically freeze all versions to the currently checked out versions 
+To automatically freeze all versions to the currently checked out versions
 
 .. code-block:: bash
 
 	inmanta module freeze --recursive --operator ==
-	
+
 
 Or for the the current project
 
@@ -151,7 +151,7 @@ install this dependencies with ``pip install`` in an virtual environment dedicat
 or agent. By default this is in `.env` of the project for the compiler and in
 `/var/lib/inmanta/agent/env` for the agent.
 
-Inmanta uses a special format of requirements that was defined in a python PEP but never fully
+Inmanta uses a special format of requirements that was defined in python PEP440 but never fully
 implemented in all python tools (setuptools and pip). Inmanta rewrites this to the syntax pip
 requires. This format allows module developers to specify a python dependency in a repo on a
 dedicated branch. And it allows inmanta to resolve the requirements of all module to a
