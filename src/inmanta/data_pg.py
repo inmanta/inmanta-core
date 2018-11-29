@@ -499,10 +499,6 @@ class Project(BaseDocument):
     """
     name = Field(field_type=str, required=True, unique=True)
 
-    async def delete_cascade(self):
-        # Cascade is done by PostgreSQL
-        await self.delete()
-
 
 def convert_boolean(value):
     if isinstance(value, bool):
@@ -696,19 +692,17 @@ class Environment(BaseDocument):
             for proc in procs:
                 await proc.delete_cascade()
 
-            # TODO: uncomment when missing documents are implemented
-            # compile_list = yield Compile.get_list(environment=self.id)
-            # for cl in compile_list:
-            #     yield cl.delete_cascade()
+            compile_list = await Compile.get_list(environment=self.id)
+            for cl in compile_list:
+                await cl.delete_cascade()
 
             models = await ConfigurationModel.get_list(environment=self.id)
             for model in models:
                 await model.delete_cascade()
 
-            # TODO: uncomment when missing documents are implemented
-            # yield Parameter.delete_all(environment=self.id)
-            # yield Form.delete_all(environment=self.id)
-            # yield FormRecord.delete_all(environment=self.id)
+            await Parameter.delete_all(environment=self.id)
+            await Form.delete_all(environment=self.id)
+            await FormRecord.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
             await self.delete()
@@ -810,10 +804,6 @@ class AgentProcess(BaseDocument):
             return objects[0]
         else:
             return objects[0]
-
-    async def delete_cascade(self):
-        # Cascade is done by PostgreSQL
-        await self.delete()
 
 
 class AgentInstance(BaseDocument):
@@ -1058,9 +1048,6 @@ class ResourceAction(BaseDocument):
                                         action_id=self.action_id)
             await new_obj.insert()
 
-    # async def update_fields(self, **kwargs):
-    #     await super(ResourceAction, self).update_fields(**kwargs)
-
     @classmethod
     async def get_by_id(cls, doc_id: uuid.UUID):
         query = cls._get_select_star_statement() + " WHERE r.id=$1"
@@ -1198,7 +1185,7 @@ class ResourceAction(BaseDocument):
         for resource, field_to_change_dict in changes.items():
             for field, change in field_to_change_dict.items():
                 if set_statement == "":
-                    jsonb_to_update = "changes"  # if self.changes is not None else "jsonb_build_object()"
+                    jsonb_to_update = "changes"
                 else:
                     jsonb_to_update = set_statement
                 dollarmark_resource = "$" + str(offset)
@@ -1526,13 +1513,6 @@ class Resource(BaseDocument):
         dct["id"] = dct["resource_version_id"]
         return dct
 
-    # @classmethod
-    # def _create_dict_wrapper(cls, from_postgres, kwargs):
-    #     result = cls._create_dict(from_postgres, kwargs)
-    #     result["id"] = result["resource_version_id"]
-    #     print(result)
-    #     return result
-
 
 class ConfigurationModel(BaseDocument):
     """
@@ -1638,16 +1618,8 @@ class ConfigurationModel(BaseDocument):
         await cls._execute_query(query, *values)
 
     async def delete_cascade(self):
-        resources = await Resource.get_list(environment=self.environment, model=self.version)
-        for res in resources:
-            await res.delete_cascade()
-        # snaps = yield Snapshot.get_list(environment=self.environment, model=self.version)
-        # for snap in snaps:
-        #     yield snap.delete_cascade()
-        await  UnknownParameter.delete_all(environment=self.environment, version=self.version)
-        await  Code.delete_all(environment=self.environment, version=self.version)
-        # yield DryRun.delete_all(environment=self.environment, model=self.version)
-        await  self.delete()
+        await Code.delete_all(environment=self.environment, version=self.version)
+        await self.delete()
 
     async def get_undeployable(self):
         """
@@ -1777,111 +1749,6 @@ class DryRun(BaseDocument):
         return dict_result
 
 
-# class ResourceSnapshot(BaseDocument):
-#     """
-#         Snapshot of a resource
-#
-#         :param error Indicates if an error made the snapshot fail
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     snapshot = Field(field_type=uuid.UUID, required=True)
-#     resource_id = Field(field_type=str, required=True)
-#     state_id = Field(field_type=str, required=True)
-#     started = Field(field_type=datetime.datetime, default=None)
-#     finished = Field(field_type=datetime.datetime, default=None)
-#     content_hash = Field(field_type=str)
-#     success = Field(field_type=bool)
-#     error = Field(field_type=bool)
-#     msg = Field(field_type=str)
-#     size = Field(field_type=int)
-#
-#
-# class ResourceRestore(BaseDocument):
-#     """
-#         A restore of a resource from a snapshot
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     restore = Field(field_type=uuid.UUID, required=True)
-#     state_id = Field(field_type=str)
-#     resource_id = Field(field_type=str)
-#     started = Field(field_type=datetime.datetime, default=None)
-#     finished = Field(field_type=datetime.datetime, default=None)
-#     success = Field(field_type=bool)
-#     error = Field(field_type=bool)
-#     msg = Field(field_type=str)
-#
-#
-# class SnapshotRestore(BaseDocument):
-#     """
-#         Information about a snapshot restore
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     snapshot = Field(field_type=uuid.UUID, required=True)
-#     started = Field(field_type=datetime.datetime, default=None)
-#     finished = Field(field_type=datetime.datetime, default=None)
-#     resources_todo = Field(field_type=int, default=0)
-#
-#     @gen.coroutine
-#     def delete_cascade(self):
-#         yield ResourceRestore.delete_all(restore=self.id)
-#         yield self.delete()
-#
-#     @gen.coroutine
-#     def resource_updated(self):
-#         yield SnapshotRestore._coll.update_one({"_id": self.id}, {"$inc": {"resources_todo": int(-1)}})
-#         self.resources_todo -= 1
-#
-#         now = datetime.datetime.now()
-#         result = yield SnapshotRestore._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-#         if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
-#             # modified_count is None for mongodb < 2.6
-#             self.finished = now
-#
-#
-# class Snapshot(BaseDocument):
-#     """
-#         A snapshot of an environment
-#
-#         :param id The id of the snapshot
-#         :param environment A reference to the environment
-#         :param started When was this snapshot started
-#         :param finished When was this snapshot finished
-#         :param total_size The total size of this snapshot
-#     """
-#     environment = Field(field_type=uuid.UUID, required=True)
-#     model = Field(field_type=int, required=True)
-#     name = Field(field_type=str)
-#     started = Field(field_type=datetime.datetime, default=None)
-#     finished = Field(field_type=datetime.datetime, default=None)
-#     total_size = Field(field_type=int, default=0)
-#     resources_todo = Field(field_type=int, default=0)
-#
-#     @gen.coroutine
-#     def delete_cascade(self):
-#         yield ResourceSnapshot.delete_all(snapshot=self.id)
-#         restores = yield SnapshotRestore.get_list(snapshot=self.id)
-#         for restore in restores:
-#             yield restore.delete_cascade()
-#
-#         yield self.delete()
-#
-#     @gen.coroutine
-#     def resource_updated(self, size):
-#         yield Snapshot._coll.update_one({"_id": self.id},
-#                                         {"$inc": {"resources_todo": int(-1), "total_size": size}})
-#         self.total_size += size
-#         self.resources_todo -= 1
-#
-#         now = datetime.datetime.now()
-#         result = yield Snapshot._coll.update_one({"_id": self.id, "resources_todo": 0}, {"$set": {"finished": now}})
-#         if result.matched_count == 1 and (result.modified_count == 1 or result.modified_count is None):
-#             # modified_count is None for mongodb < 2.6
-#             self.finished = now
-#
-#
-# _classes = [Project, Environment, Parameter, UnknownParameter, AgentProcess, AgentInstance, Agent, Report, Compile, Form,
-#             FormRecord, Resource, ResourceAction, ConfigurationModel, Code, DryRun, ResourceSnapshot, ResourceRestore,
-#             SnapshotRestore, Snapshot]
 _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent, Resource, ResourceAction,
             ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report]
 

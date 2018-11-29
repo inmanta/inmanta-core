@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS public.resourceversionid (
 -- Table: public.code
 CREATE TABLE IF NOT EXISTS public.code (
     id uuid PRIMARY KEY,
-    environment uuid NOT NULL,
+    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     resource varchar NOT NULL,
     version integer NOT NULL,
     sources JSONB,
@@ -133,7 +133,7 @@ CREATE INDEX code_env_version_resource_index ON code (environment, version, reso
 CREATE TABLE IF NOT EXISTS public.unknownparameter (
     id uuid PRIMARY KEY,
     name varchar NOT NULL,
-    environment uuid NOT NULL,
+    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     source varchar NOT NULL,
     resource_id varchar DEFAULT '',
     version integer NOT NULL,
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS public.form (
 CREATE TABLE IF NOT EXISTS public.formrecord(
     id uuid PRIMARY KEY,
     form uuid NOT NULL REFERENCES form(id) ON DELETE CASCADE,
-    environment uuid NOT NULL,
+    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     fields JSONB,
     changed timestamp
 );
