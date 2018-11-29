@@ -360,9 +360,6 @@ def pytest_runtest_makereport(item, call):
             rep.sections.append(("Resources Kept", "\n".join(
                 ["%s %s" % (label, resource) for label, resource in resources.items()])))
 
-        rep.sections.append(("Environment", "\n".join(
-            ["%s %s" % (k, v) for k, v in os.environ.items()])))
-
 
 class SnippetCompilationTest(KeepOnFail):
 
