@@ -1181,6 +1181,61 @@ async def test_data_document_recursion(init_dataclasses):
 
 
 @pytest.mark.asyncio
+async def test_code(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
+                                 total=1, version_info={})
+    await cm.insert()
+
+    code1 = data.Code(environment=env.id, resource="std::File", version=version, sources={"test": "test"},
+                      source_refs={"ref": "ref"})
+    await code1.insert()
+
+    code2 = data.Code(environment=env.id, resource="std::Directory", version=version, sources={}, source_refs={})
+    await code2.insert()
+
+    code3 = data.Code(environment=env.id, resource="std::Directory", version=(version + 1), sources={}, source_refs={})
+    await code3.insert()
+
+    def assert_match_code(code1, code2):
+        assert code1 is not None
+        assert code2 is not None
+        assert code1.id == code1.id
+        assert code1.resource == code2.resource
+        shared_keys_sources = [k for k in code1.sources if k in code2.sources and code1.sources[k] == code2.sources[k]]
+        assert len(shared_keys_sources) == len(code1.sources.keys())
+        shared_keys_source_refs = [k for k in code1.source_refs
+                                   if k in code2.source_refs and code1.source_refs[k] == code2.source_refs[k]]
+        assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
+
+    code_file = await data.Code.get_version(env.id, version, "std::File")
+    assert_match_code(code_file, code1)
+
+    code_directory = await data.Code.get_version(env.id, version, "std::Directory")
+    assert_match_code(code_directory, code2)
+
+    code_test = await data.Code.get_version(env.id, version, "std::Test")
+    assert code_test is None
+
+    code_list = await data.Code.get_versions(env.id, version)
+    ids_code_lost = [c.id for c in code_list]
+    assert len(code_list) == 2
+    assert code1.id in ids_code_lost
+    assert code2.id in ids_code_lost
+    code_list = await data.Code.get_versions(env.id, version + 1)
+    assert len(code_list) == 1
+    assert code_list[0].id == code3.id
+    code_list = await data.Code.get_versions(env.id, version + 2)
+    assert len(code_list) == 0
+
+
+@pytest.mark.asyncio
 async def test_parameter(init_dataclasses):
     project = data.Project(name="test")
     await project.insert()
@@ -1188,26 +1243,163 @@ async def test_parameter(init_dataclasses):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
-    updated1 = datetime.datetime(2018, 7, 14, 12, 30)
-    parameter1 = data.Parameter(name="test", value="test_val", environment=env.id, source="source", updated=updated1)
-    await parameter1.insert()
+    time1 = datetime.datetime(2018, 7, 14, 12, 30)
+    time2 = datetime.datetime(2018, 7, 16, 12, 30)
+    time3 = datetime.datetime(2018, 7, 12, 12, 30)
 
-    updated2 = datetime.datetime(2018, 7, 14, 15, 30)
-    parameter2 = data.Parameter(name="test", value="test_val", environment=env.id, source="source", updated=updated2)
-    await parameter2.insert()
+    parameters = []
+    for current_time in [time1, time2, time3]:
+        t = current_time.strftime("%Y-%m-%dT%H:%M:%S.%f")
+        parameter = data.Parameter(name="param_" + t, value="test_val_" + t, environment=env.id, source="test",
+                                   updated=current_time)
+        parameters.append(parameter)
+        await parameter.insert()
 
-    reference_timestamp = datetime.datetime(2018, 7, 14, 11, 30)
-    result = await data.Parameter.get_updated_before(reference_timestamp)
-    assert len(result) == 0
+    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 12, 12, 30))
+    assert len(updated_before) == 0
+    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 14, 12, 30))
+    assert len(updated_before) == 1
+    assert updated_before[0].id == parameters[2].id
+    updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 15, 12, 30))
+    list_of_ids = [x.id for x in updated_before]
+    assert len(updated_before) == 2
+    assert parameters[0].id in list_of_ids
+    assert parameters[2].id in list_of_ids
 
-    reference_timestamp = datetime.datetime(2018, 7, 14, 14, 30)
-    result = await data.Parameter.get_updated_before(reference_timestamp)
-    assert len(result) == 1
-    assert parameter1.id == result[0].id
 
-    reference_timestamp = datetime.datetime(2018, 7, 14, 16, 30)
-    result = await data.Parameter.get_updated_before(reference_timestamp)
-    assert len(result) == 2
+@pytest.mark.asyncio
+async def test_dryrun(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
 
-    result = await data.Parameter.get_updated_before(updated1)
-    assert len(result) == 0
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = 1
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    await cm.insert()
+
+    dryrun = await data.DryRun.create(env.id, version, 10, 5)
+
+    resource_version_id = "std::File[agent1,path=/etc/motd],v=%s" % version
+    dryrun_data = {"id": resource_version_id, "changes": {}}
+    await data.DryRun.update_resource(dryrun.id, resource_version_id, dryrun_data)
+
+    dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
+    assert dryrun_retrieved.todo == 4
+    assert dryrun_retrieved.resources[resource_version_id]["changes"] == {}
+
+
+@pytest.mark.asyncio
+async def test_form(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    form = data.Form(environment=env.id, form_type="a type")
+    await form.insert()
+    other_form = data.Form(environment=env.id, form_type="other type")
+    await other_form.insert()
+
+    retrieved_form = await data.Form.get_form(env.id, "a type")
+    assert retrieved_form is not None
+    assert retrieved_form.id == form.id
+
+    non_existing_form = await data.Form.get_form(env.id, "non-existing-form")
+    assert non_existing_form is None
+
+
+@pytest.mark.asyncio
+async def test_compile_get_reports(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    started1 = datetime.datetime(2018, 7, 14, 12, 30)
+    started2 = datetime.datetime(2018, 7, 16, 12, 30)
+    started3 = datetime.datetime(2018, 7, 12, 12, 30)
+
+    compiles = []
+    for started in [started1, started2, started3]:
+        completed = started + datetime.timedelta(minutes=30)
+        compile = data.Compile(environment=env.id, started=started, completed=completed)
+        await compile.insert()
+        compiles.append(compile)
+
+    retrieved_compiles = await data.Compile.get_reports(None, None, None, None)
+    assert len(retrieved_compiles) == 3
+    assert retrieved_compiles[0]["id"] == compiles[1].id
+    assert retrieved_compiles[1]["id"] == compiles[0].id
+    assert retrieved_compiles[2]["id"] == compiles[2].id
+
+    limit = 1
+    retrieved_compiles = await data.Compile.get_reports(None, 1, None, None)
+    assert len(retrieved_compiles) == 1
+    assert retrieved_compiles[0]["id"] == compiles[1].id
+
+    start_time = datetime.datetime(2018, 7, 13, 12, 30)
+    retrieved_compiles = await data.Compile.get_reports(None, None, start_time, None)
+    assert len(retrieved_compiles) == 2
+    assert retrieved_compiles[0]["id"] == compiles[1].id
+    assert retrieved_compiles[1]["id"] == compiles[0].id
+
+    end_time = datetime.datetime(2018, 7, 15, 12, 30)
+    retrieved_compiles = await data.Compile.get_reports(None, None, None, end_time)
+    assert len(retrieved_compiles) == 2
+    assert retrieved_compiles[0]["id"] == compiles[0].id
+    assert retrieved_compiles[1]["id"] == compiles[2].id
+
+    # TODO: start_time and end_time are not supported at the same time
+    retrieved_compiles = await data.Compile.get_reports(None, limit, start_time, end_time)
+    assert len(retrieved_compiles) == 1
+    assert retrieved_compiles[0]["id"] == compiles[0].id
+
+
+@pytest.mark.asyncio
+async def test_compile_get_report(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    # Compile 1
+    started = datetime.datetime(2018, 7, 15, 12, 30)
+    completed = datetime.datetime(2018, 7, 15, 13, 00)
+    compile1 = data.Compile(environment=env.id, started=started, completed=completed)
+    await compile1.insert()
+
+    report_of_compile = await data.Compile.get_report(compile1.id)
+    assert report_of_compile["reports"] == []
+
+    report11 = data.Report(started=datetime.datetime.now(), completed=datetime.datetime.now(),
+                           command="cmd", name="test", compile=compile1.id)
+    await report11.insert()
+    report12 = data.Report(started=datetime.datetime.now(), completed=datetime.datetime.now(),
+                           command="cmd", name="test", compile=compile1.id)
+    await report12.insert()
+
+    # Compile 2
+    compile2 = data.Compile(environment=env.id)
+    await compile2.insert()
+    report21 = data.Report(started=datetime.datetime.now(), completed=datetime.datetime.now(),
+                           command="cmd", name="test", compile=compile2.id)
+    await report21.insert()
+
+    report_of_compile = await data.Compile.get_report(compile1.id)
+    assert report_of_compile["id"] == compile1.id
+    assert report_of_compile["started"] == started
+    assert report_of_compile["completed"] == completed
+    reports = report_of_compile["reports"]
+    report_ids = [r["id"] for r in reports]
+    assert len(reports) == 2
+    assert report11.id in report_ids
+    assert report12.id in report_ids
+
+    report_of_compile = await data.Compile.get_report(compile2.id)
+    reports = report_of_compile["reports"]
+    assert len(reports) == 1

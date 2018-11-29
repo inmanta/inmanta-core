@@ -735,6 +735,7 @@ class Parameter(BaseDocument):
     @classmethod
     async def get_updated_before(cls, updated_before):
         query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
+
         values = [cls._get_value(updated_before)]
         result = await cls.select_query(query, values)
         return result
@@ -919,11 +920,11 @@ class Compile(BaseDocument):
             conditions_in_where_clause.append("started < $" + str(len(values) + 1))
             values.append(cls._get_value(end))
         if len(conditions_in_where_clause) > 0:
-            query += " WHERE " + 'AND'.join(conditions_in_where_clause)
+            query += " WHERE " + ' AND '.join(conditions_in_where_clause)
+        query += " ORDER BY started DESC"
         if limit:
             query += " LIMIT $" + str(len(values) + 1)
             values.append(cls._get_value(limit))
-        query += " ORDER BY started DESC"
         models = await cls.select_query(query, values)
         # load the report stages
         result = []
@@ -1667,6 +1668,7 @@ class Code(BaseDocument):
 
         :param environment The environment this code belongs to
         :param version The version of configuration model it belongs to
+        :param resource The resource type this code belongs to
         :param sources The source code of plugins (phasing out)  form:
             {code_hash:(file_name, provider.__module__, source_code, [req])}
         :param requires Python requires for the source code above
@@ -1719,11 +1721,10 @@ class DryRun(BaseDocument):
             if the resource has not been saved yet.
         """
         jsonb_key = uuid.uuid5(dryrun_id, resource_id)
-        jsonb_value = cls._value_to_dict(dryrun_data)
         query = "UPDATE " + cls.table_name() + " SET todo = todo - 1, resources=jsonb_set(resources, $1::text[], $2) " + \
-                "WHERE id=$3 and resources ? $4"
+                "WHERE id=$3 and NOT resources ? $4"
         values = [cls._get_value([jsonb_key]),
-                  cls._get_value(jsonb_value),
+                  cls._get_value(dryrun_data),
                   cls._get_value(dryrun_id),
                   cls._get_value(jsonb_key)]
         await cls._execute_query(query, *values)

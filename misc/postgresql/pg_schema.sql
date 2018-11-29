@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS public.report(
     errstream varchar DEFAULT '',
     outstream varchar DEFAULT '',
     returncode integer,
-    compile uuid REFERENCES compile(id) ON DELETE CASCADE
+    compile uuid NOT NULL REFERENCES compile(id) ON DELETE CASCADE
 );
 
 CREATE INDEX report_compile ON report (compile);
