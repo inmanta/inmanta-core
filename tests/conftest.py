@@ -44,6 +44,8 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
+import sys
+import pkg_resources
 
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
@@ -63,6 +65,20 @@ def mongo_db():
     mproc.stop()
     del os.environ[port_envvar]
     shutil.rmtree(db_path)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def deactive_venv():
+    old_os_path = os.environ.get("PATH", "")
+    old_prefix = sys.prefix
+    old_path = sys.path
+
+    yield
+
+    os.environ["PATH"] = old_os_path
+    sys.prefix = old_prefix
+    sys.path = old_path
+    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
 def reset_all():
@@ -339,9 +355,10 @@ def pytest_runtest_makereport(item, call):
                     for label, res in msg.items():
                         resources[label] = res
 
-        # we are behind report formatting, so write to report, not item
-        rep.sections.append(("Resources Kept", "\n".join(
-            ["%s %s" % (label, resource) for label, resource in resources.items()])))
+        if resources:
+            # we are behind report formatting, so write to report, not item
+            rep.sections.append(("Resources Kept", "\n".join(
+                ["%s %s" % (label, resource) for label, resource in resources.items()])))
 
 
 class SnippetCompilationTest(KeepOnFail):

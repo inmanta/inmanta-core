@@ -13,7 +13,7 @@ requires = [
         'texttable',
         'tornado < 5',
         'typing',
-        'virtualenv',
+        'virtualenv<16.1.0',
         'typing',
         'PyJWT',
         'cryptography'
