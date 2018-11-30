@@ -1084,9 +1084,11 @@ async def test_resource_action(init_dataclasses):
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     await env.insert()
 
+    now = datetime.datetime.now()
     action_id = uuid.uuid4()
-    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=[], action_id=action_id,
-                                          action=const.ResourceAction.deploy, started=datetime.datetime.now())
+    resource_version_ids = ["std::File[agent1,path=/etc/file1],v=1", "std::File[agent1,path=/etc/file2],v=1"]
+    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=action_id,
+                                          action=const.ResourceAction.deploy, started=now)
     await resource_action.insert()
 
     resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
@@ -1101,15 +1103,35 @@ async def test_resource_action(init_dataclasses):
     resource_action.add_logs([{}, {}])
     await resource_action.save()
 
-    ra = await data.ResourceAction.get_by_id(resource_action.id)
-    assert len(ra.changes["rid"]) == 3
-    assert len(ra.messages) == 4
+    resource_action.set_field("status", const.ResourceState.failed)
+    await resource_action.save()
 
-    assert ra.changes["rid"]["field1"]["old"] == "a"
-    assert ra.changes["rid"]["field1"]["new"] == "b"
-    assert ra.changes["rid"]["field2"]["old"] == "c"
-    assert ra.changes["rid"]["field2"]["new"] == "d"
-    assert ra.changes["rid"]["field3"] == {}
+    ra_via_get_by_id = await data.ResourceAction.get_by_id(resource_action.id)
+    ra_list = await data.ResourceAction.get_list(id=resource_action.id)
+    assert len(ra_list) == 1
+    ra_via_get_list = ra_list[0]
+    ra_via_get = await data.ResourceAction.get(environment=env.id, action_id=resource_action.action_id)
+    for ra in [ra_via_get_by_id, ra_via_get_list, ra_via_get]:
+        assert ra.action_id == action_id
+        assert ra.environment == env.id
+        assert ra.action == const.ResourceAction.deploy
+        assert ra.started == now
+        assert ra.finished is None
+
+        assert len(ra.resource_version_ids) == 2
+        assert sorted(ra.resource_version_ids) == sorted(resource_version_ids)
+
+        assert len(ra.changes["rid"]) == 3
+        assert ra.changes["rid"]["field1"]["old"] == "a"
+        assert ra.changes["rid"]["field1"]["new"] == "b"
+        assert ra.changes["rid"]["field2"]["old"] == "c"
+        assert ra.changes["rid"]["field2"]["new"] == "d"
+        assert ra.changes["rid"]["field3"] == {}
+        assert ra.status == const.ResourceState.failed
+
+        assert len(ra.messages) == 4
+        for message in ra.messages:
+            assert message == {}
 
 
 @pytest.mark.asyncio
