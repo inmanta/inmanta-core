@@ -1760,7 +1760,6 @@ class DryRun(BaseDocument):
         resources = {r["id"]: r for r in result["resources"].values()}
         result["resources"] = resources
         return result
-        return result
 
     def to_dict(self):
         dict_result = BaseDocument.to_dict(self)

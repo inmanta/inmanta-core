@@ -1605,7 +1605,7 @@ class DryRun(BaseDocument):
     @gen.coroutine
     def create(cls, environment, model, total, todo):
         obj = cls(environment=environment, model=model, date=datetime.datetime.now(), resources={}, total=total, todo=todo)
-        obj.insert()
+        yield obj.insert()
         return obj
 
     @classmethod
