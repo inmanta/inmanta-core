@@ -1754,19 +1754,6 @@ class DryRun(BaseDocument):
         await obj.insert()
         return obj
 
-    @classmethod
-    def _create_dict_wrapper(cls, from_postgres, kwargs):
-        result = cls._create_dict(from_postgres, kwargs)
-        resources = {r["id"]: r for r in result["resources"].values()}
-        result["resources"] = resources
-        return result
-
-    def to_dict(self):
-        dict_result = BaseDocument.to_dict(self)
-        resources = {r["id"]: r for r in dict_result["resources"].values()}
-        dict_result["resources"] = resources
-        return dict_result
-
 
 _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent, Resource, ResourceAction,
             ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report]

@@ -1308,7 +1308,9 @@ async def test_dryrun(init_dataclasses):
 
     dryrun_retrieved = await data.DryRun.get_by_id(dryrun.id)
     assert dryrun_retrieved.todo == 4
-    assert dryrun_retrieved.resources[resource_version_id]["changes"] == {}
+    key = str(uuid.uuid5(dryrun.id, resource_version_id))
+    assert dryrun_retrieved.resources[key]["changes"] == {}
+    assert dryrun_retrieved.resources[key]["id"] == resource_version_id
 
 
 @pytest.mark.asyncio

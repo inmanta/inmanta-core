@@ -893,12 +893,15 @@ class Compile(BaseDocument):
     @classmethod
     @gen.coroutine
     def get_reports(cls, environment_id, limit=None, start=None, end=None):
-        conditions_on_started = {}
-        if start is not None:
-            conditions_on_started["$gt"] = start
-        if end is not None:
-            conditions_on_started["$lt"] = end
-        mongodb_query = {"environment": environment_id, "started": conditions_on_started}
+        if start is None and end is None:
+            mongodb_query = {"environment": environment_id}
+        else:
+            conditions_on_started = {}
+            if start is not None:
+                conditions_on_started["$gt"] = start
+            if end is not None:
+                conditions_on_started["$lt"] = end
+            mongodb_query = {"environment": environment_id, "started": conditions_on_started}
 
         cursor = Compile._coll.find(mongodb_query).sort("started", pymongo.DESCENDING)
         if limit is not None:
