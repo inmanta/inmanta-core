@@ -240,6 +240,10 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         raise AttributeError(name)
 
+    @classmethod
+    def _convert_field_names_to_db_column_names(cls, field_dict):
+        return field_dict
+
     def _get_column_names_and_values(self):
         column_names = []
         values = []
@@ -333,7 +337,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
         if len(kwargs) == 0:
             return
-
+        kwargs = self._convert_field_names_to_db_column_names(kwargs)
         (set_statement, values_set_statement) = self._get_set_statement(**kwargs)
         (filter_statement, values_for_filter) = self._get_composed_filter(id=self.id, offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
@@ -362,6 +366,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Get a list of documents matching the filter args
         """
+        query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
         sql_query = "SELECT * FROM " + cls.table_name()
         if filter_statement:
@@ -380,6 +385,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Delete all documents that match the given query
         """
+        query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
         query = "DELETE FROM " + cls.table_name() + " WHERE " + filter_statement
         result = await cls._execute_query(query, *values)
@@ -847,10 +853,21 @@ class Agent(BaseDocument):
     paused = Field(field_type=bool, default=False)
     id_primary = Field(field_type=uuid.UUID)  # AgentInstance
 
+    def set_primary(self, primary):
+        self.id_primary = primary
+
+    def get_primary(self):
+        return self.id_primary
+
+    def del_primary(self):
+        del self.id_primary
+
+    primary = property(get_primary, set_primary, del_primary)
+
     def get_status(self):
         if self.paused:
             return "paused"
-        if self.id_primary is not None:
+        if self.primary is not None:
             return "up"
         return "down"
 
@@ -859,12 +876,24 @@ class Agent(BaseDocument):
         if self.last_failover is None:
             base["last_failover"] = ""
 
-        if self.id_primary is None:
+        if self.primary is None:
             base["primary"] = ""
 
         base["state"] = self.get_status()
 
         return base
+
+    @classmethod
+    def _convert_field_names_to_db_column_names(cls, field_dict):
+        if "primary" in field_dict:
+            field_dict["id_primary"] = field_dict["primary"]
+            del field_dict["primary"]
+        return field_dict
+
+    @classmethod
+    def _create_dict_wrapper(cls, from_postgres, kwargs):
+        kwargs = cls._convert_field_names_to_db_column_names(kwargs)
+        return cls._create_dict(from_postgres, kwargs)
 
     @classmethod
     async def get(cls, env, endpoint):
@@ -1127,17 +1156,6 @@ class ResourceAction(BaseDocument):
         for record in records:
             resource_version_id = record["resource_version_id"]
             result.append(resource_version_id)
-        return result
-
-    @classmethod
-    def group_records_with_same_primary_key(cls, records):
-        result = {}
-        for record in records:
-            record_id = record["id"]
-            if record_id not in result:
-                result[record_id] = [record]
-            else:
-                result[record_id].append(record)
         return result
 
     @classmethod

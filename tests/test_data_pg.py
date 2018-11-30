@@ -136,8 +136,7 @@ async def test_environment_cascade_content_only(init_dataclasses):
     agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
     await agi2.insert()
 
-    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False,
-                       id_primary=agi1.id)
+    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
     await agent.insert()
 
     version = int(time.time())
@@ -331,7 +330,7 @@ async def test_agent(init_dataclasses):
     await agi1.insert()
 
     agent1 = data.Agent(environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False,
-                        id_primary=agi1.id)
+                        primary=agi1.id)
     await agent1.insert()
     agent2 = data.Agent(environment=env.id, name="agi1_agent2", paused=False)
     await agent2.insert()
@@ -358,13 +357,13 @@ async def test_agent(init_dataclasses):
     await agent1.update_fields(paused=True)
     assert agent1.get_status() == "paused"
 
-    await agent2.update_fields(id_primary=agi1.id)
+    await agent2.update_fields(primary=agi1.id)
     assert agent2.get_status() == "up"
 
     await agent3.update_fields(paused=False)
     assert agent3.get_status() == "down"
 
-    primary_instance = await data.AgentInstance.get_by_id(agent1.id_primary)
+    primary_instance = await data.AgentInstance.get_by_id(agent1.primary)
     primary_process = await data.AgentProcess.get_by_id(primary_instance.process)
     assert primary_process.id == agent_proc.id
 
