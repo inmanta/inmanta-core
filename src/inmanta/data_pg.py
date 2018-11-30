@@ -265,7 +265,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         return (column_names, values)
 
-    async def insert(self):
+    async def insert(self, connection=None):
         """
             Insert a new document based on the instance passed. Validation is done based on the defined fields.
         """
@@ -274,7 +274,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         values_as_parameterize_sql_string = ','.join(["$" + str(i) for i in range(1, len(values) + 1)])
         query = "INSERT INTO " + self.table_name() + " (" + column_names_as_sql_string + ") " + \
                 "VALUES (" + values_as_parameterize_sql_string + ")"
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
 
     @classmethod
     async def _fetch_query(cls, query, *values):
@@ -282,7 +282,9 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return await con.fetch(query, *values)
 
     @classmethod
-    async def _execute_query(cls, query, *values):
+    async def _execute_query(cls, query, *values, connection=None):
+        if connection:
+            return await connection.execute(query, *values)
         async with cls._connection_pool.acquire() as con:
             return await con.execute(query, *values)
 
@@ -1069,12 +1071,13 @@ class ResourceAction(BaseDocument):
         self._updates = {}
 
     async def insert(self):
-        # TODO: Make this a transaction
-        await super(ResourceAction, self).insert()
-        for resource_version_id in self.resource_version_ids:
-            new_obj = ResourceVersionId(resource_version_id=resource_version_id, environment=self.environment,
-                                        action_id=self.action_id)
-            await new_obj.insert()
+        async with self._connection_pool.acquire() as con:
+            async with con.transaction():
+                await super(ResourceAction, self).insert(connection=con)
+                for resource_version_id in self.resource_version_ids:
+                    new_obj = ResourceVersionId(resource_version_id=resource_version_id, environment=self.environment,
+                                                action_id=self.action_id)
+                    await new_obj.insert(connection=con)
 
     @classmethod
     async def get_by_id(cls, doc_id: uuid.UUID):
