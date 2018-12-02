@@ -1,4 +1,4 @@
-PyJWT==1.6.4
+PyJWT==1.7.0
 click==7.0
 colorlog==3.1.4
 cryptography==2.4.2
