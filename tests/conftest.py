@@ -511,5 +511,3 @@ def postgres_proc():
     proc = PostgresProc(port)
     yield proc
     proc.stop()
-
-

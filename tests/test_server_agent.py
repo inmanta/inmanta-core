@@ -31,7 +31,7 @@ from tornado import gen
 import pytest
 from _pytest.fixtures import fixture
 
-from inmanta import agent, data, const, execute, config
+from inmanta import agent, const, execute, config, data_pg as data
 from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext
 from inmanta.resources import resource, Resource
 import inmanta.agent.agent

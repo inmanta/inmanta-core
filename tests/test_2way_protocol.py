@@ -21,7 +21,7 @@ import sys
 import uuid
 
 import colorlog
-from inmanta import methods, data
+from inmanta import methods, data_pg as data
 from tornado import gen
 import pytest
 from tornado.gen import sleep

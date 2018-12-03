@@ -20,7 +20,7 @@ from uuid import uuid4, UUID
 
 import pytest
 from inmanta.server.agentmanager import AgentManager
-from inmanta import data
+from inmanta import data_pg as data
 from tornado import gen
 from inmanta.protocol import Result
 from utils import assert_equal_ish, UNKWN

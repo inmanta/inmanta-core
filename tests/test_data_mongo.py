@@ -19,7 +19,7 @@ import uuid
 import datetime
 import time
 
-from inmanta import data
+from inmanta import data_mongo as data
 from inmanta import const
 import pytest
 import pymongo
@@ -527,8 +527,7 @@ def test_data_document_recursion(data_module):
     now = datetime.datetime.now()
     ra = data.ResourceAction(environment=env_id, resource_version_ids=["id"], action_id=uuid.uuid4(),
                              action=const.ResourceAction.store, started=now, finished=now,
-                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
-                                                        version=2)])
+                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)])
     yield ra.insert()
 
 
