@@ -46,6 +46,7 @@ from tornado import process
 import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import asyncpg
+from inmanta.mongoproc import PostgresProc
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -502,3 +503,13 @@ class CLI(object):
 def cli(io_loop):
     o = CLI(io_loop)
     yield o
+
+
+@pytest.fixture
+def postgres_proc():
+    port = 15432
+    proc = PostgresProc(port)
+    yield proc
+    proc.stop()
+
+

@@ -27,6 +27,9 @@ import socket
 
 
 MONGOD_BIN = 'mongod'
+PG_CTL_BIN = 'pg_ctl'
+INITDB_BIN = 'initdb'
+
 DEFAULT_ARGS = [
     # don't flood stdout, we're not reading it
     "--quiet",
@@ -56,32 +59,23 @@ def find_executable(executable):
             return executable_path
 
 
-class MongoProc(object):
-    """
-        Class to start and manage a mongodb server process
-    """
-    def __init__(self, port, mongod_bin=None, log_path=None, db_path=None, prealloc=False, auth=False):
-        self.mongod_bin = mongod_bin or find_executable(MONGOD_BIN)
-        assert self.mongod_bin, 'Could not find "{}" in system PATH. Make sure you have MongoDB installed.'.format(MONGOD_BIN)
+class DbProc(object):
 
+    def __init__(self, port, db_path):
         self.port = port
-        self.log_path = log_path or os.devnull
-        self.prealloc = prealloc
         self.db_path = db_path
-        self.auth = auth
-
         if self.db_path:
             if os.path.exists(self.db_path) and os.path.isfile(self.db_path):
                 raise AssertionError('DB path should be a directory, but it is a file.')
 
-        self.process = None
-
     def start(self):
         """
-            Start MongoDB.
+            Start DB.
 
             :return: `True` if instance has been started or `False` if it could not start.
         """
+        if self.running():
+            return True
         if self.db_path:
             if not os.path.exists(self.db_path):
                 os.mkdir(self.db_path)
@@ -90,18 +84,42 @@ class MongoProc(object):
             self.db_path = tempfile.mkdtemp()
             self._db_path_is_temporary = True
 
-        args = copy.copy(DEFAULT_ARGS)
-        args.insert(0, self.mongod_bin)
+        return self._do_start()
 
-        args.extend(['--dbpath', self.db_path])
-        args.extend(['--port', str(self.port)])
-        args.extend(['--logpath', self.log_path])
+    def stop(self):
+        if not self.running():
+            return
 
-        if self.auth:
-            args.append("--auth")
+        self._do_stop()
 
-        if not self.prealloc:
-            args.append("--noprealloc")
+        if self._db_path_is_temporary:
+            shutil.rmtree(self.db_path)
+            self.db_path = None
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.stop()
+
+
+class MongoProc(DbProc):
+    """
+        Class to start and manage a mongodb server process
+    """
+    def __init__(self, port, mongod_bin=None, log_path=None, db_path=None, prealloc=False, auth=False):
+        super(MongoProc, self).__init__(port, db_path)
+        self.mongod_bin = mongod_bin or find_executable(MONGOD_BIN)
+        assert self.mongod_bin, 'Could not find "{}" in system PATH. Make sure you have MongoDB installed.'.format(MONGOD_BIN)
+
+        self.prealloc = prealloc
+        self.auth = auth
+        self.process = None
+        self.log_path = log_path or os.devnull
+
+    def _do_start(self):
+        args = self._get_args()
 
         self.process = subprocess.Popen(
             args,
@@ -111,7 +129,7 @@ class MongoProc(object):
 
         return self._wait_till_started()
 
-    def stop(self):
+    def _do_stop(self):
         if not self.process:
             return
 
@@ -122,15 +140,25 @@ class MongoProc(object):
         else:
             os.kill(self.process.pid, 9)
         self.process.wait()
-
-        if self._db_path_is_temporary:
-            shutil.rmtree(self.db_path)
-            self.db_path = None
-
         self.process = None
 
     def running(self):
         return self.process is not None
+
+    def _get_args(self):
+        args = copy.copy(DEFAULT_ARGS)
+        args.insert(0, self.mongod_bin)
+        args.extend(['--dbpath', self.db_path])
+        args.extend(['--port', str(self.port)])
+        args.extend(['--logpath', self.log_path])
+
+        if self.auth:
+            args.append("--auth")
+
+        if not self.prealloc:
+            args.append("--noprealloc")
+
+        return args
 
     def _wait_till_started(self):
         attempts = 0
@@ -149,9 +177,59 @@ class MongoProc(object):
         self.stop()
         return False
 
-    def __enter__(self):
-        self.start()
-        return self
 
-    def __exit__(self, *args, **kwargs):
-        self.stop()
+class PostgresProc(DbProc):
+
+    def __init__(self, port, pg_ctl_bin=None, initdb_bin=None, db_path=None):
+        super(PostgresProc, self).__init__(port, db_path)
+
+        self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
+        assert self.pg_ctl_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.'\
+                                .format(PG_CTL_BIN)
+        self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
+        assert self.initdb_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.' \
+                                .format(INITDB_BIN)
+
+    def _do_start(self):
+        try:
+            self._init_db()
+            sockets_dir = self._create_sockets_dir()
+            args = [self.pg_ctl_bin, "start", "-D", self.db_path,
+                    "-o", "-p " + str(self.port) + " -k " + sockets_dir, "-s"]
+            process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            process.communicate()
+            if process.returncode != 0:
+                return False
+        except Exception:
+            return False
+        return True
+
+    def _create_sockets_dir(self):
+        sockets_dir = os.path.join(self.db_path, "sockets")
+        os.mkdir(sockets_dir)
+        return sockets_dir
+
+    def _init_db(self):
+        os.chmod(self.db_path, 0o700)
+        args = [self.initdb_bin, "-D", self.db_path, "--auth-host", "trust"]
+        process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process.communicate()
+        if process.returncode != 0:
+            raise Exception("Failed to initialize db path.")
+
+    def _do_stop(self):
+        args = [self.pg_ctl_bin, "stop", "-D", self.db_path, "-m", "immediate", "-s"]
+        process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process.communicate()
+        if process.returncode != 0:
+            raise Exception("Failed to stop embedded db.")
+
+    def running(self):
+        if self.db_path is None:
+            return False
+        args = [self.pg_ctl_bin, "status", "-D", self.db_path, "-s"]
+        process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        process.communicate()
+        if process.returncode == 0:
+            return True
+        return False
