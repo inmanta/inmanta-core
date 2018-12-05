@@ -128,7 +128,7 @@ class Server(protocol.ServerSlice):
 
         # LCM support should move to a server extension
         lcm = ""
-        if opt.dash_lcm_enable:
+        if opt.dash_lcm_enable.get():
             lcm = """,
     'lcm': 'http://' + window.location.hostname + ':8889/'
 """
