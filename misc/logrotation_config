@@ -1,0 +1,7 @@
+/var/log/inmanta/* {
+	daily
+	compress
+	rotate 3
+	missingok
+	create 0644 inmanta inmanta
+}
