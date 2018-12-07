@@ -690,6 +690,35 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
+    @gen.coroutine
+    def get_resource_increment_for_agent(self, env, agent):
+        started = datetime.datetime.now()
+
+        cm = yield data.ConfigurationModel.get_latest_version(env.id)
+        if cm is None:
+            return 404, {"message": "No version available"}
+
+        version = cm.version
+
+        resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
+
+        deploy_model = []
+        resource_ids = []
+        for rv in resources:
+            deploy_model.append(rv.to_dict())
+            resource_ids.append(rv.resource_version_id)
+
+        now = datetime.datetime.now()
+        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
+                                 action_id=uuid.uuid4(), started=started, finished=now,
+                                 messages=[data.LogLine.log(logging.INFO,
+                                                            "Resource version pulled by client for agent %(agent)s state",
+                                                            agent=agent)])
+        yield ra.insert()
+
+        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+        
+
     @protocol.handle(methods.VersionMethod.list_versions, env="tid")
     @gen.coroutine
     def list_version(self, env, start=None, limit=None):
