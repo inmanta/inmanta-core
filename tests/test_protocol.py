@@ -67,6 +67,15 @@ def test_client_files(client):
 
 
 @pytest.mark.gen_test
+def test_client_files_lost(client):
+    (hash, content, body) = make_random_file()
+
+    # Get the file
+    result = yield client.get_file(id=hash)
+    assert result.code == 404
+
+
+@pytest.mark.gen_test
 def test_sync_client_files(client):
     done = []
 
