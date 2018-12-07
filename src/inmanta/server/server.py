@@ -562,7 +562,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if not os.path.exists(file_name):
-            return 404
+            return 404, None
 
         else:
             with open(file_name, "rb") as fd:
