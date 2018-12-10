@@ -652,19 +652,6 @@ def test_model_delete_cascade(data_module):
                                  version_info={})
     yield cm.insert()
 
-<<<<<<< HEAD
-@pytest.mark.gen_test
-def test_resource_action(data_module):
-    env_id = uuid.uuid4()
-    action_id = uuid.uuid4()
-
-    resource_action = data.ResourceAction(environment=env_id, resource_version_ids=[], action_id=action_id,
-                                          action=const.ResourceAction.deploy, started=datetime.datetime.now())
-    yield resource_action.insert()
-
-    resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
-    yield resource_action.save()
-=======
     path = "/etc/file"
     key = "std::File[agent1,path=" + path + "]"
     resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
@@ -689,7 +676,6 @@ def test_resource_action(data_module):
 def test_undeployable_cache_lazy(data_module):
     project = data.Project(name="test")
     yield project.insert()
->>>>>>> origin/master
 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
     yield env.insert()
