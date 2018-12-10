@@ -1279,30 +1279,3 @@ def test_data_document_recursion(data_module):
                              messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                         version=2)])
     yield ra.insert()
-
-
-@pytest.mark.gen_test
-def test_snapshot(data_module):
-    project = data.Project(name="test")
-    yield project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    yield env.insert()
-
-    snap = data.Snapshot(environment=env.id, model=1, name="a", started=datetime.datetime.now(), resources_todo=1)
-    yield snap.insert()
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    yield s.resource_updated(10)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    yield s.delete_cascade()
-    result = yield data.Snapshot.get_list()
-    assert len(result) == 0
