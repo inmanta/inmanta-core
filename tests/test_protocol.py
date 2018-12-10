@@ -47,36 +47,36 @@ def make_random_file(size=0):
     return(hash, content, body)
 
 
-@pytest.mark.gen_test
-def test_client_files(client):
+@pytest.mark.asyncio
+async def test_client_files(client):
     (hash, content, body) = make_random_file()
 
     # Check if the file exists
-    result = yield client.stat_file(id=hash)
+    result = await client.stat_file(id=hash)
     assert result.code == 404
 
     # Create the file
-    result = yield client.upload_file(id=hash, content=body)
+    result = await client.upload_file(id=hash, content=body)
     assert result.code == 200
 
     # Get the file
-    result = yield client.get_file(id=hash)
+    result = await client.get_file(id=hash)
     assert result.code == 200
     assert "content" in result.result
     assert result.result["content"] == body
 
 
-@pytest.mark.gen_test
-def test_client_files_lost(client):
+@pytest.mark.asyncio
+async def test_client_files_lost(client):
     (hash, content, body) = make_random_file()
 
     # Get the file
-    result = yield client.get_file(id=hash)
+    result = await client.get_file(id=hash)
     assert result.code == 404
 
 
-@pytest.mark.gen_test
-def test_sync_client_files(client):
+@pytest.mark.asyncio
+async def test_sync_client_files(client):
     done = []
     limit = 100
     sleep = 0.01
@@ -106,15 +106,15 @@ def test_sync_client_files(client):
     thread.start()
 
     while len(done) == 0 and limit > 0:
-        yield gen.sleep(sleep)
+        await gen.sleep(sleep)
         limit -= 1
 
     thread.join()
     assert len(done) > 0
 
 
-@pytest.mark.gen_test
-def test_client_files_stat(client):
+@pytest.mark.asyncio
+async def test_client_files_stat(client):
 
     file_names = []
     i = 0
@@ -122,56 +122,56 @@ def test_client_files_stat(client):
         (hash, content, body) = make_random_file()
         if hash not in file_names:
             file_names.append(hash)
-            result = yield client.upload_file(id=hash, content=body)
+            result = await client.upload_file(id=hash, content=body)
             assert result.code == 200
             i += 1
 
-    result = yield client.stat_files(files=file_names)
+    result = await client.stat_files(files=file_names)
     assert len(result.result["files"]) == 0
 
     other_files = ["testtest"]
-    result = yield client.stat_files(files=file_names + other_files)
+    result = await client.stat_files(files=file_names + other_files)
     assert len(result.result["files"]) == len(other_files)
 
 
-@pytest.mark.gen_test
-def test_diff(client):
+@pytest.mark.asyncio
+async def test_diff(client):
     ca = "Hello world\n".encode()
     ha = hash_file(ca)
-    result = yield client.upload_file(id=ha, content=base64.b64encode(ca).decode("ascii"))
+    result = await client.upload_file(id=ha, content=base64.b64encode(ca).decode("ascii"))
     assert(result.code == 200)
 
     cb = "Bye bye world\n".encode()
     hb = hash_file(cb)
-    result = yield client.upload_file(id=hb, content=base64.b64encode(cb).decode("ascii"))
+    result = await client.upload_file(id=hb, content=base64.b64encode(cb).decode("ascii"))
     assert(result.code == 200)
 
-    diff = yield client.diff(ha, hb)
+    diff = await client.diff(ha, hb)
     assert(diff.code == 200)
     assert(len(diff.result["diff"]) == 5)
 
-    diff = yield client.diff(0, hb)
+    diff = await client.diff(0, hb)
     assert(diff.code == 200)
     assert(len(diff.result["diff"]) == 4)
 
-    diff = yield client.diff(ha, 0)
+    diff = await client.diff(ha, 0)
     assert(diff.code == 200)
     assert(len(diff.result["diff"]) == 4)
 
 
-@pytest.mark.gen_test
-def test_client_files_bad(client):
+@pytest.mark.asyncio
+async def test_client_files_bad(client):
     (hash, content, body) = make_random_file()
     # Create the file
-    result = yield client.upload_file(id=hash + "a", content=body)
+    result = await client.upload_file(id=hash + "a", content=body)
     assert result.code == 400
 
 
-@pytest.mark.gen_test
-def test_client_files_corrupt(client):
+@pytest.mark.asyncio
+async def test_client_files_corrupt(client):
     (hash, content, body) = make_random_file()
     # Create the file
-    result = yield client.upload_file(id=hash, content=body)
+    result = await client.upload_file(id=hash, content=body)
     assert result.code == 200
 
     state_dir = opt.state_dir.get()
@@ -184,22 +184,22 @@ def test_client_files_corrupt(client):
         fd.write("Haha!".encode())
 
     opt.server_delete_currupt_files.set("false")
-    result = yield client.get_file(id=hash)
+    result = await client.get_file(id=hash)
     assert result.code == 500
 
-    result = yield client.upload_file(id=hash, content=body)
+    result = await client.upload_file(id=hash, content=body)
     assert result.code == 500
 
     opt.server_delete_currupt_files.set("true")
-    result = yield client.get_file(id=hash)
+    result = await client.get_file(id=hash)
     assert result.code == 500
 
-    result = yield client.upload_file(id=hash, content=body)
+    result = await client.upload_file(id=hash, content=body)
     assert result.code == 200
 
 
-@pytest.mark.gen_test
-def test_gzip_encoding(server):
+@pytest.mark.asyncio
+async def test_gzip_encoding(server):
     """
         Test if the server accepts gzipped encoding and returns gzipped encoding.
     """
@@ -214,11 +214,11 @@ def test_gzip_encoding(server):
     request = HTTPRequest(url=url, method="PUT", headers={"Accept-Encoding": "gzip", "Content-Encoding": "gzip"},
                           body=body, decompress_response=True)
     client = AsyncHTTPClient()
-    response = yield client.fetch(request)
+    response = await client.fetch(request)
     assert response.code == 200
 
     request = HTTPRequest(url=url, method="GET", headers={"Accept-Encoding": "gzip"}, decompress_response=True)
     client = AsyncHTTPClient()
-    response = yield client.fetch(request)
+    response = await client.fetch(request)
     assert response.code == 200
     assert response.headers["X-Consumed-Content-Encoding"] == "gzip"
