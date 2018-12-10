@@ -37,7 +37,6 @@ from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
 from concurrent.futures.thread import ThreadPoolExecutor
-from tornado import gen
 import re
 from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
@@ -477,13 +476,12 @@ class CLI(object):
     def __init__(self):
         self._thread_pool = ThreadPoolExecutor(1)
 
-    @gen.coroutine
-    def run(self, *args):
+    async def run(self, *args):
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=IOLoop.current(),
+        result = await self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=IOLoop.current(),
                                                 catch_exceptions=False)
         return result
 

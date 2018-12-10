@@ -16,16 +16,13 @@
     Contact: code@inmanta.com
 """
 import time
-
-from tornado import gen
-from tornado.gen import sleep
+import asyncio
 
 
-@gen.coroutine
-def retry_limited(fun, timeout):
+async def retry_limited(fun, timeout):
     start = time.time()
     while time.time() - start < timeout and not fun():
-        yield sleep(0.1)
+        await asyncio.sleep(0.1)
     if not fun():
         raise AssertionError("Bounded wait failed")
 
