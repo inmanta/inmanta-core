@@ -19,7 +19,7 @@ requires = [
 
 setup(
     version="2018.4",
-    python_requires='>=3.6', # also update classifiers 
+    python_requires='>=3.5', # also update classifiers 
     # Meta data
     name="inmanta",
     description="Inmanta deployment tool",
@@ -35,6 +35,7 @@ setup(
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
         "Topic :: Orchestration",
+        "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7"
     ],
