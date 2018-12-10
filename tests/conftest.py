@@ -198,7 +198,6 @@ async def server(inmanta_config, mongo_db, mongo_client, motor):
     yield ibl.restserver
 
     ibl.stop()
-    del IOLoop._instance
     shutil.rmtree(state_dir)
 
 
@@ -262,11 +261,6 @@ async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
     yield ibl.restserver
 
     ibl.stop()
-
-    try:
-        del IOLoop._instance
-    except Exception:
-        pass
 
     shutil.rmtree(state_dir)
 
