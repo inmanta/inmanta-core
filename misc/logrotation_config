@@ -1,4 +1,4 @@
-/var/log/inmanta/* {
+/var/log/inmanta/*.log /var/log/inmanta/*.out /var/log/inmanta/*.err {
 	daily
 	compress
 	rotate 3
