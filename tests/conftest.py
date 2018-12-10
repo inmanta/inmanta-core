@@ -29,7 +29,7 @@ import pytest
 from inmanta import config, data, mongoproc
 import inmanta.compiler as compiler
 import pymongo
-from motor import motor_tornado
+from motor import motor_asyncio
 from inmanta.module import Project
 from inmanta import resources, export
 from inmanta.agent import handler
@@ -124,8 +124,8 @@ def mongo_client(mongo_db):
 
 
 @pytest.fixture(scope="function")
-def motor(mongo_db, mongo_client):
-    client = motor_tornado.MotorClient('localhost', int(mongo_db.port))
+def motor(mongo_db, mongo_client, event_loop):
+    client = motor_asyncio.AsyncIOMotorClient('localhost', int(mongo_db.port))
     db = client["inmanta"]
     yield db
 
