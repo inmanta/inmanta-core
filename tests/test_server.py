@@ -187,7 +187,7 @@ def test_get_resource_for_agent(io_loop, motor, server_multi, client_multi, envi
     """
         Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent(io_loop, "localhost", {"nvblah": "localhost"}, environment=environment)
+    agent = Agent(io_loop, "localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -310,7 +310,7 @@ def test_resource_update(io_loop, client, server, environment):
     """
         Test updating resources and logging
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -481,7 +481,7 @@ def test_purge_on_delete_requires(io_loop, client, server, environment):
     """
         Test purge on delete of resources and inversion of requires
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -607,7 +607,7 @@ def test_purge_on_delete_compile_failed(io_loop, client, server, environment):
     """
         Test purge on delete of resources
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -695,7 +695,7 @@ def test_purge_on_delete(io_loop, client, server, environment):
     """
         Test purge on delete of resources
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -801,7 +801,7 @@ def test_purge_on_delete_ignore(io_loop, client, server, environment):
     """
         Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 

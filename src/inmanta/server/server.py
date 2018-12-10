@@ -127,10 +127,10 @@ class Server(protocol.ServerSlice):
 
         # LCM support should move to a server extension
         lcm = ""
-        if opt.dash_lcm_enable:
+        if opt.dash_lcm_enable.get():
             lcm = """,
-    'lcm': 'http://' + window.location.hostname + ':8889/'
-"""
+    'lcm': '%s://' + window.location.hostname + ':8889/'
+""" % "https" if opt.server_ssl_key else "http"
 
         content = """
 angular.module('inmantaApi.config', []).constant('inmantaConfig', {
@@ -561,7 +561,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if not os.path.exists(file_name):
-            return 404
+            return 404, None
 
         else:
             with open(file_name, "rb") as fd:
