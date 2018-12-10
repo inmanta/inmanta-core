@@ -887,7 +887,8 @@ class Module(ModuleLike):
             comp_version = parse_version(comp_version.base_version)
             return cls.__best_for_compiler_version(modulename, versions, path, comp_version)
         else:
-            return versions[0]
+            LOGGER.warning("The Inmanta compiler is not installed")
+            return versions[0] if len(versions) > 0 else None
 
     @classmethod
     def __best_for_compiler_version(cls, modulename, versions, path, comp_version):
