@@ -62,12 +62,11 @@ class SessionSpy(SessionListener, ServerSlice):
         self.__sessions.append(session)
 
     @protocol.handle(StatusMethod.get_status_x)
-    @gen.coroutine
-    def get_status_x(self, tid):
+    async def get_status_x(self, tid):
         status_list = []
         for session in self.__sessions:
             client = session.get_client()
-            status = yield client.get_agent_status_x("x")
+            status = await client.get_agent_status_x("x")
             if status is not None and status.code == 200:
                 status_list.append(status.result)
 
@@ -85,8 +84,7 @@ class SessionSpy(SessionListener, ServerSlice):
 class Agent(protocol.AgentEndPoint):
 
     @protocol.handle(StatusMethod.get_agent_status_x)
-    @gen.coroutine
-    def get_agent_status_x(self, id):
+    async def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
 
@@ -94,13 +92,12 @@ importlib.reload(protocol)
 importlib.reload(server.protocol)
 
 
-@gen.coroutine
-def get_environment(env: uuid.UUID, metadata: dict):
+async def get_environment(env: uuid.UUID, metadata: dict):
     return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
-@pytest.mark.gen_test(timeout=30)
-def test_2way_protocol(free_port, logs=False):
+@pytest.mark.asyncio(timeout=30)
+async def test_2way_protocol(unused_tcp_port, logs=False):
 
     from inmanta.config import Config
 
@@ -113,25 +110,20 @@ def test_2way_protocol(free_port, logs=False):
             "%(log_color)s%(levelname)-8s%(reset)s %(green)s%(name)s %(blue)s%(message)s",
             datefmt=None,
             reset=True,
-            log_colors={
-                'DEBUG': 'cyan',
-                'INFO': 'green',
-                'WARNING': 'yellow',
-                'ERROR': 'red',
-                'CRITICAL': 'red',
-            }
+            log_colors={"DEBUG": "cyan", "INFO": "green", "WARNING": "yellow", "ERROR": "red", "CRITICAL": "red"},
         )
 
         stream = logging.StreamHandler()
         stream.setLevel(logging.DEBUG)
 
-        if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+        if hasattr(sys.stdout, "isatty") and sys.stdout.isatty():
             stream.setFormatter(formatter)
 
         logging.root.handlers = []
         logging.root.addHandler(stream)
         logging.root.setLevel(logging.DEBUG)
 
+    free_port = str(unused_tcp_port)
     Config.load_config()
     Config.set("server_rest_transport", "port", free_port)
     Config.set("agent_rest_transport", "port", free_port)
@@ -156,11 +148,11 @@ def test_2way_protocol(free_port, logs=False):
         agent.set_environment(uuid.uuid4())
         agent.start()
 
-        yield retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+        await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
         assert len(server.get_sessions()) == 1
 
         client = protocol.Client("client")
-        status = yield client.get_status_x(str(agent.environment))
+        status = await client.get_status_x(str(agent.environment))
         assert status.code == 200
         assert "agents" in status.result
         assert len(status.result["agents"]) == 1
@@ -174,22 +166,23 @@ def test_2way_protocol(free_port, logs=False):
         ENV_ARG["getter"] = old_get_env
 
 
-@gen.coroutine
-def check_sessions(sessions):
+async def check_sessions(sessions):
     for s in sessions:
-        a = yield s.client.get_agent_status_x("X")
-        assert a.get_result()['status'] == 'ok'
+        a = await s.client.get_agent_status_x("X")
+        assert a.get_result()["status"] == "ok"
 
 
 @pytest.mark.slowtest
-@pytest.mark.gen_test(timeout=30)
-def test_timeout(free_port):
+@pytest.mark.asyncio(timeout=30)
+async def test_timeout(unused_tcp_port):
 
     from inmanta.config import Config
     import inmanta.agent.config  # nopep8
     import inmanta.server.config  # nopep8
 
     io_loop = IOLoop.current()
+
+    free_port = str(unused_tcp_port)
 
     # start server
     Config.load_config()
@@ -221,7 +214,7 @@ def test_timeout(free_port):
         agent.start()
 
         # wait till up
-        yield retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
+        await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
         assert len(server.get_sessions()) == 1
 
         # agent 2
@@ -231,24 +224,24 @@ def test_timeout(free_port):
         agent2.start()
 
         # wait till up
-        yield retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
+        await retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
         assert len(server.get_sessions()) == 2
 
         # see if it stays up
-        yield(check_sessions(server.get_sessions()))
-        yield sleep(2)
+        await check_sessions(server.get_sessions())
+        await sleep(2)
         assert len(server.get_sessions()) == 2
-        yield(check_sessions(server.get_sessions()))
+        await check_sessions(server.get_sessions())
 
         # take it down
         agent2.stop()
 
         # timout
-        yield sleep(2)
+        await sleep(2)
         # check if down
         assert len(server.get_sessions()) == 1
         print(server.get_sessions())
-        yield(check_sessions(server.get_sessions()))
+        await check_sessions(server.get_sessions())
         assert server.expires == 1
         agent.stop()
         server.stop()

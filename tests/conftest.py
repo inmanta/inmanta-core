@@ -124,16 +124,16 @@ def mongo_client(mongo_db):
 
 
 @pytest.fixture(scope="function")
-def motor(mongo_db, mongo_client, io_loop):
-    client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
+def motor(mongo_db, mongo_client):
+    client = motor_tornado.MotorClient('localhost', int(mongo_db.port))
     db = client["inmanta"]
     yield db
 
 
 @pytest.fixture(scope="function")
-def data_module(io_loop, motor):
+async def data_module(motor):
     data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    await data.create_indexes()
 
 
 def get_free_tcp_port():
@@ -169,10 +169,9 @@ def inmanta_config():
 
 
 @pytest.fixture(scope="function")
-def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
+async def server(inmanta_config, mongo_db, mongo_client, motor):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
-    IOLoop._instance = io_loop
 
     state_dir = tempfile.mkdtemp()
 
@@ -191,7 +190,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     config.Config.set("server", "agent-timeout", "10")
 
     data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    await data.create_indexes()
 
     ibl = InmantaBootloader()
     ibl.start()
@@ -207,9 +206,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor):
-    IOLoop._instance = io_loop
-
+async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -257,7 +254,7 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
     config.Config.set("server", "agent-timeout", "2")
 
     data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    await data.create_indexes()
 
     ibl = InmantaBootloader()
     ibl.start()
@@ -293,21 +290,21 @@ def client_multi(server_multi):
 
 
 @pytest.fixture(scope="function")
-def environment(client, server, io_loop):
+async def environment(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
     def create_project():
         return client.create_project("env-test")
 
-    result = io_loop.run_sync(create_project)
+    result = await create_project()
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
     def create_env():
         return client.create_environment(project_id=project_id, name="dev")
 
-    result = io_loop.run_sync(create_env)
+    result = await create_env()
     env_id = result.result["environment"]["id"]
 
     cfg_env.set(env_id)
@@ -316,21 +313,21 @@ def environment(client, server, io_loop):
 
 
 @pytest.fixture(scope="function")
-def environment_multi(client_multi, server_multi, io_loop):
+async def environment_multi(client_multi, server_multi):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
     def create_project():
         return client_multi.create_project("env-test")
 
-    result = io_loop.run_sync(create_project)
+    result = await create_project()
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
     def create_env():
         return client_multi.create_environment(project_id=project_id, name="dev")
 
-    result = io_loop.run_sync(create_env)
+    result = await create_env()
     env_id = result.result["environment"]["id"]
 
     yield env_id
@@ -483,8 +480,7 @@ def snippetcompiler(snippetcompiler_global):
 
 class CLI(object):
 
-    def __init__(self, io_loop):
-        self.io_loop = io_loop
+    def __init__(self):
         self._thread_pool = ThreadPoolExecutor(1)
 
     @gen.coroutine
@@ -493,12 +489,12 @@ class CLI(object):
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
+        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=IOLoop.current(),
                                                 catch_exceptions=False)
         return result
 
 
 @pytest.fixture
-def cli(io_loop):
-    o = CLI(io_loop)
+def cli():
+    o = CLI()
     yield o
