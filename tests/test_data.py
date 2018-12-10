@@ -1090,62 +1090,6 @@ def test_resource_get_requires(data_module):
 
 
 @pytest.mark.gen_test
-def test_resource_get_with_state(data_module):
-    project = data.Project(name="test")
-    yield project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    yield env.insert()
-
-    # model 1
-    version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    yield cm1.insert()
-
-    res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
-                              attributes={"path": "/etc/file1", "state_id": "test11"})
-    yield res11.insert()
-    res12 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-                              attributes={"path": "/etc/file1"})
-    yield res12.insert()
-    res13 = data.Resource.new(environment=env.id,
-                              resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-                              attributes={"path": "/etc/file1", "state_id": "test13"})
-    yield res13.insert()
-    version += 1
-    cm2 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    yield cm2.insert()
-
-    res21 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
-                              attributes={"path": "/etc/file1", "state_id": "test"})
-    yield res21.insert()
-    version += 1
-    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    yield cm3.insert()
-
-    res31 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
-                              attributes={"path": "/etc/file1"})
-    yield res31.insert()
-
-    resources = yield data.Resource.get_with_state(env.id, 1)
-    assert len(resources) == 2
-    assert sorted([res11.id, res13.id]) == sorted([x.id for x in resources])
-    resources = yield data.Resource.get_with_state(env.id, 2)
-    assert len(resources) == 1
-    assert res21.id == resources[0].id
-    resources = yield data.Resource.get_with_state(env.id, 3)
-    assert len(resources) == 0
-
-
-@pytest.mark.gen_test
 def test_resources_delete_cascade(data_module):
     project = data.Project(name="test")
     yield project.insert()
@@ -1279,30 +1223,3 @@ def test_data_document_recursion(data_module):
                              messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                         version=2)])
     yield ra.insert()
-
-
-@pytest.mark.gen_test
-def test_snapshot(data_module):
-    project = data.Project(name="test")
-    yield project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    yield env.insert()
-
-    snap = data.Snapshot(environment=env.id, model=1, name="a", started=datetime.datetime.now(), resources_todo=1)
-    yield snap.insert()
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    yield s.resource_updated(10)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    yield s.delete_cascade()
-    result = yield data.Snapshot.get_list()
-    assert len(result) == 0

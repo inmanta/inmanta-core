@@ -33,7 +33,7 @@ def my_resource():
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
 
 class CacheTests(unittest.TestCase):

@@ -577,26 +577,6 @@ class ResourceHandler(object):
         """
         return True
 
-    def snapshot(self, resource: resources.Resource) -> bytes:
-        """
-            Create a new snapshot and upload it to the server
-
-            :param resource: The state of the resource for which a snapshot is created
-            :return: The data that needs to be uploaded to the server. This data is passed back to the restore method on
-                     snapshot restore.
-        """
-        raise NotImplementedError()
-
-    def restore(self, resource: resources.Resource, snapshot_id: str) -> None:
-        """
-            Restore a resource from a snapshot.
-
-            :param resource: The resource for which a snapshot needs to be restored.
-            :param snapshot_id: The id of the "file" on the server that contains the snapshot data. This data can be retrieved
-                                with the :func:`~inmanta.agent.handler.ResourceHandler.get_file` method
-        """
-        raise NotImplementedError()
-
     def get_file(self, hash_id) -> bytes:
         """
             Retrieve a file from the fileserver identified with the given id. The convention is to use the sha1sum of the

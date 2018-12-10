@@ -17,7 +17,6 @@
 """
 from collections import defaultdict, namedtuple
 import time
-import json
 import uuid
 from threading import Condition
 from itertools import groupby
@@ -57,7 +56,7 @@ def resource_container():
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
     @resource("test::Fact", agent="agent", id_attribute="key")
     class FactResource(Resource):
@@ -71,35 +70,35 @@ def resource_container():
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
     @resource("test::Wait", agent="agent", id_attribute="key")
     class WaitR(Resource):
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
     @resource("test::Noprov", agent="agent", id_attribute="key")
     class NoProv(Resource):
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
     @resource("test::FailFast", agent="agent", id_attribute="key")
     class FailFastR(Resource):
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
     @resource("test::BadEvents", agent="agent", id_attribute="key")
     class BadeEventR(Resource):
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "state_id", "allow_snapshot", "allow_restore")
+        fields = ("key", "value", "purged")
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
@@ -139,18 +138,6 @@ def resource_container():
                 ctx.set_updated()
 
             return changes
-
-        def snapshot(self, resource):
-            return json.dumps({"value": self.get(resource.id.get_agent_name(), resource.key), "metadata": "1234"}).encode()
-
-        def restore(self, resource, snapshot_id):
-            content = self.get_file(snapshot_id)
-            if content is None:
-                return
-
-            data = json.loads(content.decode())
-            if "value" in data:
-                self.set(resource.id.get_agent_name(), resource.key, data["value"])
 
         def facts(self, ctx, resource):
             return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1", "key2": "value2"}
@@ -415,9 +402,6 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -426,9 +410,6 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'send_event': False,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': None,
@@ -436,9 +417,6 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'send_event': False,
                   'requires': [],
                   'purged': True,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key4',
                   'value': execute.util.Unknown(source=None),
@@ -446,9 +424,6 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'send_event': False,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key5',
                   'value': "val",
@@ -456,9 +431,6 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'send_event': False,
                   'requires': ['test::Resource[agent2,key=key4],v=%d' % version],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key6',
                   'value': "val",
@@ -466,9 +438,6 @@ def test_dryrun_and_deploy(io_loop, server_multi, client_multi, resource_contain
                   'send_event': False,
                   'requires': ['test::Resource[agent2,key=key5],v=%d' % version],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -581,9 +550,6 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
                   'id': 'test::Resource[agent2,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  {'key': 'key2',
@@ -591,9 +557,6 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
                   'id': 'test::Resource[agent2,key=key2],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  {'key': 'key4',
@@ -603,9 +566,6 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
                   'requires': ['test::Resource[agent2,key=key1],v=%d' % version,
                                'test::Resource[agent2,key=key2],v=%d' % version],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key5',
                   'value': "val",
@@ -613,9 +573,6 @@ def test_deploy_with_undefined(io_loop, server_multi, client_multi, resource_con
                   'send_event': False,
                   'requires': ['test::Resource[agent2,key=key4],v=%d' % version],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -718,9 +675,6 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -729,9 +683,6 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': None,
@@ -739,9 +690,6 @@ def test_server_restart(resource_container, io_loop, server, mongo_db, client):
                   'requires': [],
                   'purged': True,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -838,9 +786,6 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -849,9 +794,6 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': None,
@@ -859,9 +801,6 @@ def test_spontaneous_deploy(resource_container, io_loop, server, client):
                   'requires': [],
                   'purged': True,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -919,9 +858,6 @@ def test_failing_deploy_no_handler(resource_container, io_loop, server, client):
                   'id': 'test::Noprov[agent1,key=key1],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   }
                  ]
@@ -975,9 +911,6 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
                   'id': 'test::Wait[agent1,key=key1],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': []
                   },
                  {'key': 'key2',
@@ -985,9 +918,6 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
                   'id': 'test::Wait[agent1,key=key2],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Wait[agent1,key=key1],v=%d' % version]
                   },
                  {'key': 'key1',
@@ -995,9 +925,6 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
                   'id': 'test::Wait[agent2,key=key1],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': []
                   },
                  {'key': 'key2',
@@ -1005,9 +932,6 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
                   'id': 'test::Wait[agent2,key=key2],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Wait[agent2,key=key1],v=%d' % version]
                   }]
 
@@ -1044,114 +968,6 @@ def test_dual_agent(resource_container, io_loop, server, client, environment):
     assert resource_container.Provider.get("agent2", "key2") == "value2"
 
     myagent.stop()
-
-
-@pytest.mark.gen_test(timeout=60)
-def test_snapshot_restore(resource_container, client, server, io_loop):
-    """
-        create a snapshot and restore it again
-    """
-    resource_container.Provider.reset()
-    result = yield client.create_project("env-test")
-    project_id = result.result["project"]["id"]
-
-    result = yield client.create_environment(project_id=project_id, name="dev")
-    env_id = result.result["environment"]["id"]
-
-    agent = Agent(io_loop, hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
-    agent.add_end_point_name("agent1")
-    agent.start()
-    yield retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
-
-    resource_container.Provider.set("agent1", "key", "value")
-
-    version = int(time.time())
-
-    resources = [{'key': 'key',
-                  'value': 'value',
-                  'id': 'test::Resource[agent1,key=key],v=%d' % version,
-                  'requires': [],
-                  'purged': False,
-                  'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
-                  },
-                 {'key': 'key2',
-                  'value': 'value',
-                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
-                  'requires': [],
-                  'purged': False,
-                  'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
-                  }]
-
-    result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
-
-    # deploy and wait until done
-    result = yield client.release_version(env_id, version, True)
-    assert result.code == 200
-
-    result = yield client.get_version(env_id, version)
-    assert result.code == 200
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = yield client.get_version(env_id, version)
-        yield gen.sleep(0.1)
-
-    assert result.result["model"]["done"] == len(resources)
-
-    # create a snapshot
-    result = yield client.create_snapshot(env_id, "snap1")
-    assert result.code == 200
-    snapshot_id = result.result["snapshot"]["id"]
-
-    result = yield client.list_snapshots(env_id)
-    assert result.code == 200
-    assert len(result.result["snapshots"]) == 1
-    assert result.result["snapshots"][0]["id"] == snapshot_id
-
-    while result.result["snapshots"][0]["finished"] is None:
-        result = yield client.list_snapshots(env_id)
-        assert result.code == 200
-        yield gen.sleep(0.1)
-
-    # Change the value of the resource
-    resource_container.Provider.set("agent1", "key", "other")
-
-    # try to do a restore
-    result = yield client.restore_snapshot(env_id, snapshot_id)
-    assert result.code == 200
-    restore_id = result.result["restore"]["id"]
-
-    result = yield client.list_restores(env_id)
-    assert result.code == 200
-    assert len(result.result["restores"]) == 1
-
-    result = yield client.get_restore_status(env_id, restore_id)
-    assert result.code == 200
-    while result.result["restore"]["finished"] is None:
-        result = yield client.get_restore_status(env_id, restore_id)
-        assert result.code == 200
-        yield gen.sleep(0.1)
-
-    assert resource_container.Provider.get("agent1", "key") == "value"
-
-    # get a snapshot
-    result = yield client.get_snapshot(env_id, snapshot_id)
-    assert result.code == 200
-    assert result.result["snapshot"]["id"] == snapshot_id
-
-    # delete the restore
-    result = yield client.delete_restore(env_id, restore_id)
-    assert result.code == 200
-
-    # delete the snapshot
-    result = yield client.delete_snapshot(env_id, snapshot_id)
-    assert result.code == 200
 
 
 @pytest.mark.gen_test
@@ -1216,9 +1032,6 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key2',
                   'value': 'value',
@@ -1226,9 +1039,6 @@ def test_server_agent_api(resource_container, client, server, io_loop):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }]
 
     result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
@@ -1278,9 +1088,6 @@ def test_get_facts(resource_container, client, server, io_loop):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }]
 
     result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
@@ -1325,9 +1132,6 @@ def test_purged_facts(resource_container, client, server, io_loop, environment):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }]
 
     result = yield client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
@@ -1574,9 +1378,6 @@ def test_unkown_parameters(resource_container, client, server, io_loop):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }]
 
     unknowns = [{"resource": resource_id_wov, "parameter": "length", "source": "fact"}]
@@ -1627,9 +1428,6 @@ def test_fail(resource_container, client, server, io_loop):
                   'requires': [],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key2',
                   'value': 'value',
@@ -1637,9 +1435,6 @@ def test_fail(resource_container, client, server, io_loop):
                   'requires': ['test::Fail[agent1,key=key],v=%d' % version],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': 'value',
@@ -1647,9 +1442,6 @@ def test_fail(resource_container, client, server, io_loop):
                   'requires': ['test::Fail[agent1,key=key],v=%d' % version],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key4',
                   'value': 'value',
@@ -1657,9 +1449,6 @@ def test_fail(resource_container, client, server, io_loop):
                   'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key5',
                   'value': 'value',
@@ -1668,9 +1457,6 @@ def test_fail(resource_container, client, server, io_loop):
                                'test::Fail[agent1,key=key],v=%d' % version],
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }]
 
     result = yield client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
@@ -1739,9 +1525,6 @@ def test_wait(resource_container, client, server, io_loop):
                       'requires': [],
                       'purged': False,
                       'send_event': False,
-                      'state_id': '',
-                      'allow_restore': True,
-                      'allow_snapshot': True,
                       },
                      {'key': 'key2',
                       'value': 'value',
@@ -1749,9 +1532,6 @@ def test_wait(resource_container, client, server, io_loop):
                       'requires': ['test::Wait[agent1,key=key],v=%d' % version],
                       'purged': False,
                       'send_event': False,
-                      'state_id': '',
-                      'allow_restore': True,
-                      'allow_snapshot': True,
                       },
                      {'key': 'key3',
                       'value': 'value',
@@ -1759,9 +1539,6 @@ def test_wait(resource_container, client, server, io_loop):
                       'requires': [],
                       'purged': False,
                       'send_event': False,
-                      'state_id': '',
-                      'allow_restore': True,
-                      'allow_snapshot': True,
                       },
                      {'key': 'key4',
                       'value': 'value',
@@ -1769,9 +1546,6 @@ def test_wait(resource_container, client, server, io_loop):
                       'requires': ['test::Resource[agent1,key=key3],v=%d' % version],
                       'purged': False,
                       'send_event': False,
-                      'state_id': '',
-                      'allow_restore': True,
-                      'allow_snapshot': True,
                       },
                      {'key': 'key5',
                       'value': 'value',
@@ -1780,9 +1554,6 @@ def test_wait(resource_container, client, server, io_loop):
                                    'test::Wait[agent1,key=key],v=%d' % version],
                       'purged': False,
                       'send_event': False,
-                      'state_id': '',
-                      'allow_restore': True,
-                      'allow_snapshot': True,
                       }]
         return version, resources
 
@@ -1893,9 +1664,6 @@ def test_multi_instance(resource_container, client, server, io_loop):
                                'requires': ['test::Resource[%s,key=key3],v=%d' % (agent, version)],
                                'purged': False,
                                'send_event': False,
-                               'state_id': '',
-                               'allow_restore': True,
-                               'allow_snapshot': True,
                                },
                               {'key': 'key2',
                                'value': 'value',
@@ -1903,9 +1671,6 @@ def test_multi_instance(resource_container, client, server, io_loop):
                                'requires': ['test::Wait[%s,key=key],v=%d' % (agent, version)],
                                'purged': False,
                                'send_event': False,
-                               'state_id': '',
-                               'allow_restore': True,
-                               'allow_snapshot': True,
                                },
                               {'key': 'key3',
                                'value': 'value',
@@ -1913,9 +1678,6 @@ def test_multi_instance(resource_container, client, server, io_loop):
                                'requires': [],
                                'purged': False,
                                'send_event': False,
-                               'state_id': '',
-                               'allow_restore': True,
-                               'allow_snapshot': True,
                                },
                               {'key': 'key4',
                                'value': 'value',
@@ -1923,9 +1685,6 @@ def test_multi_instance(resource_container, client, server, io_loop):
                                'requires': ['test::Resource[%s,key=key3],v=%d' % (agent, version)],
                                'purged': False,
                                'send_event': False,
-                               'state_id': '',
-                               'allow_restore': True,
-                               'allow_snapshot': True,
                                },
                               {'key': 'key5',
                                'value': 'value',
@@ -1934,9 +1693,6 @@ def test_multi_instance(resource_container, client, server, io_loop):
                                             'test::Wait[%s,key=key],v=%d' % (agent, version)],
                                'purged': False,
                                'send_event': False,
-                               'state_id': '',
-                               'allow_restore': True,
-                               'allow_snapshot': True,
                                }])
         return version, resources
 
@@ -2019,10 +1775,7 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   'value': 'value1',
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'purged': False,
-                  'state_id': '',
                   'send_event': False,
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Wait[agent1,key=key2],v=%d' % version, 'test::Resource[agent2,key=key3],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -2030,30 +1783,21 @@ def test_cross_agent_deps(resource_container, io_loop, server, client):
                   'id': 'test::Wait[agent1,key=key2],v=%d' % version,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
                   'send_event': False,
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': 'value3',
                   'id': 'test::Resource[agent2,key=key3],v=%d' % version,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
                   'send_event': False,
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key4',
                   'value': 'value4',
                   'id': 'test::Resource[agent2,key=key4],v=%d' % version,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
                   'send_event': False,
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -2117,10 +1861,7 @@ def test_dryrun_scale(resource_container, io_loop, server, client):
                           'value': 'value%d' % i,
                           'id': 'test::Resource[agent1,key=key%d],v=%d' % (i, version),
                           'purged': False,
-                          'state_id': '',
                           'send_event': False,
-                          'allow_restore': True,
-                          'allow_snapshot': True,
                           'requires': [],
                           })
 
@@ -2176,9 +1917,6 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
                   'id': 'test::Noprov[agent1,key=key1],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  {'key': 'key2',
@@ -2186,9 +1924,6 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
                   'id': 'test::FailFast[agent1,key=key2],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  {'key': 'key2',
@@ -2196,9 +1931,6 @@ def test_dryrun_failures(resource_container, io_loop, server, client):
                   'id': 'test::DoesNotExist[agent1,key=key2],v=%d' % version,
                   'purged': False,
                   'send_event': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   }
                  ]
@@ -2266,9 +1998,6 @@ def test_send_events(resource_container, io_loop, environment, server, client):
                   'id': res_id_1,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -2277,9 +2006,6 @@ def test_send_events(resource_container, io_loop, environment, server, client):
                   'send_event': True,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -2336,9 +2062,6 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
                   'id': res_id_1,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent2,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -2347,9 +2070,6 @@ def test_send_events_cross_agent(resource_container, io_loop, environment, serve
                   'send_event': True,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -2404,9 +2124,6 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                   'id': res_id_1,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent2,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -2415,9 +2132,6 @@ def test_send_events_cross_agent_restart(resource_container, io_loop, environmen
                   'send_event': True,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -2488,9 +2202,6 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                   },
                  {'key': 'key2',
@@ -2499,9 +2210,6 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
                   'send_event': False,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': None,
@@ -2509,9 +2217,6 @@ def test_auto_deploy(io_loop, server, client, resource_container, environment):
                   'send_event': False,
                   'requires': [],
                   'purged': True,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 
@@ -2562,9 +2267,6 @@ def test_auto_deploy_no_splay(io_loop, server, client, resource_container, envir
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
                   },
                  ]
@@ -2620,9 +2322,6 @@ def test_autostart_mapping(io_loop, server, client, resource_container, environm
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  {'key': 'key1',
@@ -2630,9 +2329,6 @@ def test_autostart_mapping(io_loop, server, client, resource_container, environm
                   'id': 'test::Resource[agent2,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  ]
@@ -2687,9 +2383,6 @@ def test_autostart_clear_environment(io_loop, server_multi, client_multi, resour
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   }
                  ]
@@ -2741,9 +2434,6 @@ def test_autostart_clear_environment(io_loop, server_multi, client_multi, resour
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   }
                  ]
@@ -2890,9 +2580,6 @@ class ResourceProvider(object):
                 'id': 'test::Resource[%s,key=%s],v=%d' % (agent, key, version),
                 'send_event': True,
                 'purged': False,
-                'state_id': '',
-                'allow_restore': True,
-                'allow_snapshot': True,
                 'requires': requires,
                 }
 
@@ -2991,9 +2678,6 @@ def test_deploy_and_events(io_loop, client, server, environment, resource_contai
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': True,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  dep,
@@ -3053,9 +2737,6 @@ def test_deploy_and_events_failed(io_loop, client, server, environment, resource
                   'id': 'test::Resource[agent1,key=key1],v=%d' % version,
                   'send_event': True,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': [],
                   },
                  {'key': 'key2',
@@ -3063,9 +2744,6 @@ def test_deploy_and_events_failed(io_loop, client, server, environment, resource
                   'id': 'test::BadEvents[agent1,key=key2],v=%d' % version,
                   'send_event': True,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key1],v=%d' % version],
                   },
                  ]
@@ -3122,9 +2800,6 @@ def test_reload(io_loop, client, server, environment, resource_container, dep_st
                   'id': 'test::Resource[agent1,key=key2],v=%d' % version,
                   'send_event': True,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key1],v=%d' % version],
                   },
                  dep

@@ -1,3 +1,9 @@
+v 2018.4 (2018-12-xx)
+Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
+- Removal of snapshot and restore functionality from the server (#789)
+
 v 2018.3 (2018-12-07)
 Changes in this release:
 - Various bugfixes and performance enhancements
