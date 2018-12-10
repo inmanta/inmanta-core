@@ -2491,17 +2491,19 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
     def wait_for_version(cnt):
         # Wait until the server is no longer compiling
         # wait for it to finish
+        yield gen.sleep(0.1)
         code = 200
         while code == 200:
             compiling = yield client.is_compiling(environment)
             code = compiling.code
-            yield gen.sleep(1)
-
+            yield gen.sleep(0.1)
         # wait for it to appear
         versions = yield client.list_versions(environment)
 
         while versions.result["count"] < cnt:
+            logger.info(versions.result)
             versions = yield client.list_versions(environment)
+            yield gen.sleep(0.1)
 
         return versions.result
 
@@ -2522,9 +2524,10 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
         std::ConfigFile(host=host, path="/etc/motd", content="1234")
 """)
 
-    # request a compile
+    logger.info("request a compile")
     yield client.notify_change(environment)
 
+    logger.info("wait for 1")
     versions = yield wait_for_version(1)
     assert versions["versions"][0]["total"] == 1
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "api"
@@ -2538,8 +2541,10 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
     versions = yield wait_for_version(1)
     assert versions["count"] == 1
 
+    logger.info("request second compile")
     # set a new parameter and request a recompile
     yield client.set_param(environment, id="param2", value="test", source="plugin", recompile=True)
+    logger.info("wait for 2")
     versions = yield wait_for_version(2)
     assert versions["versions"][0]["version_info"]["export_metadata"]["type"] == "param"
     assert versions["count"] == 2
@@ -2552,6 +2557,7 @@ def test_server_recompile(server_multi, client_multi, environment_multi):
     # update the parameter to a new value
     yield client.set_param(environment, id="param2", value="test2", source="plugin", recompile=True)
     versions = yield wait_for_version(3)
+    logger.info("wait for 3")
     assert versions["count"] == 3
 
 

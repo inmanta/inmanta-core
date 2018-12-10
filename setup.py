@@ -11,7 +11,7 @@ requires = [
     "python-dateutil",
     "pyyaml",
     "texttable",
-    "tornado < 5",
+    "tornado",
     "typing",
     "PyJWT",
     "cryptography",

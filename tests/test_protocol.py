@@ -18,7 +18,6 @@
 import random
 import base64
 import threading
-import time
 
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
@@ -26,6 +25,7 @@ from inmanta import config, protocol
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 import os
+from tornado import gen
 
 
 def make_random_file(size=0):
@@ -78,6 +78,8 @@ def test_client_files_lost(client):
 @pytest.mark.gen_test
 def test_sync_client_files(client):
     done = []
+    limit = 100
+    sleep = 0.01
 
     def do_test():
         sync_client = protocol.SyncClient("client")
@@ -103,8 +105,9 @@ def test_sync_client_files(client):
     thread = threading.Thread(target=do_test)
     thread.start()
 
-    while len(done) == 0:
-        time.sleep(0.01)
+    while len(done) == 0 and limit > 0:
+        yield gen.sleep(sleep)
+        limit -= 1
 
     thread.join()
     assert len(done) > 0
