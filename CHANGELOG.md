@@ -3,6 +3,7 @@ Changes in this release:
 - Various bugfixes and performance enhancements
 - Dependency updates
 - Removal of snapshot and restore functionality from the server (#789)
+- Replace virtualenv by python standard venv
 
 v 2018.3 (2018-12-07)
 Changes in this release:
