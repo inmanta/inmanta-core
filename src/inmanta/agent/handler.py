@@ -24,11 +24,11 @@ import traceback
 from concurrent.futures import Future
 from collections import defaultdict
 import typing
+import tornado.concurrent
 
 
 from inmanta.agent.io import get_io
 from inmanta import protocol, resources, const, data
-from tornado import ioloop
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
 import uuid
@@ -331,7 +331,7 @@ class ResourceHandler(object):
             self._io = io
 
         self._client = None
-        self._ioloop = ioloop.IOLoop.current(instance=True)
+        self._ioloop = agent.process._io_loop
 
     def run_sync(self, func: typing.Callable) -> typing.Any:
         """
@@ -343,20 +343,13 @@ class ResourceHandler(object):
         """
         f = Future()
 
-        def future_to_future(future):
-            exc = future.exception()
-            if exc is not None:
-                f.set_exception(exc)
-            else:
-                f.set_result(future.result())
-
         def run():
             try:
                 result = func()
                 if result is not None:
                     from tornado.gen import convert_yielded
                     result = convert_yielded(result)
-                    result.add_done_callback(future_to_future)
+                    tornado.concurrent.chain_future(result, f)
             except Exception as e:
                 f.set_exception(e)
         self._ioloop.add_callback(run)
@@ -583,26 +576,6 @@ class ResourceHandler(object):
             :return: Available or not?
         """
         return True
-
-    def snapshot(self, resource: resources.Resource) -> bytes:
-        """
-            Create a new snapshot and upload it to the server
-
-            :param resource: The state of the resource for which a snapshot is created
-            :return: The data that needs to be uploaded to the server. This data is passed back to the restore method on
-                     snapshot restore.
-        """
-        raise NotImplementedError()
-
-    def restore(self, resource: resources.Resource, snapshot_id: str) -> None:
-        """
-            Restore a resource from a snapshot.
-
-            :param resource: The resource for which a snapshot needs to be restored.
-            :param snapshot_id: The id of the "file" on the server that contains the snapshot data. This data can be retrieved
-                                with the :func:`~inmanta.agent.handler.ResourceHandler.get_file` method
-        """
-        raise NotImplementedError()
 
     def get_file(self, hash_id) -> bytes:
         """

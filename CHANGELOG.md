@@ -1,7 +1,79 @@
-v 2018.2 (2018-04-xx)
-Change in this release:
-- The internal storage format for code is optimized. This introduces API and schema changes. 
+v 2018.4 (2018-12-xx)
+Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
+- Removal of snapshot and restore functionality from the server (#789)
+- Replace virtualenv by python standard venv
+- Updated to Tornado 5, moving from tornado ioloop to the standard python async framework (#765)
+
+v 2018.3 (2018-12-07)
+Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
+- Added improved error reporting to CLI (#814)
+- Fixed missing re-raise on pip install  (#810)
+- Add pytest plugins (#786)
+- Extra test cases for the data module + two bugfixes (#805)
+- Fix deprecation warnings (#785)
+- Reorganized test case in more modules to reduce the number of merge conflicts (#764)
+- Prevent purge_on_delete due to failed compile (#780)
+- Add mypy to tox and improve typing annotations (no enforcement yet) (#763)
+- Removed incorrect uninitialize of subprocess signal handler (#778, #777)
+- Fix modules do command (#760)
+- Changed process_events so that it is called even when processing a skip. (#761)
+- Track all locations where an instance has been created. (fixes #747)
+- Add start to the index for the get_log query (#758)
+- Improved reporting of nested exceptions (#746)
+- Added compiler check on index attributes so an index on a nullable attribute now raises a compiler error. (#745)
+- Added support for lazy attribute execution in constructors (#729)
+- Big update to module and project version freeze. See documentation for more details (#106)
+- Added argument to @plugin to allow unknown objects as arguments (#754)
+- Fix for deploy of undefined resource (#627)
+- Improved handling ofr dryrun failures (#631)
+- Correctly store and report empty facts (#731)
+- Allow get facts from undeployed or undefined resources  (#726)
+- Minor changes for ide alpha release (#607)
+- Added uniqueness check to indices (#715)
+- Bugfixes in handling of optional attributes (#724)
+- Transport cleanup (added bootloader, split off session management) (#564)
+- Reserved keywords in resources (#645)
+- Fix a bug in option definition
+- Use own mongobox implementation that works with mongo >= 4
+- Fixed reporting on undefined list attributes (#657)
+- Improved list freeze for gradual execution (#643)
+- Fixed bug in bounds check (#671)
+- Improved error reporting on bad assignment (#670)
+- Improved error reporting on missing type (#672)
+- Added in operator for dicts (#673)
+
+v 2018.2 (2018-07-30)
+Changes in this release:
+- Various bugfixes and performance enhancements
+- Dependency updates
+- The internal storage format for code is optimized. This introduces API and schema changes.
   This release supports both storage versions. The old version will be removed in the next release.
+- Support formatter in repo url
+- Make export of complete model configurable
+- Use id of loopvar instead of hash to support iteration over list returned by plugins
+- Fix error in default args for list attribute (#633)
+- Add multi level map lookup (#622 and #632)
+- Improved deploy, make deploy sync
+- Added improved error message for lower bound violations on relations (#610)
+- Fixes for empty optionals  (#609)
+- Added improved logging to context handler (#602)
+- Added fix for string representation (#552)
+- Added support for single quotes (#589)
+- Fix in operator in typedefs (#596)
+- Fixed line numbers on MLS (#601)
+- Added += operator for assignment to lists (#587)
+- Add a synchronous protocol client
+- Fix error message for wrong type in ctor
+- Improve index error reporting
+- Fix validate on modules with no commited version
+- Set purged=false on clone in CRUDHandler (#582)
+- Add gzip encoding support to protocol (#576)
+- added anchormap functions to compiler
+- Improved error reporting on for loops (#553)
 
 v 2018.1 (2018-02-09)
 Changes in this release:
