@@ -338,7 +338,7 @@ def cmd_parser():
 
 
 def _get_default_stream_handler():
-    stream_handler = logging.StreamHandler()
+    stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setLevel(logging.INFO)
 
     formatter = _get_log_formatter_for_stream_handler(timed=False)
