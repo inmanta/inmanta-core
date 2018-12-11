@@ -235,7 +235,10 @@ async def test_project_unique(data_module):
         await project.insert()
 
 
-def test_project_no_project_name(data_module):
+@pytest.mark.asyncio
+
+async def test_project_no_project_name(data_module):
+    print(data_module)
     with pytest.raises(AttributeError):
         data.Project()
 
