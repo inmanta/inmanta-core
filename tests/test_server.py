@@ -23,8 +23,7 @@ import uuid
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data, protocol
-from inmanta import const
+from inmanta import data, protocol, const, config
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
 from uuid import UUID
@@ -568,15 +567,15 @@ async def test_purge_on_delete_requires(client, server, environment):
 
 
 @pytest.mark.asyncio(timeout=20)
-async def test_purge_on_delete_compile_failed_with_compile(client, server, environment, snippetcompiler):
+async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
     # run in threads to allow run_sync to work
     v1 = []
     v2 = []
 
-    version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
-
+    config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
     def i1():
+        print(IOLoop.current())
         snippetcompiler.setup_for_snippet("""
         h = std::Host(name="test", os=std::linux)
         f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
@@ -600,6 +599,7 @@ async def test_purge_on_delete_compile_failed_with_compile(client, server, envir
     t1.start()
     t1.join()
 
+    assert len(v1) == 1
     result = await client.get_version(environment, v1.pop())
     assert result.code == 200
     assert result.result["model"]["total"] == 1
@@ -608,6 +608,7 @@ async def test_purge_on_delete_compile_failed_with_compile(client, server, envir
     t1.start()
     t1.join()
 
+    assert len(v2) == 1
     result = await client.get_version(environment, v2.pop())
     assert result.code == 200
     assert result.result["model"]["total"] == 0
