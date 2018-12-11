@@ -329,8 +329,7 @@ class AgentManager(ServerSlice):
                 errhandle = open(errfile, "wb+")
 
             # TODO: perhaps show in dashboard?
-            return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(),
-                                    stdout=outhandle, stderr=errhandle)
+            return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle)
         finally:
             if outhandle is not None:
                 outhandle.close()
@@ -463,13 +462,15 @@ class AgentManager(ServerSlice):
             fd.write(config)
 
         if not self._server._agent_no_log:
-            out = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
+            out = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
             err = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
         else:
             out = None
             err = None
 
-        proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "agent"], out, err)
+        agent_log = os.path.join(self._server_storage["logs"], "agent-%s.log" % env.id)
+        proc = self._fork_inmanta(["-vvvv", "--timed-logs", "--config", config_path, "--log-file", agent_log, "agent"],
+                                  out, err)
 
         if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
             LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)

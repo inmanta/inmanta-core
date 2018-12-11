@@ -1,0 +1,7 @@
+/var/log/inmanta/*.log /var/log/inmanta/*.out /var/log/inmanta/*.err {
+	daily
+	compress
+	rotate 10
+	missingok
+	create 0644 inmanta inmanta
+}
