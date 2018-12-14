@@ -547,6 +547,37 @@ def test_resource_provides(data_module):
     assert len(res2.provides) == 0
 
 
+@pytest.mark.gen_test
+def test_resource_hash(data_module):
+    env_id = uuid.uuid4()
+    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file3],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    yield res1.insert()
+    yield res2.insert()
+    yield res3.insert()
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
+
+    readres = yield data.Resource.get_resources(env_id,
+                                                [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
+    res1, res2, res3 = readres
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
+
+
 @gen.coroutine
 def populate_model(env_id, version):
 

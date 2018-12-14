@@ -29,6 +29,7 @@ from tornado import gen
 
 from inmanta import const
 from inmanta.resources import Id
+import hashlib
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1117,6 +1118,7 @@ class Resource(BaseDocument):
 
     # State related
     attributes = Field(field_type=dict)
+    attribute_hash = Field(field_type=str)
     status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
@@ -1129,6 +1131,12 @@ class Resource(BaseDocument):
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_id", pymongo.ASCENDING)]),
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_id", pymongo.ASCENDING)], unique=True),
     ]
+
+    def make_hash(self):
+        character = "|".join(sorted([str(k)+str(v) for k, v in self.attributes.items()]))
+        m = hashlib.md5()
+        m.update(character.encode())
+        self.attribute_hash = m.hexdigest()
 
     @classmethod
     @gen.coroutine
@@ -1354,9 +1362,14 @@ class Resource(BaseDocument):
         return dct
 
     def to_dict(self):
+        self.make_hash()
         dct = BaseDocument.to_dict(self)
         dct["id"] = dct["resource_version_id"]
         return dct
+    
+    def _to_dict(self, mongo_pk=False):
+        self.make_hash()
+        return BaseDocument._to_dict(self, mongo_pk=mongo_pk)
 
 
 class ConfigurationModel(BaseDocument):
