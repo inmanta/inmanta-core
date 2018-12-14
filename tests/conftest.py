@@ -44,7 +44,12 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
+import asyncio
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+import sys
+import pkg_resources
 
+asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
 DEFAULT_PORT_ENVVAR = 'MONGOBOX_PORT'
 
@@ -63,6 +68,20 @@ def mongo_db():
     mproc.stop()
     del os.environ[port_envvar]
     shutil.rmtree(db_path)
+
+
+@pytest.fixture(scope="function", autouse=True)
+def deactive_venv():
+    old_os_path = os.environ.get("PATH", "")
+    old_prefix = sys.prefix
+    old_path = sys.path
+
+    yield
+
+    os.environ["PATH"] = old_os_path
+    sys.prefix = old_prefix
+    sys.path = old_path
+    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
 def reset_all():
@@ -317,27 +336,64 @@ def environment_multi(client_multi, server_multi, io_loop):
     yield env_id
 
 
-class SnippetCompilationTest(object):
+class KeepOnFail(object):
+
+    def keep(self) -> "Optional[Dict[str, str]]":
+        pass
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # execute all other hooks to obtain the report object
+    outcome = yield
+    rep = outcome.get_result()
+
+    # we only look at actual failing test calls, not setup/teardown
+    resources = {}
+    if rep.when == "call" and rep.failed:
+        for fixture in item.funcargs.values():
+            if isinstance(fixture, KeepOnFail):
+                msg = fixture.keep()
+                if msg:
+                    for label, res in msg.items():
+                        resources[label] = res
+
+        if resources:
+            # we are behind report formatting, so write to report, not item
+            rep.sections.append(("Resources Kept", "\n".join(
+                ["%s %s" % (label, resource) for label, resource in resources.items()])))
+
+
+class SnippetCompilationTest(KeepOnFail):
 
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
         self.cwd = os.getcwd()
+        self.keep_shared = False
 
     def tearDownClass(self):
-        shutil.rmtree(self.libs)
-        shutil.rmtree(self.env)
+        if not self.keep_shared:
+            shutil.rmtree(self.libs)
+            shutil.rmtree(self.env)
         # reset cwd
         os.chdir(self.cwd)
 
     def setup_func(self):
         # init project
+        self._keep = False
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
-        shutil.rmtree(self.project_dir)
+        if not self._keep:
+            shutil.rmtree(self.project_dir)
+
+    def keep(self):
+        self._keep = True
+        self.keep_shared = True
+        return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
     def setup_for_snippet(self, snippet, autostd=True):
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:

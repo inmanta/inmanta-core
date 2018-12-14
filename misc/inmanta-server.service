@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=inmanta
 Group=inmanta
-ExecStart=/usr/bin/inmanta -c /etc/inmanta/server.cfg -vv server
+ExecStart=/usr/bin/inmanta -c /etc/inmanta/server.cfg --log-file /var/log/inmanta/server.log --timed-logs -vv server
 Restart=on-failure
 
 [Install]

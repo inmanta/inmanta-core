@@ -474,6 +474,7 @@ class RESTTransport(RESTBase):
         self._handlers = []
         self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
+        self.request_timeout = inmanta_config.Config.get(self.id, "request_timeout", 120)
         self.headers = set()
 
     endpoint = property(lambda x: x.__end_point)
@@ -645,11 +646,11 @@ class RESTTransport(RESTBase):
 
         try:
             request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=self.connection_timout,
-                                  request_timeout=120, ca_certs=ca_certs, decompress_response=True)
+                                  request_timeout=self.request_timeout, ca_certs=ca_certs, decompress_response=True)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
         except HTTPError as e:
-            if e.response is not None and len(e.response.body) > 0:
+            if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
                     result = self._decode(e.response.body)
                 except ValueError:

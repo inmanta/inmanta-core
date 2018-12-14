@@ -137,9 +137,6 @@ def test_version(server, client, environment, cli):
                   'id': 'test::Resource[agent1,key=key1],v=' + version,
                   'send_event': False,
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   'requires': ['test::Resource[agent1,key=key2],v=' + version],
                   },
                  {'key': 'key2',
@@ -148,9 +145,6 @@ def test_version(server, client, environment, cli):
                   'send_event': False,
                   'requires': [],
                   'purged': False,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   },
                  {'key': 'key3',
                   'value': None,
@@ -158,9 +152,6 @@ def test_version(server, client, environment, cli):
                   'send_event': False,
                   'requires': [],
                   'purged': True,
-                  'state_id': '',
-                  'allow_restore': True,
-                  'allow_snapshot': True,
                   }
                  ]
 

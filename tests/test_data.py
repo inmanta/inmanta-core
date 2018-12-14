@@ -235,6 +235,11 @@ def test_project_unique(data_module):
         yield project.insert()
 
 
+def test_project_no_project_name(data_module):
+    with pytest.raises(AttributeError):
+        data.Project()
+
+
 @pytest.mark.gen_test
 def test_environment(data_module):
     project = data.Project(name="test")
@@ -253,8 +258,24 @@ def test_environment(data_module):
 
 
 @pytest.mark.gen_test
-def test_agent_process(data_module):
+def test_environment_no_environment_name(data_module):
     project = data.Project(name="test")
+    yield project.insert()
+    with pytest.raises(AttributeError):
+        data.Environment(project=project.id, repo_url="", repo_branch="")
+
+
+@pytest.mark.gen_test
+def test_environment_no_project_id(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+    with pytest.raises(AttributeError):
+        data.Environment(name="dev", repo_url="", repo_branch="")
+
+
+@pytest.mark.gen_test
+def test_environment_cascade_content_only(data_module):
+    project = data.Project(name="proj")
     yield project.insert()
 
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
@@ -272,14 +293,235 @@ def test_agent_process(data_module):
     agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
     yield agi2.insert()
 
-    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
-    agent = yield agent.insert()
+    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False,
+                       primary=agi1.id)
+    yield agent.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(version=version, environment=env.id)
+    yield cm.insert()
+
+    resource_ids = []
+    for i in range(5):
+        path = "/etc/file" + str(i)
+        key = "std::File[agent1,path=" + path + "]"
+        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                 attributes={"path": path})
+        yield res1.insert()
+        resource_ids.append(res1.id)
+
+    code = data.Code(version=version, resource="std::File", environment=env.id)
+    yield code.insert()
+
+    unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+    yield unknown_parameter.insert()
+
+    yield env.set(data.AUTO_DEPLOY, True)
+
+    assert (yield data.Project.get_by_id(project.id)) is not None
+    assert (yield data.Environment.get_by_id(env.id)) is not None
+    assert (yield data.AgentProcess.get_by_id(agent_proc.id)) is not None
+    assert (yield data.AgentInstance.get_by_id(agi1.id)) is not None
+    assert (yield data.AgentInstance.get_by_id(agi2.id)) is not None
+    assert (yield data.Agent.get_by_id(agent.id)) is not None
+    for current_id in resource_ids:
+        assert (yield data.Resource.get_by_id(current_id)) is not None
+    assert (yield data.Code.get_by_id(code.id)) is not None
+    assert (yield data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
+    assert (yield env.get(data.AUTO_DEPLOY)) is True
+
+    yield env.delete_cascade(only_content=True)
+
+    assert (yield data.Project.get_by_id(project.id)) is not None
+    assert (yield data.Environment.get_by_id(env.id)) is not None
+    assert (yield data.AgentProcess.get_by_id(agent_proc.id)) is None
+    assert (yield data.AgentInstance.get_by_id(agi1.id)) is None
+    assert (yield data.AgentInstance.get_by_id(agi2.id)) is None
+    assert (yield data.Agent.get_by_id(agent.id)) is None
+    for current_id in resource_ids:
+        assert (yield data.Resource.get_by_id(current_id)) is None
+    assert (yield data.Code.get_by_id(code.id)) is None
+    assert (yield data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
+    assert (yield env.get(data.AUTO_DEPLOY)) is True
+
+
+@pytest.mark.gen_test
+def test_environment_set_setting_parameter(data_module):
+    project = data.Project(name="proj")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    assert (yield env.get(data.AUTO_DEPLOY)) is False
+    yield env.set(data.AUTO_DEPLOY, True)
+    assert (yield env.get(data.AUTO_DEPLOY)) is True
+    yield env.unset(data.AUTO_DEPLOY)
+    assert (yield env.get(data.AUTO_DEPLOY)) is False
+
+    with pytest.raises(KeyError):
+        yield env.set("set_non_existing_parameter", 1)
+    with pytest.raises(KeyError):
+        yield env.get("get_non_existing_parameter")
+    with pytest.raises(AttributeError):
+        yield env.set(data.AUTO_DEPLOY, 5)
+
+
+@pytest.mark.gen_test
+def test_agent_process(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    sid = uuid.uuid4()
+    agent_proc = data.AgentProcess(hostname="testhost",
+                                   environment=env.id,
+                                   first_seen=datetime.datetime.now(),
+                                   last_seen=datetime.datetime.now(),
+                                   sid=sid)
+    yield agent_proc.insert()
+
+    agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+    yield agi1.insert()
+    agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+    yield agi2.insert()
+
+    agent_procs = yield data.AgentProcess.get_by_env(env=env.id)
+    assert len(agent_procs) == 1
+    assert agent_procs[0].id == agent_proc.id
+
+    assert (yield data.AgentProcess.get_by_sid(sid)).id == agent_proc.id
+    assert (yield data.AgentProcess.get_by_sid(uuid.UUID(int=1))) is None
+
+    live_procs = yield data.AgentProcess.get_live()
+    assert len(live_procs) == 1
+    assert live_procs[0].id == agent_proc.id
+
+    live_by_env_procs = yield data.AgentProcess.get_live_by_env(env=env.id)
+    assert len(live_by_env_procs) == 1
+    assert live_by_env_procs[0].id == agent_proc.id
+
+    yield agent_proc.update_fields(expired=datetime.datetime.now())
+
+    live_procs = yield data.AgentProcess.get_live()
+    assert len(live_procs) == 0
+
+    live_by_env_procs = yield data.AgentProcess.get_live_by_env(env=env.id)
+    assert len(live_by_env_procs) == 0
+
+    yield agent_proc.delete_cascade()
+
+    assert (yield data.AgentProcess.get_by_id(agent_proc.id)) is None
+    assert (yield data.AgentInstance.get_by_id(agi1.id)) is None
+    assert (yield data.AgentInstance.get_by_id(agi2.id)) is None
+
+
+@pytest.mark.gen_test
+def test_agent_instance(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    sid = uuid.uuid4()
+    agent_proc = data.AgentProcess(hostname="testhost",
+                                   environment=env.id,
+                                   first_seen=datetime.datetime.now(),
+                                   last_seen=datetime.datetime.now(),
+                                   sid=sid)
+    yield agent_proc.insert()
+
+    agi1_name = "agi1"
+    agi1 = data.AgentInstance(process=agent_proc.id, name=agi1_name, tid=env.id)
+    yield agi1.insert()
+    agi2_name = "agi2"
+    agi2 = data.AgentInstance(process=agent_proc.id, name=agi2_name, tid=env.id)
+    yield agi2.insert()
+
+    active_instances = yield data.AgentInstance.active()
+    assert len(active_instances) == 2
+    assert agi1.id in [x.id for x in active_instances]
+    assert agi2.id in [x.id for x in active_instances]
+
+    current_instances = yield data.AgentInstance.active_for(env.id, agi1_name)
+    assert len(current_instances) == 1
+    assert current_instances[0].id == agi1.id
+    current_instances = yield data.AgentInstance.active_for(env.id, agi2_name)
+    assert len(current_instances) == 1
+    assert current_instances[0].id == agi2.id
+
+    yield agi1.update_fields(expired=datetime.datetime.now())
+
+    active_instances = yield data.AgentInstance.active()
+    assert len(active_instances) == 1
+    assert agi1.id not in [x.id for x in active_instances]
+    assert agi2.id in [x.id for x in active_instances]
+
+    current_instances = yield data.AgentInstance.active_for(env.id, agi1_name)
+    assert len(current_instances) == 0
+    current_instances = yield data.AgentInstance.active_for(env.id, agi2_name)
+    assert len(current_instances) == 1
+    assert current_instances[0].id == agi2.id
+
+
+@pytest.mark.gen_test
+def test_agent(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    sid = uuid.uuid4()
+    agent_proc = data.AgentProcess(hostname="testhost",
+                                   environment=env.id,
+                                   first_seen=datetime.datetime.now(),
+                                   last_seen=datetime.datetime.now(),
+                                   sid=sid)
+    yield agent_proc.insert()
+
+    agi1_name = "agi1"
+    agi1 = data.AgentInstance(process=agent_proc.id, name=agi1_name, tid=env.id)
+    yield agi1.insert()
+
+    agent1 = data.Agent(environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False,
+                        primary=agi1.id)
+    yield agent1.insert()
+    agent2 = data.Agent(environment=env.id, name="agi1_agent2", paused=False)
+    yield agent2.insert()
+    agent3 = data.Agent(environment=env.id, name="agi1_agent3", paused=True)
+    yield agent3.insert()
 
     agents = yield data.Agent.get_list()
-    assert len(agents) == 1
-    agent = agents[0]
+    assert len(agents) == 3
+    for agent in agents:
+        assert agent.id in [agent1.id, agent2.id, agent3.id]
 
-    primary_instance = yield data.AgentInstance.get_by_id(agent.primary)
+    for agent in [agent1, agent2, agent3]:
+        retrieved_agent = yield agent.get(agent.environment, agent.name)
+        assert retrieved_agent is not None
+        assert retrieved_agent.id == agent.id
+
+    assert agent1.get_status() == "up"
+    assert agent2.get_status() == "down"
+    assert agent3.get_status() == "paused"
+
+    for agent in [agent1, agent2, agent3]:
+        assert agent.to_dict()["state"] == agent.get_status()
+
+    yield agent1.update_fields(paused=True)
+    assert agent1.get_status() == "paused"
+
+    yield agent2.update_fields(primary=agi1.id)
+    assert agent2.get_status() == "up"
+
+    yield agent3.update_fields(paused=False)
+    assert agent3.get_status() == "down"
+
+    primary_instance = yield data.AgentInstance.get_by_id(agent1.primary)
     primary_process = yield data.AgentProcess.get_by_id(primary_instance.process)
     assert primary_process.id == agent_proc.id
 
@@ -309,273 +551,193 @@ def test_config_model(data_module):
 
 @pytest.mark.gen_test
 def test_model_list(data_module):
-    env_id = uuid.uuid4()
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
 
     for version in range(1, 20):
-        cm = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0,
+        cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0,
                                      version_info={})
         yield cm.insert()
 
-    versions = yield data.ConfigurationModel.get_versions(env_id, 0, 1)
+    versions = yield data.ConfigurationModel.get_versions(env.id, 0, 1)
     assert len(versions) == 1
     assert versions[0].version == 19
 
-    versions = yield data.ConfigurationModel.get_versions(env_id, 1, 1)
+    versions = yield data.ConfigurationModel.get_versions(env.id, 1, 1)
     assert len(versions) == 1
     assert versions[0].version == 18
 
-    versions = yield data.ConfigurationModel.get_versions(env_id)
+    versions = yield data.ConfigurationModel.get_versions(env.id)
     assert len(versions) == 19
     assert versions[0].version == 19
     assert versions[-1].version == 1
 
-    versions = yield data.ConfigurationModel.get_versions(env_id, 10)
+    versions = yield data.ConfigurationModel.get_versions(env.id, 10)
     assert len(versions) == 9
     assert versions[0].version == 9
     assert versions[-1].version == 1
 
 
 @pytest.mark.gen_test
-def test_resource_purge_on_delete(data_module):
-    env_id = uuid.uuid4()
+def test_model_get_latest_version(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    cms = []
+    for version in range(1, 5):
+        cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0,
+                                     version_info={})
+        yield cm.insert()
+        cms.append(cm)
+
+    latest_version = yield data.ConfigurationModel.get_latest_version(env.id)
+    assert latest_version is None
+
+    yield cms[1].update_fields(released=True)
+    latest_version = yield data.ConfigurationModel.get_latest_version(env.id)
+    assert latest_version.version == 2
+
+    yield cms[3].update_fields(released=True)
+    latest_version = yield data.ConfigurationModel.get_latest_version(env.id)
+    assert latest_version.version == 4
+
+
+@pytest.mark.gen_test
+def test_model_set_ready(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0,
+                                 version_info={})
+    yield cm.insert()
+
+    amount_of_done_resources = cm.done
+    assert amount_of_done_resources == 0
+
+    path = "/etc/file"
+    key = "std::File[agent1,path=" + path + "]"
+    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                 attributes={"path": path})
+    yield resource.insert()
+
+    assert cm.done == 0
+
+    yield data.ConfigurationModel.set_ready(env.id, version, resource.id, resource.resource_id,
+                                            const.ResourceState.deployed)
+
+    cm = yield data.ConfigurationModel.get_by_id(cm.id)
+    assert cm.done == 1
+
+
+@pytest.mark.gen_test
+def test_model_delete_cascade(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0,
+                                 version_info={})
+    yield cm.insert()
+
+    path = "/etc/file"
+    key = "std::File[agent1,path=" + path + "]"
+    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                 attributes={"path": path})
+    yield resource.insert()
+
+    code = data.Code(version=version, resource="std::File", environment=env.id)
+    yield code.insert()
+
+    unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+    yield unknown_parameter.insert()
+
+    yield cm.delete_cascade()
+
+    assert (yield data.ConfigurationModel.get_by_id(cm.id)) is None
+    assert (yield data.Resource.get_by_id(resource.id)) is None
+    assert (yield data.Code.get_by_id(code.id)) is None
+    assert (yield data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
+
+
+@pytest.mark.gen_test
+def test_undeployable_cache_lazy(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
     version = 1
-    # model 1
-    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=2, version_info={},
-                                  released=True, deployed=True)
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=5, version_info={},
+                                  released=False, deployed=False)
     yield cm1.insert()
+    yield populate_model(env.id, version)
 
-    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
-                              status=const.ResourceState.deployed,
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    yield res11.insert()
+    assert cm1.undeployable is None
 
-    res12 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent2,path=/etc/motd],v=%s" % version,
-                              status=const.ResourceState.deployed,
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
-    yield res12.insert()
+    undep = yield cm1.get_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
 
-    # model 2 (multiple undeployed versions)
-    while version < 10:
-        version += 1
-        cm2 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=1,
-                                      version_info={}, released=False, deployed=False)
-        yield cm2.insert()
+    assert cm1.undeployable is not None
 
-        res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent5,path=/etc/motd],v=%s" % version,
-                                  status=const.ResourceState.available,
-                                  attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-        yield res21.insert()
+    undep = yield cm1.get_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
 
-    # model 3
-    version += 1
-    cm3 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0, version_info={})
-    yield cm3.insert()
+    cm1 = yield data.ConfigurationModel.get_version(env.id, version)
 
-    to_purge = yield data.Resource.get_deleted_resources(env_id, version, set())
+    assert cm1.undeployable is not None
 
-    assert len(to_purge) == 1
-    assert to_purge[0].model == 1
-    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
+    undep = yield cm1.get_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
 
 
 @pytest.mark.gen_test
-def test_issue_422(data_module):
-    env_id = uuid.uuid4()
-    version = 1
-    # model 1
-    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=1, version_info={},
-                                  released=True, deployed=True)
+def test_undeployable_skip_cache_lazy(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    version = 2
+    cm1 = data.ConfigurationModel(environment=env.id,
+                                  version=version,
+                                  date=datetime.datetime.now(),
+                                  total=5,
+                                  version_info={},
+                                  released=False, deployed=False)
     yield cm1.insert()
+    yield populate_model(env.id, version)
 
-    res11 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
-                              status=const.ResourceState.deployed,
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    yield res11.insert()
+    assert cm1.skipped_for_undeployable is None
 
-    # model 2 (multiple undeployed versions)
-    version += 1
-    cm2 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=False, deployed=False)
-    yield cm2.insert()
+    undep = yield cm1.get_skipped_for_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
 
-    res21 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
-                              status=const.ResourceState.available,
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    yield res21.insert()
+    assert cm1.skipped_for_undeployable is not None
 
-    # model 3
-    version += 1
-    cm3 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=0, version_info={})
-    yield cm3.insert()
+    undep = yield cm1.get_skipped_for_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
 
-    to_purge = yield data.Resource.get_deleted_resources(env_id, version, set())
+    cm1 = yield data.ConfigurationModel.get_version(env.id, version)
 
-    assert len(to_purge) == 1
-    assert to_purge[0].model == 1
-    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
+    assert cm1.skipped_for_undeployable is not None
 
-
-@pytest.mark.gen_test
-def test_get_latest_resource(data_module):
-    env_id = uuid.uuid4()
-    key = "std::File[agent1,path=/etc/motd]"
-    res11 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=1", status=const.ResourceState.deployed,
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    yield res11.insert()
-
-    res12 = data.Resource.new(environment=env_id, resource_version_id=key + ",v=2", status=const.ResourceState.deployed,
-                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
-    yield res12.insert()
-
-    res = yield data.Resource.get_latest_version(env_id, key)
-    assert res.model == 2
-
-
-@pytest.mark.gen_test
-def test_snapshot(data_module):
-    env_id = uuid.uuid4()
-
-    snap = data.Snapshot(environment=env_id, model=1, name="a", started=datetime.datetime.now(), resources_todo=1)
-    yield snap.insert()
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    yield s.resource_updated(10)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    s = yield data.Snapshot.get_by_id(snap.id)
-    assert s.resources_todo == 0
-    assert s.total_size == 10
-    assert s.finished is not None
-
-    yield s.delete_cascade()
-    result = yield data.Snapshot.get_list()
-    assert len(result) == 0
-
-
-@pytest.mark.gen_test
-def test_resource_action(data_module):
-    env_id = uuid.uuid4()
-    action_id = uuid.uuid4()
-
-    resource_action = data.ResourceAction(environment=env_id, resource_version_ids=[], action_id=action_id,
-                                          action=const.ResourceAction.deploy, started=datetime.datetime.now())
-    yield resource_action.insert()
-
-    resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
-    yield resource_action.save()
-
-    resource_action.add_changes({"rid": {"field2": {"old": "c", "new": "d"}, "field3": {}}})
-    yield resource_action.save()
-
-    resource_action.add_logs([{}, {}])
-    yield resource_action.save()
-
-    resource_action.add_logs([{}, {}])
-    yield resource_action.save()
-
-    ra = yield data.ResourceAction.get_by_id(resource_action.id)
-    assert len(ra.changes["rid"]) == 3
-    assert len(ra.messages) == 4
-
-    assert ra.changes["rid"]["field1"]["old"] == "a"
-    assert ra.changes["rid"]["field1"]["new"] == "b"
-    assert ra.changes["rid"]["field2"]["old"] == "c"
-    assert ra.changes["rid"]["field2"]["new"] == "d"
-    assert ra.changes["rid"]["field3"] == {}
-
-
-@pytest.mark.gen_test
-def test_get_resources(data_module):
-    env_id = uuid.uuid4()
-    resource_ids = []
-    for i in range(1, 11):
-        res = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/tmp/file%d],v=1" % i,
-                                status=const.ResourceState.deployed,
-                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-        yield res.insert()
-        resource_ids.append(res.resource_version_id)
-
-    resources = yield data.Resource.get_resources(env_id, resource_ids)
-    assert len(resources) == len(resource_ids)
-    assert sorted([x.resource_version_id for x in resources]) == sorted(resource_ids)
-
-    resources = yield data.Resource.get_resources(env_id, [resource_ids[0], "abcd"])
-    assert len(resources) == 1
-
-
-@pytest.mark.gen_test
-def test_escaped_resources(data_module):
-    env_id = uuid.uuid4()
-    routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
-    res = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,name=router],v=1",
-                            status=const.ResourceState.deployed,
-                            attributes={"name": "router", "purge_on_delete": True, "purged": False, "routes": routes})
-    yield res.insert()
-    resource_id = res.resource_version_id
-
-    resources = yield data.Resource.get_resources(env_id, [resource_id])
-    assert len(resources) == 1
-
-    assert resources[0].attributes["routes"] == routes
-
-
-@pytest.mark.gen_test
-def test_data_document_recursion(data_module):
-    env_id = uuid.uuid4()
-    now = datetime.datetime.now()
-    ra = data.ResourceAction(environment=env_id, resource_version_ids=["id"], action_id=uuid.uuid4(),
-                             action=const.ResourceAction.store, started=now, finished=now,
-                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
-                                                        version=2)])
-    yield ra.insert()
-
-
-@pytest.mark.gen_test
-def test_resource_provides(data_module):
-    env_id = uuid.uuid4()
-    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-
-    print(id(res1.provides) == id(res2.provides))
-    res1.provides.append(res2.resource_version_id)
-    assert len(res2.provides) == 0
-
-
-@pytest.mark.gen_test
-def test_resource_hash(data_module):
-    env_id = uuid.uuid4()
-    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file3],v=1",
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
-    yield res1.insert()
-    yield res2.insert()
-    yield res3.insert()
-
-    assert res1.attribute_hash is not None
-    assert res1.attribute_hash == res2.attribute_hash
-    assert res3.attribute_hash is not None
-    assert res1.attribute_hash != res3.attribute_hash
-
-    readres = yield data.Resource.get_resources(env_id,
-                                                [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
-    res1, res2, res3 = readres
-
-    assert res1.attribute_hash is not None
-    assert res1.attribute_hash == res2.attribute_hash
-    assert res3.attribute_hash is not None
-    assert res1.attribute_hash != res3.attribute_hash
+    undep = yield cm1.get_skipped_for_undeployable()
+    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
 
 
 @gen.coroutine
@@ -613,60 +775,482 @@ def populate_model(env_id, version):
 
 
 @pytest.mark.gen_test
-def test_undeployable_cache_lazy(data_module):
-    env_id = uuid.uuid4()
+def test_resource_purge_on_delete(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    # model 1
     version = 1
-
-    cm1 = data.ConfigurationModel(environment=env_id, version=version, date=datetime.datetime.now(), total=5, version_info={},
-                                  released=False, deployed=False)
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=2, version_info={},
+                                  released=True, deployed=True)
     yield cm1.insert()
-    yield populate_model(env_id, version)
 
-    assert cm1.undeployable is None
+    res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+                              status=const.ResourceState.deployed,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res11.insert()
 
-    undep = yield cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+    res12 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent2,path=/etc/motd],v=%s" % version,
+                              status=const.ResourceState.deployed,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    yield res12.insert()
 
-    assert cm1.undeployable is not None
+    # model 2 (multiple undeployed versions)
+    while version < 10:
+        version += 1
+        cm2 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                      version_info={}, released=False, deployed=False)
+        yield cm2.insert()
 
-    undep = yield cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+        res21 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent5,path=/etc/motd],v=%s" % version,
+                                  status=const.ResourceState.available,
+                                  attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        yield res21.insert()
 
-    cm1 = yield data.ConfigurationModel.get_version(env_id, version)
+    # model 3
+    version += 1
+    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={})
+    yield cm3.insert()
 
-    assert cm1.undeployable is not None
+    to_purge = yield data.Resource.get_deleted_resources(env.id, version, set())
 
-    undep = yield cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (3)]
+    assert len(to_purge) == 1
+    assert to_purge[0].model == 1
+    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
 
 
 @pytest.mark.gen_test
-def test_undeployable_skip_cache_lazy(data_module):
-    env_id = uuid.uuid4()
-    version = 2
+def test_issue_422(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
 
-    cm1 = data.ConfigurationModel(environment=env_id,
-                                  version=version,
-                                  date=datetime.datetime.now(),
-                                  total=5,
-                                  version_info={},
-                                  released=False, deployed=False)
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    # model 1
+    version = 1
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={},
+                                  released=True, deployed=True)
     yield cm1.insert()
-    yield populate_model(env_id, version)
 
-    assert cm1.skipped_for_undeployable is None
+    res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+                              status=const.ResourceState.deployed,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res11.insert()
 
-    undep = yield cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+    # model 2 (multiple undeployed versions)
+    version += 1
+    cm2 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                  version_info={}, released=False, deployed=False)
+    yield cm2.insert()
 
-    assert cm1.skipped_for_undeployable is not None
+    res21 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
+                              status=const.ResourceState.available,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res21.insert()
 
-    undep = yield cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+    # model 3
+    version += 1
+    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={})
+    yield cm3.insert()
 
-    cm1 = yield data.ConfigurationModel.get_version(env_id, version)
+    to_purge = yield data.Resource.get_deleted_resources(env.id, version, set())
 
-    assert cm1.skipped_for_undeployable is not None
+    assert len(to_purge) == 1
+    assert to_purge[0].model == 1
+    assert to_purge[0].resource_id == "std::File[agent1,path=/etc/motd]"
 
-    undep = yield cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % (4), "std::File[agent1,path=/tmp/%d]" % (5)]
+
+@pytest.mark.gen_test
+def test_get_latest_resource(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    key = "std::File[agent1,path=/etc/motd]"
+    assert (yield data.Resource.get_latest_version(env.id, key)) is None
+
+    res11 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=1", status=const.ResourceState.deployed,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    yield res11.insert()
+
+    res12 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=2", status=const.ResourceState.deployed,
+                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    yield res12.insert()
+
+    res = yield data.Resource.get_latest_version(env.id, key)
+    assert res.model == 2
+
+
+@pytest.mark.gen_test
+def test_get_resources(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    resource_ids = []
+    for i in range(1, 11):
+        res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/tmp/file%d],v=1" % i,
+                                status=const.ResourceState.deployed,
+                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        yield res.insert()
+        resource_ids.append(res.resource_version_id)
+
+    resources = yield data.Resource.get_resources(env.id, resource_ids)
+    assert len(resources) == len(resource_ids)
+    assert sorted([x.resource_version_id for x in resources]) == sorted(resource_ids)
+
+    resources = yield data.Resource.get_resources(env.id, [resource_ids[0], "abcd"])
+    assert len(resources) == 1
+
+    resources = yield data.Resource.get_resources(env.id, [])
+    assert len(resources) == 0
+
+
+@pytest.mark.gen_test
+def test_get_resources_for_version(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    resource_ids_version_one = []
+    for i in range(1, 11):
+        res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/tmp/file%d],v=1" % i,
+                                status=const.ResourceState.deployed,
+                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        yield res.insert()
+        resource_ids_version_one.append(res.resource_version_id)
+
+    resource_ids_version_two = []
+    for i in range(11, 21):
+        res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent2,path=/tmp/file%d],v=2" % i,
+                                status=const.ResourceState.deployed,
+                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        yield res.insert()
+        resource_ids_version_two.append(res.resource_version_id)
+
+    resources = yield data.Resource.get_resources_for_version(env.id, 1)
+    assert len(resources) == 10
+    assert sorted(resource_ids_version_one) == sorted([x.resource_version_id for x in resources])
+    resources = yield data.Resource.get_resources_for_version(env.id, 2)
+    assert len(resources) == 10
+    assert sorted(resource_ids_version_two) == sorted([x.resource_version_id for x in resources])
+    resources = yield data.Resource.get_resources_for_version(env.id, 3)
+    assert resources == []
+
+
+@pytest.mark.gen_test
+def test_escaped_resources(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
+    res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,name=router],v=1",
+                            status=const.ResourceState.deployed,
+                            attributes={"name": "router", "purge_on_delete": True, "purged": False, "routes": routes})
+    yield res.insert()
+    resource_id = res.resource_version_id
+
+    resources = yield data.Resource.get_resources(env.id, [resource_id])
+    assert len(resources) == 1
+
+    assert resources[0].attributes["routes"] == routes
+
+
+@pytest.mark.gen_test
+def test_resource_provides(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res2 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res1.provides.append(res2.resource_version_id)
+
+    assert len(res1.provides) == 1
+    assert len(res2.provides) == 0
+    assert res1.provides[0] == res2.resource_version_id
+    assert res2.provides == []
+
+    yield res1.insert()
+    yield res2.insert()
+
+    res1 = yield data.Resource.get(env.id, res1.resource_version_id)
+    res2 = yield data.Resource.get(env.id, res2.resource_version_id)
+
+    assert len(res1.provides) == 1
+    assert len(res2.provides) == 0
+    assert res1.provides[0] == res2.resource_version_id
+    assert res2.provides == []
+
+
+@pytest.mark.gen_test
+def test_resource_hash(data_module):
+    env_id = uuid.uuid4()
+    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file3],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    yield res1.insert()
+    yield res2.insert()
+    yield res3.insert()
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
+
+    readres = yield data.Resource.get_resources(env_id,
+                                                [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
+    res1, res2, res3 = readres
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
+
+
+@pytest.mark.gen_test
+def test_resources_report(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    # model 1
+    version = 1
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                  version_info={},
+                                  released=True, deployed=True)
+    yield cm1.insert()
+
+    res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
+                              attributes={"path": "/etc/file1"})
+    yield res11.insert()
+    res12 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
+                              attributes={"path": "/etc/file2"})
+    yield res12.insert()
+
+    # model 2
+    version += 1
+    cm2 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                  version_info={}, released=False, deployed=False)
+    yield cm2.insert()
+    res21 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+                              status=const.ResourceState.available,
+                              attributes={"path": "/etc/file1"})
+    yield res21.insert()
+
+    # model 3
+    version += 1
+    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                  version_info={}, released=True, deployed=True)
+    yield cm3.insert()
+
+    res31 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 14, 30),
+                              attributes={"path": "/etc/file2"})
+    yield res31.insert()
+
+    report = yield data.Resource.get_resources_report(env.id)
+    assert len(report) == 2
+    report_as_map = {x["resource_id"]: x for x in report}
+    assert "std::File[agent1,path=/etc/file1]" in report_as_map
+    assert "std::File[agent1,path=/etc/file2]" in report_as_map
+
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["deployed_version"] == 1
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["latest_version"] == 2
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30)
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["agent"] == "agent1"
+
+    assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
+    assert report_as_map["std::File[agent1,path=/etc/file2]"]["deployed_version"] == 3
+    assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
+    assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30)
+    assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
+
+
+@pytest.mark.gen_test
+def test_resource_get_requires(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd"})
+    yield res1.insert()
+    res2 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "requires": [res1.resource_version_id]})
+    yield res2.insert()
+
+    assert (yield data.Resource.get_requires(env.id, 1, res2.resource_version_id)) == []
+    resources = yield data.Resource.get_requires(env.id, 1, res1.resource_version_id)
+    assert len(resources) == 1
+    assert resources[0].id == res2.id
+
+
+@pytest.mark.gen_test
+def test_resources_delete_cascade(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    version = 1
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                 version_info={}, released=True, deployed=True)
+    yield cm.insert()
+
+    res1 = data.Resource.new(environment=env.id,
+                             resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+                             status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
+                             attributes={"path": "/etc/file1"})
+    yield res1.insert()
+    res2 = data.Resource.new(environment=env.id,
+                             resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
+                             status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
+                             attributes={"path": "/etc/file1"})
+    yield res2.insert()
+    resource_action1 = data.ResourceAction(environment=env.id, resource_version_ids=[res1.resource_version_id],
+                                           action_id=uuid.uuid4(), action=const.ResourceAction.deploy,
+                                           started=datetime.datetime.now())
+    yield resource_action1.insert()
+    resource_action2 = data.ResourceAction(environment=env.id, resource_version_ids=[res2.resource_version_id],
+                                           action_id=uuid.uuid4(), action=const.ResourceAction.deploy,
+                                           started=datetime.datetime.now())
+    yield resource_action2.insert()
+
+    yield res1.delete_cascade()
+
+    assert (yield data.Resource.get_by_id(res1.id)) is None
+    assert (yield data.ResourceAction.get_by_id(resource_action1.id)) is None
+    resource = yield data.Resource.get_by_id(res2.id)
+    assert resource is not None
+    assert resource.id == res2.id
+    resource_action = yield data.ResourceAction.get_by_id(resource_action2.id)
+    assert resource_action is not None
+    assert resource_action.id == resource_action2.id
+
+
+@pytest.mark.gen_test
+def test_resource_action(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    action_id = uuid.uuid4()
+    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=[], action_id=action_id,
+                                          action=const.ResourceAction.deploy, started=datetime.datetime.now())
+    yield resource_action.insert()
+
+    resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
+    yield resource_action.save()
+
+    resource_action.add_changes({"rid": {"field2": {"old": "c", "new": "d"}, "field3": {}}})
+    yield resource_action.save()
+
+    resource_action.add_logs([{}, {}])
+    yield resource_action.save()
+
+    resource_action.add_logs([{}, {}])
+    yield resource_action.save()
+
+    ra = yield data.ResourceAction.get_by_id(resource_action.id)
+    assert len(ra.changes["rid"]) == 3
+    assert len(ra.messages) == 4
+
+    assert ra.changes["rid"]["field1"]["old"] == "a"
+    assert ra.changes["rid"]["field1"]["new"] == "b"
+    assert ra.changes["rid"]["field2"]["old"] == "c"
+    assert ra.changes["rid"]["field2"]["new"] == "d"
+    assert ra.changes["rid"]["field3"] == {}
+
+
+@pytest.mark.gen_test
+def test_resource_action_get_logs(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    for i in range(1, 11):
+        action_id = uuid.uuid4()
+        resource_action = data.ResourceAction(environment=env.id, resource_version_ids=[uuid.UUID(int=1)], action_id=action_id,
+                                              action=const.ResourceAction.deploy, started=datetime.datetime.now())
+        yield resource_action.insert()
+        resource_action.add_logs(["test" + str(i)])
+        yield resource_action.save()
+
+    action_id = uuid.uuid4()
+    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=[uuid.UUID(int=1)], action_id=action_id,
+                                          action=const.ResourceAction.dryrun, started=datetime.datetime.now())
+    yield resource_action.insert()
+    resource_action.add_logs(["log", "message"])
+    yield resource_action.save()
+
+    resource_actions = yield data.ResourceAction.get_log(env.id, uuid.UUID(int=1))
+    assert len(resource_actions) == 11
+    for i in range(len(resource_actions)):
+        action = resource_actions[i]
+        if i == 0:
+            assert action.action == const.ResourceAction.dryrun
+        else:
+            assert action.action == const.ResourceAction.deploy
+    resource_actions = yield data.ResourceAction.get_log(env.id, uuid.UUID(int=1), const.ResourceAction.dryrun.name)
+    assert len(resource_actions) == 1
+    assert resource_actions[0].action == const.ResourceAction.dryrun
+    assert sorted(resource_actions[0].messages) == sorted(["log", "message"])
+    resource_actions = yield data.ResourceAction.get_log(env.id, uuid.UUID(int=1), const.ResourceAction.deploy.name, limit=2)
+    assert len(resource_actions) == 2
+    assert resource_actions[0].messages == ["test10"]
+    assert resource_actions[1].messages == ["test9"]
+
+
+@pytest.mark.gen_test
+def test_data_document_recursion(data_module):
+    project = data.Project(name="test")
+    yield project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    yield env.insert()
+
+    now = datetime.datetime.now()
+    ra = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+                             action=const.ResourceAction.store, started=now, finished=now,
+                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
+                                                        version=2)])
+    yield ra.insert()

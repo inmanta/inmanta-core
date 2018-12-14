@@ -304,6 +304,7 @@ class TransportConfig(object):
         self.ssl_ca_cert_file = Option(self.prefix, "ssl_ca_cert_file", None,
                                        "CA cert file used to validate the server certificate against", is_str_opt)
         self.token = Option(self.prefix, "token", None, "The bearer token to use to connect to the API", is_str_opt)
+        self.request_timeout = Option(self.prefix, "request_timeout", 120, "The time before a request times out in seconds", is_int)
 
 
 compiler_transport = TransportConfig("compiler")
