@@ -1133,8 +1133,9 @@ class Resource(BaseDocument):
     ]
 
     def make_hash(self):
-        character = "|".join(sorted([str(k)+str(v) for k, v in self.attributes.items()]))
+        character = "|".join(sorted([str(k)+str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
         m = hashlib.md5()
+        m.update(self.resource_id.encode())
         m.update(character.encode())
         self.attribute_hash = m.hexdigest()
 
@@ -1145,6 +1146,19 @@ class Resource(BaseDocument):
             Get all resources listed in resource_version_ids
         """
         cursor = cls._coll.find({"environment": environment, "resource_version_id": {"$in": resource_version_ids}})
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
+
+    @classmethod
+    @gen.coroutine
+    def get_resources_for_attribute_hash(cls, environment, hashes):
+        """
+            Get all resources listed in resource_version_ids
+        """
+        cursor = cls._coll.find({"environment": environment, "attribute_hash": {"$in": hashes}})
         resources = []
         while (yield cursor.fetch_next):
             resources.append(cls(from_mongo=True, **cursor.next_object()))

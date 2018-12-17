@@ -701,6 +701,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
 
+        # get resource hashes for latest version
+        # get version history
+        
+
         deploy_model = []
         resource_ids = []
         for rv in resources:

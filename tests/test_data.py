@@ -1008,10 +1008,10 @@ def test_resource_hash(data_module):
     res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
                              status=const.ResourceState.deployed,
                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file2],v=1",
+    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=2",
                              status=const.ResourceState.deployed,
                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file3],v=1",
+    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=3",
                              status=const.ResourceState.deployed,
                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     yield res1.insert()
