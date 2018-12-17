@@ -47,6 +47,7 @@ import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import sys
 import pkg_resources
+from asyncio.futures import wrap_future
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -481,8 +482,8 @@ class CLI(object):
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = await self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=IOLoop.current(),
-                                                catch_exceptions=False)
+        result = await wrap_future(self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=IOLoop.current(),
+                                                catch_exceptions=False))
         return result
 
 
