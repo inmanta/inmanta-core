@@ -574,39 +574,27 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
 
     config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
-    def i1():
-        print(IOLoop.current())
-        snippetcompiler.setup_for_snippet("""
-        h = std::Host(name="test", os=std::linux)
-        f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-        """)
-        version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
-        v1.append(version)
+    snippetcompiler.setup_for_snippet("""
+    h = std::Host(name="test", os=std::linux)
+    f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
+    """)
+    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
+    v1.append(version)
 
-    def i2():
-        snippetcompiler.setup_for_snippet("""
-        h = std::Host(name="test")
-        """)
+    snippetcompiler.setup_for_snippet("""
+    h = std::Host(name="test")
+    """)
 
-        # force deploy by having unknown
-        unknown_parameters.append({})
+    # force deploy by having unknown
+    unknown_parameters.append({})
 
-        version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
-        v2.append(version)
-
-
-    t1 = Thread(target=i1)
-    t1.start()
-    t1.join()
+    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
+    v2.append(version)
 
     assert len(v1) == 1
     result = await client.get_version(environment, v1.pop())
     assert result.code == 200
     assert result.result["model"]["total"] == 1
-
-    t1 = Thread(target=i2)
-    t1.start()
-    t1.join()
 
     assert len(v2) == 1
     result = await client.get_version(environment, v2.pop())

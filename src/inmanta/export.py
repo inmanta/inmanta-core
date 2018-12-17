@@ -128,7 +128,6 @@ class Exporter(object):
         self._scope = None
 
         self._file_store = {}
-        self._io_loop = IOLoop.current()
 
     def _get_instance_proxies_of_types(self, types):
         """
@@ -365,7 +364,7 @@ class Exporter(object):
         return resources
 
     def run_sync(self, function):
-        return self._io_loop.run_sync(function, 300)
+        return IOLoop.current(instance=True).run_sync(function, 300)
 
     def deploy_code(self, tid, version=None):
         """

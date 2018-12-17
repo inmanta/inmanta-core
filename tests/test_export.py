@@ -17,6 +17,7 @@
 """
 from inmanta import config, const
 import pytest
+from conftest import off_main_thread
 
 
 def test_id_mapping_export(snippetcompiler):
@@ -178,7 +179,7 @@ async def test_empty_server_export(snippetcompiler, server, client):
             h = std::Host(name="test", os=std::linux)
         """
     )
-    snippetcompiler.do_export(deploy=True)
+    await snippetcompiler.do_export_and_deploy()
 
 
 @pytest.mark.asyncio
@@ -189,7 +190,7 @@ async def test_server_export(snippetcompiler, server, client, environment):
             f = std::ConfigFile(host=h, path="/etc/motd", content="test")
         """
     )
-    snippetcompiler.do_export(deploy=True)
+    await snippetcompiler.do_export_and_deploy()
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200
@@ -208,7 +209,7 @@ a = exp::Test2(mydict={"a":"b"}, mylist=["a","b"])
 """
     )
 
-    snippetcompiler.do_export(deploy=True)
+    await snippetcompiler.do_export_and_deploy()
 
     result = await client.list_versions(tid=environment)
     assert result.code == 200

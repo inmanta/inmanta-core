@@ -48,6 +48,8 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import sys
 import pkg_resources
 from asyncio.futures import wrap_future
+from threading import Thread
+from asyncio.events import get_event_loop
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -355,6 +357,10 @@ def pytest_runtest_makereport(item, call):
                 ["%s %s" % (label, resource) for label, resource in resources.items()])))
 
 
+async def off_main_thread(func):
+    return await get_event_loop().run_in_executor(None, func)
+
+
 class SnippetCompilationTest(KeepOnFail):
 
     def setUpClass(self):
@@ -405,7 +411,15 @@ class SnippetCompilationTest(KeepOnFail):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self, deploy=False, include_status=False, do_raise=True):
+    def do_export(self, include_status=False, do_raise=True):
+        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)()
+
+    def _do_export(self, deploy=False, include_status=False, do_raise=True):
+        """
+        helper function to allow actual export to be run an a different thread
+        1-compiler.do_compile() must run on main thread to allow virtual env activation (it seems)
+        2-export.run must run off main thread to allow it to start a new ioloop for run_sync
+        """
         templfile = mktemp("json", "dump", self.project_dir)
 
         class Options(object):
@@ -430,9 +444,12 @@ class SnippetCompilationTest(KeepOnFail):
 
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
-
         export = Exporter(options)
-        return export.run(types, scopes, model_export=False, include_status=include_status)
+
+        return lambda: export.run(types, scopes, model_export=False, include_status=include_status)
+
+    async def do_export_and_deploy(self, include_status=False, do_raise=True):
+        return await off_main_thread(self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)
@@ -482,8 +499,11 @@ class CLI(object):
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = await wrap_future(self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=IOLoop.current(),
-                                                catch_exceptions=False))
+        result = await wrap_future(self._thread_pool.submit(runner.invoke,
+                                                            cli=inmanta.main.cmd,
+                                                            args=cmd_args,
+                                                            obj=IOLoop.current(),
+                                                            catch_exceptions=False))
         return result
 
 
