@@ -1529,8 +1529,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                              stderr=process.Subprocess.STREAM,
                                              cwd=project_dir)
 
-            out, _, _ = yield [gen.Task(sub_process.stdout.read_until_close),
-                               gen.Task(sub_process.stderr.read_until_close),
+            out, _, _ = yield [sub_process.stdout.read_until_close(),
+                               sub_process.stderr.read_until_close(),
                                sub_process.wait_for_exit(raise_error=False)]
 
             o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
