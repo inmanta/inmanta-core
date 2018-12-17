@@ -27,6 +27,7 @@ from inmanta import config, protocol
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 from tornado import gen, web
+import tornado
 
 
 def make_random_file(size=0):
@@ -237,8 +238,15 @@ class MainHandler(web.RequestHandler):
 
 
 @pytest.fixture(scope="function")
-def app():
-    return web.Application([(r"/api/v1/file/abc", MainHandler)])
+async def app(unused_tcp_port):
+    http_app = web.Application([(r"/api/v1/file/abc", MainHandler)])
+    server = tornado.httpserver.HTTPServer(http_app)
+    server.add_socket(unused_tcp_port)
+
+    yield server
+
+    server.stop()
+    await server.close_all_connections()
 
 
 @pytest.mark.asyncio(timeout=30)
