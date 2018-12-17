@@ -32,6 +32,7 @@ from inmanta.util import hash_file
 from inmanta.export import unknown_parameters
 from threading import Thread
 from tornado.ioloop import IOLoop
+import asyncio
 
 LOGGER = logging.getLogger(__name__)
 
@@ -568,10 +569,6 @@ async def test_purge_on_delete_requires(client, server, environment):
 
 @pytest.mark.asyncio(timeout=20)
 async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
-    # run in threads to allow run_sync to work
-    v1 = []
-    v2 = []
-
     config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
     snippetcompiler.setup_for_snippet("""
@@ -579,7 +576,10 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
     f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
     """)
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
-    v1.append(version)
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["total"] == 1
 
     snippetcompiler.setup_for_snippet("""
     h = std::Host(name="test")
@@ -588,16 +588,11 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
     # force deploy by having unknown
     unknown_parameters.append({})
 
+    # ensure new version, wait for other second
+    await asyncio.sleep(1)
+
     version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
-    v2.append(version)
-
-    assert len(v1) == 1
-    result = await client.get_version(environment, v1.pop())
-    assert result.code == 200
-    assert result.result["model"]["total"] == 1
-
-    assert len(v2) == 1
-    result = await client.get_version(environment, v2.pop())
+    result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 0
 
