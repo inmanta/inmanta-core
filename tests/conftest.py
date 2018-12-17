@@ -126,6 +126,9 @@ def mongo_client(mongo_db):
 
 @pytest.fixture(scope="function")
 def motor(mongo_db, mongo_client, event_loop):
+    """
+    Event_loop argument ensures this fixture is started after the eventloop is started
+    """
     client = motor_asyncio.AsyncIOMotorClient('localhost', int(mongo_db.port))
     db = client["inmanta"]
     yield db
@@ -411,13 +414,12 @@ class SnippetCompilationTest(KeepOnFail):
         Project.set(Project(self.project_dir, autostd=autostd))
 
     def do_export(self, include_status=False, do_raise=True):
-        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)()
+        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
 
     def _do_export(self, deploy=False, include_status=False, do_raise=True):
         """
         helper function to allow actual export to be run an a different thread
-        1-compiler.do_compile() must run on main thread to allow virtual env activation (it seems)
-        2-export.run must run off main thread to allow it to start a new ioloop for run_sync
+        i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
         """
         templfile = mktemp("json", "dump", self.project_dir)
 
@@ -445,10 +447,10 @@ class SnippetCompilationTest(KeepOnFail):
         # continue the export
         export = Exporter(options)
 
-        return lambda: export.run(types, scopes, model_export=False, include_status=include_status)
+        return export.run(types, scopes, model_export=False, include_status=include_status)
 
     async def do_export_and_deploy(self, include_status=False, do_raise=True):
-        return await off_main_thread(self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
+        return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)
