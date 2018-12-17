@@ -92,69 +92,73 @@ def get_timestamp_regex():
     return r'[\d]{4}\-[\d]{2}\-[\d]{2} [\d]{2}\:[\d]{2}\:[\d]{2}\,[\d]{3}'
 
 
-@pytest.mark.parametrize("log_level, timed, with_tty, allowed_log_line_prefixes, invalid_log_line_prefixes", [
-    (3, False, False, ["ERROR ", "WARNING ", "INFO ", "DEBUG "], []),
-    (2, False, False, ["ERROR ", "WARNING ", "INFO "], ["DEBUG"]),
-    (3, True, False, ["ERROR ", "WARNING ", "INFO ", "DEBUG "], []),
-    (2, True, False, ["ERROR ", "WARNING ", "INFO "], ["DEBUG"]),
-    (3, False, True, [r'\x1b\[31mERROR ', r'\x1b\[33mWARNING ', r'\x1b\[32mINFO ', r'\x1b\[36mDEBUG '], []),
-    (2, False, True, [r'\x1b\[31mERROR ', r'\x1b\[33mWARNING ', r'\x1b\[32mINFO '], [r'\x1b\[36mDEBUG ']),
-    (3, True, True, [r'\x1b\[31mERROR ', r'\x1b\[33mWARNING ', r'\x1b\[32mINFO ', r'\x1b\[36mDEBUG '], []),
-    (2, True, True, [r'\x1b\[31mERROR ', r'\x1b\[33mWARNING ', r'\x1b\[32mINFO '], [r'\x1b\[36mDEBUG '])
-])
-def test_no_log_file_set(tmpdir, log_level, timed, with_tty, allowed_log_line_prefixes, invalid_log_line_prefixes):
-    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
-    if with_tty:
-        (stdout, stderr) = run_with_tty(args)
-    else:
-        (stdout, stderr) = run_without_tty(args)
-    assert os.listdir(log_dir) == []
-    assert len(stdout) != 0
-    assert len(stderr) == 0
-
-    def get_compiled_regex(prefixes):
-        regex = '(' + '|'.join(prefixes) + ')'
+def get_compiled_regexes(regexes, timed):
+    result = []
+    for regex in regexes:
         if timed:
             regex = get_timestamp_regex() + ' ' + regex
-        return re.compile(regex)
-
-    reg_allowed = get_compiled_regex(allowed_log_line_prefixes)
-    if len(invalid_log_line_prefixes) > 0:
-        reg_invalid = get_compiled_regex(invalid_log_line_prefixes)
-    for line in stdout:
-        if len(line) > 0:
-            assert reg_allowed.match(line) is not None
-            if len(invalid_log_line_prefixes) > 0:
-                assert reg_invalid.match(line) is None
+        compiled_regex = re.compile(regex)
+        result.append(compiled_regex)
+    return result
 
 
-@pytest.mark.parametrize("log_level, with_tty, allowed_log_line_prefixes, invalid_log_line_prefixes", [
-    (3, False, ["ERROR ", "WARNING ", "INFO ", "DEBUG "], []),
-    (2, False, ["ERROR ", "WARNING ", "INFO "], ["DEBUG"]),
-    (3, True, ["ERROR ", "WARNING ", "INFO ", "DEBUG "], []),
-    (2, True, ["ERROR ", "WARNING ", "INFO "], ["DEBUG"])
+@pytest.mark.parametrize("log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines", [
+    (3, False, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
+    (2, False, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
+    (3, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
+                      r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
+    (2, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
+                     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint']),
+    (3, True, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
+    (2, True, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
+    (3, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
+                     r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
+    (2, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
+                    [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'])
 ])
-def test_log_file_set(tmpdir, log_level, with_tty, allowed_log_line_prefixes, invalid_log_line_prefixes):
+def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
+    if with_tty:
+        (stdout, _) = run_with_tty(args)
+    else:
+        (stdout, _) = run_without_tty(args)
+    assert os.listdir(log_dir) == []
+    assert len(stdout) != 0
+    check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed)
+
+
+@pytest.mark.parametrize("log_level, with_tty, regexes_required_lines, regexes_forbidden_lines", [
+    (3, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
+                r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
+    (2, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
+               [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
+    (3, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
+               r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
+    (2, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
+              [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'])
+])
+def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
     log_file = "server.log"
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
-        (stdout, stderr) = run_without_tty(args)
+        (stdout, _) = run_without_tty(args)
     else:
-        (stdout, stderr) = run_without_tty(args)
-    assert os.listdir(log_dir) == [log_file]
-    assert len(stdout) == 0
-    assert len(stderr) == 0
+        (stdout, _) = run_without_tty(args)
+    assert log_file in os.listdir(log_dir)
     log_file = os.path.join(log_dir, log_file)
-
-    def get_compiled_regex(prefixes):
-        regex_valid_prefixes = get_timestamp_regex() + ' (' + '|'.join(prefixes) + ')'
-        return re.compile(regex_valid_prefixes)
-
-    reg_allowed = get_compiled_regex(allowed_log_line_prefixes)
-    if len(invalid_log_line_prefixes) > 0:
-        reg_invalid = get_compiled_regex(invalid_log_line_prefixes)
     with open(log_file, 'r') as f:
-        for line in f:
-            assert reg_allowed.match(line) is not None
-            if len(invalid_log_line_prefixes) > 0:
-                assert reg_invalid.match(line) is None
+        log_lines = f.readlines()
+    check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed=True)
+    check_logs(stdout, [], regexes_required_lines, timed=True)
+    check_logs(stdout, [], regexes_required_lines, timed=False)
+
+
+def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
+    compiled_regexes_requires_lines = get_compiled_regexes(regexes_required_lines, timed)
+    compiled_regexes_forbidden_lines = get_compiled_regexes(regexes_forbidden_lines, timed)
+    for regex in compiled_regexes_requires_lines:
+        if not any(regex.match(line) for line in log_lines):
+            pytest.fail("Required pattern was not found in log lines: %s" % (regex.pattern,))
+    for regex in compiled_regexes_forbidden_lines:
+        if any(regex.match(line) for line in log_lines):
+            pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
