@@ -17,7 +17,6 @@
 """
 from inmanta import config, const
 import pytest
-from conftest import off_main_thread
 
 
 def test_id_mapping_export(snippetcompiler):

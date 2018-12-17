@@ -536,8 +536,13 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
 
     resource_container.Provider.set_skip("agent2", "key1", 1)
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost", "agent2": "localhost"},
-                  code_loader=False)
+    agent = Agent(
+        IOLoop.current(),
+        hostname="node1",
+        environment=env_id,
+        agent_map={"agent1": "localhost", "agent2": "localhost"},
+        code_loader=False
+    )
     agent.add_end_point_name("agent2")
     agent.start()
 

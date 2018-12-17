@@ -30,7 +30,6 @@ from uuid import UUID
 from inmanta.export import upload_code
 from inmanta.util import hash_file
 from inmanta.export import unknown_parameters
-from threading import Thread
 from tornado.ioloop import IOLoop
 import asyncio
 

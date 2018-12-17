@@ -48,7 +48,6 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import sys
 import pkg_resources
 from asyncio.futures import wrap_future
-from threading import Thread
 from asyncio.events import get_event_loop
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
