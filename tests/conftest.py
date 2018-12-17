@@ -36,9 +36,7 @@ from inmanta.agent import handler
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
-from concurrent.futures.thread import ThreadPoolExecutor
 import re
-from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
@@ -47,8 +45,6 @@ import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import sys
 import pkg_resources
-from asyncio.futures import wrap_future
-from asyncio.events import get_event_loop
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -360,7 +356,7 @@ def pytest_runtest_makereport(item, call):
 
 
 async def off_main_thread(func):
-    return await get_event_loop().run_in_executor(None, func)
+    return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
 class SnippetCompilationTest(KeepOnFail):
@@ -491,21 +487,20 @@ def snippetcompiler(snippetcompiler_global):
 
 
 class CLI(object):
-
-    def __init__(self):
-        self._thread_pool = ThreadPoolExecutor(1)
-
     async def run(self, *args):
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = await wrap_future(self._thread_pool.submit(runner.invoke,
-                                                            cli=inmanta.main.cmd,
-                                                            args=cmd_args,
-                                                            obj=IOLoop.current(),
-                                                            catch_exceptions=False))
-        return result
+
+        def invoke():
+            return runner.invoke(
+                cli=inmanta.main.cmd,
+                args=cmd_args,
+                catch_exceptions=False
+            )
+
+        return await asyncio.get_event_loop().run_in_executor(None, invoke)
 
 
 @pytest.fixture
