@@ -284,6 +284,15 @@ def client_multi(server_multi):
 
 
 @pytest.fixture(scope="function")
+def sync_client_multi(server_multi):
+    from inmanta import protocol
+
+    client = protocol.SyncClient("client")
+
+    yield client
+
+
+@pytest.fixture(scope="function")
 async def environment(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment

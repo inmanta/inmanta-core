@@ -22,12 +22,10 @@ import uuid
 import datetime
 import json
 from collections import defaultdict
-from concurrent.futures import Future
 
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from tornado.ioloop import IOLoop
 import click
 import texttable
 from time import sleep

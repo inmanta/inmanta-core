@@ -53,7 +53,7 @@ from inmanta import protocol  # NOQA
 class SessionSpy(SessionListener, ServerSlice):
 
     def __init__(self):
-        ServerSlice.__init__(self, IOLoop.current(), "sessionspy")
+        ServerSlice.__init__(self, "sessionspy")
         self.expires = 0
         self.__sessions = []
 
@@ -142,7 +142,7 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
         rs.add_endpoint(server)
         rs.start()
 
-        agent = Agent("agent", io_loop)
+        agent = Agent("agent")
         agent.add_end_point_name("agent")
         agent.set_environment(uuid.uuid4())
         agent.start()
@@ -179,8 +179,6 @@ async def test_timeout(unused_tcp_port):
     import inmanta.agent.config  # nopep8
     import inmanta.server.config  # nopep8
 
-    io_loop = IOLoop.current()
-
     free_port = str(unused_tcp_port)
 
     # start server
@@ -207,7 +205,7 @@ async def test_timeout(unused_tcp_port):
         env = uuid.uuid4()
 
         # agent 1
-        agent = Agent("agent", io_loop)
+        agent = Agent("agent")
         agent.add_end_point_name("agent")
         agent.set_environment(env)
         agent.start()
@@ -217,7 +215,7 @@ async def test_timeout(unused_tcp_port):
         assert len(server.get_sessions()) == 1
 
         # agent 2
-        agent2 = Agent("agent", io_loop)
+        agent2 = Agent("agent")
         agent2.add_end_point_name("agent")
         agent2.set_environment(env)
         agent2.start()

@@ -72,7 +72,7 @@ def start_agent(options):
     from inmanta import agent
     io_loop = IOLoop.current()
 
-    a = agent.Agent(io_loop)
+    a = agent.Agent()
     a.start()
 
     try:
@@ -297,10 +297,10 @@ def export(options):
             json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
-        conn = protocol.Client("compiler")
+        conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
-        IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
+        conn.release_version(tid, version, True)
 
 
 log_levels = {

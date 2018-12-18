@@ -42,7 +42,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER
 from typing import List, Tuple, Optional, Dict
 from inmanta.const import ResourceState
-from tornado.ioloop import IOLoop
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -385,8 +384,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -537,7 +535,6 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     resource_container.Provider.set_skip("agent2", "key1", 1)
 
     agent = Agent(
-        IOLoop.current(),
         hostname="node1",
         environment=env_id,
         agent_map={"agent1": "localhost", "agent2": "localhost"},
@@ -655,7 +652,7 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -775,7 +772,7 @@ async def test_spontaneous_deploy(resource_container, server, client):
     Config.set("config", "agent-interval", "2")
     Config.set("config", "agent-splay", "2")
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -850,8 +847,7 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -898,8 +894,7 @@ async def test_dual_agent(resource_container, server, client, environment):
         dryrun and deploy a configuration model
     """
     resource_container.Provider.reset()
-    myagent = agent.Agent(IOLoop.current(), hostname="node1", environment=environment,
-                          agent_map={"agent1": "localhost", "agent2": "localhost"},
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost", "agent2": "localhost"},
                           code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
@@ -984,12 +979,10 @@ async def test_server_agent_api(resource_container, client, server):
 
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
-    agent = Agent(IOLoop.current(), environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"}, code_loader=False)
     agent.start()
 
-    agent = Agent(IOLoop.current(), environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"},
-                  code_loader=False)
+    agent = Agent(environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"}, code_loader=False)
     agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
@@ -1074,8 +1067,7 @@ async def test_get_facts(resource_container, client, server):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
@@ -1119,8 +1111,7 @@ async def test_purged_facts(resource_container, client, server, environment):
         Test if facts are purged when the resource is purged.
     """
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
@@ -1188,8 +1179,7 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     agentmanager._fact_resource_block = 0.1
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1363,8 +1353,7 @@ async def test_unkown_parameters(resource_container, client, server):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
@@ -1416,8 +1405,7 @@ async def test_fail(resource_container, client, server):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False, poolsize=10)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
@@ -1509,8 +1497,7 @@ async def test_wait(resource_container, client, server):
     env_id = result.result["environment"]["id"]
 
     # setup agent
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False, poolsize=10)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     agent.start()
 
@@ -1640,7 +1627,7 @@ async def test_multi_instance(resource_container, client, server):
     env_id = result.result["environment"]["id"]
 
     # setup agent
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id,
+    agent = Agent(hostname="node1", environment=env_id,
                   agent_map={"agent1": "localhost", "agent2": "localhost", "agent3": "localhost"},
                   code_loader=False, poolsize=1)
     agent.add_end_point_name("agent1")
@@ -1756,14 +1743,12 @@ async def test_cross_agent_deps(resource_container, server, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    agent2 = Agent(IOLoop.current(), hostname="node2", environment=env_id, agent_map={"agent2": "localhost"},
-                   code_loader=False)
+    agent2 = Agent(hostname="node2", environment=env_id, agent_map={"agent2": "localhost"}, code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
@@ -1849,8 +1834,7 @@ async def test_dryrun_scale(resource_container, server, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1906,8 +1890,7 @@ async def test_dryrun_failures(resource_container, server, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(IOLoop.current(), hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1986,8 +1969,7 @@ async def test_send_events(resource_container, environment, server, client):
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -2044,14 +2026,12 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    agent2 = Agent(IOLoop.current(), hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
-                   code_loader=False)
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
@@ -2112,8 +2092,7 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent2 = Agent(IOLoop.current(), hostname="node2", environment=environment, agent_map={"agent2": "localhost"},
-                   code_loader=False)
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     agent2.add_end_point_name("agent2")
     agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -2156,8 +2135,7 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
 
     # start agent 1 and wait for it to finish
     Config.set("config", "agent-splay", "0")
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
@@ -2188,8 +2166,7 @@ async def test_auto_deploy(server, client, resource_container, environment):
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -2662,7 +2639,7 @@ async def test_deploy_and_events(client, server, environment, resource_container
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -2725,7 +2702,7 @@ async def test_deploy_and_events_failed(client, server, environment, resource_co
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()
@@ -2786,7 +2763,7 @@ async def test_reload(client, server, environment, resource_container, dep_state
     agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
     agent.start()

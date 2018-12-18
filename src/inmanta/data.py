@@ -1622,8 +1622,8 @@ def create_indexes():
         yield cls.create_indexes()
 
 
-def connect(host, port, database, io_loop):
-    client = motor_tornado.MotorClient(host, port, io_loop=io_loop)
+def connect(host, port, database):
+    client = motor_tornado.MotorClient(host, port)
     db = client[database]
 
     use_motor(db)
