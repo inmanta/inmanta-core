@@ -71,7 +71,7 @@ class ResultVariable(ResultCollector):
     def is_ready(self):
         return self.hasValue
 
-    def await(self, waiter):
+    def waitfor(self, waiter):
         if self.is_ready():
             waiter.ready(self)
         else:
@@ -430,9 +430,9 @@ class Waiter(object):
         self.queue.add_to_all(self)
         self.done = False
 
-    def await(self, waitable):
+    def waitfor(self, waitable):
         self.waitcount = self.waitcount + 1
-        waitable.await(self)
+        waitable.waitfor(self)
 
     def ready(self, other):
         self.waitcount = self.waitcount - 1
@@ -463,7 +463,7 @@ class ExecutionUnit(Waiter):
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def _unsafe_execute(self):
@@ -496,7 +496,7 @@ class HangUnit(Waiter):
         self.resumer = resumer
         self.target = target
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def execute(self):
@@ -522,7 +522,7 @@ class RawUnit(Waiter):
         self.requires = requires
         self.resumer = resumer
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def execute(self):
