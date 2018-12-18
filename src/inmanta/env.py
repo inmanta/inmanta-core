@@ -18,6 +18,7 @@
 
 import sys
 import os
+import site
 import subprocess
 import tempfile
 import hashlib
@@ -26,6 +27,7 @@ import re
 
 import pkg_resources
 from subprocess import CalledProcessError
+import venv
 
 
 LOGGER = logging.getLogger(__name__)
@@ -50,28 +52,30 @@ class VirtualEnv(object):
         """
             Init the virtual environment
         """
-        python_exec = sys.executable
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
         python_bin = os.path.join(self.env_path, "bin", python_name)
 
         if not os.path.exists(python_bin):
-            venv_call = [python_exec, "-m", "virtualenv"]
-            try:
-                subprocess.check_output(venv_call + ["--version"])
-            except subprocess.CalledProcessError:
-                raise Exception("Virtualenv not installed for python %s" % python_exec)
-
-            proc = subprocess.Popen(venv_call + ["-p", python_exec, self.env_path], env=os.environ.copy(),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-
-            if proc.returncode == 0:
-                LOGGER.debug("Created a new virtualenv at %s", self.env_path)
+            # venv requires some care when the .env folder already exists
+            # https://docs.python.org/3/library/venv.html
+            if not os.path.exists(self.env_path):
+                path = self.env_path
             else:
-                LOGGER.error("Unable to create new virtualenv at %s (%s, %s)", self.env_path, out.decode(), err.decode())
+                # venv has problems with symlinks
+                path = os.path.realpath(self.env_path)
+
+            # --clear is required in python prior to 3.4 if the folder already exists
+            try:
+                venv.create(path, clear=True, with_pip=True)
+            except CalledProcessError as e:
+                LOGGER.exception("Unable to create new virtualenv at %s (%s)", self.env_path, e.stdout.decode())
                 return False
+            except Exception:
+                LOGGER.exception("Unable to create new virtualenv at %s", self.env_path)
+                return False
+            LOGGER.debug("Created a new virtualenv at %s", self.env_path)
 
         # set the path to the python and the pip executables
         self.virtual_python = python_bin
@@ -84,16 +88,41 @@ class VirtualEnv(object):
         if not self.init_env():
             raise Exception("Unable to init virtual environment")
 
-        activate_file = os.path.join(self.env_path, "bin/activate_this.py")
-        if os.path.exists(activate_file):
-            with open(activate_file) as f:
-                code = compile(f.read(), activate_file, 'exec')
-                exec(code, {"__file__": activate_file})
-        else:
-            raise Exception("Unable to activate virtual environment because %s does not exist." % activate_file)
+        self.activate_that()
 
         # patch up pkg
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
+
+    def activate_that(self):
+        # adapted from https://github.com/pypa/virtualenv/blob/master/virtualenv_embedded/activate_this.py
+        # MIT license
+        # Copyright (c) 2007 Ian Bicking and Contributors
+        # Copyright (c) 2009 Ian Bicking, The Open Planning Project
+        # Copyright (c) 2011-2016 The virtualenv developers
+
+        binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
+        base = os.path.dirname(binpath)
+
+        old_os_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = binpath + os.pathsep + old_os_path
+
+        if sys.platform == "win32":
+            site_packages = os.path.join(base, "Lib", "site-packages")
+        else:
+            site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
+
+        prev_sys_path = list(sys.path)
+
+        site.addsitedir(site_packages)
+        sys.real_prefix = sys.prefix
+        sys.prefix = base
+        # Move the added items to the front of the path:
+        new_sys_path = []
+        for item in list(sys.path):
+            if item not in prev_sys_path:
+                new_sys_path.append(item)
+                sys.path.remove(item)
+        sys.path[:0] = new_sys_path
 
     def _parse_line(self, req_line: str) -> tuple:
         """
@@ -177,6 +206,7 @@ class VirtualEnv(object):
             except CalledProcessError as e:
                 LOGGER.debug("%s: %s", cmd, e.output.decode())
                 LOGGER.debug("requirements: %s", requirements_file)
+                raise
             except Exception:
                 LOGGER.debug("%s: %s", cmd, output.decode())
                 LOGGER.debug("requirements: %s", requirements_file)

@@ -148,7 +148,7 @@ class PluginMeta(type):
         return cls.__functions
 
     @classmethod
-    def clear(cls):
+    def clear(cls) -> None:
         cls.__functions = {}
 
 

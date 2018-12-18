@@ -48,6 +48,7 @@ from inmanta import protocol, module, moduletool
 from inmanta.export import cfg_env, ModelExporter
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.ast import CompilerException
 
 LOGGER = logging.getLogger()
 
@@ -71,7 +72,7 @@ def start_agent(options):
     from inmanta import agent
     io_loop = IOLoop.current()
 
-    a = agent.Agent(io_loop)
+    a = agent.Agent()
     a.start()
 
     try:
@@ -296,10 +297,10 @@ def export(options):
             json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
-        conn = protocol.Client("compiler")
+        conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
-        IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
+        conn.release_version(tid, version, True)
 
 
 log_levels = {
@@ -336,83 +337,83 @@ def cmd_parser():
     return parser
 
 
+def _get_default_stream_handler():
+    stream_handler = logging.StreamHandler(stream=sys.stdout)
+    stream_handler.setLevel(logging.INFO)
+
+    formatter = _get_log_formatter_for_stream_handler(timed=False)
+    stream_handler.setFormatter(formatter)
+
+    return stream_handler
+
+
+def _get_watched_file_handler(options):
+    if not options.log_file:
+        raise Exception("No logfile was provided.")
+    level = _convert_to_log_level(options.log_file_level)
+    formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
+    file_handler = logging.handlers.WatchedFileHandler(filename=options.log_file, mode='a+')
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(level)
+
+    return file_handler
+
+
+def _convert_to_log_level(level):
+    if level >= len(log_levels):
+        level = 3
+    return log_levels[level]
+
+
+def _get_log_formatter_for_stream_handler(timed):
+    log_format = "%(asctime)s " if timed else ""
+    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+        log_format += "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s"
+        formatter = colorlog.ColoredFormatter(
+            log_format,
+            datefmt=None,
+            reset=True,
+            log_colors={
+                'DEBUG': 'cyan',
+                'INFO': 'green',
+                'WARNING': 'yellow',
+                'ERROR': 'red',
+                'CRITICAL': 'red',
+            }
+        )
+    else:
+        log_format += "%(levelname)-8s%(message)s"
+        formatter = logging.Formatter(fmt=log_format)
+    return formatter
+
+
 def app():
     """
         Run the compiler
     """
-
-    normalformatter = logging.Formatter(fmt="%(levelname)-8s%(message)s")
-    # set logging to sensible defaults
-    formatter = colorlog.ColoredFormatter(
-        "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
-        datefmt=None,
-        reset=True,
-        log_colors={
-            'DEBUG': 'cyan',
-            'INFO': 'green',
-            'WARNING': 'yellow',
-            'ERROR': 'red',
-            'CRITICAL': 'red',
-        }
-    )
-
-    stream = logging.StreamHandler()
-    stream.setLevel(logging.INFO)
-
-    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
-        stream.setFormatter(formatter)
-    else:
-        stream.setFormatter(normalformatter)
-
+    # Send logs to stdout
+    stream_handler = _get_default_stream_handler()
     logging.root.handlers = []
-    logging.root.addHandler(stream)
+    logging.root.addHandler(stream_handler)
     logging.root.setLevel(0)
 
     # do an initial load of known config files to build the libdir path
     Config.load_config()
-
     parser = cmd_parser()
-
     options, other = parser.parse_known_args()
     options.other = other
 
-    if options.timed:
-        if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
-            formatter = colorlog.ColoredFormatter(
-                "%(asctime)s %(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s",
-                datefmt=None,
-                reset=True,
-                log_colors={
-                    'DEBUG': 'cyan',
-                    'INFO': 'green',
-                    'WARNING': 'yellow',
-                    'ERROR': 'red',
-                    'CRITICAL': 'red',
-                }
-            )
-        else:
-            formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s%(message)s")
-        stream.setFormatter(formatter)
-
-    # set the log level
-    level = options.verbose
-    if level >= len(log_levels):
-        level = 3
-    stream.setLevel(log_levels[level])
-
-    # set the logfile
+    # Log everything to a log_file if logfile is provided
     if options.log_file:
-        level = options.log_file_level
-        if level >= len(log_levels):
-            level = 3
-
-        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(name)-10s %(message)s")
-
-        file_handler = logging.FileHandler(filename=options.log_file, mode="w")
-        file_handler.setFormatter(formatter)
-
-        file_handler.setLevel(log_levels[level])
-        logging.root.addHandler(file_handler)
+        watched_file_handler = _get_watched_file_handler(options)
+        logging.root.addHandler(watched_file_handler)
+        logging.root.removeHandler(stream_handler)
+    else:
+        if options.timed:
+            formatter = _get_log_formatter_for_stream_handler(timed=True)
+            stream_handler.setFormatter(formatter)
+        log_level = _convert_to_log_level(options.verbose)
+        stream_handler.setLevel(log_level)
 
     # Load the configuration
     Config.load_config(options.config_file)
@@ -425,7 +426,10 @@ def app():
 
     def report(e):
         if not options.errors:
-            print(str(e), file=sys.stderr)
+            if isinstance(e, CompilerException):
+                print(e.format_trace(indent="  "), file=sys.stderr)
+            else:
+                print(str(e), file=sys.stderr)
         else:
             sys.excepthook(*sys.exc_info())
 

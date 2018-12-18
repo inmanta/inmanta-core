@@ -24,9 +24,8 @@ from inmanta.server import SLICE_SESSION_MANAGER
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio
-async def test_agent_get_status(io_loop, server, environment):
-    myagent = agent.Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                          code_loader=False)
+async def test_agent_get_status(server, environment):
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()
 

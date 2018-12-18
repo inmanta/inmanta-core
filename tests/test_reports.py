@@ -20,33 +20,33 @@ import pytest
 from tornado import gen
 
 
-@pytest.mark.gen_test(timeout=10)
+@pytest.mark.asyncio(timeout=10)
 @pytest.mark.slowtest
-def test_compile_report(server):
+async def test_compile_report(server):
     from inmanta import protocol
 
     client = protocol.Client("client")
-    result = yield client.create_project("env-test")
+    result = await client.create_project("env-test")
     assert result.code == 200
     project_id = result.result["project"]["id"]
 
-    result = yield client.create_environment(project_id=project_id, name="dev")
+    result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    result = yield client.notify_change(id=env_id)
+    result = await client.notify_change(id=env_id)
     assert result.code == 200
 
     while True:
-        result = yield client.get_reports(tid=env_id)
+        result = await client.get_reports(tid=env_id)
         assert result.code == 200
         if len(result.result["reports"]) > 0:
             break
 
-        yield gen.sleep(0.5)
+        await gen.sleep(0.5)
 
     report = result.result["reports"][0]
     report_id = report["id"]
 
-    result = yield client.get_report(report_id)
+    result = await client.get_report(report_id)
     assert result.code == 200
     assert len(result.result["report"]["reports"]) == 1

@@ -35,10 +35,7 @@ from inmanta.agent import handler
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
-from concurrent.futures.thread import ThreadPoolExecutor
-from tornado import gen
 import re
-from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
@@ -47,6 +44,9 @@ import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import asyncpg
 from inmanta.mongoproc import PostgresProc
+import sys
+import pkg_resources
+
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -106,6 +106,20 @@ async def init_dataclasses(postgres_db, database_name):
 
     await connection_postgres.execute("DROP DATABASE " + database_name)
     await connection_postgres.close()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def deactive_venv():
+    old_os_path = os.environ.get("PATH", "")
+    old_prefix = sys.prefix
+    old_path = sys.path
+
+    yield
+
+    os.environ["PATH"] = old_os_path
+    sys.prefix = old_prefix
+    sys.path = old_path
+    pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
 def reset_all():
@@ -208,7 +222,6 @@ def database_name():
 async def server(inmanta_config, io_loop, postgres_db, postgresql_client, database_name, motor):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
-    IOLoop._instance = io_loop
 
     state_dir = tempfile.mkdtemp()
 
@@ -236,7 +249,6 @@ async def server(inmanta_config, io_loop, postgres_db, postgresql_client, databa
     yield ibl.restserver
 
     ibl.stop()
-    del IOLoop._instance
     shutil.rmtree(state_dir)
 
 
@@ -245,7 +257,6 @@ async def server(inmanta_config, io_loop, postgres_db, postgresql_client, databa
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
 async def server_multi(inmanta_config, io_loop, postgres_db, postgresql_client, database_name, request, motor):
-    IOLoop._instance = io_loop
 
     state_dir = tempfile.mkdtemp()
 
@@ -304,11 +315,6 @@ async def server_multi(inmanta_config, io_loop, postgres_db, postgresql_client, 
 
     ibl.stop()
 
-    try:
-        del IOLoop._instance
-    except Exception:
-        pass
-
     shutil.rmtree(state_dir)
 
 
@@ -331,19 +337,22 @@ def client_multi(server_multi):
 
 
 @pytest.fixture(scope="function")
-async def environment(client, server, io_loop):
+def sync_client_multi(server_multi):
+    from inmanta import protocol
+
+    client = protocol.SyncClient("client")
+
+    yield client
+
+
+@pytest.fixture(scope="function")
+async def environment(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
-    def create_project():
-        return client.create_project("env-test")
-
     result = await client.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
-
-    def create_env():
-        return client.create_environment(project_id=project_id, name="dev")
 
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
@@ -354,19 +363,13 @@ async def environment(client, server, io_loop):
 
 
 @pytest.fixture(scope="function")
-async def environment_multi(client_multi, server_multi, io_loop):
+async def environment_multi(client_multi, server_multi):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
-    def create_project():
-        return client_multi.create_project("env-test")
-
     result = await client_multi.create_project("env-test")
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
-
-    def create_env():
-        return client_multi.create_environment(project_id=project_id, name="dev")
 
     result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
@@ -374,27 +377,68 @@ async def environment_multi(client_multi, server_multi, io_loop):
     yield env_id
 
 
-class SnippetCompilationTest(object):
+class KeepOnFail(object):
+
+    def keep(self) -> "Optional[Dict[str, str]]":
+        pass
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # execute all other hooks to obtain the report object
+    outcome = yield
+    rep = outcome.get_result()
+
+    # we only look at actual failing test calls, not setup/teardown
+    resources = {}
+    if rep.when == "call" and rep.failed:
+        for fixture in item.funcargs.values():
+            if isinstance(fixture, KeepOnFail):
+                msg = fixture.keep()
+                if msg:
+                    for label, res in msg.items():
+                        resources[label] = res
+
+        if resources:
+            # we are behind report formatting, so write to report, not item
+            rep.sections.append(("Resources Kept", "\n".join(
+                ["%s %s" % (label, resource) for label, resource in resources.items()])))
+
+
+async def off_main_thread(func):
+    return await asyncio.get_event_loop().run_in_executor(None, func)
+
+
+class SnippetCompilationTest(KeepOnFail):
 
     def setUpClass(self):
         self.libs = tempfile.mkdtemp()
         self.env = tempfile.mkdtemp()
         config.Config.load_config()
         self.cwd = os.getcwd()
+        self.keep_shared = False
 
     def tearDownClass(self):
-        shutil.rmtree(self.libs)
-        shutil.rmtree(self.env)
+        if not self.keep_shared:
+            shutil.rmtree(self.libs)
+            shutil.rmtree(self.env)
         # reset cwd
         os.chdir(self.cwd)
 
     def setup_func(self):
         # init project
+        self._keep = False
         self.project_dir = tempfile.mkdtemp()
         os.symlink(self.env, os.path.join(self.project_dir, ".env"))
 
     def tear_down_func(self):
-        shutil.rmtree(self.project_dir)
+        if not self._keep:
+            shutil.rmtree(self.project_dir)
+
+    def keep(self):
+        self._keep = True
+        self.keep_shared = True
+        return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
     def setup_for_snippet(self, snippet, autostd=True):
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
@@ -415,7 +459,14 @@ class SnippetCompilationTest(object):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self, deploy=False, include_status=False, do_raise=True):
+    def do_export(self, include_status=False, do_raise=True):
+        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
+
+    def _do_export(self, deploy=False, include_status=False, do_raise=True):
+        """
+        helper function to allow actual export to be run an a different thread
+        i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
+        """
         templfile = mktemp("json", "dump", self.project_dir)
 
         class Options(object):
@@ -440,9 +491,12 @@ class SnippetCompilationTest(object):
 
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
-
         export = Exporter(options)
+
         return export.run(types, scopes, model_export=False, include_status=include_status)
+
+    async def do_export_and_deploy(self, include_status=False, do_raise=True):
+        return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)
@@ -483,25 +537,25 @@ def snippetcompiler(snippetcompiler_global):
 
 
 class CLI(object):
-
-    def __init__(self, io_loop):
-        self.io_loop = io_loop
-        self._thread_pool = ThreadPoolExecutor(1)
-
-    @gen.coroutine
-    def run(self, *args):
+    async def run(self, *args):
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
-                                                catch_exceptions=False)
-        return result
+
+        def invoke():
+            return runner.invoke(
+                cli=inmanta.main.cmd,
+                args=cmd_args,
+                catch_exceptions=False
+            )
+
+        return await asyncio.get_event_loop().run_in_executor(None, invoke)
 
 
 @pytest.fixture
-def cli(io_loop):
-    o = CLI(io_loop)
+def cli():
+    o = CLI()
     yield o
 
 

@@ -17,10 +17,13 @@
 """
 
 import functools
+import hashlib
+import itertools
 import logging
 
-import itertools
-import hashlib
+import pkg_resources
+from pkg_resources import DistributionNotFound
+from tornado.ioloop import IOLoop
 
 
 LOGGER = logging.getLogger(__name__)
@@ -84,9 +87,8 @@ class Scheduler(object):
         An event scheduler class
     """
 
-    def __init__(self, io_loop):
+    def __init__(self):
         self._scheduled = set()
-        self._io_loop = io_loop
 
     def add_action(self, action, interval, initial_delay=None):
         """
@@ -111,9 +113,9 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
 
                 finally:
-                    self._io_loop.call_later(interval, action_function)
+                    IOLoop.current().call_later(interval, action_function)
 
-        self._io_loop.call_later(initial_delay, action_function)
+        IOLoop.current().call_later(initial_delay, action_function)
         self._scheduled.add(action)
 
     def remove(self, action):

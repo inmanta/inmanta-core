@@ -23,7 +23,7 @@ import uuid
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data_pg as data, protocol
+from inmanta import data_pg as data, protocol, const, config
 from inmanta import const
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
@@ -31,13 +31,12 @@ from uuid import UUID
 from inmanta.export import upload_code
 from inmanta.util import hash_file
 from inmanta.export import unknown_parameters
-from threading import Thread
+import asyncio
 
 LOGGER = logging.getLogger(__name__)
 
 
-# @pytest.mark.gen_test(timeout=60)
-@pytest.mark.asyncio
+@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart(server, client, environment):
     """
@@ -80,8 +79,7 @@ async def test_autostart(server, client, environment):
     assert len(agentmanager._agent_procs) == 0
 
 
-# @pytest.mark.gen_test(timeout=60)
-@pytest.mark.asyncio
+@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart_dual_env(client, server):
     """
@@ -121,8 +119,7 @@ async def test_autostart_dual_env(client, server):
     assert len(sessionendpoint._sessions) == 2
 
 
-# @pytest.mark.gen_test(timeout=60)
-@pytest.mark.asyncio
+@pytest.mark.asyncio(timeout=60)
 @pytest.mark.slowtest
 async def test_autostart_batched(client, server, environment):
     """
@@ -142,9 +139,7 @@ async def test_autostart_batched(client, server, environment):
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
     res = await agentmanager._ensure_agents(env, ["iaas_agent"])
-    print(res)
     assert not res
-
     assert len(sessionendpoint._sessions) == 1
 
     res = await agentmanager._ensure_agents(env, ["iaas_agent", "iaas_agentx"])
@@ -160,8 +155,7 @@ async def test_autostart_batched(client, server, environment):
     assert len(sessionendpoint._sessions) == 1
 
 
-# @pytest.mark.gen_test(timeout=10)
-@pytest.mark.asyncio
+@pytest.mark.asyncio(timeout=10)
 async def test_version_removal(client, server):
     """
         Test auto removal of older deploy model versions
@@ -187,14 +181,13 @@ async def test_version_removal(client, server):
         assert versions.result["count"] <= opt.server_version_to_keep.get() + 1
 
 
-# @pytest.mark.gen_test(timeout=30)
-@pytest.mark.asyncio
+@pytest.mark.asyncio(timeout=30)
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(io_loop, motor, server_multi, client_multi, environment):
+async def test_get_resource_for_agent(motor, server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent(io_loop, "localhost", {"nvblah": "localhost"}, environment=environment)
+    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -282,8 +275,7 @@ async def test_get_resource_for_agent(io_loop, motor, server_multi, client_multi
     assert result.result["model"]["done"] == 2
 
 
-# @pytest.mark.gen_test(timeout=10)
-@pytest.mark.asyncio
+@pytest.mark.asyncio(timeout=10)
 async def test_get_environment(client, server, environment):
     version = int(time.time())
 
@@ -314,11 +306,11 @@ async def test_get_environment(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_resource_update(io_loop, client, server, environment):
+async def test_resource_update(client, server, environment):
     """
         Test updating resources and logging
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -396,7 +388,7 @@ async def test_resource_update(io_loop, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_environment_settings(io_loop, client, server, environment):
+async def test_environment_settings(client, server, environment):
     """
         Test environment settings
     """
@@ -485,11 +477,11 @@ async def test_clear_environment(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete_requires(io_loop, client, server, environment):
+async def test_purge_on_delete_requires(client, server, environment):
     """
         Test purge on delete of resources and inversion of requires
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -545,8 +537,8 @@ async def test_purge_on_delete_requires(io_loop, client, server, environment):
     assert result.result["model"]["result"] == const.VersionState.success.name
 
     # validate requires and provides
-    file1 = [x for x in result.result["resources"] if "file1" in x["resource_id"]][0]
-    file2 = [x for x in result.result["resources"] if "file2" in x["resource_id"]][0]
+    file1 = [x for x in result.result["resources"] if "file1" in x["id"]][0]
+    file2 = [x for x in result.result["resources"] if "file2" in x["id"]][0]
 
     assert file2["id"] in file1["provides"]
     assert len(file1["attributes"]["requires"]) == 0
@@ -574,48 +566,42 @@ async def test_purge_on_delete_requires(io_loop, client, server, environment):
     assert file1["id"] in file2["provides"]
 
 
-@pytest.mark.asyncio
-async def test_purge_on_delete_compile_failed_with_compile(io_loop, client, server, environment, snippetcompiler):
-    # run in threads to allow run_sync to work
+@pytest.mark.asyncio(timeout=20)
+async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, server, environment, snippetcompiler):
+    config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
-    async def i1():
-        snippetcompiler.setup_for_snippet("""
-        h = std::Host(name="test", os=std::linux)
-        f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
-        """)
-        version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        assert result.result["model"]["total"] == 1
+    snippetcompiler.setup_for_snippet("""
+    h = std::Host(name="test", os=std::linux)
+    f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
+    """)
+    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
-    async def i2():
-        snippetcompiler.setup_for_snippet("""
-        h = std::Host(name="test")
-        """)
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["total"] == 1
 
-        # force deploy by having unknown
-        unknown_parameters.append({})
+    snippetcompiler.setup_for_snippet("""
+    h = std::Host(name="test")
+    """)
 
-        version, _ = snippetcompiler.do_export(deploy=True, do_raise=False)
-        result = await client.get_version(environment, version)
-        assert result.code == 200
-        assert result.result["model"]["total"] == 0
+    # force deploy by having unknown
+    unknown_parameters.append({})
 
-    t1 = Thread(target=i1)
-    t1.start()
-    t1.join()
+    # ensure new version, wait for other second
+    await asyncio.sleep(1)
 
-    t1 = Thread(target=i2)
-    t1.start()
-    t1.join()
+    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+    assert result.result["model"]["total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete_compile_failed(io_loop, client, server, environment):
+async def test_purge_on_delete_compile_failed(client, server, environment):
     """
         Test purge on delete of resources
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -699,11 +685,11 @@ async def test_purge_on_delete_compile_failed(io_loop, client, server, environme
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete(io_loop, client, server, environment):
+async def test_purge_on_delete(client, server, environment):
     """
         Test purge on delete of resources
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -805,11 +791,11 @@ async def test_purge_on_delete(io_loop, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_purge_on_delete_ignore(io_loop, client, server, environment):
+async def test_purge_on_delete_ignore(client, server, environment):
     """
         Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
-    agent = Agent(io_loop, "localhost", {"blah": "localhost"}, environment=environment)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -929,9 +915,8 @@ def make_source(collector, filename, module, source, req):
     return collector
 
 
-# @pytest.mark.gen_test(timeout=30)
-@pytest.mark.asyncio
-async def test_code_upload(io_loop, motor, server_multi, client_multi, environment):
+@pytest.mark.asyncio(timeout=30)
+async def test_code_upload(motor, server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -964,9 +949,8 @@ async def test_code_upload(io_loop, motor, server_multi, client_multi, environme
     assert res.result["sources"] == sources
 
 
-# @pytest.mark.gen_test(timeout=30)
-@pytest.mark.asyncio
-async def test_batched_code_upload(io_loop, motor, server_multi, client_multi, environment):
+@pytest.mark.asyncio(timeout=30)
+async def test_batched_code_upload(motor, server_multi, client_multi, sync_client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -999,7 +983,7 @@ async def test_batched_code_upload(io_loop, motor, server_multi, client_multi, e
                "std:xxx": csources
                }
 
-    await upload_code(client_multi, environment, version, sources)
+    await asyncio.get_event_loop().run_in_executor(None, lambda: upload_code(sync_client_multi, environment, version, sources))
 
     agent = protocol.Client("agent")
 
@@ -1009,9 +993,8 @@ async def test_batched_code_upload(io_loop, motor, server_multi, client_multi, e
         assert res.result["sources"] == sourcemap
 
 
-# @pytest.mark.gen_test(timeout=30)
-@pytest.mark.asyncio
-async def test_legacy_code(io_loop, motor, server_multi, client_multi, environment):
+@pytest.mark.asyncio(timeout=30)
+async def test_legacy_code(motor, server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
