@@ -19,27 +19,30 @@ import os
 import collections
 
 from inmanta import deploy
-from tornado import process
+from tornado import process, ioloop
 import pytest
 
 
 @pytest.mark.skip(reason="very unstable test")
-@pytest.mark.gen_test(timeout=60)
-def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
+@pytest.mark.asyncio(timeout=60)
+async def test_deploy(snippetcompiler, tmpdir, mongo_db, motor):
     file_name = tmpdir.join("test_file")
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(
+        """
     host = std::Host(name="test", os=std::linux)
     file = std::Symlink(host=host, source="/dev/null", target="%s")
-    """ % file_name)
+    """
+        % file_name
+    )
 
     os.chdir(snippetcompiler.project_dir)
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
-    run = deploy.Deploy(io_loop, mongoport=mongo_db.port)
+    run = deploy.Deploy(ioloop.IOLoop.current(), mongoport=mongo_db.port)
     try:
         run.run(options, only_setup=True)
-        yield run.do_deploy(False, "")
+        await run.do_deploy(False, "")
         assert file_name.exists()
     except (KeyboardInterrupt, deploy.FinishedException):
         # This is how the deploy command ends
@@ -49,8 +52,8 @@ def test_deploy(io_loop, snippetcompiler, tmpdir, mongo_db, motor):
         run.stop()
 
 
-@pytest.mark.gen_test(timeout=10)
-def test_fork(server, io_loop):
+@pytest.mark.asyncio(timeout=10)
+async def test_fork(server):
     """
         This test should not fail. Some Subprocess'es can make the ioloop hang, this tests fails when that happens.
     """
@@ -58,4 +61,4 @@ def test_fork(server, io_loop):
     while i < 5:
         i += 1
         sub_process = process.Subprocess(["true"])
-        yield sub_process.wait_for_exit(raise_error=False)
+        await sub_process.wait_for_exit(raise_error=False)

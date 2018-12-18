@@ -23,6 +23,7 @@ import time
 import pytest
 import re
 import pty
+import conftest
 
 
 def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False):
@@ -32,10 +33,16 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     for directory in [log_dir, state_dir]:
         os.mkdir(directory)
     config_file = os.path.join(root_dir, "inmanta.cfg")
+
+    port = conftest.get_free_tcp_port()
+
     with open(config_file, 'w+') as f:
         f.write("[config]\n")
         f.write("log-dir=" + log_dir + "\n")
         f.write("state-dir=" + state_dir + "\n")
+        f.write("[database]\n")
+        f.write("port-dir=" + str(port) + "\n")
+
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
         args.append("-" + "v" * stdout_log_level)
@@ -122,7 +129,8 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
         (stdout, _) = run_with_tty(args)
     else:
         (stdout, _) = run_without_tty(args)
-    assert os.listdir(log_dir) == []
+    log_file = "server.log"
+    assert log_file not in os.listdir(log_dir)
     assert len(stdout) != 0
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed)
 

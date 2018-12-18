@@ -20,22 +20,23 @@ import pytest
 from utils import retry_limited
 from inmanta.agent import reporting
 from inmanta.server import SLICE_SESSION_MANAGER
+from tornado.ioloop import IOLoop
 
 
 @pytest.mark.slowtest
-@pytest.mark.gen_test
-def test_agent_get_status(io_loop, server, environment):
-    myagent = agent.Agent(io_loop, hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
+@pytest.mark.asyncio
+async def test_agent_get_status(server, environment):
+    myagent = agent.Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                           code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()
 
-    yield retry_limited(lambda: len(server.get_endpoint(SLICE_SESSION_MANAGER)._sessions) == 1, 0.5)
+    await retry_limited(lambda: len(server.get_endpoint(SLICE_SESSION_MANAGER)._sessions) == 1, 0.5)
     clients = server.get_endpoint(SLICE_SESSION_MANAGER)._sessions.values()
     assert len(clients) == 1
     clients = [x for x in clients]
     client = clients[0].get_client()
-    status = yield client.get_status()
+    status = await client.get_status()
     status = status.get_result()
     for name in reporting.reports.keys():
         assert name in status and status[name] != "ERROR"

@@ -29,17 +29,14 @@ import pytest
 from inmanta import config, data, mongoproc
 import inmanta.compiler as compiler
 import pymongo
-from motor import motor_tornado
+from motor import motor_asyncio
 from inmanta.module import Project
 from inmanta import resources, export
 from inmanta.agent import handler
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
-from concurrent.futures.thread import ThreadPoolExecutor
-from tornado import gen
 import re
-from tornado.ioloop import IOLoop
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
@@ -124,16 +121,19 @@ def mongo_client(mongo_db):
 
 
 @pytest.fixture(scope="function")
-def motor(mongo_db, mongo_client, io_loop):
-    client = motor_tornado.MotorClient('localhost', int(mongo_db.port), io_loop=io_loop)
+def motor(mongo_db, mongo_client, event_loop):
+    """
+    Event_loop argument ensures this fixture is started after the eventloop is started
+    """
+    client = motor_asyncio.AsyncIOMotorClient('localhost', int(mongo_db.port))
     db = client["inmanta"]
     yield db
 
 
 @pytest.fixture(scope="function")
-def data_module(io_loop, motor):
+async def data_module(motor):
     data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    await data.create_indexes()
 
 
 def get_free_tcp_port():
@@ -169,10 +169,9 @@ def inmanta_config():
 
 
 @pytest.fixture(scope="function")
-def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
+async def server(inmanta_config, mongo_db, mongo_client, motor):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
-    IOLoop._instance = io_loop
 
     state_dir = tempfile.mkdtemp()
 
@@ -191,7 +190,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     config.Config.set("server", "agent-timeout", "10")
 
     data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    await data.create_indexes()
 
     ibl = InmantaBootloader()
     ibl.start()
@@ -199,7 +198,6 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
     yield ibl.restserver
 
     ibl.stop()
-    del IOLoop._instance
     shutil.rmtree(state_dir)
 
 
@@ -207,9 +205,7 @@ def server(inmanta_config, io_loop, mongo_db, mongo_client, motor):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor):
-    IOLoop._instance = io_loop
-
+async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -257,7 +253,7 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
     config.Config.set("server", "agent-timeout", "2")
 
     data.use_motor(motor)
-    io_loop.run_sync(data.create_indexes)
+    await data.create_indexes()
 
     ibl = InmantaBootloader()
     ibl.start()
@@ -265,11 +261,6 @@ def server_multi(inmanta_config, io_loop, mongo_db, mongo_client, request, motor
     yield ibl.restserver
 
     ibl.stop()
-
-    try:
-        del IOLoop._instance
-    except Exception:
-        pass
 
     shutil.rmtree(state_dir)
 
@@ -293,21 +284,21 @@ def client_multi(server_multi):
 
 
 @pytest.fixture(scope="function")
-def environment(client, server, io_loop):
+async def environment(client, server):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
     def create_project():
         return client.create_project("env-test")
 
-    result = io_loop.run_sync(create_project)
+    result = await create_project()
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
     def create_env():
         return client.create_environment(project_id=project_id, name="dev")
 
-    result = io_loop.run_sync(create_env)
+    result = await create_env()
     env_id = result.result["environment"]["id"]
 
     cfg_env.set(env_id)
@@ -316,21 +307,21 @@ def environment(client, server, io_loop):
 
 
 @pytest.fixture(scope="function")
-def environment_multi(client_multi, server_multi, io_loop):
+async def environment_multi(client_multi, server_multi):
     """
         Create a project and environment. This fixture returns the uuid of the environment
     """
     def create_project():
         return client_multi.create_project("env-test")
 
-    result = io_loop.run_sync(create_project)
+    result = await create_project()
     assert(result.code == 200)
     project_id = result.result["project"]["id"]
 
     def create_env():
         return client_multi.create_environment(project_id=project_id, name="dev")
 
-    result = io_loop.run_sync(create_env)
+    result = await create_env()
     env_id = result.result["environment"]["id"]
 
     yield env_id
@@ -362,6 +353,10 @@ def pytest_runtest_makereport(item, call):
             # we are behind report formatting, so write to report, not item
             rep.sections.append(("Resources Kept", "\n".join(
                 ["%s %s" % (label, resource) for label, resource in resources.items()])))
+
+
+async def off_main_thread(func):
+    return await asyncio.get_event_loop().run_in_executor(None, func)
 
 
 class SnippetCompilationTest(KeepOnFail):
@@ -414,7 +409,14 @@ class SnippetCompilationTest(KeepOnFail):
 
         Project.set(Project(self.project_dir, autostd=autostd))
 
-    def do_export(self, deploy=False, include_status=False, do_raise=True):
+    def do_export(self, include_status=False, do_raise=True):
+        return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
+
+    def _do_export(self, deploy=False, include_status=False, do_raise=True):
+        """
+        helper function to allow actual export to be run an a different thread
+        i.e. export.run must run off main thread to allow it to start a new ioloop for run_sync
+        """
         templfile = mktemp("json", "dump", self.project_dir)
 
         class Options(object):
@@ -439,9 +441,12 @@ class SnippetCompilationTest(KeepOnFail):
 
         # Even if the compile failed we might have collected additional data such as unknowns. So
         # continue the export
-
         export = Exporter(options)
+
         return export.run(types, scopes, model_export=False, include_status=include_status)
+
+    async def do_export_and_deploy(self, include_status=False, do_raise=True):
+        return await off_main_thread(lambda: self._do_export(deploy=True, include_status=include_status, do_raise=do_raise))
 
     def setup_for_error(self, snippet, shouldbe):
         self.setup_for_snippet(snippet)
@@ -482,23 +487,23 @@ def snippetcompiler(snippetcompiler_global):
 
 
 class CLI(object):
-
-    def __init__(self, io_loop):
-        self.io_loop = io_loop
-        self._thread_pool = ThreadPoolExecutor(1)
-
-    @gen.coroutine
-    def run(self, *args):
+    async def run(self, *args):
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
         cmd_args.extend(args)
-        result = yield self._thread_pool.submit(runner.invoke, cli=inmanta.main.cmd, args=cmd_args, obj=self.io_loop,
-                                                catch_exceptions=False)
-        return result
+
+        def invoke():
+            return runner.invoke(
+                cli=inmanta.main.cmd,
+                args=cmd_args,
+                catch_exceptions=False
+            )
+
+        return await asyncio.get_event_loop().run_in_executor(None, invoke)
 
 
 @pytest.fixture
-def cli(io_loop):
-    o = CLI(io_loop)
+def cli():
+    o = CLI()
     yield o
