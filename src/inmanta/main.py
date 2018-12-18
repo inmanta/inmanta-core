@@ -36,15 +36,7 @@ from time import sleep
 class Client(object):
     log = logging.getLogger(__name__)
 
-    def __init__(self, host, port, io_loop):
-        self._client = None
-        if io_loop is not None:
-            self._io_loop = io_loop
-            self._own_loop = False
-        else:
-            self._io_loop = IOLoop.current()
-            self._own_loop = True
-
+    def __init__(self, host, port):
         if host is None:
             self.host = cmdline_rest_transport.host.get()
         else:
@@ -57,34 +49,7 @@ class Client(object):
             self.port = port
             Config.set("cmdline_rest_transport", "port", str(port))
 
-        self._client = protocol.Client("cmdline")
-
-    def run_sync(self, func):
-        if self._own_loop:
-            return self._io_loop.run_sync(func)
-
-        else:
-            f = Future()
-
-            def future_to_future(future):
-                exc = future.exception()
-                if exc is not None:
-                    f.set_exception(exc)
-                else:
-                    f.set_result(future.result())
-
-            def run():
-                try:
-                    result = func()
-                    if result is not None:
-                        from tornado.gen import convert_yielded
-                        result = convert_yielded(result)
-                        result.add_done_callback(future_to_future)
-                except Exception as e:
-                    f.set_exception(e)
-            self._io_loop.add_callback(run)
-
-            return f.result()
+        self._client = protocol.SyncClient("cmdline")
 
     def do_request(self, method_name, key_name=None, arguments={}, allow_none=False):
         """
@@ -97,11 +62,7 @@ class Client(object):
             raise Exception("API call %s is not available." % method_name)
 
         method = getattr(self._client, method_name)
-
-        def call():
-            return method(**arguments)
-
-        result = self.run_sync(call)
+        result = method(**arguments)
 
         if result is None:
             raise Exception("Failed to call server.")
@@ -226,7 +187,7 @@ def print_table(header, rows, data_type=None):
 @click.option("--port", help="The server port to connect to")
 @click.pass_context
 def cmd(ctx, host, port):
-    ctx.obj = Client(host, port, io_loop=ctx.obj)
+    ctx.obj = Client(host, port)
 
 
 @cmd.group("project")
