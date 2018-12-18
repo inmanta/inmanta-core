@@ -181,6 +181,8 @@ async def test_timeout(unused_tcp_port):
 
     free_port = str(unused_tcp_port)
 
+    free_port = str(unused_tcp_port)
+
     # start server
     Config.load_config()
     Config.set("server_rest_transport", "port", free_port)
