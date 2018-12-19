@@ -43,9 +43,10 @@ from tornado import process
 import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import asyncpg
-from inmanta.mongoproc import PostgresProc
+from inmanta.postgresproc import PostgresProc
 import sys
 import pkg_resources
+from tornado.ioloop import IOLoop
 
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
@@ -74,12 +75,12 @@ def postgres_db(postgresql_proc):
 
 
 @pytest.fixture
-async def postgresql_client(postgres_db, database_name, init_dataclasses):
-    connection_inmanta_db = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port,
-                                                  user=postgres_db.user, database=database_name)
-    yield connection_inmanta_db
-    await connection_inmanta_db.close()
-
+async def postgresql_client(postgres_db, database_name, clean_reset, create_schema):
+    client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
+    try:
+        yield client
+    finally:
+        await client.close()
 
 # @pytest.fixture(scope="session")
 # def mongo_client(mongo_db):
@@ -90,22 +91,19 @@ async def postgresql_client(postgres_db, database_name, init_dataclasses):
 #     return pymongo.MongoClient(port=port)
 
 
-@pytest.fixture(scope="function")
-async def init_dataclasses(postgres_db, database_name):
-    connection_postgres = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
-    await connection_postgres.execute("DROP DATABASE IF EXISTS " + database_name)
-    await connection_postgres.execute("CREATE DATABASE " + database_name)
-
+@pytest.fixture(scope="function", autouse=True)
+async def init_dataclasses(postgres_db, database_name, clean_reset, create_schema):
     pool = await asyncpg.create_pool(host=postgres_db.host, port=postgres_db.port,
                                      user=postgres_db.user, database=database_name)
-    async with pool.acquire() as con:
-        await data.load_schema(con)
-    data.set_connection_pool(pool)
-    yield
-    await pool.close()
+    # try:
+    #     data.set_connection_pool(pool)
+    #     yield
+    # finally:
+    #     print("CLEANING CONNECTION POOL")
+    #     data.set_connection_pool(None)
+    #     await pool.close()
 
-    await connection_postgres.execute("DROP DATABASE " + database_name)
-    await connection_postgres.close()
+    data.set_connection_pool(pool)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -122,7 +120,7 @@ def deactive_venv():
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
-def reset_all():
+def reset_all_objects():
     resources.resource.reset()
     export.Exporter.reset()
     process.Subprocess.uninitialize()
@@ -144,11 +142,45 @@ def reset_all():
 
 
 @pytest.fixture(scope="function", autouse=True)
-async def clean_reset(postgresql_client, database_name):
-    reset_all()
-    await data.load_schema(postgresql_client)
+async def create_schema(postgres_db, database_name, clean_reset):
+    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port,
+                                       user=postgres_db.user, database=database_name)
+    try:
+        await data.load_schema(connection)
+    finally:
+        await connection.close()
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def clean_reset(postgres_db, database_name):
+    reset_all_objects()
+    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
+    try:
+        await connection.execute("DROP DATABASE IF EXISTS " + database_name)
+        await connection.execute("CREATE DATABASE " + database_name)
+        yield
+        # tasks = asyncio.Task.all_tasks()
+        # (_, pending) = await asyncio.wait(tasks, timeout=10)
+        # if len(pending) != 0:
+        #     for task in tasks:
+        #         print(task)
+        #     raise Exception("Pending tasks are stuck in the event loop")
+        await data.close_connection_pool()
+        config.Config._reset()
+        await connection.execute("DROP DATABASE " + database_name)
+    finally:
+        await connection.close()
+    reset_all_objects()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def fix_cwd():
+    """
+        Restore the current working directory after search test.
+    """
+    cwd = os.getcwd()
     yield
-    reset_all()
+    os.chdir(cwd)
 
 # @pytest.fixture(scope="function", autouse=True)
 # def clean_reset(mongo_client):
@@ -209,7 +241,6 @@ def inmanta_config():
     config.Config.set("auth_jwt_default", "audience", "https://localhost:8888/")
 
     yield config.Config._get_instance()
-    config.Config._reset()
 
 
 @pytest.fixture(scope="function")
@@ -219,7 +250,7 @@ def database_name():
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, io_loop, postgres_db, postgresql_client, database_name, motor):
+async def server(inmanta_config, postgres_db, init_dataclasses, database_name):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -256,7 +287,7 @@ async def server(inmanta_config, io_loop, postgres_db, postgresql_client, databa
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, io_loop, postgres_db, postgresql_client, database_name, request, motor):
+async def server_multi(inmanta_config, postgres_db, init_dataclasses, database_name, request):
 
     state_dir = tempfile.mkdtemp()
 
@@ -560,8 +591,7 @@ def cli():
 
 
 @pytest.fixture
-def postgres_proc():
-    port = 15432
-    proc = PostgresProc(port)
+def postgres_proc(free_port):
+    proc = PostgresProc(int(free_port))
     yield proc
     proc.stop()

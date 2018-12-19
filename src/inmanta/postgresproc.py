@@ -104,6 +104,7 @@ class DbProc(object):
         self.stop()
 
 
+# TODO: Remove
 class MongoProc(DbProc):
     """
         Class to start and manage a mongodb server process

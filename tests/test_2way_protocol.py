@@ -92,7 +92,7 @@ importlib.reload(server.protocol)
 
 
 async def get_environment(env: uuid.UUID, metadata: dict):
-    return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
+    return data.Environment(from_postgres=True, id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -135,7 +135,6 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
     ENV_ARG["getter"] = get_environment
 
     try:
-        io_loop = IOLoop.current()
         rs = RESTServer()
         server = SessionSpy()
         rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
@@ -157,7 +156,6 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
         assert len(status.result["agents"]) == 1
         assert status.result["agents"][0]["status"], "ok"
         server.stop()
-        io_loop.stop()
 
         rs.stop()
         agent.stop()
@@ -246,6 +244,5 @@ async def test_timeout(unused_tcp_port):
         server.stop()
 
         rs.stop()
-        agent.stop()
     finally:
         ENV_ARG["getter"] = old_get_env

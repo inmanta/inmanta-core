@@ -23,7 +23,7 @@ import sys
 import time
 import socket
 
-from inmanta import module, config, protocol, const, data_pg as data, mongoproc
+from inmanta import module, config, protocol, const, data_pg as data, postgresproc
 
 
 LOGGER = logging.getLogger(__name__)
@@ -134,8 +134,8 @@ port=%(server_port)s
 
             self._mongoport = PORT_START + random.randint(0, 2000)
             mongo_dir = os.path.join(self._data_path, "mongo")
-            self._mongoproc = mongoproc.MongoProc(db_path=mongo_dir, port=self._mongoport,
-                                                  log_path=os.path.join(log_dir, "mongod.log"))
+            self._mongoproc = postgresproc.MongoProc(db_path=mongo_dir, port=self._mongoport,
+                                                     log_path=os.path.join(log_dir, "mongod.log"))
             LOGGER.debug("Starting mongodb on port %d", self._mongoport)
             if not self._mongoproc.start():
                 LOGGER.error("Unable to start mongodb instance on port %d and data directory %s", self._mongoport, mongo_dir)

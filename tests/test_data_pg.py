@@ -25,8 +25,6 @@ from inmanta import data_pg as data, const
 
 from inmanta.const import LogLevel
 
-SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
-
 
 @pytest.mark.asyncio
 async def test_postgres_client(postgresql_client):

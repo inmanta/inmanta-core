@@ -68,10 +68,11 @@ class MockSession(object):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_primary_selection(motor):
-    data.use_motor(motor)
+async def test_primary_selection(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
 
-    env = data.Environment(name="testenv", project=uuid4())
+    env = data.Environment(name="testenv", project=project.id)
     await env.insert()
 
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
@@ -146,13 +147,16 @@ async def test_primary_selection(motor):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_api(motor):
-    data.use_motor(motor)
+async def test_api(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
 
-    env = data.Environment(name="testenv", project=uuid4())
+    env = data.Environment(name="testenv", project=project.id)
     await env.insert()
-    env2 = data.Environment(name="testenv2", project=uuid4())
+    env2 = data.Environment(name="testenv2", project=project.id)
     await env2.insert()
+    env3 = data.Environment(name="testenv3", project=project.id)
+    await env3.insert()
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
@@ -171,8 +175,7 @@ async def test_api(motor):
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     # third session
-    env3 = uuid4()
-    ts3 = MockSession(uuid4(), env3, ["agentx"], "ts3")
+    ts3 = MockSession(uuid4(), env3.id, ["agentx"], "ts3")
     am.new_session(ts3)
 
     await futures.proccess()
@@ -194,7 +197,7 @@ async def test_api(motor):
                               {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
-                               'environment': env3}]}
+                               'environment': env3.id}]}
 
     assert_equal_ish(shouldbe, all_agents, ['hostname', 'name'])
     agentid = all_agents['processes'][0]['id']
@@ -253,10 +256,11 @@ async def test_api(motor):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_db_clean(motor):
-    data.use_motor(motor)
+async def test_db_clean(init_dataclasses):
+    project = data.Project(name="test")
+    await project.insert()
 
-    env = data.Environment(name="testenv", project=uuid4())
+    env = data.Environment(name="testenv", project=project.id)
     await env.insert()
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()

@@ -35,10 +35,12 @@ from inmanta.module import Project
 class CompilerBaseTest(object):
 
     def __init__(self, name, mainfile=None):
+        config.Config.load_config()
         self.project_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", name)
         if not os.path.isdir(self.project_dir):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
         self.mainfile = mainfile
+
 
     def setUp(self):
         project = Project(self.project_dir, autostd=False)

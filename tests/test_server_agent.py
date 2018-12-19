@@ -471,6 +471,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
+
     assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
     assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
     assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
@@ -639,7 +640,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_server_restart(resource_container, server, mongo_db, client):
+async def test_server_restart(resource_container, server, postgres_db, client):
     """
         dryrun and deploy a configuration model
     """

@@ -17,6 +17,7 @@
 """
 
 import socket
+import os
 
 
 def test_basic_case(postgres_proc):
