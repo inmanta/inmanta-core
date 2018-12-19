@@ -73,6 +73,20 @@ def run_without_tty(args):
 
 def run_with_tty(args):
 
+    def read_lines(fd, n):
+        result = ""
+        while len(result.split("\n"))<n:
+            try:
+                data = os.read(fd, 1)
+            except OSError:
+                break
+            if data == "":
+                assert False, "Not enough lines: " % result
+            result += data.decode('ascii')
+        # wait some more to make sure we have enough
+        time.sleep(1)
+        return result
+
     def read(fd):
         result = ""
         while True:
@@ -88,9 +102,9 @@ def run_with_tty(args):
     master, slave = pty.openpty()
     process = subprocess.Popen(' '.join(args), stdin=slave, stdout=slave, stderr=slave, shell=True)
     os.close(slave)
-    time.sleep(2)  # Wait for some log lines
+    stdout = read_lines(master, 5)
     process.kill()
-    stdout = read(master)
+    stdout += read(master)
     stdout = stdout.split('\n')
     os.close(master)
     process.wait()
