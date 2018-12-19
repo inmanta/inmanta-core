@@ -61,16 +61,39 @@ def run_without_tty(args):
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     time.sleep(2)
     process.kill()
+    out, err = process.communicate()
 
-    def convert_to_ascii(lines):
-        return [line.decode('ascii') for line in lines if line != ""]
+    def convert_to_ascii(text):
+        return [line for line in out.decode("ascii").split("\n") if line != ""]
 
-    stdout = convert_to_ascii(process.stdout.readlines())
-    stderr = convert_to_ascii(process.stderr.readlines())
+    stdout = convert_to_ascii(out)
+    stderr = convert_to_ascii(err)
     return (stdout, stderr)
 
 
 def run_with_tty(args):
+    # difficulty with this test case is that it is unclear
+    #  1 - when we have enough data
+    #  2 - when the server has started
+    # the logs are too indeterministic to cleanly define how many lines
+    # and performance is too machine dependant to know how long to wait
+    #
+    # as such, we read 5 lines to make sure the server started to produce log lines
+    # and one additional second to ensure the server has outputted the relevant log lines
+    # this is likely to break
+    def read_lines(fd, n):
+        result = ""
+        while len(result.split("\n")) < n:
+            try:
+                data = os.read(fd, 1)
+            except OSError:
+                break
+            if data == "":
+                assert False, "Not enough lines: " % result
+            result += data.decode('ascii')
+        # wait some more to make sure we have enough
+        time.sleep(1)
+        return result
 
     def read(fd):
         result = ""
@@ -87,11 +110,12 @@ def run_with_tty(args):
     master, slave = pty.openpty()
     process = subprocess.Popen(' '.join(args), stdin=slave, stdout=slave, stderr=slave, shell=True)
     os.close(slave)
-    time.sleep(2)  # Wait for some log lines
+    stdout = read_lines(master, 5)
     process.kill()
-    stdout = read(master)
+    stdout += read(master)
     stdout = stdout.split('\n')
     os.close(master)
+    process.wait()
     return (stdout, '')
 
 
