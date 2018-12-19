@@ -61,12 +61,13 @@ def run_without_tty(args):
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     time.sleep(2)
     process.kill()
+    out, err = process.communicate()
 
-    def convert_to_ascii(lines):
-        return [line.decode('ascii') for line in lines if line != ""]
+    def convert_to_ascii(text):
+        return [line for line in out.decode("ascii").split("\n") if line != ""]
 
-    stdout = convert_to_ascii(process.stdout.readlines())
-    stderr = convert_to_ascii(process.stderr.readlines())
+    stdout = convert_to_ascii(out)
+    stderr = convert_to_ascii(err)
     return (stdout, stderr)
 
 
@@ -92,6 +93,7 @@ def run_with_tty(args):
     stdout = read(master)
     stdout = stdout.split('\n')
     os.close(master)
+    process.wait()
     return (stdout, '')
 
 
