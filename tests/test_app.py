@@ -72,10 +72,18 @@ def run_without_tty(args):
 
 
 def run_with_tty(args):
-
+    # difficulty with this test case is that it is unclear
+    #  1 - when we have enough data
+    #  2 - when the server has started
+    # the logs are too indeterministic to cleanly define how many lines
+    # and performance is too machine dependant to know how long to wait
+    #
+    # as such, we read 5 lines to make sure the server started to produce log lines
+    # and one additional second to ensure the server has outputted the relevant log lines
+    # this is likely to break
     def read_lines(fd, n):
         result = ""
-        while len(result.split("\n"))<n:
+        while len(result.split("\n")) < n:
             try:
                 data = os.read(fd, 1)
             except OSError:
