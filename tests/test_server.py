@@ -272,6 +272,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
     result = await client_multi.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
+    agent.stop()
 
 
 @pytest.mark.asyncio(timeout=10)
@@ -384,6 +385,7 @@ async def test_resource_update(client, server, environment):
     result = await client.get_version(environment, version)
     assert(result.code == 200)
     assert result.result["model"]["done"] == 10
+    agent.stop()
 
 
 @pytest.mark.asyncio
@@ -563,6 +565,7 @@ async def test_purge_on_delete_requires(client, server, environment):
 
     assert len(file2["attributes"]["requires"]) == 0
     assert file1["id"] in file2["provides"]
+    agent.stop()
 
 
 @pytest.mark.asyncio(timeout=20)
@@ -681,6 +684,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 0
+    agent.stop()
 
 
 @pytest.mark.asyncio
@@ -787,6 +791,7 @@ async def test_purge_on_delete(client, server, environment):
     assert file1["attributes"]["purged"]
     assert file2["attributes"]["purged"]
     assert not file3["attributes"]["purged"]
+    agent.stop()
 
 
 @pytest.mark.asyncio
@@ -880,6 +885,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
+    agent.stop()
 
 
 @pytest.mark.asyncio
