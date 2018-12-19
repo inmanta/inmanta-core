@@ -37,7 +37,7 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
-    from typing import Set
+    from typing import Set  # noqa: F401
 
 
 class SubConstructor(GeneratorStatement):

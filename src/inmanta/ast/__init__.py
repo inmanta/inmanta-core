@@ -240,10 +240,10 @@ class Namespace(Namespaced):
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,NamedType]
         if self.__parent is not None:
-            self.visible_namespaces = {self.get_full_name(): MockImport(self)} # type: Dict[str, Import]
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)}  # type: Dict[str, Import]
             self.__parent.add_child(self)
         else:
-            self.visible_namespaces = {name: MockImport(self)} # type: Dict[str, Import]
+            self.visible_namespaces = {name: MockImport(self)}  # type: Dict[str, Import]
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
 
@@ -303,7 +303,7 @@ class Namespace(Namespaced):
         elif name in self.primitives:
             return self.primitives[name]
         else:
-            cns = self # type: Optional[Namespace]
+            cns = self  # type: Optional[Namespace]
             while cns is not None:
                 if name in cns.defines_types:
                     return cns.defines_types[name]

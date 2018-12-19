@@ -37,7 +37,7 @@ class ResultCollector(object):
         Helper interface for gradual execution
     """
 
-    def receive_result(self, value: object, location:Location) -> None:
+    def receive_result(self, value: object, location: Location) -> None:
         """
             receive a possibly partial result
         """
@@ -62,7 +62,7 @@ class ResultVariable(ResultCollector):
         self.waiters = []
         self.value = value
         self.hasValue = False
-        self.type = None # type: Optional[Type]
+        self.type = None  # type: Optional[Type]
 
     def set_type(self, mytype: Type):
         self.type = mytype
