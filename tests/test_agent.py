@@ -20,14 +20,12 @@ import pytest
 from utils import retry_limited
 from inmanta.agent import reporting
 from inmanta.server import SLICE_SESSION_MANAGER
-from tornado.ioloop import IOLoop
 
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio
 async def test_agent_get_status(server, environment):
-    myagent = agent.Agent(IOLoop.current(), hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                          code_loader=False)
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.start()
 

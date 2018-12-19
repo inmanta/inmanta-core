@@ -30,7 +30,6 @@ from uuid import UUID
 from inmanta.export import upload_code
 from inmanta.util import hash_file
 from inmanta.export import unknown_parameters
-from tornado.ioloop import IOLoop
 import asyncio
 
 LOGGER = logging.getLogger(__name__)
@@ -187,7 +186,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
     """
         Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent(IOLoop.current(), "localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -310,7 +309,7 @@ async def test_resource_update(client, server, environment):
     """
         Test updating resources and logging
     """
-    agent = Agent(IOLoop.current(), "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -481,7 +480,7 @@ async def test_purge_on_delete_requires(client, server, environment):
     """
         Test purge on delete of resources and inversion of requires
     """
-    agent = Agent(IOLoop.current(), "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -601,7 +600,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     """
         Test purge on delete of resources
     """
-    agent = Agent(IOLoop.current(), "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -689,7 +688,7 @@ async def test_purge_on_delete(client, server, environment):
     """
         Test purge on delete of resources
     """
-    agent = Agent(IOLoop.current(), "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -795,7 +794,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     """
         Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
-    agent = Agent(IOLoop.current(), "localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
     agent.start()
     aclient = agent._client
 
@@ -950,7 +949,7 @@ async def test_code_upload(motor, server_multi, client_multi, environment):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_batched_code_upload(motor, server_multi, client_multi, environment):
+async def test_batched_code_upload(motor, server_multi, client_multi, sync_client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -983,7 +982,7 @@ async def test_batched_code_upload(motor, server_multi, client_multi, environmen
                "std:xxx": csources
                }
 
-    await upload_code(client_multi, environment, version, sources)
+    await asyncio.get_event_loop().run_in_executor(None, lambda: upload_code(sync_client_multi, environment, version, sources))
 
     agent = protocol.Client("agent")
 

@@ -9,6 +9,7 @@ Changes in this release:
 - Use files for all logs and split out logs, stdout and stderr in autostarted agents (#824, #234)
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
+- Remove all io_loop references and only use current ioloop (#847)
 
 v 2018.3 (2018-12-07)
 Changes in this release:

@@ -35,7 +35,6 @@ import subprocess
 import uuid
 from inmanta.server.protocol import ServerSlice
 from inmanta.server import config as opt
-from tornado.ioloop import IOLoop
 from inmanta.protocol import encode_token
 from inmanta.resources import Id
 
@@ -86,7 +85,7 @@ class AgentManager(ServerSlice):
     '''
 
     def __init__(self, restserver, closesessionsonstart=True, fact_back_off=None):
-        super(AgentManager, self).__init__(IOLoop.current(), SLICE_AGENT_MANAGER)
+        super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
         self.restserver = restserver
 
         if fact_back_off is None:

@@ -31,9 +31,7 @@ import uuid
 
 import dateutil
 import pymongo
-from tornado import gen
-from tornado import locks
-from tornado import process
+from tornado import gen, locks, process, ioloop
 
 from inmanta import const
 from inmanta import data, config
@@ -59,8 +57,8 @@ class Server(protocol.ServerSlice):
         information
     """
 
-    def __init__(self, io_loop, database_host=None, database_port=None, agent_no_log=False):
-        super().__init__(io_loop=io_loop, name=SLICE_SERVER)
+    def __init__(self, database_host=None, database_port=None, agent_no_log=False):
+        super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
         self._server_storage = self.check_storage()
@@ -73,10 +71,10 @@ class Server(protocol.ServerSlice):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        data.connect(database_host, database_port, opt.db_name.get(), self._io_loop)
+        data.connect(database_host, database_port, opt.db_name.get())
         LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
 
-        self._io_loop.add_callback(data.create_indexes)
+        ioloop.IOLoop.current().add_callback(data.create_indexes)
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
@@ -84,7 +82,7 @@ class Server(protocol.ServerSlice):
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
 
-        self._io_loop.add_callback(self._purge_versions)
+        ioloop.IOLoop.current().add_callback(self._purge_versions)
 
         self._recompiles = defaultdict(lambda: None)
 
@@ -1459,7 +1457,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
             self._recompiles[env.id] = self
-            self._io_loop.add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
+            ioloop.IOLoop.current().add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
         else:
             LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
 

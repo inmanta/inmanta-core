@@ -637,14 +637,14 @@ class Agent(AgentEndPoint):
         message bus for changes.
     """
 
-    def __init__(self, io_loop, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1,
+    def __init__(self, hostname=None, agent_map=None, code_loader=True, environment=None, poolsize=1,
                  cricital_pool_size=5):
-        super().__init__("agent", io_loop, timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
+        super().__init__("agent", timeout=cfg.server_timeout.get(), reconnect_delay=cfg.agent_reconnect_delay.get())
 
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
         self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
-        self._sched = Scheduler(io_loop=self._io_loop)
+        self._sched = Scheduler()
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
         if agent_map is None:

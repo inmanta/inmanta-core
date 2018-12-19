@@ -728,11 +728,10 @@ class Endpoint(object):
         An end-point in the rpc framework
     """
 
-    def __init__(self, io_loop, name):
+    def __init__(self, name):
         self._name = name
         self._node_name = inmanta_config.nodename.get()
         self._end_point_names = []
-        self._io_loop = io_loop
 
     def add_future(self, future):
         """
@@ -744,7 +743,7 @@ class Endpoint(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        self._io_loop.add_future(future, handle_result)
+        IOLoop.current().add_future(future, handle_result)
 
     def get_end_point_names(self):
         return self._end_point_names
@@ -782,11 +781,11 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
-    def __init__(self, name, io_loop, timeout=120, transport=RESTTransport, reconnect_delay=5):
-        super().__init__(io_loop, name)
+    def __init__(self, name, timeout=120, transport=RESTTransport, reconnect_delay=5):
+        super().__init__(name)
         self._transport = transport
         self._client = None
-        self._sched = Scheduler(self._io_loop)
+        self._sched = Scheduler()
 
         self._env_id = None
 
@@ -816,7 +815,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
-        self._io_loop.add_callback(self.perform_heartbeat)
+        IOLoop.current().add_callback(self.perform_heartbeat)
 
     def stop(self):
         self.running = False
@@ -895,7 +894,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
                                          {"result": result_body, "code": status})
 
-        self._io_loop.add_future(call_result, submit_result)
+        IOLoop.current().add_future(call_result, submit_result)
 
 
 class ClientMeta(type):
@@ -931,10 +930,8 @@ class Client(Endpoint, metaclass=ClientMeta):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, ioloop=None, transport=RESTTransport):
-        if ioloop is None:
-            ioloop = IOLoop.current()
-        Endpoint.__init__(self, ioloop, name)
+    def __init__(self, name, transport=RESTTransport):
+        Endpoint.__init__(self, name)
         self._transport = transport
         self._transport_instance = None
 
@@ -982,10 +979,8 @@ class AgentClient(Endpoint, metaclass=ClientMeta):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, sid, ioloop=None, transport=RESTTransport, timeout=120):
-        if ioloop is None:
-            ioloop = IOLoop.current()
-        Endpoint.__init__(self, ioloop, name)
+    def __init__(self, name, sid, transport=RESTTransport, timeout=120):
+        Endpoint.__init__(self, name)
         self._transport = transport
         self._transport_instance = None
         self._sid = sid

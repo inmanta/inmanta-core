@@ -19,7 +19,7 @@ import os
 import collections
 
 from inmanta import deploy
-from tornado import process, ioloop
+from tornado import process
 import pytest
 
 
@@ -39,7 +39,7 @@ async def test_deploy(snippetcompiler, tmpdir, mongo_db, motor):
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
-    run = deploy.Deploy(ioloop.IOLoop.current(), mongoport=mongo_db.port)
+    run = deploy.Deploy(mongoport=mongo_db.port)
     try:
         run.run(options, only_setup=True)
         await run.do_deploy(False, "")
