@@ -194,7 +194,10 @@ class AttributeReferenceAnchor(Anchor):
         self.attribute = attribute
 
     def resolve(self) -> Location:
-        return self.namespace.get_type(self.type).get_attribute(self.attribute).get_location()
+        instancetype = self.namespace.get_type(self.type)
+        # type check impossible atm due to import loop
+        # assert isinstance(instancetype, Entity)
+        return instancetype.get_attribute(self.attribute).get_location()
 
 
 class Namespaced(Locatable):
@@ -211,7 +214,14 @@ class Named(Namespaced):
         raise NotImplementedError()
 
 
-class MockImport(Locatable):
+class Import(Locatable):
+
+    def __init__(self, target: "Namespace") -> None:
+        Locatable.__init__(self)
+        self.target = target
+
+
+class MockImport(Import):
 
     def __init__(self, target: "Namespace") -> None:
         Locatable.__init__(self)
@@ -223,19 +233,17 @@ class Namespace(Namespaced):
         This class models a namespace that contains defined types, modules, ...
     """
 
-    def __init__(self, name: str, parent: "Optional[Namespace]"=None) -> None:
+    def __init__(self, name: str, parent: "Optional[Namespace]" = None) -> None:
         Namespaced.__init__(self)
         self.__name = name
         self.__parent = parent
         self.__children = {}  # type: Dict[str,Namespace]
         self.defines_types = {}  # type: Dict[str,NamedType]
         if self.__parent is not None:
-            # type: Dict[str,Union[DefineImport, MockImport]]
-            self.visible_namespaces = {self.get_full_name(): MockImport(self)}
+            self.visible_namespaces = {self.get_full_name(): MockImport(self)} # type: Dict[str, Import]
             self.__parent.add_child(self)
         else:
-            # type: Dict[str,Union[DefineImport, MockImport]]
-            self.visible_namespaces = {name: MockImport(self)}
+            self.visible_namespaces = {name: MockImport(self)} # type: Dict[str, Import]
         self.primitives = None  # type: Optional[Dict[str,Type]]
         self.scope = None  # type:  Optional[ExecutionContext]
 
@@ -244,7 +252,18 @@ class Namespace(Namespaced):
         for child in self.children():
             child.set_primitives(primitives)
 
-        self.visible_namespaces["std"] = MockImport(self.get_ns_from_string("std"))
+        std = self.get_ns_from_string("std")
+        assert std is not None
+
+        self.visible_namespaces["std"] = MockImport(std)
+
+    def get_primitives(self) -> "Dict[str,Type]":
+        assert self.primitives is not None
+        return self.primitives
+
+    def get_scope(self) -> "ExecutionContext":
+        assert self.scope is not None
+        return self.scope
 
     def define_type(self, name: str, newtype: "NamedType") -> None:
         if name in self.defines_types:
@@ -260,16 +279,17 @@ class Namespace(Namespaced):
 
     def lookup(self, name: str) -> "Type":
         if "::" not in name:
-            return self.scope.direct_lookup(name)
+            return self.get_scope().direct_lookup(name)
 
         parts = name.rsplit("::", 1)
 
         if parts[0] not in self.visible_namespaces:
             raise NotFoundException(None, name, "Variable %s not found" % parts[0])
 
-        return self.visible_namespaces[parts[0]].target.scope.direct_lookup(parts[1])
+        return self.visible_namespaces[parts[0]].target.get_scope().direct_lookup(parts[1])
 
-    def get_type(self, name: str) -> "NamedType":
+    def get_type(self, name: str) -> "Type":
+        assert self.primitives is not None
         if "::" in name:
             parts = name.rsplit("::", 1)
             if parts[0] in self.visible_namespaces:
@@ -283,7 +303,7 @@ class Namespace(Namespaced):
         elif name in self.primitives:
             return self.primitives[name]
         else:
-            cns = self
+            cns = self # type: Optional[Namespace]
             while cns is not None:
                 if name in cns.defines_types:
                     return cns.defines_types[name]
@@ -316,7 +336,7 @@ class Namespace(Namespaced):
         self.__parent = parent
         self.__parent.add_child(self)
 
-    def get_parent(self) -> "Namespace":
+    def get_parent(self) -> "Optional[Namespace]":
         """
             Get the parent namespace
         """
@@ -360,7 +380,7 @@ class Namespace(Namespaced):
 
         return children
 
-    def get_child(self, name: str) -> "Namespace":
+    def get_child(self, name: str) -> "Optional[Namespace]":
         """
             Returns the child namespace with the given name or None if it does
             not exist.
@@ -388,10 +408,12 @@ class Namespace(Namespaced):
         if len(name_parts) == 1:
             parent = self.get_root()
         else:
-            parent = self.get_root()._get_ns(name_parts[:-1])
+            preparent = self.get_root()._get_ns(name_parts[:-1])
+            assert preparent is not None
+            parent = preparent
         return parent.get_child_or_create(name_parts[-1])
 
-    def get_ns_from_string(self, fqtn: str) -> "Namespace":
+    def get_ns_from_string(self, fqtn: str) -> "Optional[Namespace]":
         """
             Get the namespace that is referenced to in the given fully qualified
             type name.
@@ -401,7 +423,7 @@ class Namespace(Namespaced):
         name_parts = fqtn.split("::")
         return self.get_root()._get_ns(name_parts)
 
-    def _get_ns(self, ns_parts: List[str]) -> "Namespace":
+    def _get_ns(self, ns_parts: List[str]) -> "Optional[Namespace]":
         """
             Return the namespace indicated by the parts list. Each element of
             the array represents a level in the namespace hierarchy.
@@ -411,7 +433,10 @@ class Namespace(Namespaced):
         elif len(ns_parts) == 1:
             return self.get_child(ns_parts[0])
         else:
-            return self.get_child(ns_parts[0])._get_ns(ns_parts[1:])
+            child = self.get_child(ns_parts[0])
+            if child is None:
+                return None
+            return child._get_ns(ns_parts[1:])
 
     @util.memoize
     def to_path(self) -> List[str]:
@@ -432,9 +457,9 @@ class Namespace(Namespaced):
 
 class CompilerException(Exception):
 
-    def __init__(self, msg: str=None) -> None:
+    def __init__(self, msg: str) -> None:
         Exception.__init__(self, msg)
-        self.location = None  # type: Location
+        self.location = None  # type: Optional[Location]
         self.msg = msg
 
     def set_location(self, location: Location) -> None:
@@ -444,7 +469,7 @@ class CompilerException(Exception):
     def get_message(self) -> str:
         return self.msg
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Optional[Location]:
         return self.location
 
     def get_causes(self) -> "List[CompilerException]":
@@ -538,7 +563,7 @@ class WrappingRuntimeException(RuntimeException):
 
         RuntimeException.__init__(self, stmt=stmt, msg=msg)
 
-        self.__cause__ = cause
+        self.__cause__ = cause  # type: RuntimeException
 
     def get_causes(self) -> List[CompilerException]:
         return [self.__cause__]
@@ -605,7 +630,7 @@ class ModuleNotFoundException(RuntimeException):
 
 class NotFoundException(RuntimeException):
 
-    def __init__(self, stmt: "Statement", name: str, msg: "Optional[str]"=None) -> None:
+    def __init__(self, stmt: "Optional[Statement]", name: str, msg: "Optional[str]"=None) -> None:
         if msg is None:
             msg = "could not find value %s" % name
         RuntimeException.__init__(self, stmt, msg)

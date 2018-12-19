@@ -36,7 +36,8 @@ except ImportError:
     TYPE_CHECKING = False
 
 if TYPE_CHECKING:
-    from inmanta.ast.entity import Default, Entity, Implement  # noqa: F401
+    from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+    from typing import Set
 
 
 class SubConstructor(GeneratorStatement):
@@ -94,7 +95,7 @@ class GradualFor(ResultCollector):
         self.resolver = resolver
         self.queue = queue
         self.stmt = stmt
-        self.seen = set()
+        self.seen = set()  # type: Set[int]
 
     def receive_result(self, value, location):
         if id(value) in self.seen:
@@ -194,8 +195,8 @@ class Constructor(GeneratorStatement):
         for a in attributes:
             self.add_attribute(a[0], a[1])
 
-        self._direct_attributes = {}
-        self._indirect_attributes = {}
+        self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
+        self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
 
     def normalize(self) -> None:
         mytype = self.namespace.get_type(self.class_type)

@@ -23,13 +23,21 @@ from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException,
 from inmanta.ast.type import Type
 from typing import List, Dict, Any
 
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+
 
 class ResultCollector(object):
     """
         Helper interface for gradual execution
     """
 
-    def receive_result(self, value, location):
+    def receive_result(self, value: object, location:Location) -> None:
         """
             receive a possibly partial result
         """
@@ -54,7 +62,7 @@ class ResultVariable(ResultCollector):
         self.waiters = []
         self.value = value
         self.hasValue = False
-        self.type = None
+        self.type = None # type: Optional[Type]
 
     def set_type(self, mytype: Type):
         self.type = mytype
@@ -638,7 +646,7 @@ class Instance(ExecutionContext, Locatable, Resolver):
 
         self.locations = []
 
-    def get_type(self):
+    def get_type(self) -> "Entity":
         return self.type
 
     def set_attribute(self, name, value, location, recur=True):
