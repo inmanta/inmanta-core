@@ -41,7 +41,6 @@ class CompilerBaseTest(object):
             raise Exception("A compile test should set a valid project directory: %s does not exist" % self.project_dir)
         self.mainfile = mainfile
 
-
     def setUp(self):
         project = Project(self.project_dir, autostd=False)
         if self.mainfile is not None:

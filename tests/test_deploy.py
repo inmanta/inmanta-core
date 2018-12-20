@@ -25,7 +25,7 @@ import pytest
 
 @pytest.mark.skip(reason="very unstable test")
 @pytest.mark.asyncio(timeout=60)
-async def test_deploy(snippetcompiler, tmpdir, postgres_db, motor):
+async def test_deploy(snippetcompiler, tmpdir, postgres_db):
     file_name = tmpdir.join("test_file")
     snippetcompiler.setup_for_snippet(
         """

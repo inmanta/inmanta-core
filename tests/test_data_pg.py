@@ -1374,7 +1374,6 @@ async def test_compile_get_reports(init_dataclasses):
     assert retrieved_compiles[0]["id"] == compiles[0].id
     assert retrieved_compiles[1]["id"] == compiles[2].id
 
-    # TODO: start_time and end_time are not supported at the same time
     retrieved_compiles = await data.Compile.get_reports(env.id, limit, start_time, end_time)
     assert len(retrieved_compiles) == 1
     assert retrieved_compiles[0]["id"] == compiles[0].id

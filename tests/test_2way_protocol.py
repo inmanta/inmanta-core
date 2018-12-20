@@ -25,7 +25,6 @@ from inmanta import methods, data_pg as data
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
-from tornado.ioloop import IOLoop
 from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
 from inmanta.methods import ENV_ARG

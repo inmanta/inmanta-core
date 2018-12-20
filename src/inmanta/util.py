@@ -44,8 +44,6 @@ def memoize(obj):
 
 
 def get_compiler_version():
-    import pkg_resources
-    from pkg_resources import DistributionNotFound
     try:
         return pkg_resources.get_distribution("inmanta").version
     except DistributionNotFound:

@@ -23,7 +23,7 @@ import uuid
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data_pg as data, protocol, const, config
+from inmanta import data_pg as data, protocol, config
 from inmanta import const
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
@@ -184,7 +184,7 @@ async def test_version_removal(client, server):
 
 @pytest.mark.asyncio(timeout=30)
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(motor, server_multi, client_multi, environment):
+async def test_get_resource_for_agent(server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -923,7 +923,7 @@ def make_source(collector, filename, module, source, req):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_code_upload(motor, server_multi, client_multi, environment):
+async def test_code_upload(server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -957,7 +957,7 @@ async def test_code_upload(motor, server_multi, client_multi, environment):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_batched_code_upload(motor, server_multi, client_multi, sync_client_multi, environment):
+async def test_batched_code_upload(server_multi, client_multi, sync_client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -1001,7 +1001,7 @@ async def test_batched_code_upload(motor, server_multi, client_multi, sync_clien
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_legacy_code(motor, server_multi, client_multi, environment):
+async def test_legacy_code(server_multi, client_multi, environment):
     """
         Test the server to manage the updates on a model during agent deploy
     """

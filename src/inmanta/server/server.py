@@ -23,13 +23,11 @@ import difflib
 import logging
 import os
 import re
-import subprocess
 import sys
 import tempfile
 import time
 from uuid import UUID
 import uuid
-import asyncio
 
 import dateutil.parser
 import pymongo
