@@ -312,6 +312,7 @@ class MethodProperties(object):
         agent_server: bool = False,
         validate_sid: bool = False,
         client_types: List[str] = ["public"],
+        api_version: int = 1,
     ) -> None:
         """
             Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
@@ -328,6 +329,7 @@ class MethodProperties(object):
             :param client_types: The allowed client types for this call
             :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
                 which the options apply.
+            :param api_version: The version of the api this method belongs to
         """
         if api is None:
             api = not server_agent and not agent_server
@@ -346,7 +348,7 @@ class MethodProperties(object):
         self._agent_server = agent_server
         self._validate_sid = validate_sid
         self._client_types = client_types
-
+        self.api_version = api_version
 
     def get_call_headers(self) -> Set[str]:
         """
@@ -368,11 +370,11 @@ class MethodProperties(object):
 # Shared
 class RESTBase(object):
 
-    def _create_base_url(self, properties: Dict[str, str], msg: Dict[str, str]=None, versioned: bool=True) -> str:
+    def _create_base_url(self, properties: Dict[str, str], msg: Dict[str, str]=None) -> str:
         """
             Create a url for the given protocol properties
         """
-        url = "/api/v1" if versioned else ""
+        url = "/api/v1"
         if "id" in properties and properties["id"]:
             if msg is None:
                 url += "/%s/(?P<id>[^/]+)" % properties["method_name"]
@@ -399,10 +401,6 @@ class RESTBase(object):
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
-        if "api_version" in config[0] and config[0]["api_version"] is None:
-            warnings.warn("Using an unversioned API method will be removed in the next release", DeprecationWarning)
-            LOGGER.warning("Using an unversioned API method will be removed in the next release")
-
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
@@ -632,11 +630,6 @@ class RESTTransport(RESTBase):
 
             url = self._create_base_url(properties)
             properties["api_version"] = "1"
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-            url = self._create_base_url(properties, versioned=False)
-            properties = properties.copy()
-            properties["api_version"] = None
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
         headers.add("Authorization")
