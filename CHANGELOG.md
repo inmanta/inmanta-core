@@ -10,6 +10,7 @@ Changes in this release:
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
 - Remove all io_loop references and only use current ioloop (#847)
+- Removed the non-version api (#526)
 
 v 2018.3 (2018-12-07)
 Changes in this release:

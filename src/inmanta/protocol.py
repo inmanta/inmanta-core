@@ -279,11 +279,11 @@ class Result(object):
 # Shared
 class RESTBase(object):
 
-    def _create_base_url(self, properties, msg=None, versioned=True):
+    def _create_base_url(self, properties, msg=None):
         """
             Create a url for the given protocol properties
         """
-        url = "/api/v1" if versioned else ""
+        url = "/api/v1"
         if "id" in properties and properties["id"]:
             if msg is None:
                 url += "/%s/(?P<id>[^/]+)" % properties["method_name"]
@@ -310,10 +310,6 @@ class RESTBase(object):
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
-        if "api_version" in config[0] and config[0]["api_version"] is None:
-            warnings.warn("Using an unversioned API method will be removed in the next release", DeprecationWarning)
-            LOGGER.warning("Using an unversioned API method will be removed in the next release")
-
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
@@ -541,11 +537,6 @@ class RESTTransport(RESTBase):
 
             url = self._create_base_url(properties)
             properties["api_version"] = "1"
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-            url = self._create_base_url(properties, versioned=False)
-            properties = properties.copy()
-            properties["api_version"] = None
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
         headers.add("Authorization")
