@@ -26,7 +26,6 @@ import re
 from datetime import datetime
 from collections import defaultdict
 import enum
-import warnings
 import io
 import gzip
 
