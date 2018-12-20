@@ -73,13 +73,9 @@ class Server(protocol.ServerSlice):
         if database_port is None:
             database_port = opt.db_port.get()
 
-        if not asyncio.get_event_loop().is_running():
-            asyncio.get_event_loop().run_until_complete(data.connect(database_host, database_port, opt.db_name.get(),
-                                                        opt.db_username.get(), opt.db_password.get()))
+        ioloop.IOLoop.current().run_in_executor(None, data.connect, database_host, database_port, opt.db_name.get(),
+                                                opt.db_username.get(), opt.db_password.get())
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
-
-        # TODO:
-        # self._io_loop.add_callback(data.create_indexes)
 
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()

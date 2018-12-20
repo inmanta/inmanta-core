@@ -39,6 +39,7 @@ async def test_deploy(snippetcompiler, tmpdir, postgres_db, motor):
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
+    # TODO: change mongoport parameter
     run = deploy.Deploy(mongoport=postgres_db.port)
     try:
         run.run(options, only_setup=True)

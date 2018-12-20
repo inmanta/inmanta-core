@@ -24,7 +24,6 @@ import traceback
 from concurrent.futures import Future
 from collections import defaultdict
 import typing
-
 from tornado import concurrent, ioloop
 
 from inmanta.agent.io import get_io
