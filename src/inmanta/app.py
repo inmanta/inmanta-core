@@ -44,7 +44,7 @@ from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
-from inmanta import protocol, module, moduletool
+from inmanta import protocol, module, moduletool, const
 from inmanta.export import cfg_env, ModelExporter
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
@@ -367,7 +367,7 @@ def _convert_to_log_level(level):
 
 def _get_log_formatter_for_stream_handler(timed):
     log_format = "%(asctime)s " if timed else ""
-    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+    if (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ:
         log_format += "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s"
         formatter = colorlog.ColoredFormatter(
             log_format,

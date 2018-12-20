@@ -119,3 +119,9 @@ class Compilestate(Enum):
 
 EXPORT_META_DATA = "export_metadata"
 META_DATA_COMPILE_STATE = "inmanta:compile:state"
+
+
+# For testing
+
+# assume we are running in a tty
+ENVIRON_FORCE_TTY = "FORCE_TTY"
