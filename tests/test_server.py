@@ -672,9 +672,9 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
 
     # New version with only file3
     version = 2
-    result = await client.put_version(tid=environment, version=version, resources=[], unknowns=[{"parameter": "a", "source": "b"}],
-                                    version_info={const.EXPORT_META_DATA:
-                                                 {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
+    result = await client.put_version(tid=environment, version=version, resources=[],
+                                      unknowns=[{"parameter": "a", "source": "b"}], version_info={const.EXPORT_META_DATA:
+                                      {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
     assert result.code == 200
 
     result = await client.get_version(environment, version)
