@@ -1,6 +1,5 @@
 """
     Copyright 2018 Inmanta
-    Copyright 2013 Roman Kalyakin (Mongobox)
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -18,34 +17,12 @@
 """
 import os
 import tempfile
-import copy
 import subprocess
-import time
-import sys
 import shutil
-import socket
 
 
-MONGOD_BIN = 'mongod'
 PG_CTL_BIN = 'pg_ctl'
 INITDB_BIN = 'initdb'
-
-DEFAULT_ARGS = [
-    # don't flood stdout, we're not reading it
-    "--quiet",
-    # save the port
-    # disable unused.
-    "--nounixsocket",
-    # use a smaller default file size
-    "--smallfiles",
-    # journaling on by default in 2.0 and makes it to slow
-    # for tests, can causes failures in jenkins
-    "--nojournal",
-    # disable scripting
-    "--noscripting",
-]
-STARTUP_TIME = 0.4
-START_CHECK_ATTEMPTS = 200
 
 
 def find_executable(executable):
@@ -59,14 +36,21 @@ def find_executable(executable):
             return executable_path
 
 
-class DbProc(object):
+class PostgresProc(object):
 
-    def __init__(self, port, db_path):
+    def __init__(self, port, pg_ctl_bin=None, initdb_bin=None, db_path=None):
         self.port = port
         self.db_path = db_path
         if self.db_path:
             if os.path.exists(self.db_path) and os.path.isfile(self.db_path):
                 raise AssertionError('DB path should be a directory, but it is a file.')
+
+        self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
+        assert self.pg_ctl_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.'\
+                                .format(PG_CTL_BIN)
+        self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
+        assert self.initdb_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.' \
+                                .format(INITDB_BIN)
 
     def start(self):
         """
@@ -76,125 +60,11 @@ class DbProc(object):
         """
         if self.running():
             return True
-        if self.db_path:
-            if not os.path.exists(self.db_path):
-                os.mkdir(self.db_path)
-            self._db_path_is_temporary = False
-        else:
-            self.db_path = tempfile.mkdtemp()
-            self._db_path_is_temporary = True
 
-        return self._do_start()
-
-    def stop(self):
-        if not self.running():
-            return
-
-        self._do_stop()
-
-        if self._db_path_is_temporary:
-            shutil.rmtree(self.db_path)
-            self.db_path = None
-
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        self.stop()
-
-
-# TODO: Remove
-class MongoProc(DbProc):
-    """
-        Class to start and manage a mongodb server process
-    """
-    def __init__(self, port, mongod_bin=None, log_path=None, db_path=None, prealloc=False, auth=False):
-        super(MongoProc, self).__init__(port, db_path)
-        self.mongod_bin = mongod_bin or find_executable(MONGOD_BIN)
-        assert self.mongod_bin, 'Could not find "{}" in system PATH. Make sure you have MongoDB installed.'.format(MONGOD_BIN)
-
-        self.prealloc = prealloc
-        self.auth = auth
-        self.process = None
-        self.log_path = log_path or os.devnull
-
-    def _do_start(self):
-        args = self._get_args()
-
-        self.process = subprocess.Popen(
-            args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT
-        )
-
-        return self._wait_till_started()
-
-    def _do_stop(self):
-        if not self.process:
-            return
-
-        # Not sure if there should be more checks for
-        # other platforms.
-        if sys.platform == 'darwin':
-            self.process.kill()
-        else:
-            os.kill(self.process.pid, 9)
-        self.process.wait()
-        self.process = None
-
-    def running(self):
-        return self.process is not None
-
-    def _get_args(self):
-        args = copy.copy(DEFAULT_ARGS)
-        args.insert(0, self.mongod_bin)
-        args.extend(['--dbpath', self.db_path])
-        args.extend(['--port', str(self.port)])
-        args.extend(['--logpath', self.log_path])
-
-        if self.auth:
-            args.append("--auth")
-
-        if not self.prealloc:
-            args.append("--noprealloc")
-
-        return args
-
-    def _wait_till_started(self):
-        attempts = 0
-        while self.process.poll() is None and attempts < START_CHECK_ATTEMPTS:
-            attempts += 1
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            try:
-                try:
-                    s.connect(('localhost', int(self.port)))
-                    return True
-                except (IOError, socket.error):
-                    time.sleep(0.25)
-            finally:
-                s.close()
-
-        self.stop()
-        return False
-
-
-class PostgresProc(DbProc):
-
-    def __init__(self, port, pg_ctl_bin=None, initdb_bin=None, db_path=None):
-        super(PostgresProc, self).__init__(port, db_path)
-
-        self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
-        assert self.pg_ctl_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.'\
-                                .format(PG_CTL_BIN)
-        self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
-        assert self.initdb_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.' \
-                                .format(INITDB_BIN)
-
-    def _do_start(self):
         try:
+            self._create_db_path()
             self._init_db()
-            sockets_dir = self._create_sockets_dir()
+            sockets_dir = self._create_sockets_dir(self.db_path)
             args = [self.pg_ctl_bin, "start", "-D", self.db_path,
                     "-o", "-p " + str(self.port) + " -k " + sockets_dir, "-s"]
             process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -205,8 +75,17 @@ class PostgresProc(DbProc):
             return False
         return True
 
-    def _create_sockets_dir(self):
-        sockets_dir = os.path.join(self.db_path, "sockets")
+    def _create_db_path(self):
+        if self.db_path:
+            if not os.path.exists(self.db_path):
+                os.mkdir(self.db_path)
+            self._db_path_is_temporary = False
+        else:
+            self.db_path = tempfile.mkdtemp()
+            self._db_path_is_temporary = True
+
+    def _create_sockets_dir(self, parent_dir):
+        sockets_dir = os.path.join(parent_dir, "sockets")
         os.mkdir(sockets_dir)
         return sockets_dir
 
@@ -218,12 +97,17 @@ class PostgresProc(DbProc):
         if process.returncode != 0:
             raise Exception("Failed to initialize db path.")
 
-    def _do_stop(self):
+    def stop(self):
+        if not self.running():
+            return
         args = [self.pg_ctl_bin, "stop", "-D", self.db_path, "-m", "immediate", "-s"]
         process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         process.communicate()
         if process.returncode != 0:
             raise Exception("Failed to stop embedded db.")
+        if self._db_path_is_temporary:
+            shutil.rmtree(self.db_path)
+            self.db_path = None
 
     def running(self):
         if self.db_path is None:
@@ -231,6 +115,11 @@ class PostgresProc(DbProc):
         args = [self.pg_ctl_bin, "status", "-D", self.db_path, "-s"]
         process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         process.communicate()
-        if process.returncode == 0:
-            return True
-        return False
+        return process.returncode == 0
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.stop()

@@ -29,9 +29,9 @@ LOGGER = logging.getLogger(__name__)
 # Database
 #############################
 
-db_host = Option("database", "host", "localhost", "Hostname or IP of the mongo server")
-db_port = Option("database", "port", 27017, "The port of the mongo server", is_int)
-db_name = Option("database", "name", "inmanta", "The name of the database on the mongo server")
+db_host = Option("database", "host", "localhost", "Hostname or IP of the postgresql server")
+db_port = Option("database", "port", 5432, "The port of the postgresql server", is_int)
+db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server")
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server")
 db_password = Option("database", "password", None, "The password that belong to the database user")
 

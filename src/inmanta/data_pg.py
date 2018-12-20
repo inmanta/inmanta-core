@@ -202,10 +202,14 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
     @classmethod
     def set_connection_pool(cls, pool):
+        if cls._connection_pool is not None:
+            raise Exception("Connection pool already set")
         cls._connection_pool = pool
 
     @classmethod
     async def close_connection_pool(cls):
+        if cls._connection_pool is None:
+            return
         await cls._connection_pool.close()
         cls._connection_pool = None
 
@@ -1816,3 +1820,4 @@ async def close_connection_pool():
 async def connect(host, port, database, username, password):
     pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
     set_connection_pool(pool)
+    return pool
