@@ -80,7 +80,7 @@ def run_without_tty(args, env=[]):
 
 
 def run_with_tty(args):
-    """ Could not get code for actual tty to run stable in docker, so we are faking it """
+    """Could not get code for actual tty to run stable in docker, so we are faking it """
     env = {const.ENVIRON_FORCE_TTY: "true"}
     return run_without_tty(args, env=env)
 
