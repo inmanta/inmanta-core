@@ -439,6 +439,7 @@ class Exporter(object):
 
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
+            raise Exception("Failed to commit resource updates (%s)" % res.result["message"])
 
     def get_unknown_resources(self, hostname):
         """
