@@ -37,7 +37,7 @@ from inmanta import config as inmanta_config
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 import jwt
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable  # noqa: F401
+from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Awaitable  # noqa: F401
 
 
 from inmanta.util import Scheduler
@@ -271,6 +271,95 @@ class Result(object):
             results are expected, the callback is called for each result.
         """
         self._callback = fnc
+
+
+class ArgOption(object):
+    """
+        Argument options to transform arguments before dispatch
+    """
+    def __init__(
+        self,
+        header: Optional[str] = None,
+        reply_header: bool = True,
+        getter: Optional[Awaitable] = None,
+    ) -> None:
+        """
+            :param header: Map this argument to a header with the following name.
+            :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
+            :param getter: Call this method after validation and pass its return value to the method call. This may change the
+                           type of the argument. This method can raise an HTTPException to return a 404 for example.
+        """
+        self.header = header
+        self.reply_header = reply_header
+        self.getter = getter
+
+
+class MethodProperties(object):
+    """
+        This class stores the information from a method definition
+    """
+
+    def __init__(
+        self,
+        index: bool = False,
+        id: bool = False,
+        operation: str = "POST",
+        reply: bool = True,
+        arg_options: Dict[str, ArgOption] = {},
+        timeout: Optional[int] = None,
+        server_agent: bool = False,
+        api: bool = True,
+        agent_server: bool = False,
+        validate_sid: bool = False,
+        client_types: List[str] = ["public"],
+    ) -> None:
+        """
+            Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
+            and model the protocol.
+
+            :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
+            :param id: This method requires an id of a resource. The python function should have an id parameter.
+            :param operation: The type of HTTP operation (verb)
+            :param timeout: nr of seconds before request it terminated
+            :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
+            :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
+            :param agent_server: This is a call from the Agent to the Server
+            :param validate_sid: This call requires a valid session, true by default if agent_server and not api
+            :param client_types: The allowed client types for this call
+            :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
+                which the options apply.
+        """
+        if api is None:
+            api = not server_agent and not agent_server
+
+        if validate_sid is None:
+            validate_sid = agent_server and not api
+
+        self._index = index
+        self._id = id
+        self._operation = operation
+        self._reply = reply
+        self._arg_options = arg_options
+        self._timeout = timeout
+        self._server_agent = server_agent
+        self._api = api
+        self._agent_server = agent_server
+        self._validate_sid = validate_sid
+        self._client_types = client_types
+
+
+    def get_call_headers(self) -> Set[str]:
+        """
+            Returns the set of headers required to create call
+        """
+        headers = set()
+        headers.add("Authorization")
+
+        for arg in self._arg_options.values():
+            if arg.header is not None:
+                headers.add(arg.header)
+
+        return headers
 
 
 # Tornado Interface
@@ -676,7 +765,7 @@ class handle(object):  # noqa: H801
         :param method A subclass of method that defines the method
     """
 
-    def __init__(self, method: str, **kwargs: Dict[str, Any]) -> None:
+    def __init__(self, method: str, **kwargs) -> None:
         self.method = method
         self.mapping = kwargs
 
