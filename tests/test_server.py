@@ -27,9 +27,8 @@ from inmanta import data, protocol, const, config
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
 from uuid import UUID
-from inmanta.export import upload_code
 from inmanta.util import hash_file
-from inmanta.export import unknown_parameters
+from inmanta.export import upload_code, unknown_parameters
 import asyncio
 
 LOGGER = logging.getLogger(__name__)
@@ -587,7 +586,7 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
     """)
 
     # force deploy by having unknown
-    unknown_parameters.append({})
+    unknown_parameters.append({"parameter": "a", "source": "b"})
 
     # ensure new version, wait for other second
     await asyncio.sleep(1)
@@ -643,8 +642,8 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
                   'purge_on_delete': True,
                   'version': version}]
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
 
     # Release the model and set all resources as deployed
     result = await client.release_version(environment, version, push=False)
@@ -676,15 +675,15 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
 
     # New version with only file3
     version = 2
-    res = await client.put_version(tid=environment, version=version, resources=[], unknowns=[],
-                                   version_info={const.EXPORT_META_DATA:
-                                                 {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
+    result = await client.put_version(tid=environment, version=version, resources=[],
+                                      unknowns=[{"parameter": "a", "source": "b"}], version_info={const.EXPORT_META_DATA:
+                                      {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
     assert result.code == 200
 
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 0
-    agent.stop()
+    assert len(result.result["unknowns"]) == 1
 
 
 @pytest.mark.asyncio
@@ -776,7 +775,7 @@ async def test_purge_on_delete(client, server, environment):
             'requires': [],
             'purge_on_delete': True,
             'version': version}
-    res = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
     assert result.code == 200
 
     result = await client.get_version(environment, version)
