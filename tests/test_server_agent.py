@@ -39,7 +39,7 @@ from utils import retry_limited, assert_equal_ish, UNKWN
 from inmanta.config import Config
 from inmanta.ast import CompilerException
 from inmanta.server.bootloader import InmantaBootloader
-from inmanta.server import SLICE_AGENT_MANAGER
+from inmanta.server import SLICE_AGENT_MANAGER, config as server_config
 from typing import List, Tuple, Optional, Dict
 from inmanta.const import ResourceState
 
@@ -2537,6 +2537,15 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
     versions = await wait_for_version(3)
     logger.info("wait for 3")
     assert versions["count"] == 3
+
+    # clear the environment
+    state_dir = server_config.state_dir.get()
+    project_dir = os.path.join(state_dir, "server", "environments", environment)
+    assert os.path.exists(project_dir)
+
+    await client.clear_environment(environment)
+
+    assert not os.path.exists(project_dir)
 
 
 class ResourceProvider(object):

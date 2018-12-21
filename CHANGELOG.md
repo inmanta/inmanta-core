@@ -10,6 +10,10 @@ Changes in this release:
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
 - Remove all io_loop references and only use current ioloop (#847)
+- Remove environment directory from server when environment is removed (#838)
+- Catch various silent test failures
+- Initialise variable for upload of version with no resources
+- Raise exception on bad export to make inmanta export fail with exit status > 0
 - Removed the non-version api (#526)
 
 v 2018.3 (2018-12-07)
