@@ -38,12 +38,15 @@ import json
 import os
 import pwd
 import socket
+import signal
 
 import colorlog
 from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
+from tornado.util import TimeoutError
+from tornado import gen
 from inmanta import protocol, module, moduletool
 from inmanta.export import cfg_env, ModelExporter
 import yaml
@@ -55,31 +58,47 @@ LOGGER = logging.getLogger()
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
-    io_loop = IOLoop.current()
-
     ibl = InmantaBootloader()
-    ibl.start()
 
-    try:
-        io_loop.start()
-    except KeyboardInterrupt:
-        IOLoop.current().stop()
-        ibl.stop()
+    def stop_server_signal_handler(signum, frame):
+        IOLoop.current().add_callback_from_signal(stop, ibl.stop)
+
+    signal.signal(signal.SIGTERM, stop_server_signal_handler)
+    signal.signal(signal.SIGINT, stop_server_signal_handler)
+
+    IOLoop.current().add_callback(ibl.start)
+    IOLoop.current().start()
 
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options):
     from inmanta import agent
-    io_loop = IOLoop.current()
-
     a = agent.Agent()
-    a.start()
 
+    def stop_agent_signal_handler(signum, frame):
+        IOLoop.current().add_callback_from_signal(stop, a.stop)
+
+    signal.signal(signal.SIGTERM, stop_agent_signal_handler)
+    signal.signal(signal.SIGINT, stop_agent_signal_handler)
+
+    IOLoop.current().add_callback(a.start)
+    IOLoop.current().start()
+
+
+@gen.coroutine
+def stop(shutdown_function):
+    """
+        Wait 30 seconds to gracefully shutdown instance.
+        Afterwards stop the IOLoop
+    """
+    future = shutdown_function()
     try:
-        io_loop.start()
-    except KeyboardInterrupt:
+        timeout = IOLoop.current().time() + 30
+        yield gen.with_timeout(timeout, future)
+    except TimeoutError:
+        pass
+    finally:
         IOLoop.current().stop()
-        a.stop()
 
 
 def compiler_config(parser):

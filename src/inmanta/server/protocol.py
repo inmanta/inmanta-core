@@ -94,6 +94,7 @@ class RESTServer(RESTBase):
                 url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
         return url_map
 
+    @gen.coroutine
     def start(self):
         """
             Start the transport
@@ -101,10 +102,10 @@ class RESTServer(RESTBase):
         LOGGER.debug("Starting Server Rest Endpoint")
 
         for endpoint in self.__end_points:
-            endpoint.prestart(self)
+            yield endpoint.prestart(self)
 
         for endpoint in self.__end_points:
-            endpoint.start()
+            yield endpoint.start()
             self._handlers.extend(endpoint.get_handlers())
 
         url_map = self.create_op_mapping()
@@ -134,16 +135,16 @@ class RESTServer(RESTBase):
             LOGGER.debug("Created REST transport with SSL")
         else:
             self.http_server = HTTPServer(application, decompress_request=True)
-
         self.http_server.listen(port)
 
         LOGGER.debug("Start REST transport")
 
+    @gen.coroutine
     def stop(self):
-        LOGGER.debug("Stoppin Server Rest Endpoint")
+        LOGGER.debug("Stopping Server Rest Endpoint")
         self.http_server.stop()
         for endpoint in self.__end_points:
-            endpoint.stop()
+            yield endpoint.stop()
 
     def return_error_msg(self, status=500, msg="", headers={}):
         body = {"message": msg}
@@ -165,13 +166,16 @@ class ServerSlice(object):
         self._handlers = []
         self._sched = Scheduler()
 
+    @gen.coroutine
     def prestart(self, server: RESTServer):
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
         pass
 
+    @gen.coroutine
     def start(self):
         pass
 
+    @gen.coroutine
     def stop(self):
         pass
 

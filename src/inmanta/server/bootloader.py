@@ -18,6 +18,7 @@
 from inmanta.server import server
 from inmanta.server.protocol import RESTServer
 from inmanta.server.agentmanager import AgentManager
+from tornado import gen
 
 
 class InmantaBootloader(object):
@@ -35,10 +36,13 @@ class InmantaBootloader(object):
     def get_server_slices(self):
         return [self.get_server_slice(), self.get_agent_manager_slice()]
 
+    @gen.coroutine
     def start(self):
         for mypart in self.get_server_slices():
             self.restserver.add_endpoint(mypart)
-        self.restserver.start()
+        yield self.restserver.start()
 
+    @gen.coroutine
     def stop(self):
-        self.restserver.stop()
+
+        yield self.restserver.stop()
