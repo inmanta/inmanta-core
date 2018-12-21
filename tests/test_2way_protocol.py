@@ -37,11 +37,11 @@ LOGGER = logging.getLogger(__name__)
 class StatusMethod(methods.Method):
     __method_name__ = "status"
 
-    @methods.protocol(operation="GET", index=True)
+    @methods.protocol(method_name="status", operation="GET", index=True)
     def get_status_x(self, tid: uuid.UUID):
         pass
 
-    @methods.protocol(operation="GET", id=True, server_agent=True, timeout=10)
+    @methods.protocol(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
     def get_agent_status_x(self, id):
         pass
 

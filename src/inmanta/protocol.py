@@ -19,19 +19,20 @@ import logging
 import socket
 import time
 import inspect
-import urllib
 import uuid
 import json
 import re
 from datetime import datetime
 from collections import defaultdict
+from urllib import parse
 import enum
 import io
 import gzip
+import functools
 
 import tornado
 from tornado import gen, web
-from inmanta import methods, const, execute
+from inmanta import methods, const, execute, rpc
 from inmanta import config as inmanta_config
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
@@ -209,28 +210,10 @@ class Result(object):
     """
         A result of a method call
     """
-
-    def __init__(self, multiple=False, code=0, result=None):
-        self._multiple = multiple
-        if multiple:
-            self._result = []
-            if result is not None:
-                self._result.append(result)
-        else:
-            self._result = result
+    def __init__(self, code: int=0, result: Dict[str, Any]=None):
+        self._result = result
         self.code = code
         self._callback = None
-
-    def add_result(self, result):
-        """
-        Add a new result to an instance
-
-        :param result: The result to store
-        """
-        assert(self._multiple)
-        self._result.append(result)
-        if self._callback:
-            self._callback(self)
 
     def get_result(self):
         """
@@ -242,16 +225,12 @@ class Result(object):
 
     def set_result(self, value):
         if not self.available():
-            assert(not self._multiple)
             self._result = value
             if self._callback:
                 self._callback(self)
 
     def available(self):
-        if self._multiple:
-            return len(self._result) > 0 is not None or self.code > 0
-        else:
-            return self._result is not None or self.code > 0
+        return self._result is not None or self.code > 0
 
     def wait(self, timeout=60):
         """
@@ -266,101 +245,9 @@ class Result(object):
 
     def callback(self, fnc):
         """
-            Set a callback function that is to be called when the result is ready. When multiple
-            results are expected, the callback is called for each result.
+            Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
-
-
-class ArgOption(object):
-    """
-        Argument options to transform arguments before dispatch
-    """
-    def __init__(
-        self,
-        header: Optional[str] = None,
-        reply_header: bool = True,
-        getter: Optional[Awaitable] = None,
-    ) -> None:
-        """
-            :param header: Map this argument to a header with the following name.
-            :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
-            :param getter: Call this method after validation and pass its return value to the method call. This may change the
-                           type of the argument. This method can raise an HTTPException to return a 404 for example.
-        """
-        self.header = header
-        self.reply_header = reply_header
-        self.getter = getter
-
-
-class MethodProperties(object):
-    """
-        This class stores the information from a method definition
-    """
-
-    def __init__(
-        self,
-        index: bool = False,
-        id: bool = False,
-        operation: str = "POST",
-        reply: bool = True,
-        arg_options: Dict[str, ArgOption] = {},
-        timeout: Optional[int] = None,
-        server_agent: bool = False,
-        api: bool = True,
-        agent_server: bool = False,
-        validate_sid: bool = False,
-        client_types: List[str] = ["public"],
-        api_version: int = 1,
-    ) -> None:
-        """
-            Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
-            and model the protocol.
-
-            :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-            :param id: This method requires an id of a resource. The python function should have an id parameter.
-            :param operation: The type of HTTP operation (verb)
-            :param timeout: nr of seconds before request it terminated
-            :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
-            :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-            :param agent_server: This is a call from the Agent to the Server
-            :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-            :param client_types: The allowed client types for this call
-            :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
-                which the options apply.
-            :param api_version: The version of the api this method belongs to
-        """
-        if api is None:
-            api = not server_agent and not agent_server
-
-        if validate_sid is None:
-            validate_sid = agent_server and not api
-
-        self._index = index
-        self._id = id
-        self._operation = operation
-        self._reply = reply
-        self._arg_options = arg_options
-        self._timeout = timeout
-        self._server_agent = server_agent
-        self._api = api
-        self._agent_server = agent_server
-        self._validate_sid = validate_sid
-        self._client_types = client_types
-        self.api_version = api_version
-
-    def get_call_headers(self) -> Set[str]:
-        """
-            Returns the set of headers required to create call
-        """
-        headers = set()
-        headers.add("Authorization")
-
-        for arg in self._arg_options.values():
-            if arg.header is not None:
-                headers.add(arg.header)
-
-        return headers
 
 
 # Tornado Interface
@@ -378,7 +265,7 @@ class RESTBase(object):
             if msg is None:
                 url += "/%s/(?P<id>[^/]+)" % properties["method_name"]
             else:
-                url += "/%s/%s" % (properties["method_name"], urllib.parse.quote(str(msg["id"]), safe=""))
+                url += "/%s/%s" % (properties["method_name"], parse.quote(str(msg["id"]), safe=""))
 
         elif "index" in properties and properties["index"]:
             url += "/%s" % properties["method_name"]
@@ -387,16 +274,15 @@ class RESTBase(object):
 
         return url
 
-    def _decode(self, body: str) -> Dict:
+    def _decode(self, body: str) -> Optional[Dict]:
         """
             Decode a response body
         """
+        result = None
         if body is not None and len(body) > 0:
-            body = json.loads(tornado.escape.to_basestring(body))
-        else:
-            body = None
+            result = json.loads(tornado.escape.to_basestring(body))
 
-        return body
+        return result
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
@@ -628,7 +514,6 @@ class RESTTransport(RESTBase):
                         headers.add(opts["header"])
 
             url = self._create_base_url(properties)
-            properties["api_version"] = "1"
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
         headers.add("Authorization")
@@ -700,7 +585,7 @@ class RESTTransport(RESTBase):
 
             # encode arguments in url
             if len(qs_map) > 0:
-                url += "?" + urllib.parse.urlencode(qs_map)
+                url += "?" + parse.urlencode(qs_map)
 
             body = None
         else:
@@ -896,7 +781,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         """
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
-        self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
+        self._client = AgentClient(self.name, self.sessionid, timeout=self.server_timeout)
         IOLoop.current().add_callback(self.perform_heartbeat)
 
     def stop(self):
@@ -952,8 +837,8 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         if "body" in method_call and method_call["body"] is not None:
             body = method_call["body"]
 
-        query_string = urllib.parse.urlparse(method_call["url"]).query
-        for key, value in urllib.parse.parse_qs(query_string, keep_blank_values=True):
+        query_string = parse.urlparse(method_call["url"]).query
+        for key, value in parse.parse_qs(query_string, keep_blank_values=True):
             if len(value) == 1:
                 body[key] = value[0].decode("latin-1")
             else:
@@ -979,56 +864,38 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         IOLoop.current().add_future(call_result, submit_result)
 
 
-class ClientMeta(type):
-    """
-        A meta class that programs all protocol method call into the Client class.
-    """
-    def __new__(cls, class_name, bases, dct):
-        classes = methods.Method.__subclasses__()  # @UndefinedVariable
-
-        for mcls in classes:
-            for attr in dir(mcls):
-                attr_fn = getattr(mcls, attr)
-                if attr[0:2] != "__" and hasattr(attr_fn, "__wrapped__"):
-                    dct[attr] = attr_fn
-
-        return type.__new__(cls, class_name, bases, dct)
-
-
-def get_method_name(properties):
-    method = properties["method"]
-    class_name = method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
-    module = inspect.getmodule(method)
-    method_class = getattr(module, class_name)
-
-    if not hasattr(method_class, "__method_name__"):
-        raise Exception("%s should have a __method_name__ variable." % method_class)
-
-    return method_class.__method_name__
-
-
-class Client(Endpoint, metaclass=ClientMeta):
+class Client(Endpoint):
     """
         A client that communicates with end-point based on its configuration
     """
-
-    def __init__(self, name, transport=RESTTransport):
-        Endpoint.__init__(self, name)
-        self._transport = transport
-        self._transport_instance = None
-
+    def __init__(self, name):
+        super().__init__(name)
         LOGGER.debug("Start transport for client %s", self.name)
-        tr = self._transport(self)
-        self._transport_instance = tr
+        self._transport_instance = RESTTransport(self)
 
     @gen.coroutine
-    def _call(self, args, kwargs, protocol_properties):
+    def _call(self, method_properties, args, kwargs) -> Result:
         """
-            Execute the rpc call
+            Execute a call and return the result
         """
-        protocol_properties["method_name"] = get_method_name(protocol_properties)
-        result = yield self._transport_instance.call(protocol_properties, args, kwargs)
+        result = yield self._transport_instance.call(method_properties, args, kwargs)
         return result
+
+    def __getattr__(self, name):
+        """
+            Return a function that will call self._call with the correct method properties associated
+        """
+        if name in rpc.MethodProperties._methods:
+            method = rpc.MethodProperties._methods[name]
+
+            def wrap(*args, **kwargs) -> Callable[[List[Any], Dict[str, Any]], Result]:
+                method.function(self, *args, **kwargs)
+                properties = method.old_props()
+                return self._call(method_properties=properties, args=args, kwargs=kwargs)
+
+            return wrap
+
+        raise AttributeError("Method with name %s is not defined for this client" % name)
 
 
 class SyncClient(object):
@@ -1056,36 +923,28 @@ class SyncClient(object):
         return async_call
 
 
-class AgentClient(Endpoint, metaclass=ClientMeta):
+class AgentClient(Client):
     """
         A client that communicates with end-point based on its configuration
     """
-
-    def __init__(self, name, sid, transport=RESTTransport, timeout=120):
-        Endpoint.__init__(self, name)
-        self._transport = transport
-        self._transport_instance = None
+    def __init__(self, name, sid, timeout=120):
+        super().__init__(name)
         self._sid = sid
-
-        LOGGER.debug("Start transport for client %s", self.name)
-        tr = self._transport(self, connection_timout=timeout)
-        self._transport_instance = tr
+        self._transport_instance = RESTTransport(self, connection_timout=timeout)
 
     @gen.coroutine
-    def _call(self, args, kwargs, protocol_properties):
+    def _call(self, method_properties, args, kwargs) -> Result:
         """
             Execute the rpc call
         """
-        protocol_properties["method_name"] = get_method_name(protocol_properties)
-
         if 'sid' not in kwargs:
             kwargs['sid'] = self._sid
 
-        result = yield self._transport_instance.call(protocol_properties, args, kwargs)
+        result = yield self._transport_instance.call(method_properties, args, kwargs)
         return result
 
 
-class ReturnClient(Client, metaclass=ClientMeta):
+class ReturnClient(Client):
     """
         A client that uses a return channel to connect to its destination. This client is used by the server to communicate
         back to clients over the heartbeat channel.
@@ -1096,12 +955,11 @@ class ReturnClient(Client, metaclass=ClientMeta):
         self.session = session
 
     @gen.coroutine
-    def _call(self, args, kwargs, protocol_properties):
-        protocol_properties["method_name"] = get_method_name(protocol_properties)
-        url, method, headers, body = self._transport_instance.build_call(protocol_properties, args, kwargs)
+    def _call(self, method_properties, args, kwargs) -> Result:
+        url, method, headers, body = self._transport_instance.build_call(method_properties, args, kwargs)
 
         call_spec = {"url": url, "method": method, "headers": headers, "body": body}
-        timeout = protocol_properties["timeout"]
+        timeout = method_properties["timeout"]
         try:
             return_value = yield self.session.put_call(call_spec, timeout=timeout)
         except gen.TimeoutError:

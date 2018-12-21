@@ -621,8 +621,6 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     await agent.trigger_update("env_id", "agent2")
 
     result = await client_multi.get_version(env_id, version, include_logs=True)
-    import pprint
-    pprint.pprint(result.result)
 
     def done():
         return resource_container.Provider.changecount("agent2", "key4") == 0 and \
@@ -1936,7 +1934,6 @@ async def test_dryrun_failures(resource_container, server, client):
 
     while result.result["dryruns"][0]["todo"] > 0:
         result = await client.dryrun_list(env_id, version)
-        print(result.result)
         await asyncio.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
