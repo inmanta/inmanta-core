@@ -25,7 +25,6 @@ from inmanta import methods, data
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
-from tornado.ioloop import IOLoop
 from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
 from inmanta.methods import ENV_ARG
@@ -135,7 +134,6 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
     ENV_ARG["getter"] = get_environment
 
     try:
-        io_loop = IOLoop.current()
         rs = RESTServer()
         server = SessionSpy()
         rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
@@ -157,7 +155,6 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
         assert len(status.result["agents"]) == 1
         assert status.result["agents"][0]["status"], "ok"
         server.stop()
-        io_loop.stop()
 
         rs.stop()
         agent.stop()

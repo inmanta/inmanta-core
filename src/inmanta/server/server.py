@@ -813,6 +813,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         compile_state = safe_get(metadata, const.META_DATA_COMPILE_STATE, "")
         failed = compile_state == const.Compilestate.failed.name
 
+        resources_to_purge = []
         if not failed:
             # search for deleted resources
             resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
