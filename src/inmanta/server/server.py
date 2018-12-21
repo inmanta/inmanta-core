@@ -28,6 +28,7 @@ import tempfile
 import time
 from uuid import UUID
 import uuid
+import shutil
 
 import dateutil
 import pymongo
@@ -1630,12 +1631,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.Decommision.clear_environment, env="id")
     @gen.coroutine
-    def clear_environment(self, env):
+    def clear_environment(self, env: data.Environment):
         """
             Clear the environment
         """
         yield self.agentmanager.stop_agents(env)
         yield env.delete_cascade(only_content=True)
+
+        project_dir = os.path.join(self._server_storage["environments"], str(env.id))
+        if os.path.exists(project_dir):
+            shutil.rmtree(project_dir)
+
         return 200
 
     @protocol.handle(methods.EnvironmentAuth.create_token, env="tid")
