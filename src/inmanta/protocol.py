@@ -550,52 +550,9 @@ class RESTTransport(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    def build_call(self, properties: Dict[str, str], args: List, kwargs: Dict[str, Any]={}) -> Tuple[str, str, Dict, Optional[Dict[str, Any]]]:
-        """
-            Build a call from the given arguments. This method returns the url, headers, method and body for the call.
-        """
-        method = properties["operation"]
-
-        # create the message
-        msg = kwargs
-
-        # map the argument in arg to names
-        argspec = inspect.getfullargspec(properties["method"])
-        for i in range(len(args)):
-            msg[argspec.args[i + 1]] = args[i]
-
-        url = self._create_base_url(properties, msg)
-
-        headers = {}
-
-        for arg_name in list(msg.keys()):
-            if isinstance(msg[arg_name], enum.Enum):  # Handle enum values "special"
-                msg[arg_name] = msg[arg_name].name
-
-            if arg_name in properties["arg_options"]:
-                opts = properties["arg_options"][arg_name]
-                if "header" in opts:
-                    headers[opts["header"]] = str(msg[arg_name])
-                    del msg[arg_name]
-
-        if not (method == "POST" or method == "PUT" or method == "PATCH"):
-            qs_map = msg.copy()
-            if "id" in qs_map:
-                del qs_map["id"]
-
-            # encode arguments in url
-            if len(qs_map) > 0:
-                url += "?" + parse.urlencode(qs_map)
-
-            body = None
-        else:
-            body = msg
-
-        return url, method, headers, body
-
     @gen.coroutine
-    def call(self, properties: Dict[str, str], args: List, kwargs: Dict[str, Any]={}) -> Result:
-        url, method, headers, body = self.build_call(properties, args, kwargs)
+    def call(self, properties: rpc.MethodProperties, args: List, kwargs: Dict[str, Any]={}) -> Result:
+        url, headers, body = properties.build_call(args, kwargs)
 
         url_host = self._get_client_config()
         url = url_host + url
@@ -609,10 +566,10 @@ class RESTTransport(RESTBase):
                 headers["Content-Encoding"] = "gzip"
 
         ca_certs = inmanta_config.Config.get(self.id, "ssl_ca_cert_file", None)
-        LOGGER.debug("Calling server %s %s", method, url)
+        LOGGER.debug("Calling server %s %s", properties.operation, url)
 
         try:
-            request = HTTPRequest(url=url, method=method, headers=headers, body=body, connect_timeout=self.connection_timout,
+            request = HTTPRequest(url=url, method=properties.operation, headers=headers, body=body, connect_timeout=self.connection_timout,
                                   request_timeout=self.request_timeout, ca_certs=ca_certs, decompress_response=True)
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
@@ -868,7 +825,7 @@ class Client(Endpoint):
     """
         A client that communicates with end-point based on its configuration
     """
-    def __init__(self, name):
+    def __init__(self, name: str) -> None:
         super().__init__(name)
         LOGGER.debug("Start transport for client %s", self.name)
         self._transport_instance = RESTTransport(self)
@@ -881,7 +838,7 @@ class Client(Endpoint):
         result = yield self._transport_instance.call(method_properties, args, kwargs)
         return result
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Callable:
         """
             Return a function that will call self._call with the correct method properties associated
         """
@@ -890,8 +847,7 @@ class Client(Endpoint):
 
             def wrap(*args, **kwargs) -> Callable[[List[Any], Dict[str, Any]], Result]:
                 method.function(self, *args, **kwargs)
-                properties = method.old_props()
-                return self._call(method_properties=properties, args=args, kwargs=kwargs)
+                return self._call(method_properties=method, args=args, kwargs=kwargs)
 
             return wrap
 
@@ -955,11 +911,11 @@ class ReturnClient(Client):
         self.session = session
 
     @gen.coroutine
-    def _call(self, method_properties, args, kwargs) -> Result:
-        url, method, headers, body = self._transport_instance.build_call(method_properties, args, kwargs)
+    def _call(self, method_properties: rpc.MethodProperties, args, kwargs) -> Result:
+        url, headers, body = method_properties.build_call(args, kwargs)
 
-        call_spec = {"url": url, "method": method, "headers": headers, "body": body}
-        timeout = method_properties["timeout"]
+        call_spec = {"url": url, "method": method_properties.operation, "headers": headers, "body": body}
+        timeout = method_properties.timeout
         try:
             return_value = yield self.session.put_call(call_spec, timeout=timeout)
         except gen.TimeoutError:

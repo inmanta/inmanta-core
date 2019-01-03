@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import inspect
+import enum
 
 from urllib import parse
 
@@ -143,6 +144,18 @@ class MethodProperties(object):
         MethodProperties._methods[function.__name__] = self
         function.__method_properties__ = self
 
+    @property
+    def operation(self) -> str:
+        return self._operation
+
+    @property
+    def arg_options(self) -> Dict[str, ArgOption]:
+        return self._arg_options
+    
+    @property
+    def timeout(self) -> int:
+        return self._timeout
+
     def get_call_headers(self) -> Set[str]:
         """
             Returns the set of headers required to create call
@@ -155,26 +168,6 @@ class MethodProperties(object):
                 headers.add(arg.header)
 
         return headers
-
-    def old_props(self) -> Dict[str, Any]:
-        """
-            Generate old style properties to be used during the refactor
-        """
-        return {
-            "index": self._index,
-            "id": self._id,
-            "reply": self._reply,
-            "operation": self._operation,
-            "timeout": self._timeout,
-            "api": self._api,
-            "server_agent": self._server_agent,
-            "agent_server": self._agent_server,
-            "validate_sid": self._validate_sid,
-            "arg_options": self._arg_options,
-            "client_types": self._client_types,
-            "method_name": self._method_name,
-            "method": self.function,
-        }
 
     def get_listen_url(self) -> str:
         """
@@ -206,8 +199,56 @@ class MethodProperties(object):
 
         return url
 
+    def build_call(self, args: List, kwargs: Dict[str, Any]={}) -> Tuple[str, Dict, Optional[Dict[str, Any]]]:
+        """
+            Build a call from the given arguments. This method returns the url, headers, and body for the call.
+
+            :return: (url, headers, body)
+        """
+        # create the message
+        msg = kwargs
+
+        # map the argument in arg to names
+        argspec = inspect.getfullargspec(self.function)
+        for i in range(len(args)):
+            msg[argspec.args[i + 1]] = args[i]
+
+        url = self.get_call_url(msg)
+
+        headers = {}
+
+        for arg_name in list(msg.keys()):
+            if isinstance(msg[arg_name], enum.Enum):  # Handle enum values "special"
+                msg[arg_name] = msg[arg_name].name
+
+            if arg_name in self.arg_options:
+                opts = self.arg_options[arg_name]
+                if "header" in opts:
+                    headers[opts["header"]] = str(msg[arg_name])
+                    del msg[arg_name]
+
+        if self.operation not in ("POST", "PUT", "PATCH"):
+            qs_map = msg.copy()
+            if "id" in qs_map:
+                del qs_map["id"]
+
+            # encode arguments in url
+            if len(qs_map) > 0:
+                url += "?" + parse.urlencode(qs_map)
+
+            body = None
+        else:
+            body = msg
+
+        return url, headers, body
+
 
 class UrlMethod(object):
     """
         This class holds the method definition together with the API (url, method) information
     """
+    def __init__(self, method_properties: MethodProperties, handler: Callable[..., Dict[int, Dict[str, Any]]]):
+        self._method_properties = method_properties
+        self._handler = handler
+
+
