@@ -5,7 +5,7 @@ cryptography==2.4.2
 execnet==1.5.0
 inmanta-sphinx==0.8
 motor==2.0.0
-netifaces==0.10.7
+netifaces==0.10.9
 ply==3.11
 pymongo==3.7.2
 pytest-cover==3.0.0
