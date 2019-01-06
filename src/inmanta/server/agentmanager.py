@@ -336,17 +336,17 @@ class AgentManager(ServerSlice):
                 errhandle.close()
 
     # External APIS
-    @protocol.handle(methods.NodeMethod.get_agent_process, agent_id="id")
+    @protocol.handle(methods.get_agent_process, agent_id="id")
     @gen.coroutine
     def get_agent_process(self, agent_id):
         return (yield self.get_agent_process_report(agent_id))
 
-    @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id", env="tid")
+    @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
     @gen.coroutine
     def trigger_agent(self, env, agent_id):
         raise NotImplemented()
 
-    @protocol.handle(methods.NodeMethod.list_agent_processes)
+    @protocol.handle(methods.list_agent_processes)
     @gen.coroutine
     def list_agent_processes(self, environment, expired):
         if environment is not None:
@@ -379,7 +379,7 @@ class AgentManager(ServerSlice):
 
         return 200, {"processes": processes}
 
-    @protocol.handle(methods.ServerAgentApiMethod.list_agents, env="tid")
+    @protocol.handle(methods.list_agents, env="tid")
     @gen.coroutine
     def list_agents(self, env):
         if env is not None:
@@ -390,7 +390,7 @@ class AgentManager(ServerSlice):
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat()}
 
-    @protocol.handle(methods.AgentRecovery.get_state, env="tid")
+    @protocol.handle(methods.get_state, env="tid")
     @gen.coroutine
     def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str):
         tid = env.id

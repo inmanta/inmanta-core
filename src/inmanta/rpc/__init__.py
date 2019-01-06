@@ -151,10 +151,30 @@ class MethodProperties(object):
     @property
     def arg_options(self) -> Dict[str, ArgOption]:
         return self._arg_options
-    
+
     @property
     def timeout(self) -> int:
         return self._timeout
+
+    @property
+    def id(self) -> bool:
+        return self._id
+
+    @property
+    def validate_sid(self) -> bool:
+        return self._validate_sid
+
+    @property
+    def agent_server(self) -> bool:
+        return self._agent_server
+
+    @property
+    def reply(self) -> bool:
+        return self._reply
+
+    @property
+    def client_types(self)-> List[str]:
+        return self._client_types
 
     def get_call_headers(self) -> Set[str]:
         """
@@ -199,7 +219,7 @@ class MethodProperties(object):
 
         return url
 
-    def build_call(self, args: List, kwargs: Dict[str, Any]={}) -> Tuple[str, Dict, Optional[Dict[str, Any]]]:
+    def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Tuple[str, Dict, Optional[Dict[str, Any]]]:
         """
             Build a call from the given arguments. This method returns the url, headers, and body for the call.
 
@@ -211,7 +231,7 @@ class MethodProperties(object):
         # map the argument in arg to names
         argspec = inspect.getfullargspec(self.function)
         for i in range(len(args)):
-            msg[argspec.args[i + 1]] = args[i]
+            msg[argspec.args[i]] = args[i]
 
         url = self.get_call_url(msg)
 
@@ -223,8 +243,8 @@ class MethodProperties(object):
 
             if arg_name in self.arg_options:
                 opts = self.arg_options[arg_name]
-                if "header" in opts:
-                    headers[opts["header"]] = str(msg[arg_name])
+                if opts.header:
+                    headers[opts.header] = str(msg[arg_name])
                     del msg[arg_name]
 
         if self.operation not in ("POST", "PUT", "PATCH"):
@@ -246,9 +266,39 @@ class MethodProperties(object):
 class UrlMethod(object):
     """
         This class holds the method definition together with the API (url, method) information
+
+        :param properties: The properties of this method
+        :param endpoint: The server endpoint on which this method is defined
+        :param handler: The method to call on the endpoint
+        :param method_name: The name of the method to call on the endpoint
     """
-    def __init__(self, method_properties: MethodProperties, handler: Callable[..., Dict[int, Dict[str, Any]]]):
-        self._method_properties = method_properties
+
+    def __init__(
+        self,
+        properties: MethodProperties,
+        endpoint: object,
+        handler: Callable[..., Dict[int, Dict[str, Any]]],
+        method_name: str,
+    ):
+        self._properties = properties
         self._handler = handler
+        self._endpoint = endpoint
+        self._method_name = method_name
+
+    @property
+    def properties(self) -> MethodProperties:
+        return self._properties
+
+    @property
+    def handler(self) -> Callable[..., Dict[int, Dict[str, Any]]]:
+        return self._handler
+
+    @property
+    def endpoint(self) -> object:
+        return self._endpoint
+
+    @property
+    def method_name(self) -> str:
+        return self._method_name
 
 

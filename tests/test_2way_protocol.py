@@ -24,26 +24,24 @@ import colorlog
 from inmanta import methods, data
 import pytest
 from tornado.gen import sleep
+from tornado import gen
 from utils import retry_limited
 from tornado.ioloop import IOLoop
 from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
-from inmanta.methods import ENV_ARG
+from inmanta.methods import ENV_OPTS
 import importlib
 
 LOGGER = logging.getLogger(__name__)
 
 
-class StatusMethod(methods.Method):
-    __method_name__ = "status"
+@methods.protocol(method_name="status", operation="GET", index=True)
+def get_status_x(tid: uuid.UUID):
+    pass
 
-    @methods.protocol(method_name="status", operation="GET", index=True)
-    def get_status_x(self, tid: uuid.UUID):
-        pass
-
-    @methods.protocol(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
-    def get_agent_status_x(self, id):
-        pass
+@methods.protocol(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
+def get_agent_status_x(id):
+    pass
 
 
 # Methods need to be defined before the Client class is loaded by Python
@@ -60,7 +58,7 @@ class SessionSpy(SessionListener, ServerSlice):
     def new_session(self, session):
         self.__sessions.append(session)
 
-    @protocol.handle(StatusMethod.get_status_x)
+    @protocol.handle(get_status_x)
     async def get_status_x(self, tid):
         status_list = []
         for session in self.__sessions:
@@ -82,7 +80,7 @@ class SessionSpy(SessionListener, ServerSlice):
 
 class Agent(protocol.AgentEndPoint):
 
-    @protocol.handle(StatusMethod.get_agent_status_x)
+    @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
@@ -131,8 +129,8 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
     Config.set("cmdline_rest_transport", "port", free_port)
 
     # Disable validation of envs
-    old_get_env = ENV_ARG["getter"]
-    ENV_ARG["getter"] = get_environment
+    old_get_env = ENV_OPTS["tid"].getter
+    ENV_OPTS["tid"].getter = get_environment
 
     try:
         io_loop = IOLoop.current()
@@ -162,7 +160,7 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
         rs.stop()
         agent.stop()
     finally:
-        ENV_ARG["getter"] = old_get_env
+        ENV_OPTS["tid"].getter = old_get_env
 
 
 async def check_sessions(sessions):
@@ -193,8 +191,8 @@ async def test_timeout(unused_tcp_port):
     Config.set("server", "agent-timeout", "1")
 
     # Disable validation of envs
-    old_get_env = ENV_ARG["getter"]
-    ENV_ARG["getter"] = get_environment
+    old_get_env = ENV_OPTS["tid"].getter
+    ENV_OPTS["tid"].getter = get_environment
 
     try:
 
@@ -248,4 +246,4 @@ async def test_timeout(unused_tcp_port):
         rs.stop()
         agent.stop()
     finally:
-        ENV_ARG["getter"] = old_get_env
+        ENV_OPTS["tid"].getter = old_get_env

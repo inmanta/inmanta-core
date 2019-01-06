@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 from inmanta.util import Scheduler
 from inmanta.protocol import RESTBase, decode_token, json_encode, UnauhorizedError, ReturnClient, handle
 
-from inmanta import config as inmanta_config, methods
+from inmanta import config as inmanta_config, methods, rpc
 from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 
 import tornado.web
@@ -74,20 +74,13 @@ class RESTServer(RESTBase):
         url_map = defaultdict(dict)
 
         # TODO: avoid colliding handlers
-
         for endpoint in self.__end_points:
             for method, method_handlers in endpoint.__methods__.items():
-                properties = method.__protocol_properties__
-                call = (endpoint, method_handlers[0])
+                properties = method.__method_properties__
+                self.headers.update(properties.get_call_headers())
+                url = properties.get_listen_url()
+                url_map[url][properties.operation] = rpc.UrlMethod(properties, endpoint, method_handlers[1], method_handlers[0])
 
-                if "arg_options" in properties:
-                    for opts in properties["arg_options"].values():
-                        if "header" in opts:
-                            self.headers.add(opts["header"])
-
-                url = self._create_base_url(properties)
-                properties["api_version"] = "1"
-                url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
         return url_map
 
     def start(self):
@@ -140,12 +133,6 @@ class RESTServer(RESTBase):
         self.http_server.stop()
         for endpoint in self.__end_points:
             endpoint.stop()
-
-    def return_error_msg(self, status=500, msg="", headers={}):
-        body = {"message": msg}
-        headers["Content-Type"] = "application/json"
-        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
-        return body, headers, status
 
 
 class ServerSlice(object):
@@ -434,7 +421,7 @@ class SessionManager(ServerSlice):
         LOGGER.debug("Seen session with id %s" % (session.get_id()))
         session.seen()
 
-    @handle(methods.HeartBeatMethod.heartbeat, env="tid")
+    @handle(methods.heartbeat, env="tid")
     @gen.coroutine
     def heartbeat(self, sid, env, endpoint_names, nodename):
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
@@ -451,7 +438,7 @@ class SessionManager(ServerSlice):
 
         return 200
 
-    @handle(methods.HeartBeatMethod.heartbeat_reply)
+    @handle(methods.heartbeat_reply)
     @gen.coroutine
     def heartbeat_reply(self, sid, reply_id, data):
         try:
@@ -475,8 +462,9 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self._transport.return_error_msg(405, "%s is not supported for this url. Supported methods: %s" %
-                                             (http_method, allowed))
+            self._transport.return_error_msg(
+                405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
+            )
             return
 
         return self._config[http_method]
@@ -537,8 +525,9 @@ class RESTHandler(tornado.web.RequestHandler):
 
             auth_enabled = inmanta_config.Config.get("server", "auth", False)
             if not auth_enabled or auth_token is not None:
-                result = yield self._transport._execute_call(kwargs, http_method, call_config,
-                                                             message, request_headers, auth_token)
+                result = yield self._transport._execute_call(
+                    kwargs, http_method, call_config, message, request_headers, auth_token
+                )
                 self.respond(*result)
             else:
                 self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))

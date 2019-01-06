@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ from urllib import parse
 import enum
 import io
 import gzip
-import functools
 
 import tornado
 from tornado import gen, web
@@ -37,7 +36,7 @@ from inmanta import config as inmanta_config
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado.ioloop import IOLoop
 import jwt
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Awaitable  # noqa: F401
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Awaitable  # noqa: F401
 
 
 from inmanta.util import Scheduler
@@ -138,7 +137,7 @@ def decode_token(token: str) -> Dict[str, str]:
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
         payload = jwt.decode(token, verify=False)
-    except Exception as e:
+    except Exception:
         raise UnauhorizedError("Unable to decode provided JWT bearer token.")
 
     if "iss" not in payload:
@@ -173,7 +172,7 @@ def decode_token(token: str) -> Dict[str, str]:
     return payload
 
 
-def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: str, config: List[Dict[str, str]]) -> None:
+def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: str, config: rpc.UrlMethod) -> None:
     """
         Authorize a request based on the given data
     """
@@ -193,12 +192,12 @@ def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], messa
     ok = False
     ct_key = const.INMANTA_URN + "ct"
     for ct in auth_data[ct_key]:
-        if ct in config[0]["client_types"]:
+        if ct in config.properties.client_types:
             ok = True
 
     if not ok:
         raise UnauhorizedError("The authorization token does not have a valid client type for this call." +
-                               " (%s provided, %s expected" % (auth_data[ct_key], config[0]["client_types"]))
+                               " (%s provided, %s expected" % (auth_data[ct_key], config.properties.client_types))
 
 
 # API
@@ -256,24 +255,6 @@ class Result(object):
 # Shared
 class RESTBase(object):
 
-    def _create_base_url(self, properties: Dict[str, str], msg: Dict[str, str]=None) -> str:
-        """
-            Create a url for the given protocol properties
-        """
-        url = "/api/v1"
-        if "id" in properties and properties["id"]:
-            if msg is None:
-                url += "/%s/(?P<id>[^/]+)" % properties["method_name"]
-            else:
-                url += "/%s/%s" % (properties["method_name"], parse.quote(str(msg["id"]), safe=""))
-
-        elif "index" in properties and properties["index"]:
-            url += "/%s" % properties["method_name"]
-        else:
-            url += "/%s" % properties["method_name"]
-
-        return url
-
     def _decode(self, body: str) -> Optional[Dict]:
         """
             Decode a response body
@@ -284,31 +265,38 @@ class RESTBase(object):
 
         return result
 
+    def return_error_msg(self, status: int=500, msg="", headers={}):
+        body = {"message": msg}
+        headers["Content-Type"] = "application/json"
+        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
+        return body, headers, status
+
     @gen.coroutine
-    def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
+    def _execute_call(self, kwargs, http_method, config: rpc.UrlMethod, message, request_headers, auth=None):
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
                 raise Exception("This method is unknown! This should not occur!")
+
             # create message that contains all arguments (id, query args and body)
             if "id" in kwargs and (message is None or "id" not in message):
                 message["id"] = kwargs["id"]
 
             # validate message against config
-            if "id" in config[0] and config[0]["id"] and "id" not in message:
+            if config.properties.id and "id" not in message:
                 return self.return_error_msg(500, "Invalid request. It should contain an id in the url.", headers)
 
-            validate_sid = config[0]["validate_sid"]
-            if validate_sid:
+            if config.properties.validate_sid:
                 if 'sid' not in message:
-                    return self.return_error_msg(500,
-                                                 "This is an agent to server call, it should contain an agent session id",
-                                                 headers)
+                    return self.return_error_msg(
+                        500, "This is an agent to server call, it should contain an agent session id", headers
+                    )
+
                 elif not self.validate_sid(message['sid']):
                     return self.return_error_msg(500, "The sid %s is not valid." % message['sid'], headers)
 
             # validate message against the arguments
-            argspec = inspect.getfullargspec(config[2])
+            argspec = inspect.getfullargspec(config.properties.function)
             args = argspec.args
 
             if "self" in args:
@@ -324,15 +312,15 @@ class RESTBase(object):
             for i in range(len(args)):
                 arg = args[i]
 
-                opts = {}
+                opts = None
                 # handle defaults and header mapping
-                if arg in config[0]["arg_options"]:
-                    opts = config[0]["arg_options"][arg]
+                if arg in config.properties.arg_options:
+                    opts: rpc.ArgOption = config.properties.arg_options[arg]
 
-                    if "header" in opts:
-                        message[arg] = request_headers[opts["header"]]
-                        if "reply_header" in opts and opts["reply_header"]:
-                            headers[opts["header"]] = message[arg]
+                    if opts.header:
+                        message[arg] = request_headers[opts.header]
+                        if opts.reply_header:
+                            headers[opts.header] = message[arg]
                     all_fields.add(arg)
 
                 if arg not in message:
@@ -368,29 +356,37 @@ class RESTBase(object):
                             return self.return_error_msg(500, error_msg, headers)
 
                 # execute any getters that are defined
-                if "getter" in opts:
+                if opts and opts.getter:
                     try:
-                        result = yield opts["getter"](message[arg], metadata)
+                        result = yield opts.getter(message[arg], metadata)
                         message[arg] = result
                     except methods.HTTPException as e:
                         LOGGER.exception("Failed to use getter for arg %s", arg)
                         return self.return_error_msg(e.code, e.message, headers)
 
-            if config[0]["agent_server"]:
+            if config.properties.agent_server:
                 if 'sid' in all_fields:
                     del message['sid']
                     all_fields.remove('sid')
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
-                                             "that are not declared in method and no kwargs argument is provided.", headers)
+                return self.return_error_msg(
+                    500,
+                    "Request contains fields %s that are not declared in method and no kwargs argument is provided." % all_fields,
+                    headers
+                )
 
-            LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
-                                                                           for name, value in message.items()]))
-            method_call = getattr(config[1][0], config[1][1])
+            LOGGER.debug(
+                "Calling method %s(%s)",
+                config.handler,
+                ", ".join(["%s='%s'" % (name, sh(str(value))) for name, value in message.items()])
+            )
 
-            if hasattr(method_call, "__protocol_mapping__"):
-                for k, v in method_call.__protocol_mapping__.items():
+
+            method_call = getattr(config.endpoint, config.method_name)
+
+            if hasattr(config.handler, "__protocol_mapping__"):
+                for k, v in config.handler.__protocol_mapping__.items():
                     if v in message:
                         message[k] = message[v]
                         del message[v]
@@ -400,10 +396,10 @@ class RESTBase(object):
             except UnauhorizedError as e:
                 return self.return_error_msg(403, e.args[0], headers)
 
-            result = yield method_call(**message)
+            result = yield config.handler(**message)
 
             if result is None:
-                raise Exception("Handlers for method calls should at least return a status code. %s on %s" % config[1])
+                raise Exception("Handlers for method calls should at least return a status code. %s on %s" % (config.method_name, config.endpoint))
 
             reply = None
             if isinstance(result, tuple):
@@ -416,12 +412,12 @@ class RESTBase(object):
                 code = result
 
             if reply is not None:
-                if "reply" in config[0] and config[0]:
-                    LOGGER.debug("%s returned %d: %s", config[1][1], code, sh(str(reply), 70))
+                if config.properties.reply:
+                    LOGGER.debug("%s returned %d: %s", config.method_name, code, sh(str(reply), 70))
                     return reply, headers, code
 
                 else:
-                    LOGGER.warn("Method %s returned a result although it is has not reply!")
+                    LOGGER.warning("Method %s returned a result although it is has not reply!")
 
             return None, headers, code
 
@@ -503,26 +499,19 @@ class RESTTransport(RESTBase):
             Build a mapping between urls, ops and methods
         """
         url_map: Dict[str, Dict[str, Callable]] = defaultdict(dict)
-        headers = set()
-        for method, method_handlers in self.endpoint.__methods__.items():
-            properties = method.__protocol_properties__
-            call = (self.endpoint, method_handlers[0])
+        for method, method_handlers in self.endpoint.get_endpoint_metadata().items():
+            properties = method.__method_properties__
+            self.headers.update(properties.get_call_headers())
+            url = properties.get_listen_url()
+            url_map[url][properties.operation] = rpc.UrlMethod(
+                properties, self.endpoint, method_handlers[1], method_handlers[0]
+            )
 
-            if "arg_options" in properties:
-                for opts in properties["arg_options"].values():
-                    if "header" in opts:
-                        headers.add(opts["header"])
-
-            url = self._create_base_url(properties)
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
-        headers.add("Authorization")
-        self.headers = headers
         return url_map
 
     def match_call(self, url: str, method: str) -> Tuple[Optional[Dict], Optional[Callable]]:
         """
-            Get the method call for the given url and http method
+            Get the method call for the given url and http method. This method is used for return calls over long poll
         """
         url_map = self.create_op_mapping()
         for url_re, handlers in url_map.items():
@@ -597,6 +586,7 @@ class handle(object):  # noqa: H801
         Decorator for subclasses of an endpoint to handle protocol methods
 
         :param method A subclass of method that defines the method
+        :param kwargs: Map arguments in the message from one name to an other
     """
 
     def __init__(self, method: str, **kwargs) -> None:
@@ -607,55 +597,33 @@ class handle(object):  # noqa: H801
         """
             The wrapping
         """
-        class_name = self.method.__qualname__.split('.<locals>', 1)[0].rsplit('.', 1)[0]
-        module = inspect.getmodule(self.method)
-        method_class = getattr(module, class_name)
-
-        if not hasattr(method_class, "__method_name__"):
-            raise Exception("%s should have a __method_name__ variable." % method_class)
-
-        if "method_name" not in self.method.__protocol_properties__:
-            self.method.__protocol_properties__["method_name"] = method_class.__method_name__
-
         function.__protocol_method__ = self.method
         function.__protocol_mapping__ = self.mapping
         return function
-
-
-class EndpointMeta(type):
-    """
-        Meta class to create endpoints
-    """
-    def __new__(cls, class_name, bases, dct):
-        if "__methods__" not in dct:
-            dct["__methods__"] = {}
-
-        total_dict = dct.copy()
-        for base in bases:
-            total_dict.update(base.__dict__)
-
-        methods = {}
-        for name, attr in total_dict.items():
-            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
-                if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method.")
-
-                methods[attr.__protocol_method__] = (name, attr)
-
-        dct["__methods__"] = methods
-
-        return type.__new__(cls, class_name, bases, dct)
 
 
 class Endpoint(object):
     """
         An end-point in the rpc framework
     """
-
     def __init__(self, name):
         self._name = name
         self._node_name = inmanta_config.nodename.get()
         self._end_point_names = []
+
+    def get_endpoint_metadata(self) -> Dict[str, Callable]:
+        total_dict = {method_name: getattr(self, method_name)
+                      for method_name in dir(self) if callable(getattr(self, method_name))}
+
+        methods = {}
+        for name, attr in total_dict.items():
+            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
+                if attr.__protocol_method__ in methods:
+                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
+
+                methods[attr.__protocol_method__] = (name, attr)
+
+        return methods
 
     def add_future(self, future) -> None:
         """
@@ -700,7 +668,7 @@ class Endpoint(object):
     node_name = property(get_node_name)
 
 
-class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
+class AgentEndPoint(Endpoint):
     """
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
@@ -756,10 +724,9 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         connected = False
         while self.running:
             LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-            result = yield self._client.heartbeat(sid=str(self.sessionid),
-                                                  tid=str(self._env_id),
-                                                  endpoint_names=self.end_point_names,
-                                                  nodename=self.node_name)
+            result = yield self._client.heartbeat(
+                sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
+            )
             LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
             if result.code == 200:
                 if not connected:
@@ -779,16 +746,16 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                 yield gen.sleep(self.reconnect_delay)
 
     def dispatch_method(self, transport, method_call):
-        LOGGER.debug("Received call through heartbeat: %s %s %s", method_call[
-                     "reply_id"], method_call["method"], method_call["url"])
+        LOGGER.debug(
+            "Received call through heartbeat: %s %s %s", method_call["reply_id"], method_call["method"], method_call["url"]
+        )
         kwargs, config = transport.match_call(method_call["url"], method_call["method"])
 
         if config is None:
             msg = "An error occurred during heartbeat method call (%s %s %s): %s" % (
                 method_call["reply_id"], method_call["method"], method_call["url"], "No such method")
             LOGGER.error(msg)
-            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
-                                                         {"result": msg, "code": 500}))
+            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call["reply_id"], {"result": msg, "code": 500}))
 
         body = {}
         if "body" in method_call and method_call["body"] is not None:
@@ -801,8 +768,9 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             else:
                 body[key] = [v.decode("latin-1") for v in value]
 
-        call_result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body,
-                                                          method_call["headers"])
+        call_result = self._transport(self)._execute_call(
+            kwargs, method_call["method"], config, body, method_call["headers"]
+        )
 
         def submit_result(future):
             if future is None:
@@ -813,10 +781,14 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
                 msg = ""
                 if result_body is not None and "message" in result_body:
                     msg = result_body["message"]
-                LOGGER.error("An error occurred during heartbeat method call (%s %s %s): %s",
-                             method_call["reply_id"], method_call["method"], method_call["url"], msg)
-            self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
-                                         {"result": result_body, "code": status})
+                LOGGER.error(
+                    "An error occurred during heartbeat method call (%s %s %s): %s",
+                    method_call["reply_id"],
+                    method_call["method"],
+                    method_call["url"],
+                    msg
+                )
+            self._client.heartbeat_reply(self.sessionid, method_call["reply_id"], {"result": result_body, "code": status})
 
         IOLoop.current().add_future(call_result, submit_result)
 
@@ -846,7 +818,7 @@ class Client(Endpoint):
             method = rpc.MethodProperties._methods[name]
 
             def wrap(*args, **kwargs) -> Callable[[List[Any], Dict[str, Any]], Result]:
-                method.function(self, *args, **kwargs)
+                method.function(*args, **kwargs)
                 return self._call(method_properties=method, args=args, kwargs=kwargs)
 
             return wrap

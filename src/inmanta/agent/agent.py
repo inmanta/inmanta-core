@@ -703,7 +703,7 @@ class Agent(AgentEndPoint):
 
         return self._instances[name].pause()
 
-    @protocol.handle(methods.AgentState.set_state)
+    @protocol.handle(methods.set_state)
     @gen.coroutine
     def set_state(self, agent, enabled):
         if enabled:
@@ -755,7 +755,7 @@ class Agent(AgentEndPoint):
         yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
         yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
-    @protocol.handle(methods.AgentState.trigger, env="tid", agent="id")
+    @protocol.handle(methods.trigger, env="tid", agent="id")
     @gen.coroutine
     def trigger_update(self, env, agent):
         """
@@ -772,7 +772,7 @@ class Agent(AgentEndPoint):
         self.add_future(future)
         return 200
 
-    @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid", agent="id")
+    @protocol.handle(methods.resource_event, env="tid", agent="id")
     @gen.coroutine
     def resource_event(self, env, agent: str, resource: str, send_events: bool,
                        state: const.ResourceState, change: const.Change, changes: dict):
@@ -792,7 +792,7 @@ class Agent(AgentEndPoint):
 
         return 200
 
-    @protocol.handle(methods.AgentDryRun.do_dryrun, env="tid", dry_run_id="id")
+    @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
     @gen.coroutine
     def run_dryrun(self, env, dry_run_id, agent, version):
         """
@@ -837,7 +837,7 @@ class Agent(AgentEndPoint):
 
         return dir_map
 
-    @protocol.handle(methods.AgentParameterMethod.get_parameter, env="tid")
+    @protocol.handle(methods.get_parameter, env="tid")
     @gen.coroutine
     def get_facts(self, env, agent, resource):
         if agent not in self._instances:
@@ -845,7 +845,7 @@ class Agent(AgentEndPoint):
 
         return (yield self._instances[agent].get_facts(resource))
 
-    @protocol.handle(methods.AgentReporting.get_status)
+    @protocol.handle(methods.get_status)
     @gen.coroutine
     def get_status(self):
         return 200, collect_report(self)
