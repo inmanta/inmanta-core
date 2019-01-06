@@ -81,7 +81,9 @@ class RESTServer(rest.RESTBase):
                 properties = method.__method_properties__
                 self.headers.update(properties.get_call_headers())
                 url = properties.get_listen_url()
-                url_map[url][properties.operation] = common.UrlMethod(properties, endpoint, method_handlers[1], method_handlers[0])
+                url_map[url][properties.operation] = common.UrlMethod(
+                    properties, endpoint, method_handlers[1], method_handlers[0]
+                )
 
         return url_map
 

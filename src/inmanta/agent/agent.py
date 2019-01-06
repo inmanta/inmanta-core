@@ -25,7 +25,7 @@ import uuid
 import time
 
 from tornado import gen, locks
-from inmanta import env, const, util
+from inmanta import env, const
 from inmanta import protocol
 from inmanta.agent import handler
 from inmanta.loader import CodeLoader
