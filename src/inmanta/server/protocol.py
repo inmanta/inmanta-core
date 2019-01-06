@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 from inmanta.util import Scheduler
-from inmanta.protocol import RESTBase, decode_token, json_encode, UnauhorizedError, ReturnClient, handle
+from inmanta.protocol import ReturnClient, handle, methods
+from inmanta.protocol import rest, common
 
-from inmanta import config as inmanta_config, methods, rpc
+from inmanta import config as inmanta_config
 from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 
 import tornado.web
@@ -30,6 +31,7 @@ import logging
 import ssl
 import time
 import uuid
+import abc
 from _collections import defaultdict
 
 
@@ -37,7 +39,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # Server Side
-class RESTServer(RESTBase):
+class RESTServer(rest.RESTBase):
 
     def __init__(self, connection_timout=120):
         self.__end_points = []
@@ -79,7 +81,7 @@ class RESTServer(RESTBase):
                 properties = method.__method_properties__
                 self.headers.update(properties.get_call_headers())
                 url = properties.get_listen_url()
-                url_map[url][properties.operation] = rpc.UrlMethod(properties, endpoint, method_handlers[1], method_handlers[0])
+                url_map[url][properties.operation] = common.UrlMethod(properties, endpoint, method_handlers[1], method_handlers[0])
 
         return url_map
 
@@ -129,7 +131,7 @@ class RESTServer(RESTBase):
         LOGGER.debug("Start REST transport")
 
     def stop(self):
-        LOGGER.debug("Stoppin Server Rest Endpoint")
+        LOGGER.debug("Stopping Server Rest Endpoint")
         self.http_server.stop()
         for endpoint in self.__end_points:
             endpoint.stop()
@@ -148,13 +150,17 @@ class ServerSlice(object):
         self._handlers = []
         self._sched = Scheduler()
 
+    @abc.abstractmethod
     def prestart(self, server: RESTServer):
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
-        pass
 
-    def start(self):
-        pass
+    @abc.abstractmethod
+    def start(self) -> None:
+        """
+            Start the server slice.
+        """
 
+    @abc.abstractmethod
     def stop(self):
         pass
 
@@ -482,11 +488,11 @@ class RESTHandler(tornado.web.RequestHandler):
                            headers["Authorization"])
             return None
 
-        return decode_token(parts[1])
+        return common.decode_token(parts[1])
 
     def respond(self, body, headers, status):
         if body is not None:
-            self.write(json_encode(body))
+            self.write(common.json_encode(body))
 
         for header, value in headers.items():
             self.set_header(header, value)
@@ -519,7 +525,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
             try:
                 auth_token = self.get_auth_token(request_headers)
-            except UnauhorizedError as e:
+            except common.UnauhorizedError as e:
                 self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
                 return
 

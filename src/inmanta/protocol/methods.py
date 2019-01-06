@@ -20,93 +20,13 @@ from functools import wraps
 import uuid
 import datetime
 
-from inmanta import data, const, rpc
+from inmanta import data, const
+from .common import ArgOption
+from .decorators import method
 from tornado import gen
 
 
 VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
-
-
-def protocol(
-    method_name,
-    index=False,
-    id=False,
-    operation="POST",
-    reply=True,
-    arg_options={},
-    timeout=None,
-    server_agent=False,
-    api=True,
-    agent_server=False,
-    validate_sid=None,
-    client_types=["public"],
-):
-    """
-        Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
-        and model the protocol.
-
-        :param index: A method that returns a list of resources. The url of this method is only the method/resource name.
-        :param id: This method requires an id of a resource. The python function should have an id parameter.
-        :param operation: The type of HTTP operation (verb)
-        :param timeout: nr of seconds before request it terminated
-        :param api This is a call from the client to the Server (True if not server_agent and not agent_server)
-        :param server_agent: This is a call from the Server to the Agent (reverse http channel through long poll)
-        :param agent_server: This is a call from the Agent to the Server
-        :param validate_sid: This call requires a valid session, true by default if agent_server and not api
-        :param client_types: The allowed client types for this call
-        :param arg_options Options related to arguments passed to the method. The key of this dict is the name of the arg to
-            which the options apply. The value is another dict that can contain the following options:
-                header: Map this argument to a header with the following name.
-                reply_header: If the argument is mapped to a header, this header will also be included in the reply
-                getter: Call this method after validation and pass its return value to the method call. This may change the
-                        type of the argument. This method can raise an HTTPException to return a 404 for example.
-    """
-    if api is None:
-        api = not server_agent and not agent_server
-
-    if validate_sid is None:
-        validate_sid = agent_server and not api
-
-    properties = {
-        "index": index,
-        "id": id,
-        "reply": reply,
-        "operation": operation,
-        "timeout": timeout,
-        "api": api,
-        "server_agent": server_agent,
-        "agent_server": agent_server,
-        "validate_sid": validate_sid,
-        "arg_options": arg_options,
-        "client_types": client_types,
-    }
-
-    def wrapper(func):
-        """
-            Return the wrapper method so it can be used to do RPC calls. Additionally it adds the protocol properties of the
-            decorator to the method.
-        """
-
-        @wraps(func)
-        @gen.coroutine
-        def wrapped_method(self, *args, **kwargs):
-            """
-                This wrapper will first call the original method to validate the arguments passed and possible custom
-                validation logic in the method itself.
-            """
-            func(*args, **kwargs)
-            print(self, args)
-            result = yield self._call(args=args, kwargs=kwargs, protocol_properties=properties)
-            return result
-
-        # TEMP for refactor
-        m = rpc.MethodProperties(func, method_name=method_name, api_version=1, **properties)
-        #
-        wrapped_method.__method_properties__ = m
-
-        return wrapped_method
-
-    return wrapper
 
 
 class HTTPException(Exception):
@@ -140,42 +60,42 @@ def ignore_env(obj: object, metadata: dict) -> object:
     return obj
 
 
-ENV_OPTS = {"tid": rpc.ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)}
-AGENT_ENV_OPTS = {"tid": rpc.ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
+ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=convert_environment)}
+AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=True, getter=add_env)}
 
 
 # Method for working with projects
 
 
-@protocol(method_name="project", operation="PUT", client_types=["api"])
+@method(method_name="project", operation="PUT", client_types=["api"])
 def create_project(name):
     """
         Create a new project
     """
 
 
-@protocol(method_name="project", operation="POST", id=True, client_types=["api"])
+@method(method_name="project", operation="POST", id=True, client_types=["api"])
 def modify_project(id: uuid.UUID, name: str):
     """
         Modify the given project
     """
 
 
-@protocol(method_name="project", operation="DELETE", id=True, client_types=["api"])
+@method(method_name="project", operation="DELETE", id=True, client_types=["api"])
 def delete_project(id: uuid.UUID):
     """
         Delete the given project and all related data
     """
 
 
-@protocol(method_name="project", operation="GET", index=True, client_types=["api"])
+@method(method_name="project", operation="GET", index=True, client_types=["api"])
 def list_projects():
     """
         Create a list of projects
     """
 
 
-@protocol(method_name="project", operation="GET", id=True, client_types=["api"])
+@method(method_name="project", operation="GET", id=True, client_types=["api"])
 def get_project(id: uuid.UUID):
     """
         Get a project and a list of the ids of all environments
@@ -185,7 +105,7 @@ def get_project(id: uuid.UUID):
 # Method for working with environments
 
 
-@protocol(method_name="environment", operation="PUT", client_types=["api"])
+@method(method_name="environment", operation="PUT", client_types=["api"])
 def create_environment(project_id: uuid.UUID, name: str, repository: str = None, branch: str = None):
     """
         Create a new environment
@@ -197,7 +117,7 @@ def create_environment(project_id: uuid.UUID, name: str, repository: str = None,
     """
 
 
-@protocol(method_name="environment", operation="POST", id=True, client_types=["api"])
+@method(method_name="environment", operation="POST", id=True, client_types=["api"])
 def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch: str = None):
     """
         Modify the given environment
@@ -209,22 +129,22 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
     """
 
 
-@protocol(method_name="environment", operation="DELETE", id=True, client_types=["api"])
+@method(method_name="environment", operation="DELETE", id=True, client_types=["api"])
 def delete_environment(id: uuid.UUID):
     """
         Delete the given environment and all related data
     """
 
 
-@protocol(method_name="environment", operation="GET", index=True, client_types=["api"])
+@method(method_name="environment", operation="GET", index=True, client_types=["api"])
 def list_environments():
     """
         Create a list of environments
     """
 
 
-@protocol(
-    method_name="environment", operation="GET", id=True, client_types=["api"], arg_options={"id": rpc.ArgOption(getter=add_env)}
+@method(
+    method_name="environment", operation="GET", id=True, client_types=["api"], arg_options={"id": ArgOption(getter=add_env)}
 )
 def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     """
@@ -240,7 +160,7 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
 # environments.
 
 
-@protocol(
+@method(
     method_name="environment_settings",
     operation="GET",
     index=True,
@@ -255,7 +175,7 @@ def list_settings(tid: uuid.UUID):
     """
 
 
-@protocol(
+@method(
     method_name="environment_settings",
     operation="POST",
     id=True,
@@ -270,7 +190,7 @@ def set_setting(tid: uuid.UUID, id: str, value: object):
     """
 
 
-@protocol(
+@method(
     method_name="environment_settings",
     operation="GET",
     id=True,
@@ -285,7 +205,7 @@ def get_setting(tid: uuid.UUID, id: str):
     """
 
 
-@protocol(
+@method(
     method_name="environment_settings",
     operation="DELETE",
     id=True,
@@ -303,7 +223,7 @@ def delete_setting(tid: uuid.UUID, id: str):
 # Method for listing and creating auth tokens for an environment that can be used by the agent and compilers
 
 
-@protocol(method_name="environment_auth", operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="environment_auth", operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
     """
         Create or get a new token for the given client types. Tokens generated with this call are scoped to the current
@@ -319,11 +239,11 @@ def create_token(tid: uuid.UUID, client_types: list, idempotent: bool = True):
 #  Decomission an environment
 
 
-@protocol(
+@method(
     method_name="decommission",
     operation="POST",
     id=True,
-    arg_options={"id": rpc.ArgOption(getter=convert_environment)},
+    arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=["api"],
 )
 def decomission_environment(id: uuid.UUID, metadata: dict = None):
@@ -333,11 +253,11 @@ def decomission_environment(id: uuid.UUID, metadata: dict = None):
     """
 
 
-@protocol(
+@method(
     method_name="decommission",
     operation="DELETE",
     id=True,
-    arg_options={"id": rpc.ArgOption(getter=convert_environment)},
+    arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=["api"],
 )
 def clear_environment(id: uuid.UUID):
@@ -347,7 +267,7 @@ def clear_environment(id: uuid.UUID):
 
 
 # Send a heartbeat to indicate that an agent is alive
-@protocol(
+@method(
     method_name="heartbeat",
     operation="POST",
     agent_server=True,
@@ -368,11 +288,11 @@ def heartbeat(sid: uuid.UUID, tid: uuid.UUID, endpoint_names: list, nodename: st
     """
 
 
-@protocol(
+@method(
     method_name="heartbeat",
     operation="PUT",
     agent_server=True,
-    arg_options={"sid": rpc.ArgOption(getter=ignore_env)},
+    arg_options={"sid": ArgOption(getter=ignore_env)},
     client_types=["agent"],
 )
 def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
@@ -388,14 +308,14 @@ def heartbeat_reply(sid: uuid.UUID, reply_id: uuid.UUID, data: dict):
 # Upload, retrieve and check for file. A file is identified by a hash of its content.
 
 
-@protocol(
+@method(
     method_name="file",
     operation="PUT",
     id=True,
     agent_server=True,
     api=True,
     client_types=["api", "agent", "compiler"],
-    arg_options={"id": rpc.ArgOption(getter=ignore_env)},
+    arg_options={"id": ArgOption(getter=ignore_env)},
 )
 def upload_file(id: str, content: str):
     """
@@ -406,14 +326,14 @@ def upload_file(id: str, content: str):
     """
 
 
-@protocol(
+@method(
     method_name="file",
     operation="HEAD",
     id=True,
     agent_server=True,
     api=True,
     client_types=["api", "agent", "compiler"],
-    arg_options={"id": rpc.ArgOption(getter=ignore_env)},
+    arg_options={"id": ArgOption(getter=ignore_env)},
 )
 def stat_file(id: str):
     """
@@ -423,14 +343,14 @@ def stat_file(id: str):
     """
 
 
-@protocol(
+@method(
     method_name="file",
     operation="GET",
     id=True,
     agent_server=True,
     api=True,
     client_types=["api", "agent", "compiler"],
-    arg_options={"id": rpc.ArgOption(getter=ignore_env)},
+    arg_options={"id": ArgOption(getter=ignore_env)},
 )
 def get_file(id: str):
     """
@@ -440,11 +360,8 @@ def get_file(id: str):
     """
 
 
-@protocol(
-    method_name="file",
-    api=True,
-    client_types=["api", "agent", "compiler"],
-    arg_options={"files": rpc.ArgOption(getter=ignore_env)},
+@method(
+    method_name="file", api=True, client_types=["api", "agent", "compiler"], arg_options={"files": ArgOption(getter=ignore_env)}
 )
 def stat_files(files: list):
     """
@@ -458,7 +375,7 @@ def stat_files(files: list):
 # Manage resources on the server
 
 
-@protocol(
+@method(
     method_name="resource",
     operation="GET",
     id=True,
@@ -484,7 +401,7 @@ def get_resource(
     """
 
 
-@protocol(method_name="resource", operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(method_name="resource", operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
 def get_resources_for_agent(tid: uuid.UUID, agent: str, version: int = None):
     """
         Return the most recent state for the resources associated with agent, or the version requested
@@ -496,7 +413,7 @@ def get_resources_for_agent(tid: uuid.UUID, agent: str, version: int = None):
     """
 
 
-@protocol(method_name="resource", operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(method_name="resource", operation="POST", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
 def resource_action_update(
     tid: uuid.UUID,
     resource_ids: list,
@@ -533,7 +450,7 @@ def resource_action_update(
 # Manage configuration model versions
 
 
-@protocol(method_name="version", index=True, operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="version", index=True, operation="GET", arg_options=ENV_OPTS, client_types=["api"])
 def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
         Returns a list of all available versions
@@ -544,7 +461,7 @@ def list_versions(tid: uuid.UUID, start: int = None, limit: int = None):
     """
 
 
-@protocol(method_name="version", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="version", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api"])
 def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: str = None, limit: int = None):
     """
         Get a particular version and a list of all resources in this version
@@ -557,7 +474,7 @@ def get_version(tid: uuid.UUID, id: int, include_logs: bool = None, log_filter: 
     """
 
 
-@protocol(method_name="version", operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="version", operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api"])
 def delete_version(tid: uuid.UUID, id: int):
     """
         Delete a particular version and resources
@@ -567,7 +484,7 @@ def delete_version(tid: uuid.UUID, id: int):
     """
 
 
-@protocol(method_name="version", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
+@method(method_name="version", operation="PUT", arg_options=ENV_OPTS, client_types=["compiler"])
 def put_version(
     tid: uuid.UUID, version: int, resources: list, resource_state: dict = {}, unknowns: list = None, version_info: dict = None
 ):
@@ -583,7 +500,7 @@ def put_version(
     """
 
 
-@protocol(method_name="version", operation="POST", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="version", operation="POST", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def release_version(tid: uuid.UUID, id: int, push: bool):
     """
         Release version of the configuration model for deployment.
@@ -597,7 +514,7 @@ def release_version(tid: uuid.UUID, id: int, push: bool):
 # Method for requesting and quering a dryrun
 
 
-@protocol(method_name="dryrun", operation="POST", id=True, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="dryrun", operation="POST", id=True, arg_options=ENV_OPTS, client_types=["api"])
 def dryrun_request(tid: uuid.UUID, id: int):
     """
         Do a dryrun
@@ -607,7 +524,7 @@ def dryrun_request(tid: uuid.UUID, id: int):
     """
 
 
-@protocol(method_name="dryrun", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="dryrun", operation="GET", arg_options=ENV_OPTS, client_types=["api"])
 def dryrun_list(tid: uuid.UUID, version: int = None):
     """
         Create a list of dry runs
@@ -617,7 +534,7 @@ def dryrun_list(tid: uuid.UUID, version: int = None):
     """
 
 
-@protocol(method_name="dryrun", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="dryrun", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api"])
 def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
         Create a dryrun report
@@ -627,7 +544,7 @@ def dryrun_report(tid: uuid.UUID, id: uuid.UUID):
     """
 
 
-@protocol(method_name="dryrun", operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(method_name="dryrun", operation="PUT", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
 def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
     """
         Store dryrun results at the server
@@ -642,7 +559,7 @@ def dryrun_update(tid: uuid.UUID, id: uuid.UUID, resource: str, changes: dict):
 # Method for requesting a dryrun from an agent
 
 
-@protocol(
+@method(
     method_name="agent_dryrun",
     operation="POST",
     id=True,
@@ -665,11 +582,11 @@ def do_dryrun(tid: uuid.UUID, id: uuid.UUID, agent: str, version: int):
 # Method to notify the server of changes in the configuration model source code
 
 
-@protocol(
+@method(
     method_name="notify",
     operation="GET",
     id=True,
-    arg_options={"id": rpc.ArgOption(getter=convert_environment)},
+    arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=["api"],
 )
 def notify_change_get(id: uuid.UUID, update: bool = True):
@@ -678,11 +595,11 @@ def notify_change_get(id: uuid.UUID, update: bool = True):
     """
 
 
-@protocol(
+@method(
     method_name="notify",
     operation="POST",
     id=True,
-    arg_options={"id": rpc.ArgOption(getter=convert_environment)},
+    arg_options={"id": ArgOption(getter=convert_environment)},
     client_types=["api"],
 )
 def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
@@ -695,7 +612,7 @@ def notify_change(id: uuid.UUID, update: bool = True, metadata: dict = {}):
     """
 
 
-@protocol(method_name="notify", operation="HEAD", id=True, client_types=["api"])
+@method(method_name="notify", operation="HEAD", id=True, client_types=["api"])
 def is_compiling(id: uuid.UUID):
     """
        Is a compiler running for the given environment
@@ -707,7 +624,7 @@ def is_compiling(id: uuid.UUID):
 # Get and set parameters on the server
 
 
-@protocol(method_name="parameter", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(method_name="parameter", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
 def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
         Get a parameter from the server.
@@ -724,7 +641,7 @@ def get_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
 
 
-@protocol(method_name="parameter", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(method_name="parameter", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
 def set_param(
     tid: uuid.UUID, id: str, source: str, value: str, resource_id: str = None, metadata: dict = {}, recompile: bool = False
 ):
@@ -742,7 +659,7 @@ def set_param(
     """
 
 
-@protocol(method_name="parameter", operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
+@method(method_name="parameter", operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler", "agent"])
 def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
         Delete a parameter on the server
@@ -753,7 +670,7 @@ def delete_param(tid: uuid.UUID, id: str, resource_id: str = None):
     """
 
 
-@protocol(method_name="parameter", operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="parameter", operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def list_params(tid: uuid.UUID, query: dict = {}):
     """
         List/query parameters in this environment
@@ -766,7 +683,7 @@ def list_params(tid: uuid.UUID, query: dict = {}):
 #  Get and set parameters on the server
 
 
-@protocol(
+@method(
     method_name="parameters",
     operation="PUT",
     index=True,
@@ -791,7 +708,7 @@ def set_parameters(tid: uuid.UUID, parameters: list):
 # Get parameters from the agent
 
 
-@protocol(
+@method(
     method_name="agent_parameter", operation="POST", server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[]
 )
 def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
@@ -807,21 +724,21 @@ def get_parameter(tid: uuid.UUID, agent: str, resource: dict):
 # Methods for creating and manipulating forms
 
 
-@protocol(method_name="form", operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="form", operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def list_forms(tid: uuid.UUID):
     """
         List all available forms in an environment
     """
 
 
-@protocol(method_name="form", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="form", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def get_form(tid: uuid.UUID, id: str):
     """
         Get a form
     """
 
 
-@protocol(method_name="form", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="form", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def put_form(tid: uuid.UUID, id: str, form: dict):
     """
         Upload a form
@@ -831,7 +748,7 @@ def put_form(tid: uuid.UUID, id: str, form: dict):
 # Methods for working with form records
 
 
-@protocol(method_name="records", operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="records", operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def list_records(tid: uuid.UUID, form_type: str, include_record: bool = False):
     """
         Get a list of all records of a specific form
@@ -842,7 +759,7 @@ def list_records(tid: uuid.UUID, form_type: str, include_record: bool = False):
     """
 
 
-@protocol(method_name="records", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="records", operation="GET", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def get_record(tid: uuid.UUID, id: uuid.UUID):
     """
         Get a record from the server
@@ -852,7 +769,7 @@ def get_record(tid: uuid.UUID, id: uuid.UUID):
     """
 
 
-@protocol(method_name="records", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="records", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def update_record(tid: uuid.UUID, id: uuid.UUID, form: dict):
     """
         Update a record
@@ -863,7 +780,7 @@ def update_record(tid: uuid.UUID, id: uuid.UUID, form: dict):
     """
 
 
-@protocol(method_name="records", operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="records", operation="POST", index=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def create_record(tid: uuid.UUID, form_type: str, form: dict):
     """
         Get a list of all records of a specific form
@@ -874,7 +791,7 @@ def create_record(tid: uuid.UUID, form_type: str, form: dict):
     """
 
 
-@protocol(method_name="records", operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
+@method(method_name="records", operation="DELETE", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
 def delete_record(tid: uuid.UUID, id: uuid.UUID):
     """
         Delete a record
@@ -887,7 +804,7 @@ def delete_record(tid: uuid.UUID, id: uuid.UUID):
 # Upload code to the server
 
 
-@protocol(method_name="code", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["compiler"])
+@method(method_name="code", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["compiler"])
 def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
     """
         Upload the supporting code to the server
@@ -899,7 +816,7 @@ def upload_code(tid: uuid.UUID, id: int, resource: str, sources: dict):
     """
 
 
-@protocol(method_name="code", operation="GET", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(method_name="code", operation="GET", id=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
 def get_code(tid: uuid.UUID, id: int, resource: str):
     """
         Get the code for a given version of the configuration model
@@ -912,7 +829,7 @@ def get_code(tid: uuid.UUID, id: int, resource: str):
 # Upload code to the server
 
 
-@protocol(method_name="codebatched", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["compiler"])
+@method(method_name="codebatched", operation="PUT", id=True, arg_options=ENV_OPTS, client_types=["compiler"])
 def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
     """
         Upload the supporting code to the server
@@ -926,7 +843,7 @@ def upload_code_batched(tid: uuid.UUID, id: int, resources: dict):
 # Generate download the diff of two hashes
 
 
-@protocol(method_name="filediff", client_types=["api"])
+@method(method_name="filediff", client_types=["api"])
 def diff(a: str, b: str):
     """
         Returns the diff of the files with the two given ids
@@ -936,7 +853,7 @@ def diff(a: str, b: str):
 # Get a list of compile reports
 
 
-@protocol(method_name="compilereport", operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="compilereport", operation="GET", index=True, arg_options=ENV_OPTS, client_types=["api"])
 def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int = None):
     """
         Return compile reports newer then start
@@ -948,7 +865,7 @@ def get_reports(tid: uuid.UUID, start: str = None, end: str = None, limit: int =
     """
 
 
-@protocol(method_name="compilereport", operation="GET", id=True, client_types=["api"])
+@method(method_name="compilereport", operation="GET", id=True, client_types=["api"])
 def get_report(id: uuid.UUID):
     """
         Get a compile report from the server
@@ -960,7 +877,7 @@ def get_report(id: uuid.UUID):
 # Get a list of all agents
 
 
-@protocol(method_name="agentproc", operation="GET", index=True, client_types=["api"])
+@method(method_name="agentproc", operation="GET", index=True, client_types=["api"])
 def list_agent_processes(environment: uuid.UUID = None, expired: bool = True):
     """
         Return a list of all nodes and the agents for these nodes
@@ -971,7 +888,7 @@ def list_agent_processes(environment: uuid.UUID = None, expired: bool = True):
     """
 
 
-@protocol(method_name="agentproc", operation="GET", id=True, client_types=["api"])
+@method(method_name="agentproc", operation="GET", id=True, client_types=["api"])
 def get_agent_process(id: uuid.UUID):
     """
         Return a detailed report for a node
@@ -982,7 +899,7 @@ def get_agent_process(id: uuid.UUID):
 
 
 # Get a list of all agents
-@protocol(method_name="agent", operation="POST", id=True, api=True, timeout=5, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="agent", operation="POST", id=True, api=True, timeout=5, arg_options=ENV_OPTS, client_types=["api"])
 def trigger_agent(tid: uuid.UUID, id: str):
     """
         Request the server to reload an agent
@@ -993,7 +910,7 @@ def trigger_agent(tid: uuid.UUID, id: str):
     """
 
 
-@protocol(method_name="agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=["api"])
+@method(method_name="agent", operation="GET", api=True, timeout=5, arg_options=ENV_OPTS, client_types=["api"])
 def list_agents(tid: uuid.UUID):
     """
         List all agent for an environment
@@ -1005,7 +922,7 @@ def list_agents(tid: uuid.UUID):
 # Reporting by the agent to the server
 
 
-@protocol(method_name="status", operation="GET", server_agent=True, timeout=5, client_types=[])
+@method(method_name="status", operation="GET", server_agent=True, timeout=5, client_types=[])
 def get_status():
     """
         A call from the server to the agent to report its status to the server
@@ -1017,14 +934,14 @@ def get_status():
 # Methods to allow the server to set the agents state
 
 
-@protocol(method_name="agentstate", operation="POST", server_agent=True, timeout=5, client_types=[])
+@method(method_name="agentstate", operation="POST", server_agent=True, timeout=5, client_types=[])
 def set_state(agent: str, enabled: bool):
     """
         Set the state of the agent.
     """
 
 
-@protocol(
+@method(
     method_name="agentstate",
     operation="POST",
     id=True,
@@ -1045,7 +962,7 @@ def trigger(tid: uuid.UUID, id: str):
 # Methods to send event to the server
 
 
-@protocol(
+@method(
     method_name="event", operation="PUT", id=True, server_agent=True, timeout=5, arg_options=AGENT_ENV_OPTS, client_types=[]
 )
 def resource_event(
@@ -1067,7 +984,7 @@ def resource_event(
 # Methods for the agent to get its initial state from the server
 
 
-@protocol(method_name="agentrecovery", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
+@method(method_name="agentrecovery", operation="GET", agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
 def get_state(tid: uuid.UUID, sid: uuid.UUID, agent: str):
     """
         Get the state for this agent.

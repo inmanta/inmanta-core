@@ -21,25 +21,25 @@ import sys
 import uuid
 
 import colorlog
-from inmanta import methods, data
+from inmanta import data
 import pytest
 from tornado.gen import sleep
-from tornado import gen
 from utils import retry_limited
 from tornado.ioloop import IOLoop
 from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
-from inmanta.methods import ENV_OPTS
+from inmanta.protocol.methods import ENV_OPTS
+from inmanta.protocol import method
 import importlib
 
 LOGGER = logging.getLogger(__name__)
 
 
-@methods.protocol(method_name="status", operation="GET", index=True)
+@method(method_name="status", operation="GET", index=True)
 def get_status_x(tid: uuid.UUID):
     pass
 
-@methods.protocol(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
+@method(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
 def get_agent_status_x(id):
     pass
 
@@ -97,9 +97,6 @@ async def get_environment(env: uuid.UUID, metadata: dict):
 async def test_2way_protocol(unused_tcp_port, logs=False):
 
     from inmanta.config import Config
-
-    import inmanta.agent.config  # nopep8
-    import inmanta.server.config  # nopep8
 
     if logs:
         # set logging to sensible defaults
@@ -174,8 +171,6 @@ async def check_sessions(sessions):
 async def test_timeout(unused_tcp_port):
 
     from inmanta.config import Config
-    import inmanta.agent.config  # nopep8
-    import inmanta.server.config  # nopep8
 
     free_port = str(unused_tcp_port)
 

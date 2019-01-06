@@ -35,7 +35,6 @@ from tornado import gen, locks, process, ioloop
 
 from inmanta import const
 from inmanta import data, config
-from inmanta import methods
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -43,7 +42,7 @@ from inmanta.server import config as opt
 import json
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
-from inmanta.protocol import encode_token
+from inmanta.protocol import encode_token, methods
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()

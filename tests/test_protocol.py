@@ -23,7 +23,7 @@ import time
 
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
-from inmanta import config, protocol, rpc
+from inmanta import config, protocol
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 from tornado import gen, web
@@ -277,13 +277,13 @@ async def test_method_properties():
     """
         Test method properties decorator and helper functions
     """
-    @rpc.method(method_name="test", operation="PUT", client_types=["api"])
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
     def test_method(name):
         """
             Create a new project
         """
 
-    props: rpc.MethodProperties = test_method.__method_properties__
+    props: protocol.common.MethodProperties = test_method.__method_properties__
     assert "Authorization" in props.get_call_headers()
     assert props.get_listen_url() == "/api/v1/test"
     assert props.get_call_url({}) == "/api/v1/test"

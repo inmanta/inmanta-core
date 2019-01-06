@@ -21,7 +21,7 @@ from tornado import gen
 from tornado import locks
 
 from inmanta.config import Config
-from inmanta import data, methods
+from inmanta import data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
@@ -35,7 +35,7 @@ import subprocess
 import uuid
 from inmanta.server.protocol import ServerSlice
 from inmanta.server import config as opt
-from inmanta.protocol import encode_token
+from inmanta.protocol import encode_token, methods
 from inmanta.resources import Id
 
 

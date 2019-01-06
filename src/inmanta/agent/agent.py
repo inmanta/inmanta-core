@@ -25,12 +25,11 @@ import uuid
 import time
 
 from tornado import gen, locks
-from inmanta import env, const
-from inmanta import methods
+from inmanta import env, const, util
 from inmanta import protocol
 from inmanta.agent import handler
 from inmanta.loader import CodeLoader
-from inmanta.protocol import Scheduler, AgentEndPoint
+from inmanta.protocol import AgentEndPoint, methods
 from inmanta.resources import Resource
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
@@ -644,7 +643,6 @@ class Agent(AgentEndPoint):
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
         self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
-        self._sched = Scheduler()
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
         if agent_map is None:

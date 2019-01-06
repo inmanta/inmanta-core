@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,12 +15,28 @@
 
     Contact: code@inmanta.com
 """
+
 import inspect
 import enum
+import uuid
+import datetime
+import logging
+import json
+import gzip
+import io
+import time
 
+import jwt
+
+from tornado import web
 from urllib import parse
-
 from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Awaitable  # noqa: F401
+
+from inmanta import execute, const
+from inmanta import config as inmanta_config
+
+
+LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
 class ArgOption(object):
@@ -38,43 +54,6 @@ class ArgOption(object):
         self.header = header
         self.reply_header = reply_header
         self.getter = getter
-
-
-def method(
-    method_name: str,
-    index: bool = False,
-    id: bool = False,
-    operation: str = "POST",
-    reply: bool = True,
-    arg_options: Dict[str, ArgOption] = {},
-    timeout: Optional[int] = None,
-    server_agent: bool = False,
-    api: bool = True,
-    agent_server: bool = False,
-    validate_sid: bool = False,
-    client_types: List[str] = ["public"],
-    api_version: int = 1,
-):
-    def wrapper(func: Callable[..., Dict[str, Any]]) -> Callable[..., Dict[str, Any]]:
-        MethodProperties(
-            func,
-            method_name,
-            index,
-            id,
-            operation,
-            reply,
-            arg_options,
-            timeout,
-            server_agent,
-            api,
-            agent_server,
-            validate_sid,
-            client_types,
-            api_version,
-        )
-        return func
-
-    return wrapper
 
 
 class MethodProperties(object):
@@ -173,7 +152,7 @@ class MethodProperties(object):
         return self._reply
 
     @property
-    def client_types(self)-> List[str]:
+    def client_types(self) -> List[str]:
         return self._client_types
 
     def get_call_headers(self) -> Set[str]:
@@ -302,3 +281,164 @@ class UrlMethod(object):
         return self._method_name
 
 
+class UnauhorizedError(Exception):
+    pass
+
+
+# Util functions
+def custom_json_encoder(o: object) -> Union[Dict, str, List]:
+    """
+        A custom json encoder that knows how to encode other types commonly used by Inmanta
+    """
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime.datetime):
+        return o.isoformat()
+
+    if hasattr(o, "to_dict"):
+        return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
+
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    if isinstance(o, execute.util.Unknown):
+        return const.UNKNOWN_STRING
+
+    LOGGER.error("Unable to serialize %s", o)
+    raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def json_encode(value: object) -> str:
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
+
+
+def gzipped_json(value: object) -> Tuple[bool, Union[bytes, str]]:
+    value = json_encode(value)
+    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
+        return False, value
+
+    gzip_value = io.BytesIO()
+    gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
+
+    gzip_file.write(value.encode())
+    gzip_file.close()
+
+    return True, gzip_value.getvalue()
+
+
+def shorten(msg: str, max_len: int = 10) -> str:
+    if len(msg) < max_len:
+        return msg
+    return msg[0 : max_len - 3] + "..."
+
+
+def encode_token(client_types: List[str], environment=None, idempotent: bool = False, expire=None):
+    cfg = inmanta_config.AuthJWTConfig.get_sign_config()
+
+    payload = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
+
+    if not idempotent:
+        payload["iat"] = int(time.time())
+
+        if cfg.expire > 0:
+            payload["exp"] = int(time.time() + cfg.expire)
+        elif expire is not None:
+            payload["exp"] = int(time.time() + expire)
+
+    if environment is not None:
+        payload[const.INMANTA_URN + "env"] = environment
+
+    return jwt.encode(payload, cfg.key, cfg.algo).decode()
+
+
+def decode_token(token: str) -> Dict[str, str]:
+    try:
+        # First decode the token without verification
+        header = jwt.get_unverified_header(token)
+        payload = jwt.decode(token, verify=False)
+    except Exception:
+        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
+
+    if "iss" not in payload:
+        raise UnauhorizedError("Issuer is required in token to validate.")
+
+    cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
+    if cfg is None:
+        raise UnauhorizedError("Unknown issuer for token")
+
+    alg = header["alg"].lower()
+    if alg == "hs256":
+        key = cfg.key
+    elif alg == "rs256":
+        if "kid" not in header:
+            raise UnauhorizedError("A kid is required for RS256")
+        kid = header["kid"]
+        if kid not in cfg.keys:
+            raise UnauhorizedError(
+                "The kid provided in the token does not match a known key. Check the jwks_uri or try "
+                "restarting the server to load any new keys."
+            )
+
+        key = cfg.keys[kid]
+    else:
+        raise UnauhorizedError("Algorithm %s is not supported." % alg)
+
+    try:
+        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
+        ct_key = const.INMANTA_URN + "ct"
+        payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
+    except Exception as e:
+        raise UnauhorizedError(*e.args)
+
+    return payload
+
+
+class Result(object):
+    """
+        A result of a method call
+    """
+
+    def __init__(self, code: int = 0, result: Dict[str, Any] = None):
+        self._result = result
+        self.code = code
+        self._callback = None
+
+    def get_result(self):
+        """
+            Only when the result is marked as available the result can be returned
+        """
+        if self.available():
+            return self._result
+        raise Exception("The result is not yet available")
+
+    def set_result(self, value):
+        if not self.available():
+            self._result = value
+            if self._callback:
+                self._callback(self)
+
+    def available(self):
+        return self._result is not None or self.code > 0
+
+    def wait(self, timeout=60):
+        """
+            Wait for the result to become available
+        """
+        count = 0
+        while count < timeout:
+            time.sleep(0.1)
+            count += 0.1
+
+    result = property(get_result, set_result)
+
+    def callback(self, fnc):
+        """
+            Set a callback function that is to be called when the result is ready.
+        """
+        self._callback = fnc
