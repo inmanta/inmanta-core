@@ -30,6 +30,7 @@ from tornado import gen
 from inmanta import const
 from inmanta.resources import Id
 import hashlib
+from inmanta.const import ResourceState
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1133,7 +1134,8 @@ class Resource(BaseDocument):
     ]
 
     def make_hash(self):
-        character = "|".join(sorted([str(k)+"||"+str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
+        character = "|".join(sorted([str(k) + "||" + str(v)
+                                     for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
         m = hashlib.md5()
         m.update(self.resource_id.encode())
         m.update(character.encode())
@@ -1243,15 +1245,20 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False):
+    def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False, include_undefined=True):
         projection = None
         if not include_attributes:
             projection = {"attributes": False}
 
+        filter = {"environment": environment, "model": version}
+
         if agent is not None:
-            cursor = cls._coll.find({"environment": environment, "model": version, "agent": agent}, projection)
-        else:
-            cursor = cls._coll.find({"environment": environment, "model": version}, projection)
+            filter["agent"] = agent
+
+        if not include_undefined:
+            filter["status"] = {"$nin": [const.ResourceState.undefined.name, const.ResourceState.skipped_for_undefined.name]}
+
+        cursor = cls._coll.find(filter, projection)
 
         resources = []
         while (yield cursor.fetch_next):
@@ -1367,7 +1374,7 @@ class Resource(BaseDocument):
         dct = BaseDocument.to_dict(self)
         dct["id"] = dct["resource_version_id"]
         return dct
-    
+
     def _to_dict(self, mongo_pk=False):
         self.make_hash()
         return BaseDocument._to_dict(self, mongo_pk=mongo_pk)
@@ -1537,7 +1544,7 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     @gen.coroutine
-    def get_increment_for_agent(self, agent:str):
+    def get_increment_for_agent(self, agent: str):
         """ Find resources incremented by this version compared to deployment state
         transitions per resource
         available/skipped/unavailable -> next version
@@ -1548,22 +1555,58 @@ class ConfigurationModel(BaseDocument):
          """
 
         # get resources for agent
-        resources = Resource.get_resources_for_version(self.environment, self.version, agent)
+        resources = yield Resource.get_resources_for_version(self.environment, self.version, agent, include_undefined=False)
 
-        increment = set()
+        # to increment
+        increment = []
+        # todo in this verions
+        work = list(resources)
 
         # get versions
-        cursor = self.__class__._coll.find({"environment": self.environment, "released":True}).sort("version", pymongo.DESCENDING)
+        cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
+                                           ).sort("version", pymongo.DESCENDING)
         versions = []
         while (yield cursor.fetch_next):
             versions.append(cursor.next_object()["version"])
 
-        print(versions)
-        # for version
-        #   get resources 
-        #   decide
-        # 
-        
+        for version in versions:
+            # todo in next verion
+            next = []
+
+            resources = yield Resource.get_resources_for_version(self.environment, version, agent, False)
+            id_to_resource = {r.resource_id: r for r in resources}
+
+            for res in work:
+                # not present -> increment
+                if res.resource_id not in id_to_resource:
+                    next.append(res)
+
+                ores = id_to_resource[res.resource_id]
+
+                # available/skipped/unavailable -> next version
+                if ores.status in [ResourceState.available, ResourceState.skipped, ResourceState.unavailable]:
+                    next.append(res)
+
+                # error -> increment
+                elif ores.status in [ResourceState.failed, ResourceState.cancelled]:
+                    increment.append(res)
+
+                elif ores.status == ResourceState.deployed:
+                    if res.attribute_hash == ores.attribute_hash:
+                        #  Deployed and same hash -> not increment
+                        continue
+                    else:
+                        # Deployed and different hash -> increment
+                        increment.append(res)
+                else:
+                    LOGGER.warning("Resource in unexpected state: %s, %s", ores.status, ores.resource_version_id)
+                    increment.append(res)
+
+            work = next
+            if not work:
+                break
+
+        return increment
 
 
 class Code(BaseDocument):

@@ -698,7 +698,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         version = cm.version
 
-        resources = cm.get_increment_for_agent(agent)
+        resources = yield cm.get_increment_for_agent(agent)
 
         deploy_model = []
         resource_ids = []
