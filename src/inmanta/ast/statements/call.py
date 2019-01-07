@@ -129,7 +129,7 @@ class FunctionUnit(Waiter):
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def execute(self):
@@ -139,7 +139,7 @@ class FunctionUnit(Waiter):
             self.done = True
         except UnsetException as e:
             LOGGER.debug("Unset value in python code in plugin %s." % self.function.function)
-            self.await(e.get_result_variable())
+            self.waitfor(e.get_result_variable())
         except RuntimeException as e:
             e.set_statement(self.function)
             raise e

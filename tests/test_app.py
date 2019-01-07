@@ -19,10 +19,11 @@
 import sys
 import os
 import subprocess
-import time
 import pytest
 import re
-import pty
+import conftest
+from threading import Timer
+from inmanta import const
 
 
 def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False):
@@ -32,10 +33,16 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     for directory in [log_dir, state_dir]:
         os.mkdir(directory)
     config_file = os.path.join(root_dir, "inmanta.cfg")
+
+    port = conftest.get_free_tcp_port()
+
     with open(config_file, 'w+') as f:
         f.write("[config]\n")
         f.write("log-dir=" + log_dir + "\n")
         f.write("state-dir=" + state_dir + "\n")
+        f.write("[database]\n")
+        f.write("port=" + str(port) + "\n")
+
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:
         args.append("-" + "v" * stdout_log_level)
@@ -50,42 +57,32 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     return (args, log_dir)
 
 
-def run_without_tty(args):
-    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    time.sleep(2)
-    process.kill()
+def run_without_tty(args, env=[]):
+    baseenv = os.environ.copy()
+    baseenv.update(env)
+    process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
+    t1 = Timer(2, process.kill)
+    t2 = Timer(3, process.terminate)
+    t1.start()
+    t2.start()
 
-    def convert_to_ascii(lines):
-        return [line.decode('ascii') for line in lines if line != ""]
+    out, err = process.communicate()
 
-    stdout = convert_to_ascii(process.stdout.readlines())
-    stderr = convert_to_ascii(process.stderr.readlines())
+    t1.cancel()
+    t2.cancel()
+
+    def convert_to_ascii(text):
+        return [line for line in out.decode("ascii").split("\n") if line != ""]
+
+    stdout = convert_to_ascii(out)
+    stderr = convert_to_ascii(err)
     return (stdout, stderr)
 
 
 def run_with_tty(args):
-
-    def read(fd):
-        result = ""
-        while True:
-            try:
-                data = os.read(fd, 1024)
-            except OSError:
-                break
-            if data == "":
-                break
-            result += data.decode('ascii')
-        return result
-
-    master, slave = pty.openpty()
-    process = subprocess.Popen(' '.join(args), stdin=slave, stdout=slave, stderr=slave, shell=True)
-    os.close(slave)
-    time.sleep(2)  # Wait for some log lines
-    process.kill()
-    stdout = read(master)
-    stdout = stdout.split('\n')
-    os.close(master)
-    return (stdout, '')
+    """Could not get code for actual tty to run stable in docker, so we are faking it """
+    env = {const.ENVIRON_FORCE_TTY: "true"}
+    return run_without_tty(args, env=env)
 
 
 def get_timestamp_regex():
@@ -108,21 +105,23 @@ def get_compiled_regexes(regexes, timed):
     (3, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
                       r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
     (2, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
-                     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint']),
+     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint']),
     (3, True, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
     (2, True, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
     (3, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
                      r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
     (2, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
-                    [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'])
+     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'])
 ])
+@pytest.mark.timeout(20)
 def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
     if with_tty:
         (stdout, _) = run_with_tty(args)
     else:
         (stdout, _) = run_without_tty(args)
-    assert os.listdir(log_dir) == []
+    log_file = "server.log"
+    assert log_file not in os.listdir(log_dir)
     assert len(stdout) != 0
     check_logs(stdout, regexes_required_lines, regexes_forbidden_lines, timed)
 
@@ -131,17 +130,18 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
     (3, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
                 r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
     (2, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
-               [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
+     [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
     (3, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
                r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
     (2, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
-              [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'])
+     [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'])
 ])
+@pytest.mark.timeout(60)
 def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
     log_file = "server.log"
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
-        (stdout, _) = run_without_tty(args)
+        (stdout, _) = run_with_tty(args)
     else:
         (stdout, _) = run_without_tty(args)
     assert log_file in os.listdir(log_dir)

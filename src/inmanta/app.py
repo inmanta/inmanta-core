@@ -44,7 +44,7 @@ from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
-from inmanta import protocol, module, moduletool
+from inmanta import protocol, module, moduletool, const
 from inmanta.export import cfg_env, ModelExporter
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
@@ -72,7 +72,7 @@ def start_agent(options):
     from inmanta import agent
     io_loop = IOLoop.current()
 
-    a = agent.Agent(io_loop)
+    a = agent.Agent()
     a.start()
 
     try:
@@ -297,10 +297,10 @@ def export(options):
             json.dump(modelexporter.export_all(), fh)
 
     if options.deploy:
-        conn = protocol.Client("compiler")
+        conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
-        IOLoop.current().run_sync(lambda: conn.release_version(tid, version, True), 60)
+        conn.release_version(tid, version, True)
 
 
 log_levels = {
@@ -367,7 +367,7 @@ def _convert_to_log_level(level):
 
 def _get_log_formatter_for_stream_handler(timed):
     log_format = "%(asctime)s " if timed else ""
-    if hasattr(sys.stdout, 'isatty') and sys.stdout.isatty():
+    if (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ:
         log_format += "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s"
         formatter = colorlog.ColoredFormatter(
             log_format,

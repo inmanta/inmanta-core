@@ -46,7 +46,7 @@ class RESTServer(RESTBase):
         self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.headers = set()
-        self.sessions_handler = SessionManager(IOLoop.current())
+        self.sessions_handler = SessionManager()
         self.add_endpoint(self.sessions_handler)
 
     def add_endpoint(self, endpoint: "ServerSlice"):
@@ -87,10 +87,6 @@ class RESTServer(RESTBase):
 
                 url = self._create_base_url(properties)
                 properties["api_version"] = "1"
-                url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-                url = self._create_base_url(properties, versioned=False)
-                properties = properties.copy()
-                properties["api_version"] = None
                 url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
         return url_map
 
@@ -157,14 +153,13 @@ class ServerSlice(object):
         An API serving part of the server.
     """
 
-    def __init__(self, io_loop, name):
+    def __init__(self, name):
         self._name = name
-        self._io_loop = io_loop
 
         self.create_endpoint_metadata()
         self._end_point_names = []
         self._handlers = []
-        self._sched = Scheduler(self._io_loop)
+        self._sched = Scheduler()
 
     def prestart(self, server: RESTServer):
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
@@ -202,7 +197,7 @@ class ServerSlice(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        self._io_loop.add_future(future, handle_result)
+        IOLoop.current().add_future(future, handle_result)
 
     def schedule(self, call, interval=60):
         self._sched.add_action(call, interval)
@@ -251,7 +246,7 @@ class Session(object):
         An environment that segments agents connected to the server
     """
 
-    def __init__(self, sessionstore, io_loop, sid, hang_interval, timout, tid, endpoint_names, nodename):
+    def __init__(self, sessionstore, sid, hang_interval, timout, tid, endpoint_names, nodename):
         self._sid = sid
         self._interval = hang_interval
         self._timeout = timout
@@ -263,8 +258,6 @@ class Session(object):
         self.tid = tid
         self.endpoint_names = endpoint_names
         self.nodename = nodename
-
-        self._io_loop = io_loop
 
         self._replies = {}
         self.check_expire()
@@ -279,7 +272,7 @@ class Session(object):
         if ttw < 0:
             self.expire(self._seen - time.time())
         else:
-            self._callhandle = self._io_loop.call_later(ttw, self.check_expire)
+            self._callhandle = IOLoop.current().call_later(ttw, self.check_expire)
 
     def get_id(self):
         return self._sid
@@ -289,7 +282,7 @@ class Session(object):
     def expire(self, timeout):
         self.expired = True
         if self._callhandle is not None:
-            self._io_loop.remove_timeout(self._callhandle)
+            IOLoop.current().remove_timeout(self._callhandle)
         self._sessionstore.expire(self, timeout)
 
     def seen(self):
@@ -301,8 +294,8 @@ class Session(object):
                 LOGGER.warning(log_message)
             future.set_exception(gen.TimeoutError())
 
-        timeout_handle = self._io_loop.add_timeout(self._io_loop.time() + timeout, on_timeout)
-        future.add_done_callback(lambda _: self._io_loop.remove_timeout(timeout_handle))
+        timeout_handle = IOLoop.current().add_timeout(IOLoop.current().time() + timeout, on_timeout)
+        future.add_done_callback(lambda _: IOLoop.current().remove_timeout(timeout_handle))
 
     def put_call(self, call_spec, timeout=10):
         future = tornado.concurrent.Future()
@@ -329,7 +322,7 @@ class Session(object):
         try:
             q = self._queue
             call_list = []
-            call = yield q.get(timeout=self._io_loop.time() + self._interval)
+            call = yield q.get(timeout=IOLoop.current().time() + self._interval)
             call_list.append(call)
             while q.qsize() > 0:
                 call = yield q.get()
@@ -373,8 +366,8 @@ class SessionManager(ServerSlice):
     """
     __methods__ = {}
 
-    def __init__(self, io_loop):
-        super().__init__(io_loop, SLICE_SESSION_MANAGER)
+    def __init__(self):
+        super().__init__(SLICE_SESSION_MANAGER)
 
         # Config
         interval = opt.agent_timeout.get()
@@ -429,7 +422,7 @@ class SessionManager(ServerSlice):
 
     def new_session(self, sid, tid, endpoint_names, nodename):
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
-        return Session(self, self._io_loop, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
+        return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
     def expire(self, session: Session, timeout):
         LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))

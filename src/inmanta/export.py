@@ -29,8 +29,6 @@ from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
 from inmanta.ast import RuntimeException, CompilerException, Locatable, OptionalValueException
-from tornado.ioloop import IOLoop
-from tornado import gen
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.util import hash_file
 import itertools
@@ -38,6 +36,8 @@ from inmanta.ast.entity import Entity
 from inmanta.util import groupby
 from inmanta.ast.attribute import RelationAttribute
 import inmanta.model as model
+
+
 LOGGER = logging.getLogger(__name__)
 
 unknown_parameters = []
@@ -65,17 +65,16 @@ class DependencyCycleException(Exception):
         return "Cycle in dependencies: %s" % self.cycle
 
 
-@gen.coroutine
 def upload_code(conn, tid, version, resource_to_sourcemap):
     allfiles = {myhash: source_code for sourcemap in resource_to_sourcemap.values()
                 for myhash, (file_name, module, source_code, req) in sourcemap.items()}
 
-    res = yield conn.stat_files(list(allfiles.keys()))
+    res = conn.stat_files(list(allfiles.keys()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
     for file in res.result["files"]:
-        res = yield conn.upload_file(id=file, content=base64.b64encode(allfiles[file].encode()).decode("ascii"))
+        res = conn.upload_file(id=file, content=base64.b64encode(allfiles[file].encode()).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
@@ -83,7 +82,7 @@ def upload_code(conn, tid, version, resource_to_sourcemap):
                              myhash, (file_name, module, source_code, req)in sourcemap.items()}
                   for resource, sourcemap in resource_to_sourcemap.items()}
 
-    res = yield conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
+    res = conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
@@ -128,7 +127,6 @@ class Exporter(object):
         self._scope = None
 
         self._file_store = {}
-        self._io_loop = IOLoop.current()
 
     def _get_instance_proxies_of_types(self, types):
         """
@@ -364,10 +362,7 @@ class Exporter(object):
 
         return resources
 
-    def run_sync(self, function):
-        return self._io_loop.run_sync(function, 300)
-
-    def deploy_code(self, tid, version=None):
+    def deploy_code(self, conn, tid, version=None):
         """
             Deploy code to the server
         """
@@ -391,13 +386,7 @@ class Exporter(object):
 
         LOGGER.info("Uploading source files")
 
-        conn = protocol.Client("compiler")
-
-        @gen.coroutine
-        def call():
-            yield upload_code(conn, tid, version, sources)
-
-        self.run_sync(call)
+        upload_code(conn, tid, version, sources)
 
     def commit_resources(self, version: int, resources: List[Dict[str, str]],
                          metadata: Dict[str, str], model: Dict) -> None:
@@ -409,19 +398,16 @@ class Exporter(object):
             LOGGER.error("The environment for this model should be set!")
             return
 
-        self.deploy_code(tid, version)
+        conn = protocol.SyncClient("compiler")
+        self.deploy_code(conn, tid, version)
 
-        conn = protocol.Client("compiler")
         LOGGER.info("Uploading %d files" % len(self._file_store))
 
         # collect all hashes and send them at once to the server to check
         # if they are already uploaded
         hashes = list(self._file_store.keys())
 
-        def call():
-            return conn.stat_files(files=hashes)
-
-        res = self.run_sync(call)
+        res = conn.stat_files(files=hashes)
 
         if res.code != 200:
             raise Exception("Unable to check status of files at server")
@@ -432,10 +418,7 @@ class Exporter(object):
         for hash_id in to_upload:
             content = self._file_store[hash_id]
 
-            def call():
-                return conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
-
-            res = self.run_sync(call)
+            res = conn.upload_file(id=hash_id, content=base64.b64encode(content).decode("ascii"))
 
             if res.code != 200:
                 LOGGER.error("Unable to upload file with hash %s" % hash_id)
@@ -451,14 +434,12 @@ class Exporter(object):
         for res in resources:
             LOGGER.debug("  %s", res["id"])
 
-        def put_call():
-            return conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
-                                    resource_state=self._resource_state, version_info=version_info)
-
-        res = self.run_sync(put_call)
+        res = conn.put_version(tid=tid, version=version, resources=resources, unknowns=unknown_parameters,
+                               resource_state=self._resource_state, version_info=version_info)
 
         if res.code != 200:
             LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
+            raise Exception("Failed to commit resource updates (%s)" % res.result["message"])
 
     def get_unknown_resources(self, hostname):
         """

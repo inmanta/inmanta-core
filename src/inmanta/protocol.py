@@ -26,7 +26,6 @@ import re
 from datetime import datetime
 from collections import defaultdict
 import enum
-import warnings
 import io
 import gzip
 
@@ -279,11 +278,11 @@ class Result(object):
 # Shared
 class RESTBase(object):
 
-    def _create_base_url(self, properties, msg=None, versioned=True):
+    def _create_base_url(self, properties, msg=None):
         """
             Create a url for the given protocol properties
         """
-        url = "/api/v1" if versioned else ""
+        url = "/api/v1"
         if "id" in properties and properties["id"]:
             if msg is None:
                 url += "/%s/(?P<id>[^/]+)" % properties["method_name"]
@@ -310,10 +309,6 @@ class RESTBase(object):
 
     @gen.coroutine
     def _execute_call(self, kwargs, http_method, config, message, request_headers, auth=None):
-        if "api_version" in config[0] and config[0]["api_version"] is None:
-            warnings.warn("Using an unversioned API method will be removed in the next release", DeprecationWarning)
-            LOGGER.warning("Using an unversioned API method will be removed in the next release")
-
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
@@ -543,11 +538,6 @@ class RESTTransport(RESTBase):
             properties["api_version"] = "1"
             url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
 
-            url = self._create_base_url(properties, versioned=False)
-            properties = properties.copy()
-            properties["api_version"] = None
-            url_map[url][properties["operation"]] = (properties, call, method.__wrapped__)
-
         headers.add("Authorization")
         self.headers = headers
         return url_map
@@ -728,11 +718,10 @@ class Endpoint(object):
         An end-point in the rpc framework
     """
 
-    def __init__(self, io_loop, name):
+    def __init__(self, name):
         self._name = name
         self._node_name = inmanta_config.nodename.get()
         self._end_point_names = []
-        self._io_loop = io_loop
 
     def add_future(self, future):
         """
@@ -744,7 +733,7 @@ class Endpoint(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        self._io_loop.add_future(future, handle_result)
+        IOLoop.current().add_future(future, handle_result)
 
     def get_end_point_names(self):
         return self._end_point_names
@@ -782,11 +771,11 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
-    def __init__(self, name, io_loop, timeout=120, transport=RESTTransport, reconnect_delay=5):
-        super().__init__(io_loop, name)
+    def __init__(self, name, timeout=120, transport=RESTTransport, reconnect_delay=5):
+        super().__init__(name)
         self._transport = transport
         self._client = None
-        self._sched = Scheduler(self._io_loop)
+        self._sched = Scheduler()
 
         self._env_id = None
 
@@ -816,7 +805,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
-        self._io_loop.add_callback(self.perform_heartbeat)
+        IOLoop.current().add_callback(self.perform_heartbeat)
 
     def stop(self):
         self.running = False
@@ -895,7 +884,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
             self._client.heartbeat_reply(self.sessionid, method_call["reply_id"],
                                          {"result": result_body, "code": status})
 
-        self._io_loop.add_future(call_result, submit_result)
+        IOLoop.current().add_future(call_result, submit_result)
 
 
 class ClientMeta(type):
@@ -931,10 +920,8 @@ class Client(Endpoint, metaclass=ClientMeta):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, ioloop=None, transport=RESTTransport):
-        if ioloop is None:
-            ioloop = IOLoop.current()
-        Endpoint.__init__(self, ioloop, name)
+    def __init__(self, name, transport=RESTTransport):
+        Endpoint.__init__(self, name)
         self._transport = transport
         self._transport_instance = None
 
@@ -982,10 +969,8 @@ class AgentClient(Endpoint, metaclass=ClientMeta):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, sid, ioloop=None, transport=RESTTransport, timeout=120):
-        if ioloop is None:
-            ioloop = IOLoop.current()
-        Endpoint.__init__(self, ioloop, name)
+    def __init__(self, name, sid, transport=RESTTransport, timeout=120):
+        Endpoint.__init__(self, name)
         self._transport = transport
         self._transport_instance = None
         self._sid = sid

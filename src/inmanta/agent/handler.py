@@ -24,7 +24,9 @@ import traceback
 from concurrent.futures import Future
 from collections import defaultdict
 import typing
-import tornado.concurrent
+
+
+from tornado import concurrent, ioloop
 
 
 from inmanta.agent.io import get_io
@@ -331,7 +333,6 @@ class ResourceHandler(object):
             self._io = io
 
         self._client = None
-        self._ioloop = agent.process._io_loop
 
     def run_sync(self, func: typing.Callable) -> typing.Any:
         """
@@ -349,10 +350,10 @@ class ResourceHandler(object):
                 if result is not None:
                     from tornado.gen import convert_yielded
                     result = convert_yielded(result)
-                    tornado.concurrent.chain_future(result, f)
+                    concurrent.chain_future(result, f)
             except Exception as e:
                 f.set_exception(e)
-        self._ioloop.add_callback(run)
+        ioloop.IOLoop.current().add_callback(run)
 
         return f.result()
 
@@ -366,7 +367,7 @@ class ResourceHandler(object):
             :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
-            self._client = protocol.AgentClient("agent", self._agent.sessionid, self._ioloop)
+            self._client = protocol.AgentClient("agent", self._agent.sessionid)
         return self._client
 
     def process_events(self, ctx: HandlerContext, resource: resources.Resource, events: dict) -> None:

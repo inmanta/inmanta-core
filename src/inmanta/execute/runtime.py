@@ -23,13 +23,21 @@ from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException,
 from inmanta.ast.type import Type
 from typing import List, Dict, Any
 
+try:
+    from typing import TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False
+
+if TYPE_CHECKING:
+    from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+
 
 class ResultCollector(object):
     """
         Helper interface for gradual execution
     """
 
-    def receive_result(self, value, location):
+    def receive_result(self, value: object, location: Location) -> None:
         """
             receive a possibly partial result
         """
@@ -54,7 +62,7 @@ class ResultVariable(ResultCollector):
         self.waiters = []
         self.value = value
         self.hasValue = False
-        self.type = None
+        self.type = None  # type: Optional[Type]
 
     def set_type(self, mytype: Type):
         self.type = mytype
@@ -71,7 +79,7 @@ class ResultVariable(ResultCollector):
     def is_ready(self):
         return self.hasValue
 
-    def await(self, waiter):
+    def waitfor(self, waiter):
         if self.is_ready():
             waiter.ready(self)
         else:
@@ -430,9 +438,9 @@ class Waiter(object):
         self.queue.add_to_all(self)
         self.done = False
 
-    def await(self, waitable):
+    def waitfor(self, waitable):
         self.waitcount = self.waitcount + 1
-        waitable.await(self)
+        waitable.waitfor(self)
 
     def ready(self, other):
         self.waitcount = self.waitcount - 1
@@ -463,7 +471,7 @@ class ExecutionUnit(Waiter):
         self.resolver = resolver
         self.queue_scheduler = queue_scheduler
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def _unsafe_execute(self):
@@ -496,7 +504,7 @@ class HangUnit(Waiter):
         self.resumer = resumer
         self.target = target
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def execute(self):
@@ -522,7 +530,7 @@ class RawUnit(Waiter):
         self.requires = requires
         self.resumer = resumer
         for r in requires.values():
-            self.await(r)
+            self.waitfor(r)
         self.ready(self)
 
     def execute(self):
@@ -638,7 +646,7 @@ class Instance(ExecutionContext, Locatable, Resolver):
 
         self.locations = []
 
-    def get_type(self):
+    def get_type(self) -> "Entity":
         return self.type
 
     def set_attribute(self, name, value, location, recur=True):

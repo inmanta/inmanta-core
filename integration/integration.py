@@ -5,25 +5,18 @@ from tornado.ioloop import IOLoop
 from tornado import gen
 import logging
 from uuid import UUID
-from inmanta.module import gitprovider, Module
+from inmanta.module import gitprovider
 from inmanta import module
-import shutil
 from os import makedirs
 from os.path import os
-from inmanta.compiler import do_compile
-from inmanta.ast import RuntimeException
 import sys
 import subprocess
 from subprocess import CalledProcessError
 import re
-import datetime
-from datetime import timedelta
-import dateutil.parser
 from time import sleep
 from shutil import rmtree
 from inmanta.config import TransportConfig
 import tempfile
-from inmanta.server.agentmanager import AgentManager
 import time
 
 
@@ -62,7 +55,7 @@ def patch(dir, patch):
 
 class Server(object):
 
-    def __init__(self, path, host, auth=False, ssl=False, autostart="iaas_*"):
+    def __init__(self, path, host, username_host="fedora", auth=False, ssl=False, autostart="iaas_*"):
         path = os.path.abspath(path)
         print("server root @:", path)
         makedirs(path, exist_ok=True)
@@ -116,7 +109,7 @@ path=/home/wouter/projects/inmanta-dashboard/dist""")
         self.proc = subprocess.Popen(args, cwd=path, env=os.environ.copy())
         if host != "127.0.0.1" and host != "localhost":
             self.tunnel = subprocess.Popen(
-                ["ssh", "-R", "*:8888:127.0.0.1:8888", "fedora@%s" % host], cwd=path, env=os.environ.copy())
+                ["ssh", "-R", "127.0.0.1:8888:127.0.0.1:8888", username_host + "@%s" % host], cwd=path, env=os.environ.copy())
         else:
             self.tunnel = None
 
@@ -299,7 +292,6 @@ class Environment(object):
     def get_endpoints(self):
         result = yield self.connection._client.list_params(self.envid)
         result = unwrap(result)
-        print(result)
         reports = {x["name"]: x["value"]
                    for x in result["parameters"] if "metadata" in x and x["metadata"] is not None and "type" in x["metadata"] and x["metadata"]["type"] == "report"}
         return reports
@@ -346,7 +338,7 @@ class Environment(object):
     def clear(self):
         yield self.connection._client.clear_environment(self.envid)
 
-    def start_agent(self, base_path, agent, agentmap):
+    def start_agent(self, base_path, agent, agentmap, hostname_server="127.0.0.1", agent_interval=600):
         base_path = os.path.abspath(os.path.join(base_path, agent))
         os.makedirs(base_path, exist_ok=True)
 
@@ -362,7 +354,12 @@ agent-map=%s
 agent-splay = 10
 
 agent-run-at-start=true
-""" % (base_path, ",".join(agentmap.keys()), self.envid, ",".join(["%s=%s" % (k, v) for (k, v) in agentmap.items()]))
+
+agent-interval=%s
+[agent_rest_transport]
+host=%s
+""" % (base_path, ",".join(agentmap.keys()), self.envid, ",".join(["%s=%s" % (k, v) for (k, v) in agentmap.items()]),
+       str(agent_interval), hostname_server)
 
         config_path = os.path.join(base_path, "agent.cfg")
         with open(config_path, "w+") as fd:
@@ -371,13 +368,42 @@ agent-run-at-start=true
         app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
         inmanta_path = [sys.executable, app]
         args = inmanta_path + ["-vvvv", "--timed-logs", "--config", config_path, "agent"]
-
         outfile = os.path.join(base_path, "out.log")
         err = os.path.join(base_path, "err.log")
 
         with open(outfile, "wb+") as outhandle:
             with open(err, "wb+") as errhandle:
                 return subprocess.Popen(args, stdout=outhandle, stderr=errhandle, cwd=base_path, env=os.environ.copy())
+
+    @gen.coroutine
+    def get_latest_version(self):
+        result = yield self.connection._client.list_versions(self.envid, 0, 1)
+        result = unwrap(result)
+        return result['versions'][0]['version']
+
+    @gen.coroutine
+    def get_resources_in_version(self, versionID, include_logs=False):
+        result = yield self.connection._client.get_version(self.envid, versionID, include_logs)
+        result = unwrap(result)
+        return result
+
+    @gen.coroutine
+    def get_resource_logs(self, resourceID):
+        result = yield self.connection._client.get_resource(self.envid, resourceID, True)
+        result = unwrap(result)
+        return result
+
+    @gen.coroutine
+    def get_resources_overview(self):
+        result = yield self.connection._client.get_environment(self.envid, 5, 1)
+        result = unwrap(result)
+        return result
+
+    @gen.coroutine
+    def set_setting(self, key, value):
+        result = yield self.connection._client.set_setting(self.envid, key, value)
+        result = unwrap(result)
+        return result
 
 
 class Project(object):
@@ -407,44 +433,27 @@ class Project(object):
         module.Project.set(self.project)
 
     def compile(self, env, logfile=None, envvars=None):
-        Config.set("config", "environment", env.envid)
-        # reset compiler state
-        # do_compile()
-
-        apppath = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
-        args = [sys.executable, apppath]
-
-        if logfile is not None:
-            args += ["--log-file", logfile, "--log-file-level", "3", "-v"]
-        else:
-            args += ["-vvv"]
-
-        args = args + ["compile",  "-e", env.envid,
-                       "--server_address", env.connection.server, "--server_port", "8888"]
-
-        if env.auth:
-            args += ["--username", "jos", "--password", "raienvnWAVbaerMSZ"]
-
-        if env.ssl:
-            args += ["--ssl", "--ssl-ca-cert", "/etc/pki/tls/certs/server.crt"]
-        try:
-            env = os.environ.copy()
-            if envvars is not None:
-                for k, v in envvars.items():
-                    env[k] = v
-            subprocess.check_output(args, cwd=self.target, env=env)
-        except CalledProcessError as e:
-            print(e.output)
-            raise e
+        self.do_command(env, logfile, envvars, "compile")
 
     def export(self, env, logfile, envvars=None):
+        try:
+            self.do_command(env, logfile, envvars, "export")
+            out = subprocess.check_output(
+                ["grep", "Committed resources with version", logfile], env=os.environ.copy(), universal_newlines=True)
+
+            return re.search(r'Committed resources with version ([0-9]+)', out).group(1)
+        except CalledProcessError as e:
+            print(e.output.decode("utf-8"))
+            raise e
+
+    def do_command(self, env, logfile, envvars=None, action='export'):
         Config.set("config", "environment", env.envid)
         # reset compiler state
         # do_compile()
 
         app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
 
-        inmanta_path = [sys.executable, app]
+        inmanta_path = [sys.executable, "-m", "inmanta.app"]
         args = inmanta_path
         if logfile is None:
             logfile = tempfile.mktemp()
@@ -452,7 +461,8 @@ class Project(object):
 
         args += ["--log-file", logfile, "--log-file-level", "3"]
 
-        args = args + ["-v", "export",  "-e", env.envid,
+
+        args = args + ["-v", action, "-e", env.envid,
                        "--server_address", env.connection.server, "--server_port", "8888"]
 
         if env.auth:
@@ -467,10 +477,7 @@ class Project(object):
                 for k, v in envvars.items():
                     env[k] = v
             subprocess.check_call(args, cwd=self.target, env=env, stderr=subprocess.STDOUT)
-            out = subprocess.check_output(
-                ["grep", "Committed resources with version", logfile], env=os.environ.copy(), universal_newlines=True)
-
-            return re.search(r'Committed resources with version ([0-9]+)', out).group(1)
         except CalledProcessError as e:
             print(e.output.decode("utf-8"))
             raise e
+
