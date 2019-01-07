@@ -1579,7 +1579,8 @@ class ConfigurationModel(BaseDocument):
             for res in work:
                 # not present -> increment
                 if res.resource_id not in id_to_resource:
-                    next.append(res)
+                    increment.append(res)
+                    continue
 
                 ores = id_to_resource[res.resource_id]
 
@@ -1605,7 +1606,8 @@ class ConfigurationModel(BaseDocument):
             work = next
             if not work:
                 break
-
+        if work:
+            increment.extend(work)
         return increment
 
 
