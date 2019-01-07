@@ -1084,7 +1084,7 @@ async def test_resources_attribute(data_module):
     assert res1.attribute_hash != res3.attribute_hash
 
 
-@pytest.mark.gen_test
+@pytest.mark.asyncio
 async def test_resources_report(data_module):
     project = data.Project(name="test")
     await project.insert()
