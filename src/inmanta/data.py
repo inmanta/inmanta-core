@@ -1133,7 +1133,7 @@ class Resource(BaseDocument):
     ]
 
     def make_hash(self):
-        character = "|".join(sorted([str(k)+str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
+        character = "|".join(sorted([str(k)+"||"+str(v) for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
         m = hashlib.md5()
         m.update(self.resource_id.encode())
         m.update(character.encode())
@@ -1535,6 +1535,35 @@ class ConfigurationModel(BaseDocument):
             yield ConfigurationModel._coll.update_one({"environment": self.environment, "version": self.version},
                                                       {"$set": {"skipped_for_undeployable": self.skipped_for_undeployable}})
         return self.skipped_for_undeployable
+
+    @gen.coroutine
+    def get_increment_for_agent(self, agent:str):
+        """ Find resources incremented by this version compared to deployment state
+        transitions per resource
+        available/skipped/unavailable -> next version
+        not present -> increment
+        error -> increment
+        Deployed and same hash -> not increment
+        deployed and different hash -> increment
+         """
+
+        # get resources for agent
+        resources = Resource.get_resources_for_version(self.environment, self.version, agent)
+
+        increment = set()
+
+        # get versions
+        cursor = self.__class__._coll.find({"environment": self.environment, "released":True}).sort("version", pymongo.DESCENDING)
+        versions = []
+        while (yield cursor.fetch_next):
+            versions.append(cursor.next_object()["version"])
+
+        print(versions)
+        # for version
+        #   get resources 
+        #   decide
+        # 
+        
 
 
 class Code(BaseDocument):
