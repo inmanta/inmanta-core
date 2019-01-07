@@ -1245,7 +1245,13 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False, include_undefined=True):
+    def get_resources_for_version(cls,
+                                  environment,
+                                  version,
+                                  agent=None,
+                                  include_attributes=True,
+                                  no_obj=False,
+                                  include_undefined=True):
         projection = None
         if not include_attributes:
             projection = {"attributes": False}
@@ -1545,8 +1551,9 @@ class ConfigurationModel(BaseDocument):
 
     @gen.coroutine
     def get_increment_for_agent(self, agent: str):
-        """ Find resources incremented by this version compared to deployment state
-        transitions per resource
+        """
+        Find resources incremented by this version compared to deployment state transitions per resource
+
         available/skipped/unavailable -> next version
         not present -> increment
         error -> increment

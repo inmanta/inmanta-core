@@ -715,7 +715,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
-        
 
     @protocol.handle(methods.VersionMethod.list_versions, env="tid")
     @gen.coroutine

@@ -23,11 +23,11 @@ from datetime import datetime
 from inmanta import data, const
 from inmanta.const import ResourceState, ResourceAction
 import logging
-from _collections import defaultdict
 
 
 class MultiVersionSetup(object):
-    """ create scenarios by describing the history of a resource, from newest to oldest state 
+    """
+      create scenarios by describing the history of a resource, from newest to oldest state
 
       V = void, nothing
       A - available/skipped/unavailable
@@ -35,7 +35,6 @@ class MultiVersionSetup(object):
       D - deployed
       S - skipped for undefined
       U - undefined
-
     """
 
     def __init__(self):
