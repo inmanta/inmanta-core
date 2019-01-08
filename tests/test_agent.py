@@ -27,7 +27,7 @@ from inmanta.server import SLICE_SESSION_MANAGER
 async def test_agent_get_status(server, environment):
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
-    myagent.start()
+    await myagent.start()
 
     await retry_limited(lambda: len(server.get_endpoint(SLICE_SESSION_MANAGER)._sessions) == 1, 0.5)
     clients = server.get_endpoint(SLICE_SESSION_MANAGER)._sessions.values()

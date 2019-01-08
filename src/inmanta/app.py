@@ -88,12 +88,12 @@ def start_agent(options):
 @gen.coroutine
 def stop(shutdown_function):
     """
-        Wait 30 seconds to gracefully shutdown instance.
+        Wait 10 seconds to gracefully shutdown instance.
         Afterwards stop the IOLoop
     """
     future = shutdown_function()
     try:
-        timeout = IOLoop.current().time() + 30
+        timeout = IOLoop.current().time() + 10
         yield gen.with_timeout(timeout, future)
     except TimeoutError:
         pass

@@ -187,7 +187,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
         Test the server to manage the updates on a model during agent deploy
     """
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -310,7 +310,7 @@ async def test_resource_update(client, server, environment):
         Test updating resources and logging
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = int(time.time())
@@ -481,7 +481,7 @@ async def test_purge_on_delete_requires(client, server, environment):
         Test purge on delete of resources and inversion of requires
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -601,7 +601,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
         Test purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -689,7 +689,7 @@ async def test_purge_on_delete(client, server, environment):
         Test purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -795,7 +795,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
         Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     # Version 1 with purge_on_delete true

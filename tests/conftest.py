@@ -193,11 +193,11 @@ async def server(inmanta_config, mongo_db, mongo_client, motor):
     await data.create_indexes()
 
     ibl = InmantaBootloader()
-    ibl.start()
+    await ibl.start()
 
     yield ibl.restserver
 
-    ibl.stop()
+    await ibl.stop()
     shutil.rmtree(state_dir)
 
 
@@ -256,11 +256,11 @@ async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
     await data.create_indexes()
 
     ibl = InmantaBootloader()
-    ibl.start()
+    await ibl.start()
 
     yield ibl.restserver
 
-    ibl.stop()
+    await ibl.stop()
 
     shutil.rmtree(state_dir)
 
