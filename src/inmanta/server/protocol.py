@@ -107,7 +107,7 @@ class RESTServer(rest.RESTBase):
             for op, cfg in configs.items():
                 handler_config[op] = cfg
 
-            self._handlers.append((url, RESTHandler, {"transport": self, "config": handler_config}))
+            self._handlers.append((url, rest.RESTHandler, {"transport": self, "config": handler_config}))
             LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
 
         port = 8888
@@ -150,7 +150,7 @@ class ServerSlice(object):
         self.create_endpoint_metadata()
         self._end_point_names = []
         self._handlers = []
-        self._sched = Scheduler()
+        self._sched = Scheduler() # FIXME: why has each slice its own scheduler?
 
     @abc.abstractmethod
     def prestart(self, server: RESTServer):
@@ -232,7 +232,7 @@ class ServerSlice(object):
             self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
 
     def add_static_content(self, path, content, content_type="application/javascript"):
-        self._handlers.append((r"%s(.*)" % path, StaticContentHandler, {"transport": self, "content": content,
+        self._handlers.append((r"%s(.*)" % path, rest.StaticContentHandler, {"transport": self, "content": content,
                                                                         "content_type": content_type}))
 
 
@@ -456,137 +456,3 @@ class SessionManager(ServerSlice):
         except Exception:
             LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
 
-
-class RESTHandler(tornado.web.RequestHandler):
-    """
-        A generic class use by the transport
-    """
-
-    def initialize(self, transport: "RESTServer", config):
-        self._transport = transport
-        self._config = config
-
-    def _get_config(self, http_method):
-        if http_method.upper() not in self._config:
-            allowed = ", ".join(self._config.keys())
-            self.set_header("Allow", allowed)
-            self._transport.return_error_msg(
-                405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
-            )
-            return
-
-        return self._config[http_method]
-
-    def get_auth_token(self, headers: dict):
-        """
-            Get the auth token provided by the caller. The token is provided as a bearer token.
-        """
-        if "Authorization" not in headers:
-            return None
-
-        parts = headers["Authorization"].split(" ")
-        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
-            LOGGER.warning("Invalid authentication header, Inmanta expects a bearer token. (%s was provided)",
-                           headers["Authorization"])
-            return None
-
-        return common.decode_token(parts[1])
-
-    def respond(self, body, headers, status):
-        if body is not None:
-            self.write(common.json_encode(body))
-
-        for header, value in headers.items():
-            self.set_header(header, value)
-
-        self.set_status(status)
-
-    @gen.coroutine
-    def _call(self, kwargs, http_method, call_config):
-        """
-            An rpc like call
-        """
-        if call_config is None:
-            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
-            self.respond(body, headers, status)
-            return
-
-        self.set_header("Access-Control-Allow-Origin", "*")
-        try:
-            message = self._transport._decode(self.request.body)
-            if message is None:
-                message = {}
-
-            for key, value in self.request.query_arguments.items():
-                if len(value) == 1:
-                    message[key] = value[0].decode("latin-1")
-                else:
-                    message[key] = [v.decode("latin-1") for v in value]
-
-            request_headers = self.request.headers
-
-            try:
-                auth_token = self.get_auth_token(request_headers)
-            except common.UnauhorizedError as e:
-                self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
-                return
-
-            auth_enabled = inmanta_config.Config.get("server", "auth", False)
-            if not auth_enabled or auth_token is not None:
-                result = yield self._transport._execute_call(
-                    kwargs, http_method, call_config, message, request_headers, auth_token
-                )
-                self.respond(*result)
-            else:
-                self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))
-        except ValueError:
-            LOGGER.exception("An exception occured")
-            self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
-
-    @gen.coroutine
-    def head(self, *args, **kwargs):
-        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
-
-    @gen.coroutine
-    def get(self, *args, **kwargs):
-        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
-
-    @gen.coroutine
-    def post(self, *args, **kwargs):
-        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
-
-    @gen.coroutine
-    def delete(self, *args, **kwargs):
-        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
-
-    @gen.coroutine
-    def patch(self, *args, **kwargs):
-        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
-
-    @gen.coroutine
-    def put(self, *args, **kwargs):
-        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
-
-    @gen.coroutine
-    def options(self, *args, **kwargs):
-        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
-        if len(self._transport.headers):
-            allow_headers += ", " + ", ".join(self._transport.headers)
-
-        self.set_header("Access-Control-Allow-Origin", "*")
-        self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
-        self.set_header("Access-Control-Allow-Headers", allow_headers)
-
-        self.set_status(200)
-
-
-class StaticContentHandler(tornado.web.RequestHandler):
-    def initialize(self, transport: "RESTServer", content, content_type):
-        self._transport = transport
-        self._content = content
-        self._content_type = content_type
-
-    def get(self, *args, **kwargs):
-        self.set_header("Content-Type", self._content_type)
-        self.write(self._content)
-        self.set_status(200)

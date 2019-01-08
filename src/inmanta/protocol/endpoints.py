@@ -167,6 +167,7 @@ class AgentEndPoint(Endpoint):
                 if result.result is not None:
                     if "method_calls" in result.result:
                         method_calls = result.result["method_calls"]
+                        # FIXME: reuse transport?
                         transport = self._transport(self)
 
                         for method_call in method_calls:
@@ -208,6 +209,7 @@ class AgentEndPoint(Endpoint):
             else:
                 body[key] = [v.decode("latin-1") for v in value]
 
+        # FIXME: why create a new transport instance on each call? keep-alive?
         call_result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body, method_call["headers"])
 
         def submit_result(future):

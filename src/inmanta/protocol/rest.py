@@ -29,10 +29,13 @@ from inmanta import const
 from inmanta.protocol import methods, common
 from inmanta import config as inmanta_config
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
+from tornado import httpserver
 from typing import Any, Dict, List, Optional, Tuple, Set, Callable  # noqa: F401
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
+CONTENT_TYPE = "Content-Type"
+JSON_CONTENT = "application/json"
 
 """
 
@@ -77,6 +80,19 @@ def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], messa
 
 # Shared
 class RESTBase(object):
+    """
+        Base class for REST based client and servers
+    """
+
+    _id: str
+
+    def __init__(self) -> None:
+        pass
+
+    @property
+    def id(self) -> str:
+        return self._id
+
     def _decode(self, body: str) -> Optional[Dict]:
         """
             Decode a response body
@@ -208,8 +224,6 @@ class RESTBase(object):
                 ", ".join(["%s='%s'" % (name, common.shorten(str(value))) for name, value in message.items()]),
             )
 
-            method_call = getattr(config.endpoint, config.method_name)
-
             if hasattr(config.handler, "__protocol_mapping__"):
                 for k, v in config.handler.__protocol_mapping__.items():
                     if v in message:
@@ -254,17 +268,185 @@ class RESTBase(object):
             return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
 
 
+class RESTHandler(tornado.web.RequestHandler):
+    """
+        A generic class use by the transport
+    """
+
+    def initialize(self, transport: "RESTServer", config):
+        self._transport = transport
+        self._config = config
+
+    def _get_config(self, http_method):
+        if http_method.upper() not in self._config:
+            allowed = ", ".join(self._config.keys())
+            self.set_header("Allow", allowed)
+            self._transport.return_error_msg(
+                405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
+            )
+            return
+
+        return self._config[http_method]
+
+    def get_auth_token(self, headers: dict):
+        """
+            Get the auth token provided by the caller. The token is provided as a bearer token.
+        """
+        if "Authorization" not in headers:
+            return None
+
+        parts = headers["Authorization"].split(" ")
+        if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
+            LOGGER.warning(
+                "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
+            )
+            return None
+
+        return common.decode_token(parts[1])
+
+    def respond(self, body: Optional[Dict[str, Any]], headers: Dict[str, str], status: int) -> None:
+        if CONTENT_TYPE not in headers:
+            headers[CONTENT_TYPE] = JSON_CONTENT
+        elif headers[CONTENT_TYPE] != JSON_CONTENT:
+            raise Exception("Invalid content type header provided. Only %s is supported" % JSON_CONTENT)
+
+        if body is not None:
+            self.write(common.json_encode(body))
+
+        for header, value in headers.items():
+            self.set_header(header, value)
+
+        self.set_status(status)
+
+    @gen.coroutine
+    def _call(self, kwargs, http_method, call_config):
+        """
+            An rpc like call
+        """
+        if call_config is None:
+            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
+            self.respond(body, headers, status)
+            return
+
+        self.set_header("Access-Control-Allow-Origin", "*")
+        try:
+            message = self._transport._decode(self.request.body)
+            if message is None:
+                message = {}
+
+            for key, value in self.request.query_arguments.items():
+                if len(value) == 1:
+                    message[key] = value[0].decode("latin-1")
+                else:
+                    message[key] = [v.decode("latin-1") for v in value]
+
+            request_headers = self.request.headers
+
+            try:
+                auth_token = self.get_auth_token(request_headers)
+            except common.UnauhorizedError as e:
+                self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
+                return
+
+            auth_enabled = inmanta_config.Config.get("server", "auth", False)
+            if not auth_enabled or auth_token is not None:
+                result = yield self._transport._execute_call(
+                    kwargs, http_method, call_config, message, request_headers, auth_token
+                )
+                self.respond(*result)
+            else:
+                self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))
+        except ValueError:
+            LOGGER.exception("An exception occured")
+            self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
+
+        finally:
+            self.finish()
+
+    @gen.coroutine
+    def head(self, *args, **kwargs):
+        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+
+    @gen.coroutine
+    def get(self, *args, **kwargs):
+        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+
+    @gen.coroutine
+    def post(self, *args, **kwargs):
+        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+
+    @gen.coroutine
+    def delete(self, *args, **kwargs):
+        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+
+    @gen.coroutine
+    def patch(self, *args, **kwargs):
+        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+
+    @gen.coroutine
+    def put(self, *args, **kwargs):
+        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+
+    @gen.coroutine
+    def options(self, *args, **kwargs):
+        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        if len(self._transport.headers):
+            allow_headers += ", " + ", ".join(self._transport.headers)
+
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Methods", "HEAD, GET, POST, PUT, OPTIONS, DELETE, PATCH")
+        self.set_header("Access-Control-Allow-Headers", allow_headers)
+
+        self.set_status(200)
+
+
+class StaticContentHandler(tornado.web.RequestHandler):
+    def initialize(self, transport: "RESTServer", content, content_type):
+        self._transport = transport
+        self._content = content
+        self._content_type = content_type
+
+    def get(self, *args, **kwargs):
+        self.set_header("Content-Type", self._content_type)
+        self.write(self._content)
+        self.set_status(200)
+
+
+class RESTServer(RESTBase):
+    """
+        A tornado based rest server
+    """
+
+    _http_server: httpserver.HTTPServer
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def start(self) -> None:
+        """
+            Start the server on the current ioloop
+        """
+
+    def stop(self) -> None:
+        """
+            Stop the current server
+        """
+        LOGGER.debug("Stopping Server Rest Endpoint")
+        if self._http_server is None:
+            self._http_server.stop()
+
+
 # Client side
 class RESTClient(RESTBase):
     """"
         A REST (json body over http) client transport. Only methods that operate on resource can use all
         HTTP verbs. For other methods the POST verb is used.
     """
+
     def __init__(self, endpoint: "Endpoint", connection_timout: int = 120) -> None:
+        super().__init__()
         self.__end_point = endpoint
         self.daemon = True
-        self._connected = False
-        self.set_connected()
         self.token = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.headers: Set[str] = set()
@@ -282,19 +464,6 @@ class RESTClient(RESTBase):
 
     id = property(get_id)
 
-    def set_connected(self) -> None:
-        """
-            Mark this transport as connected
-        """
-        LOGGER.debug("Transport %s is connected", self.get_id())
-        self._connected = True
-
-    def is_connected(self) -> bool:
-        """
-            Is this transport connected
-        """
-        return self._connected
-
     def create_op_mapping(self) -> Dict[str, Dict[str, Callable]]:
         """
             Build a mapping between urls, ops and methods
@@ -303,6 +472,7 @@ class RESTClient(RESTBase):
         for method, method_handlers in self.endpoint.get_endpoint_metadata().items():
             properties = method.__method_properties__
             self.headers.update(properties.get_call_headers())
+
             url = properties.get_listen_url()
             url_map[url][properties.operation] = common.UrlMethod(
                 properties, self.endpoint, method_handlers[1], method_handlers[0]
@@ -381,8 +551,7 @@ class RESTClient(RESTBase):
 
             return common.Result(code=e.code, result={"message": str(e)})
         except Exception as e:
-            raise e
-            return Result(code=500, result={"message": str(e)})
+            return common.Result(code=500, result={"message": str(e)})
 
         return common.Result(code=response.code, result=self._decode(response.body))
 

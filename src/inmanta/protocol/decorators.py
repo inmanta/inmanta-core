@@ -79,6 +79,7 @@ def method(
                 getter: Call this method after validation and pass its return value to the method call. This may change the
                         type of the argument. This method can raise an HTTPException to return a 404 for example.
     """
+
     def wrapper(func: Callable[..., Dict[str, Any]]) -> Callable[..., Dict[str, Any]]:
         common.MethodProperties(
             func,
