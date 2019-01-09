@@ -103,8 +103,7 @@ enabled=true
 # The path where the dashboard is installed
 path=/home/wouter/projects/inmanta-dashboard/dist""")
 
-        app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
-        inmanta_path = [sys.executable, app]
+        inmanta_path = [sys.executable, "-m", "inmanta.app"]
         args = inmanta_path + ["-v", "--log-file", os.path.join(path, "log"), "--log-file-level", "4", "server"]
         self.proc = subprocess.Popen(args, cwd=path, env=os.environ.copy())
         if host != "127.0.0.1" and host != "localhost":
@@ -365,8 +364,7 @@ host=%s
         with open(config_path, "w+") as fd:
             fd.write(cfg)
 
-        app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
-        inmanta_path = [sys.executable, app]
+        inmanta_path = [sys.executable, "-m", "inmanta.app"]
         args = inmanta_path + ["-vvvv", "--timed-logs", "--config", config_path, "agent"]
         outfile = os.path.join(base_path, "out.log")
         err = os.path.join(base_path, "err.log")
@@ -450,8 +448,6 @@ class Project(object):
         Config.set("config", "environment", env.envid)
         # reset compiler state
         # do_compile()
-
-        app = os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py"))
 
         inmanta_path = [sys.executable, "-m", "inmanta.app"]
         args = inmanta_path
