@@ -65,39 +65,42 @@ class Server(protocol.ServerSlice):
         self._server_storage = self.check_storage()
         self._agent_no_log = agent_no_log
 
-        self._db = None
-        if database_host is None:
-            database_host = opt.db_host.get()
+        self._recompiles = defaultdict(lambda: None)
 
-        if database_port is None:
-            database_port = opt.db_port.get()
-
-        data.connect(database_host, database_port, opt.db_name.get())
-        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
-
-        ioloop.IOLoop.current().add_callback(data.create_indexes)
-
+        self.setup_dashboard()
+        self.dryrun_lock = locks.Lock()
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
+        self._database_host = database_host
+        self._database_port = database_port
+
+    @gen.coroutine
+    def prestart(self, server):
+        self.agentmanager = server.get_endpoint("agentmanager")
+
+    @gen.coroutine
+    def start(self):
+        if self._database_host is None:
+            self._database_host = opt.db_host.get()
+
+        if self._database_port is None:
+            self._database_port = opt.db_port.get()
+
+        data.connect(self._database_host, self._database_port, opt.db_name.get())
+        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), self._database_host, self._database_port)
+
+        ioloop.IOLoop.current().add_callback(data.create_indexes)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
-        self._recompiles = defaultdict(lambda: None)
+        yield super().start()
 
-        self.setup_dashboard()
-        self.dryrun_lock = locks.Lock()
-
-    def prestart(self, server):
-        self.agentmanager = server.get_endpoint("agentmanager")
-
-    def start(self):
-        super().start()
-
+    @gen.coroutine
     def stop(self):
-        super().stop()
+        yield super().stop()
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)

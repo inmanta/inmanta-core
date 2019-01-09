@@ -798,6 +798,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         else:
             self._env_id = environment_id
 
+    @gen.coroutine
     def start(self):
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
@@ -807,6 +808,7 @@ class AgentEndPoint(Endpoint, metaclass=EndpointMeta):
         self._client = AgentClient(self.name, self.sessionid, transport=self._transport, timeout=self.server_timeout)
         IOLoop.current().add_callback(self.perform_heartbeat)
 
+    @gen.coroutine
     def stop(self):
         self.running = False
 

@@ -1,6 +1,6 @@
 v 2018.4 (2018-12-xx)
 Changes in this release:
-- Various bugfixes and performance enhancements
+- Various bugfixes and performance enhancements (#873)
 - Dependency updates
 - Removal of snapshot and restore functionality from the server (#789)
 - Replace virtualenv by python standard venv (#783)
