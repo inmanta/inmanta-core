@@ -25,7 +25,6 @@ from inmanta import data
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
-from tornado.ioloop import IOLoop
 from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
 from inmanta.protocol.methods import ENV_OPTS
@@ -130,17 +129,16 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
     ENV_OPTS["tid"].getter = get_environment
 
     try:
-        io_loop = IOLoop.current()
         rs = RESTServer()
         server = SessionSpy()
         rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
         rs.add_endpoint(server)
-        rs.start()
+        await rs.start()
 
         agent = Agent("agent")
         agent.add_end_point_name("agent")
         agent.set_environment(uuid.uuid4())
-        agent.start()
+        await agent.start()
 
         await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
         assert len(server.get_sessions()) == 1
@@ -151,11 +149,10 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
         assert "agents" in status.result
         assert len(status.result["agents"]) == 1
         assert status.result["agents"][0]["status"], "ok"
-        server.stop()
-        io_loop.stop()
+        await server.stop()
 
-        rs.stop()
-        agent.stop()
+        await rs.stop()
+        await agent.stop()
     finally:
         ENV_OPTS["tid"].getter = old_get_env
 
@@ -195,7 +192,7 @@ async def test_timeout(unused_tcp_port):
         server = SessionSpy()
         rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
         rs.add_endpoint(server)
-        rs.start()
+        await rs.start()
 
         env = uuid.uuid4()
 
@@ -203,7 +200,7 @@ async def test_timeout(unused_tcp_port):
         agent = Agent("agent")
         agent.add_end_point_name("agent")
         agent.set_environment(env)
-        agent.start()
+        await agent.start()
 
         # wait till up
         await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
@@ -213,7 +210,7 @@ async def test_timeout(unused_tcp_port):
         agent2 = Agent("agent")
         agent2.add_end_point_name("agent")
         agent2.set_environment(env)
-        agent2.start()
+        await agent2.start()
 
         # wait till up
         await retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
@@ -226,7 +223,7 @@ async def test_timeout(unused_tcp_port):
         await check_sessions(server.get_sessions())
 
         # take it down
-        agent2.stop()
+        await agent2.stop()
 
         # timout
         await sleep(2)
@@ -235,10 +232,10 @@ async def test_timeout(unused_tcp_port):
         print(server.get_sessions())
         await check_sessions(server.get_sessions())
         assert server.expires == 1
-        agent.stop()
-        server.stop()
+        await agent.stop()
+        await server.stop()
 
-        rs.stop()
-        agent.stop()
+        await rs.stop()
+        await agent.stop()
     finally:
         ENV_OPTS["tid"].getter = old_get_env

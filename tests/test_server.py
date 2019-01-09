@@ -27,9 +27,8 @@ from inmanta import data, protocol, const, config
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
 from datetime import datetime
 from uuid import UUID
-from inmanta.export import upload_code
 from inmanta.util import hash_file
-from inmanta.export import unknown_parameters
+from inmanta.export import upload_code, unknown_parameters
 import asyncio
 
 LOGGER = logging.getLogger(__name__)
@@ -187,7 +186,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
         Test the server to manage the updates on a model during agent deploy
     """
     agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -272,6 +271,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
     result = await client_multi.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=10)
@@ -310,7 +310,7 @@ async def test_resource_update(client, server, environment):
         Test updating resources and logging
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = int(time.time())
@@ -384,6 +384,7 @@ async def test_resource_update(client, server, environment):
     result = await client.get_version(environment, version)
     assert(result.code == 200)
     assert result.result["model"]["done"] == 10
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -481,7 +482,7 @@ async def test_purge_on_delete_requires(client, server, environment):
         Test purge on delete of resources and inversion of requires
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -563,6 +564,7 @@ async def test_purge_on_delete_requires(client, server, environment):
 
     assert len(file2["attributes"]["requires"]) == 0
     assert file1["id"] in file2["provides"]
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=20)
@@ -584,7 +586,7 @@ async def test_purge_on_delete_compile_failed_with_compile(event_loop, client, s
     """)
 
     # force deploy by having unknown
-    unknown_parameters.append({})
+    unknown_parameters.append({"parameter": "a", "source": "b"})
 
     # ensure new version, wait for other second
     await asyncio.sleep(1)
@@ -601,7 +603,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
         Test purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -640,8 +642,8 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
                   'purge_on_delete': True,
                   'version': version}]
 
-    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
 
     # Release the model and set all resources as deployed
     result = await client.release_version(environment, version, push=False)
@@ -673,14 +675,15 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
 
     # New version with only file3
     version = 2
-    res = await client.put_version(tid=environment, version=version, resources=[], unknowns=[],
-                                   version_info={const.EXPORT_META_DATA:
-                                                 {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
+    result = await client.put_version(tid=environment, version=version, resources=[],
+                                      unknowns=[{"parameter": "a", "source": "b"}], version_info={const.EXPORT_META_DATA:
+                                      {const.META_DATA_COMPILE_STATE: const.Compilestate.failed}})
     assert result.code == 200
 
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 0
+    assert len(result.result["unknowns"]) == 1
 
 
 @pytest.mark.asyncio
@@ -689,7 +692,7 @@ async def test_purge_on_delete(client, server, environment):
         Test purge on delete of resources
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     version = 1
@@ -772,7 +775,7 @@ async def test_purge_on_delete(client, server, environment):
             'requires': [],
             'purge_on_delete': True,
             'version': version}
-    res = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
+    result = await client.put_version(tid=environment, version=version, resources=[res3], unknowns=[], version_info={})
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -787,6 +790,7 @@ async def test_purge_on_delete(client, server, environment):
     assert file1["attributes"]["purged"]
     assert file2["attributes"]["purged"]
     assert not file3["attributes"]["purged"]
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -795,7 +799,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
         Test purge on delete behavior for resources that have not longer purged_on_delete set
     """
     agent = Agent("localhost", {"blah": "localhost"}, environment=environment, code_loader=False)
-    agent.start()
+    await agent.start()
     aclient = agent._client
 
     # Version 1 with purge_on_delete true
@@ -880,6 +884,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
+    await agent.stop()
 
 
 @pytest.mark.asyncio

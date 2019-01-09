@@ -41,7 +41,7 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
         f.write("log-dir=" + log_dir + "\n")
         f.write("state-dir=" + state_dir + "\n")
         f.write("[database]\n")
-        f.write("port-dir=" + str(port) + "\n")
+        f.write("port=" + str(port) + "\n")
 
     args = [sys.executable, "-m", "inmanta.app"]
     if stdout_log_level:

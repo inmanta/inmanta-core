@@ -87,17 +87,22 @@ class RESTServer(rest.RESTBase):
 
         return url_map
 
+    @gen.coroutine
     def start(self):
         """
-            Start the transport
+            Start the transport.
+
+            The order in which the different endpoints are prestarted/started, is determined by the
+            order in which they are added to the RESTserver via the add_endpoint(endpoint) method.
+            This order is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         LOGGER.debug("Starting Server Rest Endpoint")
 
         for endpoint in self.__end_points:
-            endpoint.prestart(self)
+            yield endpoint.prestart(self)
 
         for endpoint in self.__end_points:
-            endpoint.start()
+            yield endpoint.start()
             self._handlers.extend(endpoint.get_handlers())
 
         url_map = self.create_op_mapping()
@@ -127,16 +132,23 @@ class RESTServer(rest.RESTBase):
             LOGGER.debug("Created REST transport with SSL")
         else:
             self.http_server = HTTPServer(application, decompress_request=True)
-
         self.http_server.listen(port)
 
         LOGGER.debug("Start REST transport")
 
+    @gen.coroutine
     def stop(self):
+        """
+            Stop the transport.
+
+            The order in which the endpoint are stopped, is reverse compared to the starting order.
+            This prevents database connection from being closed too early. This order in which the endpoint
+            are started, is hardcoded in the get_server_slices() method in server/bootloader.py
+        """
         LOGGER.debug("Stopping Server Rest Endpoint")
         self.http_server.stop()
-        for endpoint in self.__end_points:
-            endpoint.stop()
+        for endpoint in reversed(self.__end_points):
+            yield endpoint.stop()
 
 
 class ServerSlice(object):
@@ -153,9 +165,11 @@ class ServerSlice(object):
         self._sched = Scheduler() # FIXME: why has each slice its own scheduler?
 
     @abc.abstractmethod
+    @gen.coroutine
     def prestart(self, server: RESTServer):
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
+    @gen.coroutine
     @abc.abstractmethod
     def start(self) -> None:
         """
@@ -163,6 +177,7 @@ class ServerSlice(object):
         """
 
     @abc.abstractmethod
+    @gen.coroutine
     def stop(self):
         pass
 
