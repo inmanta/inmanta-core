@@ -895,7 +895,7 @@ async def test_tokens(server_multi, client_multi, environment):
 
     # try to access a non environment call (global)
     result = await client_multi.list_environments()
-    assert result.code == 403
+    assert result.code == 401
 
     result = await client_multi.list_versions(environment)
     assert result.code == 200
@@ -905,7 +905,7 @@ async def test_tokens(server_multi, client_multi, environment):
 
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment)
-    assert result.code == 403
+    assert result.code == 401
 
 
 def make_source(collector, filename, module, source, req):

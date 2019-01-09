@@ -18,6 +18,7 @@
 import logging
 import inspect
 import json
+import uuid
 import re
 from datetime import datetime
 from collections import defaultdict
@@ -26,11 +27,16 @@ import enum
 import tornado
 from tornado import gen
 from inmanta import const
-from inmanta.protocol import methods, common
+from inmanta.protocol import methods, common, exceptions
 from inmanta import config as inmanta_config
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 from tornado import httpserver
-from typing import Any, Dict, List, Optional, Tuple, Set, Callable  # noqa: F401
+
+from typing import Any, Dict, List, Optional, Tuple, Set, Callable, TYPE_CHECKING  # noqa: F401
+
+if TYPE_CHECKING:
+    from inmanta.protocol.endpoints import Endpoint
+
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -48,7 +54,9 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: str, config: common.UrlMethod) -> None:
+def authorize_request(
+    auth_data: Dict[str, str], metadata: Dict[str, str], message: Dict[str, Any], config: common.UrlMethod
+) -> None:
     """
         Authorize a request based on the given data
     """
@@ -59,10 +67,10 @@ def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], messa
     env_key = const.INMANTA_URN + "env"
     if env_key in auth_data:
         if env_key not in metadata:
-            raise common.UnauhorizedError("The authorization token is scoped to a specific environment.")
+            raise exceptions.UnauthorizedException("The authorization token is scoped to a specific environment.")
 
         if metadata[env_key] != "all" and auth_data[env_key] != metadata[env_key]:
-            raise common.UnauhorizedError("The authorization token is not valid for the requested environment.")
+            raise exceptions.UnauthorizedException("The authorization token is not valid for the requested environment.")
 
     # Enforce client_types restrictions
     ok = False
@@ -72,7 +80,7 @@ def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], messa
             ok = True
 
     if not ok:
-        raise common.UnauhorizedError(
+        raise exceptions.UnauthorizedException(
             "The authorization token does not have a valid client type for this call."
             + " (%s provided, %s expected" % (auth_data[ct_key], config.properties.client_types)
         )
@@ -103,14 +111,20 @@ class RESTBase(object):
 
         return result
 
-    def return_error_msg(self, status: int = 500, msg="", headers={}):
-        body = {"message": msg}
-        headers["Content-Type"] = "application/json"
-        LOGGER.debug("Signaling error to client: %d, %s, %s", status, body, headers)
-        return body, headers, status
+    def validate_sid(self, sid: uuid.UUID) -> bool:
+        raise NotImplementedError()
 
     @gen.coroutine
-    def _execute_call(self, kwargs, http_method, config: common.UrlMethod, message, request_headers, auth=None):
+    def _execute_call(
+        self,
+        kwargs,
+        http_method: str,
+        config: common.UrlMethod,
+        message: Dict[str, Any],
+        request_headers: Dict[str, str],
+        auth=None,
+    ) -> Tuple[object, Dict[str, str], int]:
+
         headers = {"Content-Type": "application/json"}
         try:
             if kwargs is None or config is None:
@@ -122,20 +136,18 @@ class RESTBase(object):
 
             # validate message against config
             if config.properties.id and "id" not in message:
-                return self.return_error_msg(500, "Invalid request. It should contain an id in the url.", headers)
+                raise exceptions.BadRequest("the request should contain an id in the url.")
 
             if config.properties.validate_sid:
                 if "sid" not in message:
-                    return self.return_error_msg(
-                        500, "This is an agent to server call, it should contain an agent session id", headers
-                    )
+                    raise exceptions.BadRequest("this is an agent to server call, it should contain an agent session id")
 
                 elif not self.validate_sid(message["sid"]):
-                    return self.return_error_msg(500, "The sid %s is not valid." % message["sid"], headers)
+                    raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
             # validate message against the arguments
-            argspec = inspect.getfullargspec(config.properties.function)
-            args = argspec.args
+            argspec: inspect.FullArgSpec = inspect.getfullargspec(config.properties.function)
+            args: List[str] = argspec.args
 
             if "self" in args:
                 args.remove("self")
@@ -146,14 +158,12 @@ class RESTBase(object):
             else:
                 defaults_start = -1
 
-            metadata = {}
-            for i in range(len(args)):
-                arg = args[i]
-
-                opts = None
+            metadata: Dict[str, Any] = {}
+            for i, arg in enumerate(args):
                 # handle defaults and header mapping
+                opts: Optional[common.ArgOption] = None
                 if arg in config.properties.arg_options:
-                    opts: common.ArgOption = config.properties.arg_options[arg]
+                    opts = config.properties.arg_options[arg]
 
                     if opts.header:
                         message[arg] = request_headers[opts.header]
@@ -165,7 +175,7 @@ class RESTBase(object):
                     if defaults_start >= 0 and (i - defaults_start) < len(argspec.defaults):
                         message[arg] = argspec.defaults[i - defaults_start]
                     else:
-                        return self.return_error_msg(500, "Invalid request. Field '%s' is required." % arg, headers)
+                        raise exceptions.BadRequest("Invalid request. Field '%s' is required." % arg)
 
                 else:
                     all_fields.remove(arg)
@@ -194,16 +204,16 @@ class RESTBase(object):
                                 message[arg].__class__,
                             )
                             LOGGER.exception(error_msg)
-                            return self.return_error_msg(500, error_msg, headers)
+                            raise exceptions.BadRequest(error_msg)
 
                 # execute any getters that are defined
                 if opts and opts.getter:
                     try:
                         result = yield opts.getter(message[arg], metadata)
                         message[arg] = result
-                    except methods.HTTPException as e:
+                    except Exception as e:
                         LOGGER.exception("Failed to use getter for arg %s", arg)
-                        return self.return_error_msg(e.code, e.message, headers)
+                        raise e
 
             if config.properties.agent_server:
                 if "sid" in all_fields:
@@ -211,11 +221,9 @@ class RESTBase(object):
                     all_fields.remove("sid")
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                return self.return_error_msg(
-                    500,
-                    "Request contains fields %s that are not declared in method and no kwargs argument is provided."
-                    % all_fields,
-                    headers,
+                raise exceptions.BadRequest(
+                    "request contains fields %s that are not declared in method and no kwargs argument is provided."
+                    % all_fields
                 )
 
             LOGGER.debug(
@@ -230,15 +238,12 @@ class RESTBase(object):
                         message[k] = message[v]
                         del message[v]
 
-            try:
-                authorize_request(auth, metadata, message, config)
-            except common.UnauhorizedError as e:
-                return self.return_error_msg(403, e.args[0], headers)
+            authorize_request(auth, metadata, message, config)
 
             result = yield config.handler(**message)
 
             if result is None:
-                raise Exception(
+                raise exceptions.BadRequest(
                     "Handlers for method calls should at least return a status code. %s on %s"
                     % (config.method_name, config.endpoint)
                 )
@@ -248,7 +253,7 @@ class RESTBase(object):
                 if len(result) == 2:
                     code, reply = result
                 else:
-                    raise Exception("Handlers for method call can only return a status code and a reply")
+                    raise exceptions.BadRequest("Handlers for method call can only return a status code and a reply")
 
             else:
                 code = result
@@ -263,9 +268,12 @@ class RESTBase(object):
 
             return None, headers, code
 
+        except exceptions.BaseException:
+            raise
+
         except Exception as e:
             LOGGER.exception("An exception occured during the request.")
-            return self.return_error_msg(500, "An exception occured: " + str(e.args), headers)
+            raise exceptions.ServerError(str(e.args))
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -281,10 +289,9 @@ class RESTHandler(tornado.web.RequestHandler):
         if http_method.upper() not in self._config:
             allowed = ", ".join(self._config.keys())
             self.set_header("Allow", allowed)
-            self._transport.return_error_msg(
+            raise exceptions.BaseException(
                 405, "%s is not supported for this url. Supported methods: %s" % (http_method, allowed)
             )
-            return
 
         return self._config[http_method]
 
@@ -298,7 +305,8 @@ class RESTHandler(tornado.web.RequestHandler):
         parts = headers["Authorization"].split(" ")
         if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
             LOGGER.warning(
-                "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
+                "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)",
+                headers["Authorization"]
             )
             return None
 
@@ -319,14 +327,12 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_status(status)
 
     @gen.coroutine
-    def _call(self, kwargs, http_method, call_config):
+    def _call(self, kwargs: Dict[str, str], http_method: str, call_config):
         """
             An rpc like call
         """
         if call_config is None:
-            body, headers, status = self._transport.return_error_msg(404, "This method does not exist.")
-            self.respond(body, headers, status)
-            return
+            raise exceptions.NotFound("This method does not exist")
 
         self.set_header("Access-Control-Allow-Origin", "*")
         try:
@@ -341,12 +347,7 @@ class RESTHandler(tornado.web.RequestHandler):
                     message[key] = [v.decode("latin-1") for v in value]
 
             request_headers = self.request.headers
-
-            try:
-                auth_token = self.get_auth_token(request_headers)
-            except common.UnauhorizedError as e:
-                self.respond(*self._transport.return_error_msg(403, "Access denied: " + e.args[0]))
-                return
+            auth_token = self.get_auth_token(request_headers)
 
             auth_enabled = inmanta_config.Config.get("server", "auth", False)
             if not auth_enabled or auth_token is not None:
@@ -355,10 +356,14 @@ class RESTHandler(tornado.web.RequestHandler):
                 )
                 self.respond(*result)
             else:
-                self.respond(*self._transport.return_error_msg(401, "Access to this resource is unauthorized."))
+                raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
+
         except ValueError:
             LOGGER.exception("An exception occured")
-            self.respond(*self._transport.return_error_msg(500, "Unable to decode request body"))
+            self.respond({"message": "Unable to decode request body"}, {}, 400)
+
+        except exceptions.BaseException as e:
+            self.respond(e.to_body(), {}, e.to_status())
 
         finally:
             self.finish()
@@ -432,7 +437,7 @@ class RESTServer(RESTBase):
             Stop the current server
         """
         LOGGER.debug("Stopping Server Rest Endpoint")
-        if self._http_server is None:
+        if self._http_server is not None:
             self._http_server.stop()
 
 
@@ -456,13 +461,12 @@ class RESTClient(RESTBase):
     def endpoint(self):
         return self.__end_point
 
-    def get_id(self):
+    @property
+    def id(self):
         """
             Returns a unique id for a transport on an endpoint
         """
         return "%s_rest_transport" % self.__end_point.name
-
-    id = property(get_id)
 
     def create_op_mapping(self) -> Dict[str, Dict[str, Callable]]:
         """

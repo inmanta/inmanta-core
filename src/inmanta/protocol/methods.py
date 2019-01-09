@@ -16,24 +16,17 @@
     Contact: code@inmanta.com
 """
 
-from functools import wraps
 import uuid
 import datetime
 
 from inmanta import data, const
 from .common import ArgOption
 from .decorators import method
+from . import exceptions
 from tornado import gen
 
 
 VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
-
-
-class HTTPException(Exception):
-    def __init__(self, code, message=None):
-        super().__init__(code, message)
-        self.code = code
-        self.message = message
 
 
 @gen.coroutine
@@ -41,7 +34,7 @@ def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     metadata[const.INMANTA_URN + "env"] = str(env)
     env = yield data.Environment.get_by_id(env)
     if env is None:
-        raise HTTPException(code=404, message="The given environment id does not exist!")
+        raise exceptions.NotFound("the given environment id does not exist!")
     return env
 
 

@@ -34,6 +34,7 @@ from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Calla
 
 from inmanta import execute, const
 from inmanta import config as inmanta_config
+from . import exceptions
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ class MethodProperties(object):
         return self._arg_options
 
     @property
-    def timeout(self) -> int:
+    def timeout(self) -> Optional[int]:
         return self._timeout
 
     @property
@@ -281,10 +282,6 @@ class UrlMethod(object):
         return self._method_name
 
 
-class UnauhorizedError(Exception):
-    pass
-
-
 # Util functions
 def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     """
@@ -363,38 +360,38 @@ def decode_token(token: str) -> Dict[str, str]:
         header = jwt.get_unverified_header(token)
         payload = jwt.decode(token, verify=False)
     except Exception:
-        raise UnauhorizedError("Unable to decode provided JWT bearer token.")
+        raise exceptions.AccessDeniedException("Unable to decode provided JWT bearer token.")
 
     if "iss" not in payload:
-        raise UnauhorizedError("Issuer is required in token to validate.")
+        raise exceptions.AccessDeniedException("Issuer is required in token to validate.")
 
     cfg = inmanta_config.AuthJWTConfig.get_issuer(payload["iss"])
     if cfg is None:
-        raise UnauhorizedError("Unknown issuer for token")
+        raise exceptions.AccessDeniedException("Unknown issuer for token")
 
     alg = header["alg"].lower()
     if alg == "hs256":
         key = cfg.key
     elif alg == "rs256":
         if "kid" not in header:
-            raise UnauhorizedError("A kid is required for RS256")
+            raise exceptions.AccessDeniedException("A kid is required for RS256")
         kid = header["kid"]
         if kid not in cfg.keys:
-            raise UnauhorizedError(
+            raise exceptions.AccessDeniedException(
                 "The kid provided in the token does not match a known key. Check the jwks_uri or try "
                 "restarting the server to load any new keys."
             )
 
         key = cfg.keys[kid]
     else:
-        raise UnauhorizedError("Algorithm %s is not supported." % alg)
+        raise exceptions.AccessDeniedException("Algorithm %s is not supported." % alg)
 
     try:
         payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
         ct_key = const.INMANTA_URN + "ct"
         payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
     except Exception as e:
-        raise UnauhorizedError(*e.args)
+        raise exceptions.AccessDeniedException(*e.args)
 
     return payload
 
