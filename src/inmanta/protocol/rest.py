@@ -305,8 +305,7 @@ class RESTHandler(tornado.web.RequestHandler):
         parts = headers["Authorization"].split(" ")
         if len(parts) == 0 or parts[0].lower() != "bearer" or len(parts) > 2 or len(parts) == 1:
             LOGGER.warning(
-                "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)",
-                headers["Authorization"]
+                "Invalid authentication header, Inmanta expects a bearer token. (%s was provided)", headers["Authorization"]
             )
             return None
 
@@ -427,11 +426,13 @@ class RESTServer(RESTBase):
     def __init__(self) -> None:
         super().__init__()
 
+    @gen.coroutine
     def start(self) -> None:
         """
             Start the server on the current ioloop
         """
 
+    @gen.coroutine
     def stop(self) -> None:
         """
             Stop the current server

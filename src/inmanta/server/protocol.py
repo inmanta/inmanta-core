@@ -40,7 +40,6 @@ LOGGER = logging.getLogger(__name__)
 
 # Server Side
 class RESTServer(rest.RESTBase):
-
     def __init__(self, connection_timout=120):
         self.__end_points = []
         self.__endpoint_dict = {}
@@ -124,7 +123,7 @@ class RESTServer(rest.RESTBase):
         crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
         key = inmanta_config.Config.get("server", "ssl_key_file", None)
 
-        if(crt is not None and key is not None):
+        if crt is not None and key is not None:
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             ssl_ctx.load_cert_chain(crt, key)
 
@@ -162,7 +161,7 @@ class ServerSlice(object):
         self.create_endpoint_metadata()
         self._end_point_names = []
         self._handlers = []
-        self._sched = Scheduler() # FIXME: why has each slice its own scheduler?
+        self._sched = Scheduler()  # FIXME: why has each slice its own scheduler?
 
     @abc.abstractmethod
     @gen.coroutine
@@ -201,6 +200,7 @@ class ServerSlice(object):
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
+
         def handle_result(f):
             try:
                 f.result()
@@ -213,8 +213,9 @@ class ServerSlice(object):
         self._sched.add_action(call, interval)
 
     def create_endpoint_metadata(self):
-        total_dict = {method_name: getattr(self, method_name)
-                      for method_name in dir(self) if callable(getattr(self, method_name))}
+        total_dict = {
+            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
+        }
 
         methods = {}
         for name, attr in total_dict.items():
@@ -247,8 +248,9 @@ class ServerSlice(object):
             self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
 
     def add_static_content(self, path, content, content_type="application/javascript"):
-        self._handlers.append((r"%s(.*)" % path, rest.StaticContentHandler, {"transport": self, "content": content,
-                                                                        "content_type": content_type}))
+        self._handlers.append(
+            (r"%s(.*)" % path, rest.StaticContentHandler, {"transport": self, "content": content, "content_type": content_type})
+        )
 
 
 class Session(object):
@@ -317,8 +319,11 @@ class Session(object):
         q = self._queue
         call_spec["reply_id"] = reply_id
         q.put(call_spec)
-        self._set_timeout(future, timeout, "Call %s: %s %s for agent %s timed out." %
-                          (reply_id, call_spec["method"], call_spec["url"], self._sid))
+        self._set_timeout(
+            future,
+            timeout,
+            "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec["method"], call_spec["url"], self._sid),
+        )
         self._replies[call_spec["reply_id"]] = future
 
         return future
@@ -358,7 +363,6 @@ class Session(object):
 
 
 class SessionListener(object):
-
     def new_session(self, session: Session):
         pass
 
@@ -374,6 +378,7 @@ class SessionManager(ServerSlice):
     """
         A service that receives method calls over one or more transports
     """
+
     __methods__ = {}
 
     def __init__(self):
@@ -470,4 +475,3 @@ class SessionManager(ServerSlice):
             return 200
         except Exception:
             LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
-
