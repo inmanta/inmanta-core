@@ -93,7 +93,11 @@ class RESTServer(RESTBase):
     @gen.coroutine
     def start(self):
         """
-            Start the transport
+            Start the transport.
+
+            The order in which the different endpoints are prestarted/started, is determined by the
+            order in which they are added to the RESTserver via the add_endpoint(endpoint) method.
+            This order is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         LOGGER.debug("Starting Server Rest Endpoint")
 
@@ -137,9 +141,16 @@ class RESTServer(RESTBase):
 
     @gen.coroutine
     def stop(self):
+        """
+            Stop the transport.
+
+            The order in which the endpoint are stopped, is reverse compared to the starting order.
+            This prevents database connection from being closed too early. This order in which the endpoint
+            are started, is hardcoded in the get_server_slices() method in server/bootloader.py
+        """
         LOGGER.debug("Stopping Server Rest Endpoint")
         self.http_server.stop()
-        for endpoint in self.__end_points:
+        for endpoint in reversed(self.__end_points):
             yield endpoint.stop()
 
     def return_error_msg(self, status=500, msg="", headers={}):

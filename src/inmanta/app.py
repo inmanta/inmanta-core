@@ -59,13 +59,7 @@ LOGGER = logging.getLogger()
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
     ibl = InmantaBootloader()
-
-    def stop_server_signal_handler(signum, frame):
-        IOLoop.current().add_callback_from_signal(stop, ibl.stop)
-
-    signal.signal(signal.SIGTERM, stop_server_signal_handler)
-    signal.signal(signal.SIGINT, stop_server_signal_handler)
-
+    setup_signal_handlers(ibl.stop)
     IOLoop.current().add_callback(ibl.start)
     IOLoop.current().start()
 
@@ -74,21 +68,28 @@ def start_server(options):
 def start_agent(options):
     from inmanta import agent
     a = agent.Agent()
-
-    def stop_agent_signal_handler(signum, frame):
-        IOLoop.current().add_callback_from_signal(stop, a.stop)
-
-    signal.signal(signal.SIGTERM, stop_agent_signal_handler)
-    signal.signal(signal.SIGINT, stop_agent_signal_handler)
-
+    setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
 
 
-@gen.coroutine
-def stop(shutdown_function):
+def setup_signal_handlers(shutdown_function):
     """
-        Wait 10 seconds to gracefully shutdown instance.
+        Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
+
+        :param shutdown_function: The function that contains the shutdown logic.
+    """
+    def handle_signal(signum, frame):
+        IOLoop.current().add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+
+@gen.coroutine
+def safe_shutdown_wrapper(shutdown_function):
+    """
+        Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
     """
     future = shutdown_function()

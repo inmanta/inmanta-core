@@ -44,5 +44,4 @@ class InmantaBootloader(object):
 
     @gen.coroutine
     def stop(self):
-
         yield self.restserver.stop()
