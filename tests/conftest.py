@@ -318,6 +318,8 @@ async def environment_multi(client_multi, server_multi):
     result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
+    cfg_env.set(env_id)
+
     yield env_id
 
 
