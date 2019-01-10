@@ -42,9 +42,9 @@ class FinishedException(Exception):
 
 
 class Deploy(object):
-    def __init__(self, mongoport=0):
-        self._mongoproc = None
-        self._mongoport = mongoport
+    def __init__(self, postgresport=0):
+        self._postgresproc = None
+        self._postgresport = postgresport
         self._server_port = 0
         self._data_path = None
         self._server_proc = None
@@ -74,14 +74,14 @@ class Deploy(object):
         self._ensure_dir(log_dir)
 
         self._server_port = PORT_START + random.randint(0, 2000)
-        assert self._server_port != self._mongoport
+        assert self._server_port != self._postgresport
 
         config.Config.set("client_rest_transport", "port", str(self._server_port))
 
         config_file = """
 [database]
 name=inmanta
-port=%(mongo_port)s
+port=%(postgres_port)s
 
 [config]
 state-dir=%(state_dir)s
@@ -101,7 +101,7 @@ port=%(server_port)s
 
 [cmdline_rest_transport]
 port=%(server_port)s
-""" % {"state_dir": state_dir, "log_dir": log_dir, "server_port": self._server_port, "mongo_port": self._mongoport}
+""" % {"state_dir": state_dir, "log_dir": log_dir, "server_port": self._server_port, "postgres_port": self._postgresport}
 
         server_config = os.path.join(self._data_path, "server.cfg")
         with open(server_config, "w+") as fd:
@@ -126,19 +126,17 @@ port=%(server_port)s
 
         return False
 
-    def setup_mongodb(self):
-        # start a local mongodb on a random port
-        if self._mongoport == 0:
-            log_dir = os.path.join(self._data_path, "logs")
-            self._ensure_dir(log_dir)
-
-            self._mongoport = PORT_START + random.randint(0, 2000)
-            mongo_dir = os.path.join(self._data_path, "mongo")
-            self._mongoproc = postgresproc.MongoProc(db_path=mongo_dir, port=self._mongoport,
-                                                     log_path=os.path.join(log_dir, "mongod.log"))
-            LOGGER.debug("Starting mongodb on port %d", self._mongoport)
-            if not self._mongoproc.start():
-                LOGGER.error("Unable to start mongodb instance on port %d and data directory %s", self._mongoport, mongo_dir)
+    def setup_postgresql(self):
+        # start a local postgresql server on a random port
+        if self._postgresport == 0:
+            self._postgresport = PORT_START + random.randint(0, 2000)
+            postgres_dir = os.path.join(self._data_path, "postgres")
+            os.mkdir(postgres_dir)
+            self._postgresproc = postgresproc.PostgresProc(port=self._postgresport, db_path=postgres_dir)
+            LOGGER.debug("Starting postgresql on port %d", self._postgresport)
+            if not self._postgresproc.start():
+                LOGGER.error("Unable to start postgresqlinstance on port %d and data directory %s",
+                             self._postgresport, postgres_dir)
                 return False
 
         return True
@@ -246,7 +244,7 @@ port=%(server_port)s
         self._ensure_dir(os.path.join(project.project_path, "data"))
         self._ensure_dir(self._data_path)
 
-        if not self.setup_mongodb():
+        if not self.setup_postgresql():
             return False
 
         if not self.setup_server(no_agent_log):
@@ -413,5 +411,5 @@ port=%(server_port)s
         if self._server_proc is not None:
             self._server_proc.kill()
 
-        if self._mongoproc is not None:
-            self._mongoproc.stop()
+        if self._postgresproc is not None:
+            self._postgresproc.stop()

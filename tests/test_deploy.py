@@ -40,7 +40,7 @@ async def test_deploy(snippetcompiler, tmpdir, postgres_db):
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
     # TODO: change mongoport parameter
-    run = deploy.Deploy(mongoport=postgres_db.port)
+    run = deploy.Deploy(postgresport=postgres_db.port)
     try:
         run.run(options, only_setup=True)
         await run.do_deploy(False, "")

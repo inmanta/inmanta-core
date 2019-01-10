@@ -30,7 +30,7 @@ from uuid import UUID
 import uuid
 
 import dateutil.parser
-import pymongo
+import asyncpg
 from tornado import gen, locks, process, ioloop
 
 from inmanta import const
@@ -860,7 +860,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                          total=len(resources), version_info=version_info, undeployable=undeployable,
                                          skipped_for_undeployable=skippeable)
             yield cm.insert()
-        except pymongo.errors.DuplicateKeyError:
+        except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
 
         yield data.Resource.insert_many(resource_objects)
@@ -1211,7 +1211,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         try:
             project = data.Project(name=name)
             yield project.insert()
-        except pymongo.errors.DuplicateKeyError:
+        except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "A project with name %s already exists." % name}
 
         return 200, {"project": project}
@@ -1238,7 +1238,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             return 200, {"project": project}
 
-        except pymongo.errors.DuplicateKeyError:
+        except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "A project with name %s already exists." % name}
 
     @protocol.handle(methods.Project.list_projects)

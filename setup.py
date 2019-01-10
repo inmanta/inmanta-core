@@ -7,7 +7,6 @@ requires = [
     "execnet",
     "netifaces",
     "ply",
-    "pymongo",
     "python-dateutil",
     "pyyaml",
     "texttable",

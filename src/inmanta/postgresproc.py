@@ -64,16 +64,19 @@ class PostgresProc(object):
         try:
             self._create_db_path()
             self._init_db()
-            sockets_dir = self._create_sockets_dir(self.db_path)
-            args = [self.pg_ctl_bin, "start", "-D", self.db_path,
-                    "-o", "-p " + str(self.port) + " -k " + sockets_dir, "-s"]
+            self._create_sockets_dir(self.db_path)
+            old_wc = os.getcwd()
+            os.chdir(self.db_path)
+            args = [self.pg_ctl_bin, "start", "-D", ".",
+                    "-o", "-p " + str(self.port) + " -k " + "sockets", "-s"]
             process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             process.communicate()
-            if process.returncode != 0:
-                return False
+            return process.returncode == 0
         except Exception:
             return False
-        return True
+        finally:
+            if old_wc is not None:
+                os.chdir(old_wc)
 
     def _create_db_path(self):
         if self.db_path:
