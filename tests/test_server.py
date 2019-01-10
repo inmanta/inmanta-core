@@ -183,11 +183,11 @@ async def test_version_removal(client, server):
 
 @pytest.mark.asyncio(timeout=30)
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(server_multi, client_multi, environment):
+async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
     await agent.start()
     aclient = agent._client
 
@@ -230,47 +230,48 @@ async def test_get_resource_for_agent(server_multi, client_multi, environment):
                   'state': 'running',
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
-    result = await client_multi.list_versions(environment)
+    result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
     assert result.result["count"] == 1
 
-    result = await client_multi.release_version(environment, version, push=False)
+    result = await client_multi.release_version(environment_multi, version, push=False)
     assert result.code == 200
 
-    result = await client_multi.get_version(environment, version)
+    result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["released"]
     assert result.result["model"]["result"] == "deploying"
 
-    result = await aclient.get_resources_for_agent(environment, "vm1.dev.inmanta.com")
+    result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
     assert result.code == 200
     assert len(result.result["resources"]) == 3
 
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
+    result = await aclient.resource_action_update(environment_multi,
                                                   ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
                                                   action_id, "deploy", now, now, "deployed", [], {})
 
     assert result.code == 200
 
-    result = await client_multi.get_version(environment, version)
+    result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 1
 
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
+    result = await aclient.resource_action_update(environment_multi,
                                                   ["std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version],
                                                   action_id, "deploy", now, now, "deployed", [], {})
     assert result.code == 200
 
-    result = await client_multi.get_version(environment, version)
+    result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
     await agent.stop()
@@ -891,10 +892,10 @@ async def test_purge_on_delete_ignore(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_tokens(server_multi, client_multi, environment):
+async def test_tokens(server_multi, client_multi, environment_multi):
     # Test using API tokens
     test_token = client_multi._transport_instance.token
-    token = await client_multi.create_token(environment, ["api"], idempotent=True)
+    token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
     jot = token.result["token"]
 
     assert jot != test_token
@@ -905,14 +906,14 @@ async def test_tokens(server_multi, client_multi, environment):
     result = await client_multi.list_environments()
     assert result.code == 403
 
-    result = await client_multi.list_versions(environment)
+    result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
 
-    token = await client_multi.create_token(environment, ["agent"], idempotent=True)
+    token = await client_multi.create_token(environment_multi, ["agent"], idempotent=True)
     agent_jot = token.result["token"]
 
     client_multi._transport_instance.token = agent_jot
-    result = await client_multi.list_versions(environment)
+    result = await client_multi.list_versions(environment_multi)
     assert result.code == 403
 
 
@@ -923,7 +924,7 @@ def make_source(collector, filename, module, source, req):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_code_upload(server_multi, client_multi, environment):
+async def test_code_upload(server_multi, client_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -940,24 +941,25 @@ async def test_code_upload(server_multi, client_multi, environment):
                   'requires': [],
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
     sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
     sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
 
-    res = await client_multi.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
+    res = await client_multi.upload_code(tid=environment_multi, id=version, resource="std::File", sources=sources)
     assert res.code == 200
 
     agent = protocol.Client("agent")
 
-    res = await agent.get_code(tid=environment, id=version, resource="std::File")
+    res = await agent.get_code(tid=environment_multi, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_batched_code_upload(server_multi, client_multi, sync_client_multi, environment):
+async def test_batched_code_upload(server_multi, client_multi, sync_client_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -974,7 +976,8 @@ async def test_batched_code_upload(server_multi, client_multi, sync_client_multi
                   'requires': [],
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
     asources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
@@ -990,18 +993,19 @@ async def test_batched_code_upload(server_multi, client_multi, sync_client_multi
                "std:xxx": csources
                }
 
-    await asyncio.get_event_loop().run_in_executor(None, lambda: upload_code(sync_client_multi, environment, version, sources))
+    await asyncio.get_event_loop().run_in_executor(None,
+                                                   lambda: upload_code(sync_client_multi, environment_multi, version, sources))
 
     agent = protocol.Client("agent")
 
     for name, sourcemap in sources.items():
-        res = await agent.get_code(tid=environment, id=version, resource=name)
+        res = await agent.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
         assert res.result["sources"] == sourcemap
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_legacy_code(server_multi, client_multi, environment):
+async def test_legacy_code(server_multi, client_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -1018,16 +1022,17 @@ async def test_legacy_code(server_multi, client_multi, environment):
                   'requires': [],
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
     sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
 
-    code = data.Code(environment=UUID(environment), version=version, resource="std::File", sources=sources)
+    code = data.Code(environment=UUID(environment_multi), version=version, resource="std::File", sources=sources)
     await code.insert()
 
     agent = protocol.Client("agent")
 
-    res = await agent.get_code(tid=environment, id=version, resource="std::File")
+    res = await agent.get_code(tid=environment_multi, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources

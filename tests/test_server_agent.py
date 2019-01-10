@@ -2344,12 +2344,12 @@ async def test_autostart_mapping(server, client, resource_container, environment
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment):
+async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment_multi):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
     resource_container.Provider.reset()
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    env = await data.Environment.get_by_id(uuid.UUID(environment_multi))
     await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
@@ -2368,28 +2368,28 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
                  ]
 
     client = client_multi
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = await client.get_version(environment, version)
+    result = await client.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment_multi)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment)
+        result = await client.list_agents(tid=environment_multi)
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     # clear environment
-    await client.clear_environment(environment)
+    await client.clear_environment(environment_multi)
 
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
@@ -2418,21 +2418,21 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
                   }
                  ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = await client.get_version(environment, version)
+    result = await client.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment_multi)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment)
+        result = await client.list_agents(tid=environment_multi)
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
