@@ -698,11 +698,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         version = cm.version
 
-        resources = yield cm.get_increment_for_agent(agent)
+        resources = yield cm.get_increment()
 
         deploy_model = []
         resource_ids = []
         for rv in resources:
+            if rv.agent != agent:
+                continue
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 

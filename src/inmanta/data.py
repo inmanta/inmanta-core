@@ -31,6 +31,8 @@ from inmanta import const
 from inmanta.resources import Id
 import hashlib
 from inmanta.const import ResourceState
+from _collections import defaultdict
+from typing import Dict
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1550,7 +1552,7 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     @gen.coroutine
-    def get_increment_for_agent(self, agent: str):
+    def get_increment(self):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -1562,7 +1564,7 @@ class ConfigurationModel(BaseDocument):
          """
 
         # get resources for agent
-        resources = yield Resource.get_resources_for_version(self.environment, self.version, agent, include_undefined=False)
+        resources = yield Resource.get_resources_for_version(self.environment, self.version, include_undefined=False)
 
         # to increment
         increment = []
@@ -1580,8 +1582,8 @@ class ConfigurationModel(BaseDocument):
             # todo in next verion
             next = []
 
-            resources = yield Resource.get_resources_for_version(self.environment, version, agent, False)
-            id_to_resource = {r.resource_id: r for r in resources}
+            vresources = yield Resource.get_resources_for_version(self.environment, version, include_attributes=False)
+            id_to_resource = {r.resource_id: r for r in vresources}
 
             for res in work:
                 # not present -> increment
@@ -1615,7 +1617,49 @@ class ConfigurationModel(BaseDocument):
                 break
         if work:
             increment.extend(work)
-        return increment
+
+        # patch up the graph
+        # 1-include stuff for send-events.
+        # 2-adapt requires/provides to get closured set
+
+        outset = set((res.resource_version_id for res in increment))  # type: Set[str]
+        allids = {res.resource_version_id: res for res in resources}  # type: Dict[str,Resource]
+        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
+        send_events = []  # type: List[str]
+
+        # build lookup tables
+        for res in resources:
+            for req in res.attributes["requires"]:
+                original_provides[req].append(res.resource_version_id)
+            if "send_event" in res.attributes and res.attributes["send_event"]:
+                send_events.append(res.resource_version_id)
+
+        # recursively include stuff potentially receiving events from nodes in the increment
+        work = list(outset)
+        done = set()
+        while work:
+            current = work.pop()
+            if current not in send_events:
+                # not sending events, so no receivers
+                continue
+
+            if current in done:
+                continue
+            done.add(current)
+
+            provides = original_provides[current]
+            work.extend(provides)
+            outset.extend(provides)
+
+        # close the increment
+        out = []
+        for resvid in outset:
+            res = allids[resvid]
+            requires = [r for r in res.attributes["requires"] if r in outset]
+            res.attributes["requires"] = requires
+            out.append(res)
+
+        return out
 
 
 class Code(BaseDocument):

@@ -15,6 +15,10 @@
 
     Contact: code@inmanta.com
 """
+from collections import defaultdict
+from re import sub
+from uuid import UUID
+
 import pytest
 import time
 from inmanta.server import SLICE_SERVER
@@ -23,6 +27,9 @@ from datetime import datetime
 from inmanta import data, const
 from inmanta.const import ResourceState, ResourceAction
 import logging
+from typing import List, Dict, Any
+
+from inmanta.server.server import Server
 
 
 class MultiVersionSetup(object):
@@ -38,15 +45,15 @@ class MultiVersionSetup(object):
     """
 
     def __init__(self):
-        self.firstversion = 100
-        self.versions = [[] for _ in range(100)]
-        self.states = {}
-        self.results = []
+        self.firstversion: int = 100
+        self.versions: List[List[Dict[str, Any]]] = [[] for _ in range(100)]
+        self.states: Dict[str, ResourceState] = {}
+        self.results: Dict[str, List[str]] = defaultdict(lambda : [])
 
-    def get_version(self, v):
+    def get_version(self, v: int) -> List[Dict[str, Any]]:
         return self.versions[v]
 
-    def expand_code(self, code):
+    def expand_code(self, code: str) -> ResourceState:
         if code == "A":
             return ResourceState.available
 
@@ -64,24 +71,37 @@ class MultiVersionSetup(object):
 
         assert False
 
-    def make_resource(self, name, value, version, agent="agent1"):
+    def make_resource(
+        self,
+        name: str,
+        value: str,
+        version: int,
+        agent: str = "agent1",
+        requires: List[str] = [],
+        send_event: bool = False
+    ) -> str:
+        """
+            requires: list of resource identifiers
+        """
         id = "test::Resource[%s,key=%s],v=%d" % (agent, name, version)
         res = {
             "key": value,
             "id": id,
-            "send_event": False,
+            "send_event": send_event,
             "purged": False,
-            "requires": [],
+            "requires": ["%s,v=%d" % (r, version) for r in requires],
         }
         self.get_version(version).append(res)
         return id
 
-    def add_resource(self, name, scenario, increment, agent="agent1"):
+    def add_resource(
+        self, name: str, scenario: str, increment: bool, agent="agent1", requires=[], send_event: bool = False
+    ) -> str:
         v = self.firstversion
         rid = "test::Resource[%s,key=%s]" % (agent, name)
 
         if increment:
-            self.results.append(rid)
+            self.results[agent].append(rid)
 
         for step in scenario.split():
             v -= 1
@@ -89,10 +109,11 @@ class MultiVersionSetup(object):
             if code == "V":
                 continue
             value = step[1:]
-            rvid = self.make_resource(name, value, v, agent)
+            rvid = self.make_resource(name, value, v, agent, requires, send_event)
             self.states[rvid] = self.expand_code(code)
+        return rid
 
-    async def setup(self, serverdirect, env):
+    async def setup(self, serverdirect: Server, env: UUID):
         for version in range(0, len(self.versions)):
             if self.versions[version]:
                 res = await serverdirect.put_version(
@@ -126,11 +147,20 @@ class MultiVersionSetup(object):
             )
             assert result == 200
 
-        result, payload = await serverdirect.get_resource_increment_for_agent(
-            env, "agent1"
-        )
-        print(sorted([x["resource_id"] for x in payload["resources"]]))
-        assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(self.results)
+
+        allresources = {}
+
+        for agent, results in self.results.items():
+            result, payload = await serverdirect.get_resource_increment_for_agent(
+                env, agent
+            )
+
+            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(
+                results
+            )
+            allresources.update({r["resource_id"]: r for r in payload["resources"]})
+
+        return allresources
 
 
 @pytest.mark.asyncio
@@ -237,6 +267,9 @@ async def test_deploy(server, environment, caplog):
     for record in caplog.records:
         assert record.levelname != "WARNING"
 
+def strip_version(v):
+    return sub(",v=[0-9]+","", v)
+
 
 @pytest.mark.asyncio
 async def test_deploy_scenarios(server, environment, caplog):
@@ -259,10 +292,102 @@ async def test_deploy_scenarios(server, environment, caplog):
         setup.add_resource("R8", "D1 A1 E1 D1", False)
         setup.add_resource("R9", "A1 E2 D1", True)
         setup.add_resource("R10", "A1 A1 D1", False)
-
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
 
         await setup.setup(serverdirect, env)
+
+    for record in caplog.records:
+        assert record.levelname != "WARNING"
+
+
+@pytest.mark.asyncio
+async def test_deploy_scenarios_removed_req_by_increment(server, environment, caplog):
+    with caplog.at_level(logging.WARNING):
+        # acquire raw server
+        serverdirect = server.get_endpoint(SLICE_SERVER)
+
+        # acquire env object
+        env = await data.Environment.get_by_id(uuid.UUID(environment))
+
+        setup = MultiVersionSetup()
+
+        id1 = setup.add_resource("R1", "A1 D1", False)
+        id2 = setup.add_resource("R2", "A1 D2", True, requires=[id1])
+
+        resources = await setup.setup(serverdirect, env)
+        assert not resources[id2]["attributes"]["requires"]
+
+    for record in caplog.records:
+        assert record.levelname != "WARNING"
+
+
+@pytest.mark.asyncio
+async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog):
+    with caplog.at_level(logging.WARNING):
+        # acquire raw server
+        serverdirect = server.get_endpoint(SLICE_SERVER)
+
+        # acquire env object
+        env = await data.Environment.get_by_id(uuid.UUID(environment))
+
+        setup = MultiVersionSetup()
+
+        id1 = setup.add_resource("R1", "A1 D1", False)
+        id3 = setup.add_resource("R3", "A1 D2", True)
+        id4 = setup.add_resource("R4", "A1 D2", True, agent="agent2")
+        id2 = setup.add_resource("R2", "A1 D2", True, requires=[id1, id3, id4])
+
+        resources = await setup.setup(serverdirect, env)
+        print(sorted(resources[id2]["attributes"]["requires"]))
+        print(sorted(sorted([id3, id4])))
+        assert sorted([strip_version(r) for r in resources[id2]["attributes"]["requires"]]) == sorted([id3, id4])
+
+    for record in caplog.records:
+        assert record.levelname != "WARNING"
+
+
+@pytest.mark.asyncio
+async def test_deploy_scenarios_added_by_send_event(server, environment, caplog):
+    with caplog.at_level(logging.WARNING):
+        # acquire raw server
+        serverdirect = server.get_endpoint(SLICE_SERVER)
+
+        # acquire env object
+        env = await data.Environment.get_by_id(uuid.UUID(environment))
+
+        setup = MultiVersionSetup()
+
+        id1 = setup.add_resource("R1", "A1 D2", True, send_event=True)
+        id2 = setup.add_resource("R2", "A1 D1", True, requires=[id1])
+        id3 = setup.add_resource("R3", "A1 D1", True, requires=[id1], send_event=True)
+        id4 = setup.add_resource("R4", "A1 D1", True, requires=[id3])
+        id5 = setup.add_resource("R5", "A1 D1", False, requires=[id2])
+
+
+    for record in caplog.records:
+        assert record.levelname != "WARNING"
+
+
+@pytest.mark.asyncio
+async def test_deploy_scenarios_added_by_send_event_CAD(server, environment, caplog):
+    # ensure CAD does not change send_event
+    with caplog.at_level(logging.WARNING):
+        # acquire raw server
+        serverdirect = server.get_endpoint(SLICE_SERVER)
+
+        # acquire env object
+        env = await data.Environment.get_by_id(uuid.UUID(environment))
+
+        setup = MultiVersionSetup()
+
+        id1 = setup.add_resource("R1", "A1 D2", True, send_event=False)
+        id2 = setup.add_resource("R2", "A1 D1", False, requires=[id1])
+        id3 = setup.add_resource("R3", "A1 D1", False, requires=[id1], send_event=True)
+        id4 = setup.add_resource("R4", "A1 D1", False, requires=[id3])
+        id5 = setup.add_resource("R5", "A1 D1", False, requires=[id2])
+
+        setup.add_resource("R6", "A1 D1", False, requires=[id1], agent="agent2")
+
 
     for record in caplog.records:
         assert record.levelname != "WARNING"
