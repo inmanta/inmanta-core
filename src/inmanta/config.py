@@ -134,7 +134,7 @@ class Config(object):
             # raise Exception("Config name %s not defined in section %s" % (name, section))
             return
         opt = cls.__config_definition[section][name]
-        if not opt.get_default_value() == opt.get_default_value():
+        if default_value is not None and opt.get_default_value() != default_value:
             LOGGER.warning("Inconsistent default value for option %s.%s: defined as %s, got %s" %
                         (section, name, opt.default, default_value))
 

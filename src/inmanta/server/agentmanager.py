@@ -107,8 +107,9 @@ class AgentManager(ServerSlice):
 
         self.closesessionsonstart = closesessionsonstart
 
+    @gen.coroutine
     def prestart(self, server):
-        ServerSlice.prestart(self, server)
+        yield ServerSlice.prestart(self, server)
         self._server = server.get_endpoint("server")
         self._server_storage = self._server._server_storage
         server.get_endpoint("session").add_listener(self)
@@ -135,13 +136,15 @@ class AgentManager(ServerSlice):
             return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
         return None
 
+    @gen.coroutine
     def start(self):
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
 
+    @gen.coroutine
     def stop(self):
-        self.terminate_agents()
+        yield self.terminate_agents()
 
     # Agent Management
     @gen.coroutine
@@ -484,6 +487,7 @@ class AgentManager(ServerSlice):
         LOGGER.debug("Started new agent with PID %s", proc.pid)
         return True
 
+    @gen.coroutine
     def terminate_agents(self):
         for proc in self._agent_procs.values():
             proc.terminate()

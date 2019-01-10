@@ -65,18 +65,10 @@ async def postgresql_client(postgres_db, database_name, clean_reset, create_sche
         await client.close()
 
 
-@pytest.fixture(scope="function", autouse=True)
+@pytest.fixture(scope="function")
 async def init_dataclasses(postgres_db, database_name, clean_reset, create_schema):
     pool = await asyncpg.create_pool(host=postgres_db.host, port=postgres_db.port,
                                      user=postgres_db.user, database=database_name)
-    # try:
-    #     data.set_connection_pool(pool)
-    #     yield
-    # finally:
-    #     print("CLEANING CONNECTION POOL")
-    #     data.set_connection_pool(None)
-    #     await pool.close()
-
     data.set_connection_pool(pool)
 
 
@@ -123,13 +115,7 @@ async def clean_reset(postgres_db, database_name):
         await connection.execute("DROP DATABASE IF EXISTS " + database_name)
         await connection.execute("CREATE DATABASE " + database_name)
         yield
-        # tasks = asyncio.Task.all_tasks()
-        # (_, pending) = await asyncio.wait(tasks, timeout=10)
-        # if len(pending) != 0:
-        #     for task in tasks:
-        #         print(task)
-        #     raise Exception("Pending tasks are stuck in the event loop")
-        await data.close_connection_pool()
+        await data.disconnect()
         config.Config._reset()
         await connection.execute("DROP DATABASE " + database_name)
     finally:
@@ -185,7 +171,7 @@ def database_name():
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, postgres_db, init_dataclasses, database_name):
+async def server(inmanta_config, postgres_db, database_name):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -206,11 +192,11 @@ async def server(inmanta_config, postgres_db, init_dataclasses, database_name):
     config.Config.set("server", "agent-timeout", "10")
 
     ibl = InmantaBootloader()
-    ibl.start()
+    await ibl.start()
 
     yield ibl.restserver
 
-    ibl.stop()
+    await ibl.stop()
     shutil.rmtree(state_dir)
 
 
@@ -218,7 +204,7 @@ async def server(inmanta_config, postgres_db, init_dataclasses, database_name):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, postgres_db, init_dataclasses, database_name, request):
+async def server_multi(inmanta_config, postgres_db, database_name, request):
 
     state_dir = tempfile.mkdtemp()
 
@@ -267,11 +253,11 @@ async def server_multi(inmanta_config, postgres_db, init_dataclasses, database_n
     config.Config.set("server", "agent-timeout", "2")
 
     ibl = InmantaBootloader()
-    ibl.start()
+    await ibl.start()
 
     yield ibl.restserver
 
-    ibl.stop()
+    await ibl.stop()
 
     shutil.rmtree(state_dir)
 
