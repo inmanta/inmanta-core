@@ -15,52 +15,83 @@
 
     Contact: code@inmanta.com
 """
+import concurrent
+
+import inmanta.protocol.rest.server
 from inmanta.util import Scheduler
-from inmanta.protocol import ReturnClient, handle, methods
-from inmanta.protocol import rest, common
+from inmanta.protocol import Client, handle, methods
+from inmanta.protocol import common, endpoints
+from inmanta.protocol.rest import server
 
 from inmanta import config as inmanta_config
 from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 
-import tornado.web
-from tornado import gen, queues
+from tornado import gen, queues, concurrent, web, routing
 from tornado.ioloop import IOLoop
-from tornado.httpserver import HTTPServer
+
+from typing import Dict, Tuple, Callable, Optional, List, Union, Any
 
 import logging
 import ssl
 import time
 import uuid
 import abc
-from _collections import defaultdict
 
 
 LOGGER = logging.getLogger(__name__)
 
 
+class ReturnClient(Client):
+    """
+        A client that uses a return channel to connect to its destination. This client is used by the server to communicate
+        back to clients over the heartbeat channel.
+    """
+
+    def __init__(self, name: str, session: "Session") -> None:
+        super().__init__(name)
+        self.session = session
+
+    @gen.coroutine
+    def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
+        call_spec = method_properties.build_call(args, kwargs)
+        try:
+            return_value = yield self.session.put_call(call_spec, timeout=method_properties.timeout)
+        except gen.TimeoutError:
+            return common.Result(code=500, result={"message": "Call timed out"})
+
+        return common.Result(code=return_value["code"], result=return_value["result"])
+
+
 # Server Side
-class RESTServer(rest.RESTBase):
-    def __init__(self, connection_timout=120):
-        self.__end_points = []
-        self.__endpoint_dict = {}
+class Server(endpoints.Endpoint):
+    def __init__(self, connection_timout: int = 120) -> None:
+        super().__init__("server")
+
+        self._slices: Dict[str, ServerSlice] = {}
         self._handlers = []
-        self.token = inmanta_config.Config.get(self.id, "token", None)
+        self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
-        self.headers = set()
         self.sessions_handler = SessionManager()
-        self.add_endpoint(self.sessions_handler)
+        self.add_slice(self.sessions_handler)
 
-    def add_endpoint(self, endpoint: "ServerSlice"):
-        self.__end_points.append(endpoint)
-        self.__endpoint_dict[endpoint.name] = endpoint
+        self._transport = server.RESTServer(self.id)
 
-    def get_endpoint(self, name):
-        return self.__endpoint_dict[name]
+    def add_slice(self, slice: "ServerSlice") -> None:
+        """
+            Add new endpoints to this rest transport
+        """
+        self._slices[slice.name] = slice
 
-    def validate_sid(self, sid):
+    def get_slices(self) -> Dict[str, "ServerSlice"]:
+        return self._slices
+
+    def get_slice(self, name: str) -> "ServerSlice":
+        return self._slices[name]
+
+    def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.sessions_handler.validate_sid(sid)
 
-    def get_id(self):
+    def get_id(self) -> str:
         """
             Returns a unique id for a transport on an endpoint
         """
@@ -68,26 +99,8 @@ class RESTServer(rest.RESTBase):
 
     id = property(get_id)
 
-    def create_op_mapping(self):
-        """
-            Build a mapping between urls, ops and methods
-        """
-        url_map = defaultdict(dict)
-
-        # TODO: avoid colliding handlers
-        for endpoint in self.__end_points:
-            for method, method_handlers in endpoint.__methods__.items():
-                properties = method.__method_properties__
-                self.headers.update(properties.get_call_headers())
-                url = properties.get_listen_url()
-                url_map[url][properties.operation] = common.UrlMethod(
-                    properties, endpoint, method_handlers[1], method_handlers[0]
-                )
-
-        return url_map
-
     @gen.coroutine
-    def start(self):
+    def start(self) -> None:
         """
             Start the transport.
 
@@ -97,46 +110,17 @@ class RESTServer(rest.RESTBase):
         """
         LOGGER.debug("Starting Server Rest Endpoint")
 
-        for endpoint in self.__end_points:
-            yield endpoint.prestart(self)
+        for slice in self.get_slices().values():
+            yield slice.prestart(self)
 
-        for endpoint in self.__end_points:
-            yield endpoint.start()
-            self._handlers.extend(endpoint.get_handlers())
+        for slice in self.get_slices().values():
+            yield slice.start()
+            self._handlers.extend(slice.get_handlers())
 
-        url_map = self.create_op_mapping()
-
-        for url, configs in url_map.items():
-            handler_config = {}
-            for op, cfg in configs.items():
-                handler_config[op] = cfg
-
-            self._handlers.append((url, rest.RESTHandler, {"transport": self, "config": handler_config}))
-            LOGGER.debug("Registering handler(s) for url %s and methods %s" % (url, ", ".join(handler_config.keys())))
-
-        port = 8888
-        if self.id in inmanta_config.Config.get() and "port" in inmanta_config.Config.get()[self.id]:
-            port = inmanta_config.Config.get()[self.id]["port"]
-
-        application = tornado.web.Application(self._handlers, compress_response=True)
-
-        crt = inmanta_config.Config.get("server", "ssl_cert_file", None)
-        key = inmanta_config.Config.get("server", "ssl_key_file", None)
-
-        if crt is not None and key is not None:
-            ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            ssl_ctx.load_cert_chain(crt, key)
-
-            self.http_server = HTTPServer(application, decompress_request=True, ssl_options=ssl_ctx)
-            LOGGER.debug("Created REST transport with SSL")
-        else:
-            self.http_server = HTTPServer(application, decompress_request=True)
-        self.http_server.listen(port)
-
-        LOGGER.debug("Start REST transport")
+        yield self._transport.start(self.get_slices().values(), self._handlers)
 
     @gen.coroutine
-    def stop(self):
+    def stop(self) -> None:
         """
             Stop the transport.
 
@@ -145,27 +129,26 @@ class RESTServer(rest.RESTBase):
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         LOGGER.debug("Stopping Server Rest Endpoint")
-        self.http_server.stop()
-        for endpoint in reversed(self.__end_points):
+        self._transport.stop()
+        for endpoint in reversed(list(self.get_slices().values())):
             yield endpoint.stop()
 
 
-class ServerSlice(object):
+class ServerSlice(common.CallTarget):
     """
         An API serving part of the server.
     """
 
-    def __init__(self, name):
-        self._name = name
+    def __init__(self, name: str) -> None:
+        super().__init__()
 
-        self.create_endpoint_metadata()
-        self._end_point_names = []
-        self._handlers = []
+        self._name: str = name
+        self._handlers: List[routing.Rule] = []
         self._sched = Scheduler()  # FIXME: why has each slice its own scheduler?
 
     @abc.abstractmethod
     @gen.coroutine
-    def prestart(self, server: RESTServer):
+    def prestart(self, server: Server) -> None:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
     @gen.coroutine
@@ -177,31 +160,20 @@ class ServerSlice(object):
 
     @abc.abstractmethod
     @gen.coroutine
-    def stop(self):
+    def stop(self) -> None:
         pass
 
     name = property(lambda self: self._name)
 
-    def get_handlers(self):
+    def get_handlers(self) -> List[routing.Rule]:
         return self._handlers
 
-    def get_end_point_names(self):
-        # TODO: why?
-        return self._end_point_names
-
-    def add_end_point_name(self, name):
-        """
-            Add an additional name to this endpoint to which it reacts and sends out in heartbeats
-        """
-        LOGGER.debug("Adding '%s' as endpoint", name)
-        self._end_point_names.append(name)
-
-    def add_future(self, future):
+    def add_future(self, future: concurrent.Future) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
 
-        def handle_result(f):
+        def handle_result(f: concurrent.Future) -> None:
             try:
                 f.result()
             except Exception as e:
@@ -209,25 +181,10 @@ class ServerSlice(object):
 
         IOLoop.current().add_future(future, handle_result)
 
-    def schedule(self, call, interval=60):
+    def schedule(self, call: Callable, interval: int = 60) -> None:
         self._sched.add_action(call, interval)
 
-    def create_endpoint_metadata(self):
-        total_dict = {
-            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
-        }
-
-        methods = {}
-        for name, attr in total_dict.items():
-            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
-                if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
-
-                methods[attr.__protocol_method__] = (name, attr)
-
-        self.__methods__ = methods
-
-    def add_static_handler(self, location, path, default_filename=None, start=False):
+    def add_static_handler(self, location: str, path: str, default_filename: Optional[str] = None, start: bool = False) -> None:
         """
             Configure a static handler to serve data from the specified path.
         """
@@ -241,15 +198,19 @@ class ServerSlice(object):
         if default_filename is None:
             options["default_filename"] = "index.html"
 
-        self._handlers.append((r"%s(.*)" % location, tornado.web.StaticFileHandler, options))
-        self._handlers.append((r"%s" % location[:-1], tornado.web.RedirectHandler, {"url": location}))
+        self._handlers.append(routing.Rule(routing.PathMatches(r"%s(.*)" % location), web.StaticFileHandler, options))
+        self._handlers.append(routing.Rule(routing.PathMatches(r"%s" % location[:-1]), web.RedirectHandler, {"url": location}))
 
         if start:
-            self._handlers.append((r"/", tornado.web.RedirectHandler, {"url": location}))
+            self._handlers.append((r"/", web.RedirectHandler, {"url": location}))
 
-    def add_static_content(self, path, content, content_type="application/javascript"):
+    def add_static_content(self, path: str, content: str, content_type: str = "application/javascript") -> None:
         self._handlers.append(
-            (r"%s(.*)" % path, rest.StaticContentHandler, {"transport": self, "content": content, "content_type": content_type})
+            routing.Rule(
+                routing.PathMatches(r"%s(.*)" % path),
+                server.StaticContentHandler,
+                {"transport": self, "content": content, "content_type": content_type},
+            )
         )
 
 
@@ -258,26 +219,35 @@ class Session(object):
         An environment that segments agents connected to the server
     """
 
-    def __init__(self, sessionstore, sid, hang_interval, timout, tid, endpoint_names, nodename):
+    def __init__(
+        self,
+        sessionstore: "SessionManager",
+        sid: uuid.UUID,
+        hang_interval: int,
+        timout: int,
+        tid: uuid.UUID,
+        endpoint_names: List[str],
+        nodename: str,
+    ) -> None:
         self._sid = sid
         self._interval = hang_interval
         self._timeout = timout
-        self._sessionstore = sessionstore
-        self._seen = time.time()
+        self._sessionstore: SessionManager = sessionstore
+        self._seen: float = time.time()
         self._callhandle = None
-        self.expired = False
+        self.expired: bool = False
 
-        self.tid = tid
-        self.endpoint_names = endpoint_names
-        self.nodename = nodename
+        self.tid: uuid.UUID = tid
+        self.endpoint_names: List[str] = endpoint_names
+        self.nodename: str = nodename
 
-        self._replies = {}
+        self._replies: Dict[uuid.UUID, concurrent.Future] = {}
         self.check_expire()
-        self._queue = queues.Queue()
+        self._queue: queues.Queue[common.Request] = queues.Queue()
 
         self.client = ReturnClient(str(sid), self)
 
-    def check_expire(self):
+    def check_expire(self) -> None:
         if self.expired:
             LOGGER.exception("Tried to expire session already expired")
         ttw = self._timeout + self._seen - time.time()
@@ -286,21 +256,21 @@ class Session(object):
         else:
             self._callhandle = IOLoop.current().call_later(ttw, self.check_expire)
 
-    def get_id(self):
+    def get_id(self) -> uuid.UUID:
         return self._sid
 
     id = property(get_id)
 
-    def expire(self, timeout):
+    def expire(self, timeout: float) -> None:
         self.expired = True
         if self._callhandle is not None:
             IOLoop.current().remove_timeout(self._callhandle)
         self._sessionstore.expire(self, timeout)
 
-    def seen(self):
+    def seen(self) -> None:
         self._seen = time.time()
 
-    def _set_timeout(self, future, timeout, log_message):
+    def _set_timeout(self, future: concurrent.Future, timeout: int, log_message: str) -> None:
         def on_timeout():
             if not self.expired:
                 LOGGER.warning(log_message)
@@ -309,38 +279,34 @@ class Session(object):
         timeout_handle = IOLoop.current().add_timeout(IOLoop.current().time() + timeout, on_timeout)
         future.add_done_callback(lambda _: IOLoop.current().remove_timeout(timeout_handle))
 
-    def put_call(self, call_spec, timeout=10):
-        future = tornado.concurrent.Future()
+    def put_call(self, call_spec: common.Request, timeout: int = 10) -> concurrent.Future:
+        future = concurrent.Future()
 
         reply_id = uuid.uuid4()
 
-        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec["method"], call_spec["url"], self._sid)
+        LOGGER.debug("Putting call %s: %s %s for agent %s in queue", reply_id, call_spec.method, call_spec.url, self._sid)
 
-        q = self._queue
-        call_spec["reply_id"] = reply_id
-        q.put(call_spec)
+        call_spec.reply_id = reply_id
+        self._queue.put(call_spec)
         self._set_timeout(
-            future,
-            timeout,
-            "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec["method"], call_spec["url"], self._sid),
+            future, timeout, "Call %s: %s %s for agent %s timed out." % (reply_id, call_spec.method, call_spec.url, self._sid)
         )
-        self._replies[call_spec["reply_id"]] = future
+        self._replies[reply_id] = future
 
         return future
 
     @gen.coroutine
-    def get_calls(self):
+    def get_calls(self) -> Optional[List[common.Request]]:
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
         """
         try:
-            q = self._queue
-            call_list = []
-            call = yield q.get(timeout=IOLoop.current().time() + self._interval)
+            call_list: List[common.Request] = []
+            call = yield self._queue.get(timeout=IOLoop.current().time() + self._interval)
             call_list.append(call)
-            while q.qsize() > 0:
-                call = yield q.get()
+            while self._queue.qsize() > 0:
+                call = yield self._queue.get()
                 call_list.append(call)
 
             return call_list
@@ -348,28 +314,28 @@ class Session(object):
         except gen.TimeoutError:
             return None
 
-    def set_reply(self, reply_id, data):
+    def set_reply(self, reply_id: uuid.UUID, data: Dict[str, Any]) -> None:
         LOGGER.log(3, "Received Reply: %s", reply_id)
         if reply_id in self._replies:
-            future = self._replies[reply_id]
+            future: concurrent.Future = self._replies[reply_id]
             del self._replies[reply_id]
             if not future.done():
                 future.set_result(data)
         else:
             LOGGER.debug("Received Reply that is unknown: %s", reply_id)
 
-    def get_client(self):
+    def get_client(self) -> ReturnClient:
         return self.client
 
 
 class SessionListener(object):
-    def new_session(self, session: Session):
+    def new_session(self, session: Session) -> None:
         pass
 
-    def expire(self, session: Session, timeout):
+    def expire(self, session: Session, timeout: float) -> None:
         pass
 
-    def seen(self, session: Session, endpoint_names: list):
+    def seen(self, session: Session, endpoint_names: List[str]) -> None:
         pass
 
 
@@ -379,33 +345,42 @@ class SessionManager(ServerSlice):
         A service that receives method calls over one or more transports
     """
 
-    __methods__ = {}
+    __methods__: Dict[str, Tuple[str, Callable]] = {}
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(SLICE_SESSION_MANAGER)
 
         # Config
-        interval = opt.agent_timeout.get()
-        hangtime = opt.agent_hangtime.get()
+        interval: int = opt.agent_timeout.get()
+        hangtime: Optional[int] = opt.agent_hangtime.get()
 
         if hangtime is None:
-            hangtime = interval * 3 / 4
+            hangtime = int(interval * 3 / 4)
 
-        self.hangtime = hangtime
-        self.interval = interval
+        self.hangtime: int = hangtime
+        self.interval: int = interval
 
         # Session management
-        self._heartbeat_cb = None
-        self.agent_handles = {}
-        self._sessions = {}
+        self._sessions: Dict[uuid.UUID, Session] = {}
 
         # Listeners
-        self.listeners = []
+        self.listeners: List[SessionListener] = []
 
-    def add_listener(self, listener):
+    def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)
 
-    def stop(self):
+    @gen.coroutine
+    def prestart(self, server: Server) -> None:
+        """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
+
+    @gen.coroutine
+    def start(self) -> None:
+        """
+            Start the server slice.
+        """
+
+    @gen.coroutine
+    def stop(self) -> None:
         """
             Stop the end-point and all of its transports
         """
@@ -413,12 +388,12 @@ class SessionManager(ServerSlice):
         for session in self._sessions.copy().values():
             session.expire(0)
 
-    def validate_sid(self, sid):
+    def validate_sid(self, sid: uuid.UUID) -> bool:
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
         return sid in self._sessions
 
-    def get_or_create_session(self, sid, tid, endpoint_names, nodename):
+    def get_or_create_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
         if isinstance(sid, str):
             sid = uuid.UUID(sid)
 
@@ -435,26 +410,28 @@ class SessionManager(ServerSlice):
 
         return session
 
-    def new_session(self, sid, tid, endpoint_names, nodename):
+    def new_session(self, sid: uuid.UUID, tid: uuid.UUID, endpoint_names: List[str], nodename: str) -> Session:
         LOGGER.debug("New session with id %s on node %s for env %s with endpoints %s" % (sid, nodename, tid, endpoint_names))
         return Session(self, sid, self.hangtime, self.interval, tid, endpoint_names, nodename)
 
-    def expire(self, session: Session, timeout):
+    def expire(self, session: Session, timeout: float) -> None:
         LOGGER.debug("Expired session with id %s, last seen %d seconds ago" % (session.get_id(), timeout))
         for listener in self.listeners:
             listener.expire(session, timeout)
         del self._sessions[session.id]
 
-    def seen(self, session: Session, endpoint_names: list):
+    def seen(self, session: Session, endpoint_names: List[str]) -> None:
         LOGGER.debug("Seen session with id %s" % (session.get_id()))
         session.seen()
 
     @handle(methods.heartbeat, env="tid")
     @gen.coroutine
-    def heartbeat(self, sid, env, endpoint_names, nodename):
+    def heartbeat(
+        self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names, nodename
+    ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
 
-        session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
+        session: Session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
         call_list = yield session.get_calls()
@@ -468,10 +445,13 @@ class SessionManager(ServerSlice):
 
     @handle(methods.heartbeat_reply)
     @gen.coroutine
-    def heartbeat_reply(self, sid, reply_id, data):
+    def heartbeat_reply(
+        self, sid: uuid.UUID, reply_id: uuid.UUID, data: Dict[str, Any]
+    ) -> Union[int, Tuple[int, Dict[str, str]]]:
         try:
             env = self._sessions[sid]
             env.set_reply(reply_id, data)
             return 200
         except Exception:
             LOGGER.warning("could not deliver agent reply with sid=%s and reply_id=%s" % (sid, reply_id), exc_info=True)
+            return 500

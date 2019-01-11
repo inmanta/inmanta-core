@@ -24,44 +24,38 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable  # noq
 
 from inmanta import config as inmanta_config
 from inmanta import util
-from . import common, rest
+from . import common
+from .rest import client
 
-from tornado import ioloop, gen
+from tornado import ioloop, gen, concurrent
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-class Endpoint(object):
+class Endpoint(common.CallTarget):
     """
         An end-point in the rpc framework
     """
 
-    def __init__(self, name):
-        self._name = name
-        self._node_name = inmanta_config.nodename.get()
-        self._end_point_names = []
+    def __init__(self, name: str):
+        self._name: str = name
+        self._node_name: str = inmanta_config.nodename.get()
+        self._end_point_names: List[str] = []
+        self._targets: List[common.CallTarget] = []
 
-    def get_endpoint_metadata(self) -> Dict[str, Callable]:
-        total_dict = {
-            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
-        }
+    def add_call_target(self, target: common.CallTarget) -> None:
+        self._targets.append(target)
 
-        methods: Dict[str, Tuple[str, Callable]] = {}
-        for name, attr in total_dict.items():
-            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
-                if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
+    @property
+    def call_targets(self) -> List[common.CallTarget]:
+        return self._targets
 
-                methods[attr.__protocol_method__] = (name, attr)
-
-        return methods
-
-    def add_future(self, future) -> None:
+    def add_future(self, future: concurrent.Future) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
 
-        def handle_result(f):
+        def handle_result(f: concurrent.Future) -> None:
             try:
                 f.result()
             except Exception as e:
@@ -79,7 +73,7 @@ class Endpoint(object):
         LOGGER.debug("Adding '%s' as endpoint", name)
         self._end_point_names.append(name)
 
-    def clear_end_points(self):
+    def clear_end_points(self) -> None:
         """
             Clear all endpoints
         """
@@ -88,42 +82,44 @@ class Endpoint(object):
     name = property(lambda self: self._name)
     end_point_names = property(get_end_point_names)
 
-    def _get_hostname(self):
+    def _get_hostname(self) -> str:
         """
             Determine the hostname of this machine
         """
         return socket.gethostname()
 
-    def get_node_name(self):
+    def get_node_name(self) -> str:
         return self._node_name
 
     node_name = property(get_node_name)
 
 
-class AgentEndPoint(Endpoint):
+class AgentEndPoint(Endpoint, common.CallTarget):
     """
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
 
-    def __init__(self, name, timeout=120, reconnect_delay=5):
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
-        self._transport = rest.RESTClient
-        self._client = None
+        self._transport = client.RESTClient
+        self._client: Optional[AgentClient] = None
         self._sched = util.Scheduler()
 
-        self._env_id = None
+        self._env_id: Optional[uuid.UUID] = None
 
-        self.sessionid = uuid.uuid1()
-        self.running = True
+        self.sessionid: uuid.UUID = uuid.uuid1()
+        self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
 
-    def get_environment(self):
+        self.add_call_target(self)
+
+    def get_environment(self) -> Optional[uuid.UUID]:
         return self._env_id
 
     environment = property(get_environment)
 
-    def set_environment(self, environment_id: uuid.UUID):
+    def set_environment(self, environment_id: uuid.UUID) -> None:
         """
             Set the environment of this agent
         """
@@ -133,7 +129,7 @@ class AgentEndPoint(Endpoint):
             self._env_id = environment_id
 
     @gen.coroutine
-    def start(self):
+    def start(self) -> None:
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
@@ -143,19 +139,22 @@ class AgentEndPoint(Endpoint):
         ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
 
     @gen.coroutine
-    def stop(self):
+    def stop(self) -> None:
         self.running = False
 
     @gen.coroutine
-    def on_reconnect(self):
+    def on_reconnect(self) -> None:
         pass
 
     @gen.coroutine
-    def perform_heartbeat(self):
+    def perform_heartbeat(self) -> None:
         """
             Start a continuous heartbeat call
         """
-        connected = False
+        if self._client is None:
+            raise Exception("AgentEndpoint not started")
+
+        connected: bool = False
         while self.running:
             LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
             result = yield self._client.heartbeat(
@@ -168,7 +167,9 @@ class AgentEndPoint(Endpoint):
                     self.add_future(self.on_reconnect())
                 if result.result is not None:
                     if "method_calls" in result.result:
-                        method_calls = result.result["method_calls"]
+                        method_calls: List[common.Request] = [
+                            common.Request.from_dict(req) for req in result.result["method_calls"]
+                        ]
                         # FIXME: reuse transport?
                         transport = self._transport(self)
 
@@ -184,27 +185,25 @@ class AgentEndPoint(Endpoint):
                 connected = False
                 yield gen.sleep(self.reconnect_delay)
 
-    def dispatch_method(self, transport, method_call):
-        LOGGER.debug(
-            "Received call through heartbeat: %s %s %s", method_call["reply_id"], method_call["method"], method_call["url"]
-        )
-        kwargs, config = transport.match_call(method_call["url"], method_call["method"])
+    def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
+        if self._client is None:
+            raise Exception("AgentEndpoint not started")
+
+        LOGGER.debug("Received call through heartbeat: %s %s %s", method_call.reply_id, method_call.method, method_call.url)
+        kwargs, config = transport.match_call(method_call.url, method_call.method)
 
         if config is None:
             msg = "An error occurred during heartbeat method call (%s %s %s): %s" % (
-                method_call["reply_id"],
-                method_call["method"],
-                method_call["url"],
+                method_call.reply_id,
+                method_call.method,
+                method_call.url,
                 "No such method",
             )
             LOGGER.error(msg)
-            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call["reply_id"], {"result": msg, "code": 500}))
+            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500}))
 
-        body = {}
-        if "body" in method_call and method_call["body"] is not None:
-            body = method_call["body"]
-
-        query_string = parse.urlparse(method_call["url"]).query
+        body = method_call.body or {}
+        query_string = parse.urlparse(method_call.url).query
         for key, value in parse.parse_qs(query_string, keep_blank_values=True):
             if len(value) == 1:
                 body[key] = value[0].decode("latin-1")
@@ -212,25 +211,31 @@ class AgentEndPoint(Endpoint):
                 body[key] = [v.decode("latin-1") for v in value]
 
         # FIXME: why create a new transport instance on each call? keep-alive?
-        call_result = self._transport(self)._execute_call(kwargs, method_call["method"], config, body, method_call["headers"])
+        call_result = transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
 
-        def submit_result(future):
+        def submit_result(future: concurrent.Future) -> None:
             if future is None:
                 return
 
-            result_body, _, status = future.result()
-            if status == 500:
+            response: common.Response = future.result()
+            if response.status_code == 500:
                 msg = ""
-                if result_body is not None and "message" in result_body:
-                    msg = result_body["message"]
+                if response.body is not None and "message" in response.body:
+                    msg = response.body["message"]
                 LOGGER.error(
                     "An error occurred during heartbeat method call (%s %s %s): %s",
-                    method_call["reply_id"],
-                    method_call["method"],
-                    method_call["url"],
+                    method_call.reply_id,
+                    method_call.method,
+                    method_call.url,
                     msg,
                 )
-            self._client.heartbeat_reply(self.sessionid, method_call["reply_id"], {"result": result_body, "code": status})
+
+            if self._client is None:
+                raise Exception("AgentEndpoint not started")
+
+            self._client.heartbeat_reply(
+                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+            )
 
         ioloop.IOLoop.current().add_future(call_result, submit_result)
 
@@ -243,10 +248,10 @@ class Client(Endpoint):
     def __init__(self, name: str) -> None:
         super().__init__(name)
         LOGGER.debug("Start transport for client %s", self.name)
-        self._transport_instance = rest.RESTClient(self)
+        self._transport_instance = client.RESTClient(self)
 
     @gen.coroutine
-    def _call(self, method_properties, args, kwargs) -> common.Result:
+    def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
             Execute a call and return the result
         """
@@ -257,10 +262,10 @@ class Client(Endpoint):
         """
             Return a function that will call self._call with the correct method properties associated
         """
-        if name in common.MethodProperties._methods:
-            method = common.MethodProperties._methods[name]
+        if name in common.MethodProperties.methods:
+            method = common.MethodProperties.methods[name]
 
-            def wrap(*args, **kwargs) -> Callable[[List[Any], Dict[str, Any]], common.Result]:
+            def wrap(*args: List, **kwargs: Dict) -> common.Result:
                 method.function(*args, **kwargs)
                 return self._call(method_properties=method, args=args, kwargs=kwargs)
 
@@ -274,16 +279,16 @@ class SyncClient(object):
         A synchronous client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, timeout=120):
+    def __init__(self, name: str, timeout: int = 120) -> None:
         self.name = name
         self.timeout = timeout
         self._client = Client(self.name)
 
-    def __getattr__(self, name):
-        def async_call(*args, **kwargs):
+    def __getattr__(self, name: str) -> Callable:
+        def async_call(*args: List, **kwargs: Dict) -> None:
             method = getattr(self._client, name)
 
-            def method_call():
+            def method_call() -> None:
                 return method(*args, **kwargs)
 
             try:
@@ -299,13 +304,13 @@ class AgentClient(Client):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name, sid, timeout=120):
+    def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
         super().__init__(name)
         self._sid = sid
-        self._transport_instance = rest.RESTClient(self, connection_timout=timeout)
+        self._transport_instance = client.RESTClient(self, connection_timout=timeout)
 
     @gen.coroutine
-    def _call(self, method_properties, args, kwargs) -> common.Result:
+    def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
             Execute the rpc call
         """
@@ -314,27 +319,3 @@ class AgentClient(Client):
 
         result = yield self._transport_instance.call(method_properties, args, kwargs)
         return result
-
-
-class ReturnClient(Client):
-    """
-        A client that uses a return channel to connect to its destination. This client is used by the server to communicate
-        back to clients over the heartbeat channel.
-    """
-
-    def __init__(self, name, session) -> None:
-        super().__init__(name)
-        self.session = session
-
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
-        url, headers, body = method_properties.build_call(args, kwargs)
-
-        call_spec = {"url": url, "method": method_properties.operation, "headers": headers, "body": body}
-        timeout = method_properties.timeout
-        try:
-            return_value = yield self.session.put_call(call_spec, timeout=timeout)
-        except gen.TimeoutError:
-            return common.Result(code=500, result={"message": "Call timed out"})
-
-        return common.Result(code=return_value["code"], result=return_value["result"])

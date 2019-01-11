@@ -28,9 +28,10 @@ import time
 
 import jwt
 
+from collections import defaultdict, namedtuple
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Awaitable  # noqa: F401
+from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Generator  # noqa: F401
 
 from inmanta import execute, const
 from inmanta import config as inmanta_config
@@ -45,7 +46,7 @@ class ArgOption(object):
         Argument options to transform arguments before dispatch
     """
 
-    def __init__(self, header: Optional[str] = None, reply_header: bool = True, getter: Optional[Awaitable] = None) -> None:
+    def __init__(self, header: Optional[str] = None, reply_header: bool = True, getter: Optional[Generator] = None) -> None:
         """
             :param header: Map this argument to a header with the following name.
             :param reply_header: If the argument is mapped to a header, this header will also be included in the reply
@@ -57,17 +58,98 @@ class ArgOption(object):
         self.getter = getter
 
 
+class Request(object):
+    """
+        A protocol request
+    """
+
+    def __init__(self, url: str, method: str, headers: Dict[str, str], body: Dict[str, Any]) -> None:
+        self._url = url
+        self._method = method
+        self._headers = headers
+        self._body = body
+        self._reply_id: Optional[uuid.UUID] = None
+
+    @property
+    def body(self) -> Dict[str, Any]:
+        return self._body
+
+    @property
+    def url(self) -> str:
+        return self._url
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return self._headers
+
+    @property
+    def method(self) -> str:
+        return self._method
+
+    def set_reply_id(self, reply_id: uuid.UUID) -> None:
+        self._reply_id = reply_id
+
+    def get_reply_id(self) -> Optional[uuid.UUID]:
+        return self._reply_id
+
+    reply_id = property(get_reply_id, set_reply_id)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return_dict: Dict[str, Any] = {"url": self._url, "headers": self._headers, "body": self._body, "method": self._method}
+        if self._reply_id is not None:
+            return_dict["reply_id"] = self._reply_id
+
+        return return_dict
+
+    @classmethod
+    def from_dict(self, value: Dict[str, Any]) -> "Request":
+        reply_id = None
+        if "reply_id" in value:
+            reply_id = value["reply_id"]
+            del value["reply_id"]
+
+        req = Request(**value)
+
+        if reply_id is not None:
+            req.reply_id = uuid.UUID(reply_id)
+
+        return req
+
+
+class Response(object):
+    """
+        A response object of a call
+    """
+
+    def __init__(self, status_code: int, headers: Dict[str, str], body: Optional[Dict[str, Any]] = None) -> None:
+        self._status_code = status_code
+        self._headers = headers
+        self._body = body
+
+    @property
+    def body(self) -> Optional[Dict[str, Any]]:
+        return self._body
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        return self._headers
+
+    @property
+    def status_code(self) -> int:
+        return self._status_code
+
+
 class MethodProperties(object):
     """
         This class stores the information from a method definition
     """
 
-    _methods: Dict[str, "MethodProperties"] = {}
+    methods: Dict[str, "MethodProperties"] = {}
 
     def __init__(
         self,
         function: Callable[..., Dict[str, Any]],
-        method_name,
+        method_name: str,
         index: bool,
         id: bool,
         operation: str,
@@ -75,9 +157,9 @@ class MethodProperties(object):
         arg_options: Dict[str, ArgOption],
         timeout: Optional[int],
         server_agent: bool,
-        api: bool,
+        api: Optional[bool],
         agent_server: bool,
-        validate_sid: bool,
+        validate_sid: Optional[bool],
         client_types: List[str],
         api_version: int,
     ) -> None:
@@ -114,14 +196,14 @@ class MethodProperties(object):
         self._arg_options = arg_options
         self._timeout = timeout
         self._server_agent = server_agent
-        self._api = api
+        self._api: bool = api
         self._agent_server = agent_server
-        self._validate_sid = validate_sid
+        self._validate_sid: bool = validate_sid
         self._client_types = client_types
         self._api_version = api_version
         self.function = function
 
-        MethodProperties._methods[function.__name__] = self
+        MethodProperties.methods[function.__name__] = self
         function.__method_properties__ = self
 
     @property
@@ -199,14 +281,12 @@ class MethodProperties(object):
 
         return url
 
-    def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Tuple[str, Dict, Optional[Dict[str, Any]]]:
+    def build_call(self, args: List, kwargs: Dict[str, Any] = {}) -> Request:
         """
             Build a call from the given arguments. This method returns the url, headers, and body for the call.
-
-            :return: (url, headers, body)
         """
         # create the message
-        msg = kwargs
+        msg: Dict[str, Any] = dict(kwargs)
 
         # map the argument in arg to names
         argspec = inspect.getfullargspec(self.function)
@@ -240,7 +320,7 @@ class MethodProperties(object):
         else:
             body = msg
 
-        return url, headers, body
+        return Request(url=url, method=self.operation, headers=headers, body=body)
 
 
 class UrlMethod(object):
@@ -248,7 +328,7 @@ class UrlMethod(object):
         This class holds the method definition together with the API (url, method) information
 
         :param properties: The properties of this method
-        :param endpoint: The server endpoint on which this method is defined
+        :param endpoint: The object on which this method is defined
         :param handler: The method to call on the endpoint
         :param method_name: The name of the method to call on the endpoint
     """
@@ -256,13 +336,13 @@ class UrlMethod(object):
     def __init__(
         self,
         properties: MethodProperties,
-        endpoint: object,
+        slice: "CallTarget",
         handler: Callable[..., Dict[int, Dict[str, Any]]],
         method_name: str,
     ):
         self._properties = properties
         self._handler = handler
-        self._endpoint = endpoint
+        self._slice = slice
         self._method_name = method_name
 
     @property
@@ -274,8 +354,8 @@ class UrlMethod(object):
         return self._handler
 
     @property
-    def endpoint(self) -> object:
-        return self._endpoint
+    def endpoint(self) -> "CallTarget":
+        return self._slice
 
     @property
     def method_name(self) -> str:
@@ -310,20 +390,20 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     raise TypeError(repr(o) + " is not JSON serializable")
 
 
-def json_encode(value: object) -> str:
+def json_encode(value: Dict[str, Any]) -> str:
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
 
-def gzipped_json(value: object) -> Tuple[bool, Union[bytes, str]]:
-    value = json_encode(value)
-    if len(value) < web.GZipContentEncoding.MIN_LENGTH:
-        return False, value
+def gzipped_json(value: Dict[str, Any]) -> Tuple[bool, Union[bytes, str]]:
+    json_string = json_encode(value)
+    if len(json_string) < web.GZipContentEncoding.MIN_LENGTH:
+        return False, json_string
 
     gzip_value = io.BytesIO()
     gzip_file = gzip.GzipFile(mode="w", fileobj=gzip_value, compresslevel=web.GZipContentEncoding.GZIP_LEVEL)
 
-    gzip_file.write(value.encode())
+    gzip_file.write(json_string.encode())
     gzip_file.close()
 
     return True, gzip_value.getvalue()
@@ -387,7 +467,7 @@ def decode_token(token: str) -> Dict[str, str]:
         raise exceptions.AccessDeniedException("Algorithm %s is not supported." % alg)
 
     try:
-        payload = jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo])
+        payload = dict(jwt.decode(token, key, audience=cfg.audience, algorithms=[cfg.algo]))
         ct_key = const.INMANTA_URN + "ct"
         payload[ct_key] = [x.strip() for x in payload[ct_key].split(",")]
     except Exception as e:
@@ -420,14 +500,14 @@ class Result(object):
             if self._callback:
                 self._callback(self)
 
-    def available(self):
+    def available(self) -> bool:
         return self._result is not None or self.code > 0
 
-    def wait(self, timeout=60):
+    def wait(self, timeout: int = 60) -> None:
         """
             Wait for the result to become available
         """
-        count = 0
+        count: float = 0
         while count < timeout:
             time.sleep(0.1)
             count += 0.1
@@ -439,3 +519,39 @@ class Result(object):
             Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+
+class CallTarget(object):
+    """
+        A baseclass for all classes that are target for protocol calls / methods
+    """
+
+    def _get_endpoint_metadata(self) -> Dict[str, Tuple[str, Callable]]:
+        total_dict = {
+            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
+        }
+
+        methods: Dict[str, Tuple[str, Callable]] = {}
+        for name, attr in total_dict.items():
+            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
+                if attr.__protocol_method__ in methods:
+                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
+
+                methods[attr.__protocol_method__] = (name, attr)
+
+        return methods
+
+    def get_op_mapping(self) -> Dict[str, Dict[str, UrlMethod]]:
+        """
+            Build a mapping between urls, ops and methods
+        """
+        url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
+
+        # TODO: avoid colliding handlers
+        for method, method_handlers in self._get_endpoint_metadata().items():
+            properties = method.__method_properties__
+            # self.headers.update(properties.get_call_headers())
+            url = properties.get_listen_url()
+            url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+
+        return url_map

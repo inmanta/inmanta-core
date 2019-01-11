@@ -24,6 +24,8 @@ import time
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from inmanta import config, protocol
+from inmanta.protocol.common import UrlMethod
+from inmanta.protocol.rest import CallArguments
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 from tornado import gen, web
@@ -287,3 +289,21 @@ async def test_method_properties():
     assert "Authorization" in props.get_call_headers()
     assert props.get_listen_url() == "/api/v1/test"
     assert props.get_call_url({}) == "/api/v1/test"
+
+
+@pytest.mark.asyncio
+async def test_call_arguments_defaults():
+    """
+        Test processing RPC messages
+    """
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    def test_method(name: str, value: int = 10):
+        """
+            Create a new project
+        """
+
+    call = CallArguments(test_method.__method_properties__, {"name": "test"}, {})
+    await call.process()
+
+    assert call.call_args["name"] == "test"
+    assert call.call_args["value"] == 10

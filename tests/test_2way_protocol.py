@@ -25,7 +25,7 @@ from inmanta import data
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
-from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
+from inmanta.server.protocol import Server, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol import method
@@ -92,7 +92,7 @@ async def get_environment(env: uuid.UUID, metadata: dict):
     return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
-@pytest.mark.asyncio(timeout=30)
+@pytest.mark.asyncio
 async def test_2way_protocol(unused_tcp_port, logs=False):
 
     from inmanta.config import Config
@@ -129,10 +129,10 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
     ENV_OPTS["tid"].getter = get_environment
 
     try:
-        rs = RESTServer()
+        rs = Server()
         server = SessionSpy()
-        rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
-        rs.add_endpoint(server)
+        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_slice(server)
         await rs.start()
 
         agent = Agent("agent")
@@ -188,10 +188,10 @@ async def test_timeout(unused_tcp_port):
 
     try:
 
-        rs = RESTServer()
+        rs = Server()
         server = SessionSpy()
-        rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
-        rs.add_endpoint(server)
+        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_slice(server)
         await rs.start()
 
         env = uuid.uuid4()

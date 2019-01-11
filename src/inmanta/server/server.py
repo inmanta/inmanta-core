@@ -75,7 +75,7 @@ class Server(protocol.ServerSlice):
 
     @gen.coroutine
     def prestart(self, server):
-        self.agentmanager = server.get_endpoint("agentmanager")
+        self.agentmanager = server.get_slice("agentmanager")
 
     @gen.coroutine
     def start(self):

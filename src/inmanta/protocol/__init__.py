@@ -18,6 +18,6 @@
 
 # flake8: noqa: F401, F403
 
-from .endpoints import Client, SyncClient, AgentClient, ReturnClient, AgentEndPoint
-from .common import Result, encode_token, gzipped_json, decode_token, json_encode
+from .endpoints import Client, SyncClient, AgentClient, AgentEndPoint
+from .common import Result, encode_token, gzipped_json, decode_token, json_encode, Response
 from .decorators import *

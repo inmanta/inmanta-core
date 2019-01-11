@@ -25,6 +25,8 @@ from .decorators import method
 from . import exceptions
 from tornado import gen
 
+from typing import Any
+
 
 VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
 
@@ -45,7 +47,7 @@ def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
 
 
 @gen.coroutine
-def ignore_env(obj: object, metadata: dict) -> object:
+def ignore_env(obj: Any, metadata: dict) -> Any:
     """
         This mapper only adds an env all for authz
     """

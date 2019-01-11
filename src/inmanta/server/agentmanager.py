@@ -33,7 +33,7 @@ import time
 import sys
 import subprocess
 import uuid
-from inmanta.server.protocol import ServerSlice
+from inmanta.server.protocol import ServerSlice, SessionListener
 from inmanta.server import config as opt
 from inmanta.protocol import encode_token, methods
 from inmanta.resources import Id
@@ -79,7 +79,7 @@ set_parameters
 """
 
 
-class AgentManager(ServerSlice):
+class AgentManager(ServerSlice, SessionListener):
     '''
     This class contains all server functionality related to the management of agents
     '''
@@ -110,9 +110,9 @@ class AgentManager(ServerSlice):
     @gen.coroutine
     def prestart(self, server):
         yield ServerSlice.prestart(self, server)
-        self._server = server.get_endpoint("server")
+        self._server = server.get_slice("server")
         self._server_storage = self._server._server_storage
-        server.get_endpoint("session").add_listener(self)
+        server.get_slice("session").add_listener(self)
 
     def new_session(self, session):
         self.add_future(self.register_session(session, datetime.now()))
