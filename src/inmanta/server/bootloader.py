@@ -20,7 +20,7 @@ from inmanta.server.protocol import Server, ServerSlice
 from inmanta.server.agentmanager import AgentManager
 from tornado import gen
 
-from typing import List
+from typing import List, Generator, Any
 
 
 class InmantaBootloader(object):
@@ -38,11 +38,11 @@ class InmantaBootloader(object):
         return [self.get_server_slice(), self.get_agent_manager_slice()]
 
     @gen.coroutine
-    def start(self) -> None:
+    def start(self) -> Generator[Any, None, None]:
         for mypart in self.get_server_slices():
             self.restserver.add_slice(mypart)
         yield self.restserver.start()
 
     @gen.coroutine
-    def stop(self) -> None:
+    def stop(self) -> Generator[Any, None, None]:
         yield self.restserver.stop()
