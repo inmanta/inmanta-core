@@ -15,6 +15,7 @@ Changes in this release:
 - Initialise variable for upload of version with no resources
 - Raise exception on bad export to make inmanta export fail with exit status > 0
 - Removed the non-version api (#526)
+- Refactor protocol
 
 v 2018.3 (2018-12-07)
 Changes in this release:
