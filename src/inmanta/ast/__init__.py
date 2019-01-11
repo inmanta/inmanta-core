@@ -732,7 +732,7 @@ The procedure to solve this is the following
             return """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects a relation to have all its elements.
-In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would be complete with the values %(values)s, 
+In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would be complete with the values %(values)s,
 but the value %(value)s was added at %(location)s
 
 This can mean one of two things
