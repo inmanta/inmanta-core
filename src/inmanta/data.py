@@ -32,8 +32,7 @@ from inmanta.resources import Id
 import hashlib
 from inmanta.const import ResourceState
 from _collections import defaultdict
-from typing import Dict
-
+from typing import Dict, List
 
 LOGGER = logging.getLogger(__name__)
 

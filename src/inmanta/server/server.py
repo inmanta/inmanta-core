@@ -33,10 +33,12 @@ import shutil
 import dateutil
 import pymongo
 from tornado import gen, locks, process, ioloop
+from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
 from inmanta import methods
+from inmanta.data import Environment
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -689,7 +691,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     @gen.coroutine
-    def get_resource_increment_for_agent(self, env, agent):
+    def get_resource_increment_for_agent(self, env: Environment, agent:str) -> Dict[str, Any]:
         started = datetime.datetime.now()
 
         cm = yield data.ConfigurationModel.get_latest_version(env.id)
