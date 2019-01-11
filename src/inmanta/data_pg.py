@@ -1788,17 +1788,18 @@ class DryRun(BaseDocument):
 _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent, Resource, ResourceAction,
             ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report]
 
-SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
-
 
 async def load_schema(connection):
+    from inmanta.server import config as opt
+
     result = await connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     if len(result) != 0:
         LOGGER.info("Database schema already exists")
         return
     LOGGER.info("Creating database schema")
     prog = re.compile('.*; *')
-    with open(SCHEMA_FILE, 'r') as f:
+    schema_file = opt.db_schema.get()
+    with open(schema_file, 'r') as f:
         query = ""
         for line in f:
             if line and not line.startswith("--"):

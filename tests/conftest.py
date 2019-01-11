@@ -86,8 +86,15 @@ def deactive_venv():
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
+@pytest.fixture(scope="session")
+def database_schema_file():
+    yield str(os.path.abspath("misc/postgresql/pg_schema.sql"))
+
+
 @pytest.fixture(scope="function", autouse=True)
-async def create_schema(postgres_db, database_name, clean_reset):
+async def create_schema(postgres_db, database_name, clean_reset, database_schema_file):
+    config.Config.load_config()
+    config.Config.set("database", "schema", database_schema_file)
     connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port,
                                        user=postgres_db.user, database=database_name)
     try:
@@ -171,7 +178,7 @@ def database_name():
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, postgres_db, database_name):
+async def server(inmanta_config, postgres_db, database_name, database_schema_file):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -181,6 +188,7 @@ async def server(inmanta_config, postgres_db, database_name):
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "schema", database_schema_file)
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -204,7 +212,7 @@ async def server(inmanta_config, postgres_db, database_name):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, postgres_db, database_name, request):
+async def server_multi(inmanta_config, postgres_db, database_name, database_schema_file, request):
 
     state_dir = tempfile.mkdtemp()
 
@@ -242,6 +250,7 @@ async def server_multi(inmanta_config, postgres_db, database_name, request):
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
+    config.Config.set("database", "schema", database_schema_file)
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)

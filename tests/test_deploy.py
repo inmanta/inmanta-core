@@ -39,7 +39,6 @@ async def test_deploy(snippetcompiler, tmpdir, postgres_db):
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
-    # TODO: change mongoport parameter
     run = deploy.Deploy(postgresport=postgres_db.port)
     try:
         run.run(options, only_setup=True)
@@ -66,7 +65,7 @@ async def test_fork(server):
 
 
 @pytest.mark.timeout(30)
-def test_embedded_inmanta_server(tmpdir):
+def test_embedded_inmanta_server(tmpdir, database_schema_file):
     project_dir = tmpdir.mkdir("project")
     os.chdir(project_dir)
     main_cf_file = project_dir.join("main.cf")
@@ -80,5 +79,5 @@ def test_embedded_inmanta_server(tmpdir):
     with open(main_cf_file, 'w') as f:
         f.write("")
     depl = deploy.Deploy()
-    assert depl.setup()
+    assert depl.setup(database_schema_file)
     depl.stop()

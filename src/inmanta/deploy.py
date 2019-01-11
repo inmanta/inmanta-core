@@ -66,7 +66,7 @@ class Deploy(object):
             LOGGER.debug("Creating directory %s", path)
             os.mkdir(path)
 
-    def setup_server(self, no_agent_log):
+    def setup_server(self, db_schema_file):
         state_dir = os.path.join(self._data_path, "state")
         self._ensure_dir(state_dir)
 
@@ -78,10 +78,13 @@ class Deploy(object):
 
         config.Config.set("client_rest_transport", "port", str(self._server_port))
 
+        vars_in_configfile = {"state_dir": state_dir, "log_dir": log_dir, "server_port": self._server_port,
+                              "postgres_port": self._postgresport, "db_schema_file": db_schema_file}
         config_file = """
 [database]
 name=postgres
 port=%(postgres_port)s
+schema=%(db_schema_file)s
 
 [config]
 state-dir=%(state_dir)s
@@ -101,7 +104,7 @@ port=%(server_port)s
 
 [cmdline_rest_transport]
 port=%(server_port)s
-""" % {"state_dir": state_dir, "log_dir": log_dir, "server_port": self._server_port, "postgres_port": self._postgresport}
+""" % vars_in_configfile
 
         server_config = os.path.join(self._data_path, "server.cfg")
         with open(server_config, "w+") as fd:
@@ -234,10 +237,13 @@ port=%(server_port)s
 
         return True
 
-    def setup(self, no_agent_log=True):
+    def setup(self, db_schema_file=None):
         """
             Run inmanta locally
         """
+        from inmanta.server import config as opt
+        if not db_schema_file:
+            db_schema_file = opt.db_schema.get()
         # create local storage
         project = module.Project.get()
         self._data_path = os.path.join(project.project_path, "data", "deploy")
@@ -248,7 +254,7 @@ port=%(server_port)s
         if not self.setup_postgresql():
             return False
 
-        if not self.setup_server(no_agent_log):
+        if not self.setup_server(db_schema_file):
             return False
 
         if not self.setup_project():
