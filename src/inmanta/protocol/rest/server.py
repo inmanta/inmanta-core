@@ -22,6 +22,7 @@ from typing import Optional, Dict, Any, List, Generator, NoReturn
 import tornado
 from tornado import gen, httpserver, web, routing
 
+import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
@@ -198,7 +199,7 @@ class RESTServer(RESTBase):
         self.headers: Dict[str, str] = {}
 
     @gen.coroutine
-    def start(self, targets: List[common.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:
+    def start(self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:
         """
             Start the server on the current ioloop
         """

@@ -360,14 +360,14 @@ class ResourceHandler(object):
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
 
-    def get_client(self) -> protocol.AgentClient:
+    def get_client(self) -> protocol.SessionClient:
         """
             Get the client instance that identifies itself with the agent session.
 
             :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
-            self._client = protocol.AgentClient("agent", self._agent.sessionid)
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
 
     def process_events(self, ctx: HandlerContext, resource: resources.Resource, events: dict) -> None:

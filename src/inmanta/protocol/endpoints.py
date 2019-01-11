@@ -18,6 +18,7 @@
 import logging
 import socket
 import uuid
+from collections import defaultdict
 
 from urllib import parse
 from asyncio import Future
@@ -25,6 +26,7 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, NoRet
 
 from inmanta import config as inmanta_config
 from inmanta import util
+from inmanta.protocol.common import UrlMethod
 from . import common
 from .rest import client
 
@@ -36,7 +38,43 @@ LOGGER: logging.Logger = logging.getLogger(__name__)
 NoneGen = Generator[Any, Any, NoReturn]
 
 
-class Endpoint(common.CallTarget):
+class CallTarget(object):
+    """
+        A baseclass for all classes that are target for protocol calls / methods
+    """
+
+    def _get_endpoint_metadata(self) -> Dict[str, Tuple[str, Callable]]:
+        total_dict = {
+            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
+        }
+
+        methods: Dict[str, Tuple[str, Callable]] = {}
+        for name, attr in total_dict.items():
+            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
+                if attr.__protocol_method__ in methods:
+                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
+
+                methods[attr.__protocol_method__] = (name, attr)
+
+        return methods
+
+    def get_op_mapping(self) -> Dict[str, Dict[str, UrlMethod]]:
+        """
+            Build a mapping between urls, ops and methods
+        """
+        url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
+
+        # TODO: avoid colliding handlers
+        for method, method_handlers in self._get_endpoint_metadata().items():
+            properties = method.__method_properties__
+            # self.headers.update(properties.get_call_headers())
+            url = properties.get_listen_url()
+            url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
+
+        return url_map
+
+
+class Endpoint(object):
     """
         An end-point in the rpc framework
     """
@@ -45,13 +83,13 @@ class Endpoint(common.CallTarget):
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
         self._end_point_names: List[str] = []
-        self._targets: List[common.CallTarget] = []
+        self._targets: List[CallTarget] = []
 
-    def add_call_target(self, target: common.CallTarget) -> None:
+    def add_call_target(self, target: CallTarget) -> None:
         self._targets.append(target)
 
     @property
-    def call_targets(self) -> List[common.CallTarget]:
+    def call_targets(self) -> List[CallTarget]:
         return self._targets
 
     def add_future(self, future: Future) -> None:
@@ -98,7 +136,7 @@ class Endpoint(common.CallTarget):
     node_name = property(get_node_name)
 
 
-class AgentEndPoint(Endpoint, common.CallTarget):
+class SessionEndpoint(Endpoint, CallTarget):
     """
         An endpoint for clients that make calls to a server and that receive calls back from the server using long-poll
     """
@@ -106,7 +144,7 @@ class AgentEndPoint(Endpoint, common.CallTarget):
     def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
         super().__init__(name)
         self._transport = client.RESTClient
-        self._client: Optional[AgentClient] = None
+        self._client: Optional[SessionClient] = None
         self._sched = util.Scheduler()
 
         self._env_id: Optional[uuid.UUID] = None
@@ -139,7 +177,7 @@ class AgentEndPoint(Endpoint, common.CallTarget):
         """
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
-        self._client = AgentClient(self.name, self.sessionid, timeout=self.server_timeout)
+        self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
         ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
 
     @gen.coroutine
@@ -249,10 +287,10 @@ class Client(Endpoint):
         A client that communicates with end-point based on its configuration
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, timeout: int = 120) -> None:
         super().__init__(name)
         LOGGER.debug("Start transport for client %s", self.name)
-        self._transport_instance = client.RESTClient(self)
+        self._transport_instance = client.RESTClient(self, connection_timout=timeout)
 
     @gen.coroutine
     def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
@@ -303,15 +341,13 @@ class SyncClient(object):
         return async_call
 
 
-class AgentClient(Client):
+class SessionClient(Client):
     """
-        A client that communicates with end-point based on its configuration
+        A client that communicates with server endpoints over a session.
     """
-
     def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
-        super().__init__(name)
+        super().__init__(name, timeout)
         self._sid = sid
-        self._transport_instance = client.RESTClient(self, connection_timout=timeout)
 
     @gen.coroutine
     def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:

@@ -77,7 +77,7 @@ class SessionSpy(SessionListener, ServerSlice):
         return self.__sessions
 
 
-class Agent(protocol.AgentEndPoint):
+class Agent(protocol.SessionEndpoint):
 
     @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):

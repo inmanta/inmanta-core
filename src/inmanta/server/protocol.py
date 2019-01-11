@@ -17,6 +17,7 @@
 """
 import concurrent
 
+import inmanta.protocol.endpoints
 import inmanta.protocol.rest.server
 from inmanta.util import Scheduler
 from inmanta.protocol import Client, handle, methods
@@ -134,7 +135,7 @@ class Server(endpoints.Endpoint):
             yield endpoint.stop()
 
 
-class ServerSlice(common.CallTarget):
+class ServerSlice(inmanta.protocol.endpoints.CallTarget):
     """
         An API serving part of the server.
     """

@@ -28,10 +28,9 @@ import time
 
 import jwt
 
-from collections import defaultdict, namedtuple
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Generator, cast  # noqa: F401
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, cast  # noqa: F401
 
 from inmanta import execute, const
 from inmanta import config as inmanta_config
@@ -521,37 +520,3 @@ class Result(object):
         self._callback = fnc
 
 
-class CallTarget(object):
-    """
-        A baseclass for all classes that are target for protocol calls / methods
-    """
-
-    def _get_endpoint_metadata(self) -> Dict[str, Tuple[str, Callable]]:
-        total_dict = {
-            method_name: getattr(self, method_name) for method_name in dir(self) if callable(getattr(self, method_name))
-        }
-
-        methods: Dict[str, Tuple[str, Callable]] = {}
-        for name, attr in total_dict.items():
-            if name[0:2] != "__" and hasattr(attr, "__protocol_method__"):
-                if attr.__protocol_method__ in methods:
-                    raise Exception("Unable to register multiple handlers for the same method. %s" % attr.__protocol_method__)
-
-                methods[attr.__protocol_method__] = (name, attr)
-
-        return methods
-
-    def get_op_mapping(self) -> Dict[str, Dict[str, UrlMethod]]:
-        """
-            Build a mapping between urls, ops and methods
-        """
-        url_map: Dict[str, Dict[str, UrlMethod]] = defaultdict(dict)
-
-        # TODO: avoid colliding handlers
-        for method, method_handlers in self._get_endpoint_metadata().items():
-            properties = method.__method_properties__
-            # self.headers.update(properties.get_call_headers())
-            url = properties.get_listen_url()
-            url_map[url][properties.operation] = UrlMethod(properties, self, method_handlers[1], method_handlers[0])
-
-        return url_map

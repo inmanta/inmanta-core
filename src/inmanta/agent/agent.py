@@ -29,7 +29,7 @@ from inmanta import env, const
 from inmanta import protocol
 from inmanta.agent import handler
 from inmanta.loader import CodeLoader
-from inmanta.protocol import AgentEndPoint, methods
+from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Resource
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
@@ -630,7 +630,7 @@ class AgentInstance(object):
             return 200
 
 
-class Agent(AgentEndPoint):
+class Agent(SessionEndpoint):
     """
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
@@ -681,7 +681,7 @@ class Agent(AgentEndPoint):
                     self.add_end_point_name(name)
 
     def add_end_point_name(self, name):
-        AgentEndPoint.add_end_point_name(self, name)
+        SessionEndpoint.add_end_point_name(self, name)
 
         hostname = "local:"
         if name in self.agent_map:
