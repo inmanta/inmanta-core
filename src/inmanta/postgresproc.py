@@ -94,7 +94,8 @@ class PostgresProc(object):
 
     def _init_db(self):
         os.chmod(self.db_path, 0o700)
-        args = [self.initdb_bin, "-D", self.db_path, "--auth-host", "trust"]
+
+        args = [self.initdb_bin, "-D", self.db_path, "--auth-host", "trust", "-U", "postgres"]
         process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         process.communicate()
         if process.returncode != 0:

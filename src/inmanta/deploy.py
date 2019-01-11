@@ -80,7 +80,7 @@ class Deploy(object):
 
         config_file = """
 [database]
-name=inmanta
+name=postgres
 port=%(postgres_port)s
 
 [config]
@@ -107,7 +107,8 @@ port=%(server_port)s
         with open(server_config, "w+") as fd:
             fd.write(config_file)
 
-        args = [sys.executable, "-m", "inmanta.app", "-vvv", "-c", server_config, "server"]
+        log_file = os.path.join(log_dir, "inmanta.log")
+        args = [sys.executable, "-m", "inmanta.app", "-vvv", "-c", server_config, "--log-file", log_file, "server"]
 
         self._server_proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 

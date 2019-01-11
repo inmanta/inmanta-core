@@ -1794,7 +1794,9 @@ SCHEMA_FILE = "misc/postgresql/pg_schema.sql"
 async def load_schema(connection):
     result = await connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     if len(result) != 0:
+        LOGGER.info("Database schema already exists")
         return
+    LOGGER.info("Creating database schema")
     prog = re.compile('.*; *')
     with open(SCHEMA_FILE, 'r') as f:
         query = ""
@@ -1817,7 +1819,10 @@ async def disconnect():
         await cls.close_connection_pool()
 
 
-async def connect(host, port, database, username, password):
+async def connect(host, port, database, username, password, create_db_schema=True):
     pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
+    if create_db_schema:
+        async with pool.acquire() as con:
+            await load_schema(con)
     set_connection_pool(pool)
     return pool
