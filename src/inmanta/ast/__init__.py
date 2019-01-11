@@ -31,9 +31,10 @@ except ImportError:
 
 if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
+    from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
-    from inmanta.execute.runtime import ExecutionContext, Instance  # noqa: F401
-    from inmanta.ast.statements import Statement  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable  # noqa: F401
+    from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.statements.define import DefineImport  # noqa: F401
 
@@ -494,6 +495,12 @@ class CompilerException(Exception):
 
         return out
 
+    def format_help(self) -> Optional[str]:
+        """ return a text with help towards end users, explaining what to do"""
+        help_from_children = [child.format_help() for child in self.get_causes() if child.format_help() is not None]
+
+        return None if not help_from_children else "\n\n".join(help_from_children)
+
     def __str__(self):
         return self.format()
 
@@ -508,6 +515,9 @@ class RuntimeException(CompilerException):
             self.stmt = stmt
 
     def set_statement(self, stmt: "Locatable", replace: bool = True):
+        for cause in self.get_causes():
+            cause.set_statement(stmt, replace)
+
         if replace or self.stmt is None:
             self.set_location(stmt.get_location())
             self.stmt = stmt
@@ -647,6 +657,114 @@ class DoubleSetException(RuntimeException):
         msg = ("value set twice: \n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n"
                % (self.value, self.location, self.newvalue, self.newlocation))
         RuntimeException.__init__(self, stmt, msg)
+
+
+class ModifiedAfterFreezeException(RuntimeException):
+
+    def __init__(self, rv: "DelayedResultVariable", instance: "Entity", attribute: "Attribute", value: object, location: Location, reverse: bool) -> None:
+        RuntimeException.__init__(self, None, "List modified after freeze")
+        self.instance = instance
+        self.attribute = attribute
+        self.value = value
+        self.location = location
+        self.resultvariable = rv
+        self.reverse = reverse
+
+    def build_reverse_hint(self):
+        # typeloop, ...
+        from inmanta.ast.statements import AssignStatement
+        from inmanta.ast.statements.generator import Constructor
+
+        if isinstance(self.stmt, AssignStatement):
+            return "%s.%s = %s" % (self.stmt.rhs.pretty_print(), self.attribute.get_name(), self.stmt.lhs.pretty_print())
+        
+        if isinstance(self.stmt, Constructor):
+            #find right parameter:
+            attr = self.attribute.end.get_name()
+            if attr not in self.stmt.get_attributes():
+                attr_rhs = "?"
+            else:
+                attr_rhs = self.stmt.get_attributes()[attr].pretty_print()
+            return "%s.%s = %s" % (attr_rhs, self.attribute.get_name(), self.stmt.pretty_print())
+        
+        return ""
+
+    def format_help(self):
+        # typeloop, ...
+        from inmanta.execute.runtime import OptionVariable
+
+        if isinstance(self.resultvariable, OptionVariable):
+            return """The compiler could not figure out a way to execute this model!
+
+During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
+In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would never get a value assigned, 
+but the value %(value)s was assigned at %(location)s
+
+This can mean one of two things
+
+1- the model is incorrect. Most often, this is due to something of the form  
+  `implementation mydefault for MyEntity:
+      self.relation = "default"
+   end
+
+   implement MyEntity using mydefault when not (relation is defined)
+   `
+   This is always wrong, because the relation can not at the same time be undefined and have the value "default"
+2- the model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following
+
+1- ensure the model is correct by checking that the problematic assignment at %(location)s is not conditional on the value it assigns
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+3- %(isreverse)s if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: %(reverse_example)s
+4- simplify the model by relying less on `is defined` but use a boolean instead
+""" %{
+            "relation": self.attribute.get_name(),
+            "instance": self.instance,
+            "value": self.value,
+            "location": self.location,
+            "isreverse": "[applies]" if self.reverse else "[does not apply here]",
+            "reverse_example": "" if not self.reverse else self.build_reverse_hint()
+        }
+        else:
+            # is list
+            return """The compiler could not figure out a way to execute this model!
+
+During compilation, the compiler has to decide when it expects a relation to have all its elements.
+In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would be complete with the values %(values)s, 
+but the value %(value)s was added at %(location)s
+
+This can mean one of two things
+
+1- the model is incorrect. Most often, this is due to something of the form  
+  `implementation mydefault for MyEntity:
+      self.relation += "default"
+   end
+
+   implement MyEntity using mydefault when std::count(relation) == 0
+   `
+   This is always wrong, because the relation can not at the same time have length 0 and contain the value "default"
+2- the model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following
+
+1- ensure the model is correct by checking that the problematic assignment at %(location)s is not conditional on the value it assigns
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+3- %(isreverse)s if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: %(reverse_example)s
+4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
+""" %{
+            "relation": self.attribute.get_name(),
+            "values": [str(x) for x in self.resultvariable.value],
+            "instance": self.instance,
+            "value": self.value,
+            "location": self.location,
+            "isreverse": "[applies]" if self.reverse else "[does not apply here]",
+            "reverse_example": "" if not self.reverse else self.build_reverse_hint()
+        }
+    
+            
 
 
 class DuplicateException(TypingException):

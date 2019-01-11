@@ -381,7 +381,7 @@ def _get_watched_file_handler(options):
 
 def _convert_to_log_level(level):
     if level >= len(log_levels):
-        level = 3
+        level = len(log_levels) - 1
     return log_levels[level]
 
 
@@ -452,6 +452,11 @@ def app():
                 print(str(e), file=sys.stderr)
         else:
             sys.excepthook(*sys.exc_info())
+
+        if isinstance(e, CompilerException):
+            helpmsg = e.format_help()
+            if helpmsg is not None:
+                print(e.format_help())
 
     try:
         options.func(options)
