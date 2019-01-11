@@ -22,13 +22,12 @@ import uuid
 from datetime import datetime
 import enum
 
-import tornado
 from tornado import gen, escape
 from inmanta import const
 from inmanta.protocol import common, exceptions
 from inmanta import config as inmanta_config
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping, Generator  # noqa: F401
 
 JsonDict = Dict[str, Any]
 
@@ -279,7 +278,7 @@ class RESTBase(object):
         message: Dict[str, Any],
         request_headers: Mapping[str, str],
         auth=None,
-    ) -> common.Response:
+    ) -> Generator[Any, Any, common.Response]:
 
         headers: Dict[str, str] = {}
         try:

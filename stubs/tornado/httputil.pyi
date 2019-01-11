@@ -6,6 +6,6 @@ class HTTPHeaders(Dict):
     ...
 
 class HTTPServerRequest:
-    body: Union[str, bytes]
+    body: str
     query_arguments: Dict[str, List[bytes]]
     headers: httputil.HTTPHeaders

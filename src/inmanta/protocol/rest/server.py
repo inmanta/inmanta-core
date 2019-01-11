@@ -17,7 +17,7 @@
 """
 import ssl
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Generator, NoReturn
 
 import tornado
 from tornado import gen, httpserver, web, routing
@@ -25,6 +25,9 @@ from tornado import gen, httpserver, web, routing
 from inmanta import config as inmanta_config
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
+
+
+NoneGen = Generator[Any, Any, NoReturn]
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -77,7 +80,7 @@ class RESTHandler(tornado.web.RequestHandler):
         self.set_status(status)
 
     @gen.coroutine
-    def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
+    def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> NoneGen:
         """
             An rpc like call
         """
@@ -119,42 +122,41 @@ class RESTHandler(tornado.web.RequestHandler):
             self.finish()
 
     @gen.coroutine
-    def head(self, *args: str, **kwargs: str) -> None:
+    def head(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
 
     @gen.coroutine
-    def get(self, *args: str, **kwargs: str) -> None:
+    def get(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
 
     @gen.coroutine
-    def post(self, *args: str, **kwargs: str) -> None:
+    def post(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
 
     @gen.coroutine
-    def delete(self, *args: str, **kwargs: str) -> None:
+    def delete(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
 
     @gen.coroutine
-    def patch(self, *args: str, **kwargs: str) -> None:
+    def patch(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
 
     @gen.coroutine
-    def put(self, *args: str, **kwargs: str) -> None:
+    def put(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
 
-    @gen.coroutine
     def options(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
@@ -196,7 +198,7 @@ class RESTServer(RESTBase):
         self.headers: Dict[str, str] = {}
 
     @gen.coroutine
-    def start(self, targets: List[common.CallTarget], additional_rules: List[routing.Rule] = []) -> None:
+    def start(self, targets: List[common.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:
         """
             Start the server on the current ioloop
         """
@@ -236,7 +238,7 @@ class RESTServer(RESTBase):
         LOGGER.debug("Start REST transport")
 
     @gen.coroutine
-    def stop(self) -> None:
+    def stop(self) -> NoneGen:
         """
             Stop the current server
         """

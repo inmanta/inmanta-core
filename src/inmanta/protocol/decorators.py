@@ -15,9 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from functools import wraps
-from tornado import gen
-
+from asyncio import Future
 from . import common
 
 from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator  # noqa: F401
@@ -31,11 +29,11 @@ class handle(object):  # noqa: H801
         :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: str, **kwargs: str) -> None:
-        self.method: str = method
+    def __init__(self, method: Callable[..., Any], **kwargs: str) -> None:
+        self.method = method
         self.mapping: Dict[str, str] = kwargs
 
-    def __call__(self, function: Generator):
+    def __call__(self, function: Callable[..., Future[Any]]):
         """
             The wrapping
         """

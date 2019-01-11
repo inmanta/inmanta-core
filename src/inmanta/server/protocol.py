@@ -26,13 +26,13 @@ from inmanta.protocol.rest import server
 from inmanta import config as inmanta_config
 from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 
-from tornado import gen, queues, concurrent, web, routing
+from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
 from typing import Dict, Tuple, Callable, Optional, List, Union, Any
 
 import logging
-import ssl
+import asyncio
 import time
 import uuid
 import abc
@@ -68,7 +68,7 @@ class Server(endpoints.Endpoint):
         super().__init__("server")
 
         self._slices: Dict[str, ServerSlice] = {}
-        self._handlers = []
+        self._handlers: List[routing.Rule] = []
         self.token: Optional[str] = inmanta_config.Config.get(self.id, "token", None)
         self.connection_timout = connection_timout
         self.sessions_handler = SessionManager()
@@ -168,12 +168,12 @@ class ServerSlice(common.CallTarget):
     def get_handlers(self) -> List[routing.Rule]:
         return self._handlers
 
-    def add_future(self, future: concurrent.Future) -> None:
+    def add_future(self, future: asyncio.Future) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
 
-        def handle_result(f: concurrent.Future) -> None:
+        def handle_result(f: asyncio.Future) -> None:
             try:
                 f.result()
             except Exception as e:
@@ -241,7 +241,7 @@ class Session(object):
         self.endpoint_names: List[str] = endpoint_names
         self.nodename: str = nodename
 
-        self._replies: Dict[uuid.UUID, concurrent.Future] = {}
+        self._replies: Dict[uuid.UUID, asyncio.Future] = {}
         self.check_expire()
         self._queue: queues.Queue[common.Request] = queues.Queue()
 
@@ -270,7 +270,7 @@ class Session(object):
     def seen(self) -> None:
         self._seen = time.time()
 
-    def _set_timeout(self, future: concurrent.Future, timeout: int, log_message: str) -> None:
+    def _set_timeout(self, future: asyncio.Future, timeout: int, log_message: str) -> None:
         def on_timeout():
             if not self.expired:
                 LOGGER.warning(log_message)
@@ -279,8 +279,8 @@ class Session(object):
         timeout_handle = IOLoop.current().add_timeout(IOLoop.current().time() + timeout, on_timeout)
         future.add_done_callback(lambda _: IOLoop.current().remove_timeout(timeout_handle))
 
-    def put_call(self, call_spec: common.Request, timeout: int = 10) -> concurrent.Future:
-        future = concurrent.Future()
+    def put_call(self, call_spec: common.Request, timeout: int = 10) -> asyncio.Future:
+        future = asyncio.Future()
 
         reply_id = uuid.uuid4()
 
@@ -317,7 +317,7 @@ class Session(object):
     def set_reply(self, reply_id: uuid.UUID, data: Dict[str, Any]) -> None:
         LOGGER.log(3, "Received Reply: %s", reply_id)
         if reply_id in self._replies:
-            future: concurrent.Future = self._replies[reply_id]
+            future: asyncio.Future = self._replies[reply_id]
             del self._replies[reply_id]
             if not future.done():
                 future.set_result(data)

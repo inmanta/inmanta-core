@@ -19,10 +19,10 @@
 import re
 import uuid
 from collections import defaultdict
-from typing import Set, Dict, Callable, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, cast
+from typing import Set, Dict, Callable, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, cast, Generator
 
-from tornado import gen
-from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
+from tornado import gen, web
+from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
@@ -90,7 +90,7 @@ class RESTClient(RESTBase):
         return "%s://%s:%d" % (protocol, host, port)
 
     @gen.coroutine
-    def call(self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None) -> common.Result:
+    def call(self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None) -> Generator[Any, Any, common.Result]:
         if kwargs is None:
             kwargs = {}
 
@@ -125,7 +125,7 @@ class RESTClient(RESTBase):
             )
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
-        except HTTPError as e:
+        except web.HTTPError as e:
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
                     result = self._decode(e.response.body)

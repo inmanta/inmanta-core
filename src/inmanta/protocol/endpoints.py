@@ -20,16 +20,20 @@ import socket
 import uuid
 
 from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable  # noqa: F401
+from asyncio import Future
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, NoReturn, Generator  # noqa: F401
 
 from inmanta import config as inmanta_config
 from inmanta import util
 from . import common
 from .rest import client
 
-from tornado import ioloop, gen, concurrent
+from tornado import ioloop, gen
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
+
+
+NoneGen = Generator[Any, Any, NoReturn]
 
 
 class Endpoint(common.CallTarget):
@@ -50,12 +54,12 @@ class Endpoint(common.CallTarget):
     def call_targets(self) -> List[common.CallTarget]:
         return self._targets
 
-    def add_future(self, future: concurrent.Future) -> None:
+    def add_future(self, future: Future[NoReturn]) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
 
-        def handle_result(f: concurrent.Future) -> None:
+        def handle_result(f: Future[NoReturn]) -> None:
             try:
                 f.result()
             except Exception as e:
@@ -129,7 +133,7 @@ class AgentEndPoint(Endpoint, common.CallTarget):
             self._env_id = environment_id
 
     @gen.coroutine
-    def start(self) -> None:
+    def start(self) -> NoneGen:
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
@@ -139,15 +143,15 @@ class AgentEndPoint(Endpoint, common.CallTarget):
         ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
 
     @gen.coroutine
-    def stop(self) -> None:
+    def stop(self) -> NoneGen:
         self.running = False
 
     @gen.coroutine
-    def on_reconnect(self) -> None:
+    def on_reconnect(self) -> NoneGen:
         pass
 
     @gen.coroutine
-    def perform_heartbeat(self) -> None:
+    def perform_heartbeat(self) -> NoneGen:
         """
             Start a continuous heartbeat call
         """
@@ -211,9 +215,9 @@ class AgentEndPoint(Endpoint, common.CallTarget):
                 body[key] = [v.decode("latin-1") for v in value]
 
         # FIXME: why create a new transport instance on each call? keep-alive?
-        call_result = transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
+        call_result: common.Response = transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
 
-        def submit_result(future: concurrent.Future) -> None:
+        def submit_result(future: Future) -> None:
             if future is None:
                 return
 
