@@ -27,11 +27,10 @@ from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, 
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException,\
     LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
 from inmanta.execute.tracking import ImplementsTracker
-from typing import List, Dict, Tuple, Set
+from typing import List, Dict, Tuple, Set  # noqa: F401
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.assign import SetAttributeHelper
-from inmanta.ast.attribute import RelationAttribute
 
 try:
     from typing import TYPE_CHECKING
@@ -72,7 +71,7 @@ class SubConstructor(GeneratorStatement):
         """
             Evaluate this statement
         """
-        LOGGER.log(LOG_LEVEL_TRACE,"executing subconstructor for %s implement %s", self.type, self.implements.location)
+        LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
         expr = self.implements.constraint
         if not expr.execute(requires, instance, queue):
             return None
@@ -253,8 +252,10 @@ class Constructor(GeneratorStatement):
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
-        default_actual_type = {name: expr for name, expr in self.type.get_entity().get_default_values().items() if name in self._use_default}
-        default_wrapper_type = {name: expr for name, expr in self.type.get_default_values().items() if name in self._use_default}
+        default_actual_type = {name: expr for name, expr in self.type.get_entity().get_default_values().items()
+                               if name in self._use_default}
+        default_wrapper_type = {name: expr for name, expr in self.type.get_default_values().items()
+                                if name in self._use_default}
 
         default_actual_type.update(default_wrapper_type)
 
@@ -263,7 +264,11 @@ class Constructor(GeneratorStatement):
 
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
         default_requires.update(direct_requires)
-        LOGGER.log(LOG_LEVEL_TRACE,"emitting constructor for %s at %s with %s", self.class_type, self.location, direct_requires)
+        LOGGER.log(LOG_LEVEL_TRACE,
+                   "emitting constructor for %s at %s with %s",
+                   self.class_type,
+                   self.location,
+                   direct_requires)
 
         return direct_requires
 
@@ -271,7 +276,7 @@ class Constructor(GeneratorStatement):
         """
             Evaluate this statement.
         """
-        LOGGER.log(LOG_LEVEL_TRACE,"executing constructor for %s at %s", self.class_type, self.location)
+        LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
 
         # the type to construct
         type_class = self.type.get_entity()
