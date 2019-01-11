@@ -20,7 +20,7 @@ from tornado import gen
 
 from . import common
 
-from typing import Any, Dict, List, Optional, Tuple, Set, Callable  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator  # noqa: F401
 
 
 class handle(object):  # noqa: H801
@@ -31,11 +31,11 @@ class handle(object):  # noqa: H801
         :param kwargs: Map arguments in the message from one name to an other
     """
 
-    def __init__(self, method: str, **kwargs) -> None:
-        self.method = method
-        self.mapping = kwargs
+    def __init__(self, method: str, **kwargs: str) -> None:
+        self.method: str = method
+        self.mapping: Dict[str, str] = kwargs
 
-    def __call__(self, function):
+    def __call__(self, function: Generator):
         """
             The wrapping
         """
@@ -58,7 +58,7 @@ def method(
     validate_sid: bool = False,
     client_types: List[str] = ["public"],
     api_version: int = 1,
-):
+) -> Callable[..., Callable]:
     """
         Decorator to identify a method as a RPC call. The arguments of the decorator are used by each transport to build
         and model the protocol.

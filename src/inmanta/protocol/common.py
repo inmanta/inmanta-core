@@ -31,7 +31,7 @@ import jwt
 from collections import defaultdict, namedtuple
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Generator  # noqa: F401
+from typing import Any, Dict, Sequence, List, Optional, Union, Tuple, Set, Callable, Generator, cast  # noqa: F401
 
 from inmanta import execute, const
 from inmanta import config as inmanta_config
@@ -103,9 +103,9 @@ class Request(object):
 
     @classmethod
     def from_dict(self, value: Dict[str, Any]) -> "Request":
-        reply_id = None
+        reply_id: Optional[str] = None
         if "reply_id" in value:
-            reply_id = value["reply_id"]
+            reply_id = cast(str, value["reply_id"])
             del value["reply_id"]
 
         req = Request(**value)
@@ -415,7 +415,7 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0 : max_len - 3] + "..."
 
 
-def encode_token(client_types: List[str], environment=None, idempotent: bool = False, expire=None):
+def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> None:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
 
     payload = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}

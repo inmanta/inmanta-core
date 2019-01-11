@@ -125,7 +125,7 @@ class RESTHandler(tornado.web.RequestHandler):
         yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
 
     @gen.coroutine
-    def get(self, *args:str, **kwargs: str) -> None:
+    def get(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
