@@ -125,3 +125,6 @@ META_DATA_COMPILE_STATE = "inmanta:compile:state"
 
 # assume we are running in a tty
 ENVIRON_FORCE_TTY = "FORCE_TTY"
+
+
+LOG_LEVEL_TRACE = 3

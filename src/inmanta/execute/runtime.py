@@ -325,8 +325,10 @@ class OptionVariable(DelayedResultVariable):
         self.value = None
         self.attribute = attribute
         self.myself = instance
+        self.location = None
 
     def set_value(self, value, location, recur=True):
+        assert location is not None
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
