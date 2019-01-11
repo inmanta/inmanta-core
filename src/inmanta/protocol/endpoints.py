@@ -54,12 +54,12 @@ class Endpoint(common.CallTarget):
     def call_targets(self) -> List[common.CallTarget]:
         return self._targets
 
-    def add_future(self, future: Future[NoReturn]) -> None:
+    def add_future(self, future: Future) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
 
-        def handle_result(f: Future[NoReturn]) -> None:
+        def handle_result(f: Future) -> None:
             try:
                 f.result()
             except Exception as e:

@@ -21,8 +21,8 @@ import uuid
 from collections import defaultdict
 from typing import Set, Dict, Callable, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, cast, Generator
 
-from tornado import gen, web
-from tornado.httpclient import HTTPRequest, AsyncHTTPClient
+from tornado import gen
+from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 
 from inmanta import config as inmanta_config
 from inmanta.protocol import common
@@ -125,7 +125,7 @@ class RESTClient(RESTBase):
             )
             client = AsyncHTTPClient()
             response = yield client.fetch(request)
-        except web.HTTPError as e:
+        except HTTPError as e:
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
                     result = self._decode(e.response.body)
@@ -135,6 +135,7 @@ class RESTClient(RESTBase):
 
             return common.Result(code=e.code, result={"message": str(e)})
         except Exception as e:
+            LOGGER.exception("Failed to send request")
             return common.Result(code=500, result={"message": str(e)})
 
         return common.Result(code=response.code, result=self._decode(response.body))

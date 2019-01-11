@@ -33,7 +33,7 @@ class handle(object):  # noqa: H801
         self.method = method
         self.mapping: Dict[str, str] = kwargs
 
-    def __call__(self, function: Callable[..., Future[Any]]):
+    def __call__(self, function: Callable[..., Future]):
         """
             The wrapping
         """
