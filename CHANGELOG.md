@@ -3,6 +3,7 @@ Changes in this release:
 - Various bugfixes and performance enhancements (#873)
 - Dependency updates
 - Removal of snapshot and restore functionality from the server (#789)
+- Removed the non-version api (#526)
 - Replace virtualenv by python standard venv (#783)
 - Updated to Tornado 5, moving from tornado ioloop to the standard python async framework (#765)
 - Extend mypy type annotations
@@ -14,7 +15,7 @@ Changes in this release:
 - Catch various silent test failures
 - Initialise variable for upload of version with no resources
 - Raise exception on bad export to make inmanta export fail with exit status > 0
-- Removed the non-version api (#526)
+- Improved lazy execution for attributes
 
 v 2018.3 (2018-12-07)
 Changes in this release:
