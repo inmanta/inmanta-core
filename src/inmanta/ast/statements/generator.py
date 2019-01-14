@@ -197,9 +197,9 @@ class Constructor(GeneratorStatement):
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
-        
+
     def pretty_print(self) -> str:
-        return "%s(%s)"%(self.class_type, ",".join(("%s=%s"%(k,v.pretty_print()) for k,v in self.attributes.items())))
+        return "%s(%s)" % (self.class_type, ",".join(("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items())))
 
     def normalize(self) -> None:
         mytype = self.namespace.get_type(self.class_type)

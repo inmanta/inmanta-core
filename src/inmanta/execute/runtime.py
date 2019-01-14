@@ -259,17 +259,17 @@ class ListVariable(DelayedResultVariable):
                                 attribute=self.attribute,
                                 value=value,
                                 location=location,
-                                reverse= not recur
+                                reverse=not recur
                             )
                 else:
                     raise ModifiedAfterFreezeException(
-                                self,
-                                instance=self.myself,
-                                attribute=self.attribute,
-                                value=value,
-                                location=location,
-                                reverse=not recur
-                            )
+                        self,
+                        instance=self.myself,
+                        attribute=self.attribute,
+                        value=value,
+                        location=location,
+                        reverse=not recur
+                    )
 
         if isinstance(value, list):
             if len(value) == 0:

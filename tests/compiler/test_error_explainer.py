@@ -18,7 +18,7 @@
 import pytest
 
 from inmanta import compiler
-from inmanta.ast import ModifiedAfterFreezeException, AttributeException
+from inmanta.ast import AttributeException
 
 
 def test_optional_loop(snippetcompiler):
@@ -47,12 +47,12 @@ Thing(name="a")
     assert e.value.format_help() == """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
-In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:16) would never get a value assigned, 
+In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:16) would never get a value assigned,
 but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was assigned at %(dir)s/main.cf:11
 
 This can mean one of two things
 
-1- the model is incorrect. Most often, this is due to something of the form  
+1- the model is incorrect. Most often, this is due to something of the form
   `implementation mydefault for MyEntity:
       self.relation = "default"
    end
@@ -65,11 +65,11 @@ This can mean one of two things
 The procedure to solve this is the following
 
 1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:11 is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- [does not apply here] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: 
 4- simplify the model by relying less on `is defined` but use a boolean instead
-""" % { "dir" : snippetcompiler.project_dir}
+""" % {"dir": snippetcompiler.project_dir}
 
 
 def test_optional_loop2(snippetcompiler):
@@ -99,12 +99,12 @@ Thing(name="a")
     assert e.value.format_help() == """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
-In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would never get a value assigned, 
+In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would never get a value assigned,
 but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was assigned at %(dir)s/main.cf:12:14
 
 This can mean one of two things
 
-1- the model is incorrect. Most often, this is due to something of the form  
+1- the model is incorrect. Most often, this is due to something of the form
   `implementation mydefault for MyEntity:
       self.relation = "default"
    end
@@ -117,8 +117,8 @@ This can mean one of two things
 The procedure to solve this is the following
 
 1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- [applies] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
 4- simplify the model by relying less on `is defined` but use a boolean instead
 """ % {"dir": snippetcompiler.project_dir}
@@ -157,7 +157,7 @@ but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was added a
 
 This can mean one of two things
 
-1- the model is incorrect. Most often, this is due to something of the form  
+1- the model is incorrect. Most often, this is due to something of the form
   `implementation mydefault for MyEntity:
       self.relation += "default"
    end
@@ -170,8 +170,8 @@ This can mean one of two things
 The procedure to solve this is the following
 
 1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- [applies] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
 4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
 """ % {"dir": snippetcompiler.project_dir}

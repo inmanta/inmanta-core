@@ -496,7 +496,7 @@ class CompilerException(Exception):
         return out
 
     def format_help(self) -> Optional[str]:
-        """ return a text with help towards end users, explaining what to do"""
+        """return a text with help towards end users, explaining what to do"""
         help_from_children = [child.format_help() for child in self.get_causes() if child.format_help() is not None]
 
         return None if not help_from_children else "\n\n".join(help_from_children)
@@ -661,7 +661,13 @@ class DoubleSetException(RuntimeException):
 
 class ModifiedAfterFreezeException(RuntimeException):
 
-    def __init__(self, rv: "DelayedResultVariable", instance: "Entity", attribute: "Attribute", value: object, location: Location, reverse: bool) -> None:
+    def __init__(self,
+                 rv: "DelayedResultVariable",
+                 instance: "Entity",
+                 attribute: "Attribute",
+                 value: object,
+                 location: Location,
+                 reverse: bool) -> None:
         RuntimeException.__init__(self, None, "List modified after freeze")
         self.instance = instance
         self.attribute = attribute
@@ -672,21 +678,21 @@ class ModifiedAfterFreezeException(RuntimeException):
 
     def build_reverse_hint(self):
         # typeloop, ...
-        from inmanta.ast.statements import AssignStatement
+        from inmanta.ast.statements import AssignStatement  # noqa: F811
         from inmanta.ast.statements.generator import Constructor
 
         if isinstance(self.stmt, AssignStatement):
             return "%s.%s = %s" % (self.stmt.rhs.pretty_print(), self.attribute.get_name(), self.stmt.lhs.pretty_print())
-        
+
         if isinstance(self.stmt, Constructor):
-            #find right parameter:
+            # find right parameter:
             attr = self.attribute.end.get_name()
             if attr not in self.stmt.get_attributes():
                 attr_rhs = "?"
             else:
                 attr_rhs = self.stmt.get_attributes()[attr].pretty_print()
             return "%s.%s = %s" % (attr_rhs, self.attribute.get_name(), self.stmt.pretty_print())
-        
+
         return ""
 
     def format_help(self):
@@ -697,12 +703,12 @@ class ModifiedAfterFreezeException(RuntimeException):
             return """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
-In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would never get a value assigned, 
+In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would never get a value assigned,
 but the value %(value)s was assigned at %(location)s
 
 This can mean one of two things
 
-1- the model is incorrect. Most often, this is due to something of the form  
+1- the model is incorrect. Most often, this is due to something of the form
   `implementation mydefault for MyEntity:
       self.relation = "default"
    end
@@ -715,18 +721,18 @@ This can mean one of two things
 The procedure to solve this is the following
 
 1- ensure the model is correct by checking that the problematic assignment at %(location)s is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- %(isreverse)s if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: %(reverse_example)s
 4- simplify the model by relying less on `is defined` but use a boolean instead
-""" %{
-            "relation": self.attribute.get_name(),
-            "instance": self.instance,
-            "value": self.value,
-            "location": self.location,
-            "isreverse": "[applies]" if self.reverse else "[does not apply here]",
-            "reverse_example": "" if not self.reverse else self.build_reverse_hint()
-        }
+""" % {
+                "relation": self.attribute.get_name(),
+                "instance": self.instance,
+                "value": self.value,
+                "location": self.location,
+                "isreverse": "[applies]" if self.reverse else "[does not apply here]",
+                "reverse_example": "" if not self.reverse else self.build_reverse_hint()
+            }
         else:
             # is list
             return """The compiler could not figure out a way to execute this model!
@@ -737,7 +743,7 @@ but the value %(value)s was added at %(location)s
 
 This can mean one of two things
 
-1- the model is incorrect. Most often, this is due to something of the form  
+1- the model is incorrect. Most often, this is due to something of the form
   `implementation mydefault for MyEntity:
       self.relation += "default"
    end
@@ -750,21 +756,19 @@ This can mean one of two things
 The procedure to solve this is the following
 
 1- ensure the model is correct by checking that the problematic assignment at %(location)s is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. 
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly. 
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- %(isreverse)s if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: %(reverse_example)s
 4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
-""" %{
-            "relation": self.attribute.get_name(),
-            "values": [str(x) for x in self.resultvariable.value],
-            "instance": self.instance,
-            "value": self.value,
-            "location": self.location,
-            "isreverse": "[applies]" if self.reverse else "[does not apply here]",
-            "reverse_example": "" if not self.reverse else self.build_reverse_hint()
-        }
-    
-            
+""" % {
+                "relation": self.attribute.get_name(),
+                "values": [str(x) for x in self.resultvariable.value],
+                "instance": self.instance,
+                "value": self.value,
+                "location": self.location,
+                "isreverse": "[applies]" if self.reverse else "[does not apply here]",
+                "reverse_example": "" if not self.reverse else self.build_reverse_hint()
+            }
 
 
 class DuplicateException(TypingException):
