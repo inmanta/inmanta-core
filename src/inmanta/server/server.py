@@ -166,38 +166,20 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """
             Check if the server storage is configured and ready to use.
         """
+        def _ensure_directories_exist(dirs):
+            for directory in dirs:
+                if not os.path.exists(directory):
+                    os.mkdir(directory)
+
         state_dir = opt.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         server_state_dir = os.path.join(state_dir, "server")
-
-        if not os.path.exists(server_state_dir):
-            os.mkdir(server_state_dir)
-
         dir_map = {"server": server_state_dir}
+        dir_map["files"] = os.path.join(server_state_dir, "files")
+        dir_map["environments"] = os.path.join(server_state_dir, "environments")
+        dir_map["agents"] = os.path.join(server_state_dir, "agents")
+        dir_map["logs"] = opt.log_dir.get()
 
-        file_dir = os.path.join(server_state_dir, "files")
-        dir_map["files"] = file_dir
-        if not os.path.exists(file_dir):
-            os.mkdir(file_dir)
-
-        environments_dir = os.path.join(server_state_dir, "environments")
-        dir_map["environments"] = environments_dir
-        if not os.path.exists(environments_dir):
-            os.mkdir(environments_dir)
-
-        env_agent_dir = os.path.join(server_state_dir, "agents")
-        dir_map["agents"] = env_agent_dir
-        if not os.path.exists(env_agent_dir):
-            os.mkdir(env_agent_dir)
-
-        log_dir = opt.log_dir.get()
-        if not os.path.isdir(log_dir):
-            os.mkdir(log_dir)
-        dir_map["logs"] = log_dir
-
+        _ensure_directories_exist(dir_map.values())
         return dir_map
 
     @gen.coroutine
