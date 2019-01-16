@@ -32,6 +32,7 @@ import shutil
 
 import dateutil
 import pymongo
+from collections import OrderedDict
 from tornado import gen, locks, process, ioloop
 
 from inmanta import const
@@ -173,7 +174,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         state_dir = opt.state_dir.get()
         server_state_dir = os.path.join(state_dir, "server")
-        dir_map = {"server": server_state_dir}
+        dir_map = OrderedDict()
+        dir_map["server"] = server_state_dir
         dir_map["files"] = os.path.join(server_state_dir, "files")
         dir_map["environments"] = os.path.join(server_state_dir, "environments")
         dir_map["agents"] = os.path.join(server_state_dir, "agents")
