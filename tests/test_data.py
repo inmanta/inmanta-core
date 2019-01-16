@@ -1223,3 +1223,34 @@ async def test_data_document_recursion(data_module):
                              messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
                                                         version=2)])
     await ra.insert()
+
+
+@pytest.mark.asyncio
+async def test_purgelog_test(data_module):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    # ResourceAction 1
+    timestamp_ra1 = datetime.datetime.now() - datetime.timedelta(days=8)
+    log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
+    ra1 = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+                              action=const.ResourceAction.store, started=timestamp_ra1, finished=datetime.datetime.now(),
+                              messages=[log_line_ra1])
+    await ra1.insert()
+
+    # ResourceAction 2
+    timestamp_ra2 = datetime.datetime.now() - datetime.timedelta(days=6)
+    log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
+    ra2 = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+                              action=const.ResourceAction.store, started=timestamp_ra2, finished=datetime.datetime.now(),
+                              messages=[log_line_ra2])
+    await ra2.insert()
+
+    assert len(await data.ResourceAction.get_list()) == 2
+    await data.ResourceAction.purge_logs()
+    assert len(await data.ResourceAction.get_list()) == 1
+    remaining_resource_action = (await data.ResourceAction.get_list())[0]
+    assert remaining_resource_action.id == ra2.id
