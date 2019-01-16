@@ -32,7 +32,6 @@ import shutil
 
 import dateutil
 import pymongo
-from collections import OrderedDict
 from tornado import gen, locks, process, ioloop
 
 from inmanta import const
@@ -167,21 +166,19 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """
             Check if the server storage is configured and ready to use.
         """
-        def _ensure_directories_exist(dirs):
-            for directory in dirs:
-                if not os.path.exists(directory):
-                    os.mkdir(directory)
+        def _ensure_directory_exist(directory, *subdirs):
+            directory = os.path.join(directory, *subdirs)
+            if not os.path.exists(directory):
+                os.mkdir(directory)
+            return directory
 
         state_dir = opt.state_dir.get()
         server_state_dir = os.path.join(state_dir, "server")
-        dir_map = OrderedDict()
-        dir_map["server"] = server_state_dir
-        dir_map["files"] = os.path.join(server_state_dir, "files")
-        dir_map["environments"] = os.path.join(server_state_dir, "environments")
-        dir_map["agents"] = os.path.join(server_state_dir, "agents")
-        dir_map["logs"] = opt.log_dir.get()
-
-        _ensure_directories_exist(dir_map.values())
+        dir_map = {"server": _ensure_directory_exist(state_dir, "server")}
+        dir_map["files"] = _ensure_directory_exist(server_state_dir, "files")
+        dir_map["environments"] = _ensure_directory_exist(server_state_dir, "environments")
+        dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
+        dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
         return dir_map
 
     @gen.coroutine
