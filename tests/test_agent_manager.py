@@ -68,7 +68,7 @@ class MockSession(object):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_primary_selection(init_dataclasses):
+async def test_primary_selection(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -147,7 +147,7 @@ async def test_primary_selection(init_dataclasses):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_api(init_dataclasses):
+async def test_api(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -256,7 +256,7 @@ async def test_api(init_dataclasses):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_db_clean(init_dataclasses):
+async def test_db_clean(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 

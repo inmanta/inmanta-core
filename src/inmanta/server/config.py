@@ -34,7 +34,8 @@ db_port = Option("database", "port", 5432, "The port of the postgresql server", 
 db_name = Option("database", "name", "inmanta", "The name of the database on the postgresql server")
 db_username = Option("database", "username", "postgres", "The username to access the database in the PostgreSQL server")
 db_password = Option("database", "password", None, "The password that belong to the database user")
-db_schema = Option("database", "schema", "/opt/inmanta/pg_schema.sql", "Path to the file that contains the database schema")
+db_schema_dir = Option("database", "schema_dir", "/opt/inmanta/postgresql",
+                       "Path to the file that contains the database schema")
 
 #############################
 # server_rest_transport

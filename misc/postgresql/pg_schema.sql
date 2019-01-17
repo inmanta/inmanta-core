@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS formrecord CASCADE;
 DROP TABLE IF EXISTS compile CASCADE;
 DROP TABLE IF EXISTS report CASCADE;
 DROP TABLE IF EXISTS dryrun CASCADE;
+DROP TABLE IF EXISTS schemaversion;
 DROP TYPE IF EXISTS versionstate;
 DROP TYPE IF EXISTS resourcestate;
 DROP TYPE IF EXISTS resourceaction_type;
@@ -248,3 +249,12 @@ CREATE TABLE IF NOT EXISTS public.dryrun(
 );
 
 CREATE INDEX dryrun_env_model ON dryrun (environment, model DESC);
+
+-- Table: public.schemaversion
+CREATE TABLE IF NOT EXISTS public.schemaversion(
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    current_version integer NOT NULL
+);
+
+-- Add the version of this schema to the database
+INSERT INTO public.schemaversion(current_version) VALUES(1);

@@ -1036,3 +1036,13 @@ async def test_legacy_code(server_multi, client_multi, environment_multi):
     res = await agent.get_code(tid=environment_multi, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_db_schema_update(server, write_db_update_file, postgresql_client):
+    await server.stop()
+    schema_dir = opt.db_schema_dir.get()
+    write_db_update_file(schema_dir, 2, "CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);")
+    await server.start()
+
+    await postgresql_client.execute("SELECT * FROM public.tab")

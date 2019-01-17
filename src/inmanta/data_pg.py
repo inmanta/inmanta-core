@@ -24,6 +24,7 @@ import uuid
 import json
 import re
 import logging
+import os
 
 from inmanta import const
 from inmanta.resources import Id
@@ -401,14 +402,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return result
 
     @classmethod
-    async def delete_all(cls, **query):
+    async def delete_all(cls, connection=None, **query):
         """
             Delete all documents that match the given query
         """
         query = cls._convert_field_names_to_db_column_names(query)
         (filter_statement, values) = cls._get_composed_filter(**query)
-        query = "DELETE FROM " + cls.table_name() + " WHERE " + filter_statement
-        result = await cls._execute_query(query, *values)
+        query = "DELETE FROM " + cls.table_name()
+        if filter_statement:
+            query += " WHERE " + filter_statement
+        result = await cls._execute_query(query, *values, connection=connection)
         record_count = int(result.split(' ')[1])
         return record_count
 
@@ -1785,29 +1788,108 @@ class DryRun(BaseDocument):
         return dict_result
 
 
+class SchemaVersion(BaseDocument):
+    """
+       This table contains the current version of the database schema.
+
+       :param current_version The current version of the database schema.
+    """
+    current_version = Field(field_type=int, required=True, unique=True)
+
+    @classmethod
+    async def get_current_version(cls):
+        result = await cls.get_list()
+        if not result:
+            raise Exception("Version of db schema was not set.")
+        if len(result) > 1:
+            raise Exception("More than one current version was found.")
+        return result[0].current_version
+
+    @classmethod
+    async def set_current_version(cls, version_number, connection):
+        """
+            Set the current version of the database schema to version_number
+
+            :param version_number: The new version number of the db schema
+            :param connection: The new version is set in the same transaction as the one of this connection.
+        """
+        new_version = cls(current_version=version_number)
+        await SchemaVersion.delete_all(connection=connection)
+        await new_version.insert(connection=connection)
+
+
 _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance, Agent, Resource, ResourceAction,
-            ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report]
+            ResourceVersionId, ConfigurationModel, Code, Parameter, DryRun, Form, FormRecord, Compile, Report, SchemaVersion]
 
 
-async def load_schema(connection):
-    from inmanta.server import config as opt
+class DBSchema(object):
 
-    result = await connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    if len(result) != 0:
-        LOGGER.info("Database schema already exists")
-        return
-    LOGGER.info("Creating database schema")
-    prog = re.compile('.*; *')
-    schema_file = opt.db_schema.get()
-    with open(schema_file, 'r') as f:
-        query = ""
-        for line in f:
-            if line and not line.startswith("--"):
-                line = line.strip('\n ')
-                query += line
-            if re.match(prog, query):
-                await connection.execute(query)
-                query = ""
+    def __init__(self):
+        from inmanta.server import config as opt
+        self._full_schema_file = os.path.join(opt.db_schema_dir.get(), "pg_schema.sql")
+        self._dir_with_incremental_schema_updates = os.path.join(opt.db_schema_dir.get(), "schema_updates")
+
+    async def ensure_db_schema(self, connection):
+        if not await self._does_db_schema_exist(connection):
+            await self._create_db_schema(connection)
+        else:
+            await self._update_db_schema(connection)
+
+    async def _does_db_schema_exist(self, connection):
+        tables_in_db = await connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+        tables_in_db = sorted([r['table_name'] for r in tables_in_db])
+        if len(tables_in_db) != 0 and SchemaVersion.table_name() not in tables_in_db:
+            raise Exception("Database is in inconsistent state.")
+        return len(tables_in_db) != 0
+
+    async def _create_db_schema(self, connection):
+        LOGGER.info("Creating database schema using file {0}".format(self._full_schema_file))
+        async with connection.transaction():
+            await self._load_sql_file(connection, self._full_schema_file)
+            # TODO: Set new version
+
+    async def _update_db_schema(self, connection):
+        current_version_db_schema = await SchemaVersion.get_current_version()
+        update_possible_to_this_version = await self._get_latest_db_schema_version_available_for_update()
+        if update_possible_to_this_version is None:
+            return  # No schema update files exist
+        if current_version_db_schema > update_possible_to_this_version:
+            raise Exception("The current database schema was created with a newer version of the inmanta server "
+                            "(version db schema=%s; required version=%s). Update the version of the inmanta server to resolve "
+                            "this compatibility problem. " % current_version_db_schema, update_possible_to_this_version)
+        for version in range(current_version_db_schema + 1, update_possible_to_this_version + 1):
+            LOGGER.info("Updating database schema to version {:d}".format(version))
+            schema_update_file = os.path.join(self._dir_with_incremental_schema_updates, str(version) + ".sql")
+            async with connection.transaction():
+                await self._load_sql_file(connection, schema_update_file)
+                await SchemaVersion.set_current_version(version, connection)
+
+    async def _get_latest_db_schema_version_available_for_update(self):
+        """
+            Check the directory containing the db schema update files for the latest version that we can update to.
+            Each update file has the following naming convention: "<version_number_schema>.sql".
+
+            :return: The latest db schema version that can be achieved with a db schema update.
+        """
+        if not os.path.exists(self._dir_with_incremental_schema_updates):
+            return None
+        dir_names = os.listdir(self._dir_with_incremental_schema_updates)
+        version_numbers = [int(d.split('.')[0]) for d in dir_names]
+        if not version_numbers:
+            return None
+        return max(version_numbers)
+
+    async def _load_sql_file(self, connection, sql_file):
+        prog = re.compile('.*; *')
+        with open(sql_file, 'r') as f:
+            query = ""
+            for line in f:
+                if line and not line.startswith("--"):
+                    line = line.strip('\n ')
+                    query += line
+                if re.match(prog, query):
+                    await connection.execute(query)
+                    query = ""
 
 
 def set_connection_pool(pool):
@@ -1822,8 +1904,13 @@ async def disconnect():
 
 async def connect(host, port, database, username, password, create_db_schema=True):
     pool = await asyncpg.create_pool(host=host, port=port, database=database, user=username, password=password)
-    if create_db_schema:
-        async with pool.acquire() as con:
-            await load_schema(con)
     set_connection_pool(pool)
+    if create_db_schema:
+        try:
+            async with pool.acquire() as con:
+                await DBSchema().ensure_db_schema(con)
+        except Exception as e:
+            await disconnect()
+            await pool.close()
+            raise e
     return pool

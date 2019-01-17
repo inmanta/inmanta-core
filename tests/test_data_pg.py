@@ -21,9 +21,11 @@ import datetime
 import uuid
 import time
 import logging
-from inmanta import data_pg as data, const
+import os
 
+from inmanta import data_pg as data, const
 from inmanta.const import LogLevel
+from inmanta import config
 
 
 @pytest.mark.asyncio
@@ -41,8 +43,7 @@ async def test_postgres_client(postgresql_client):
 
 
 @pytest.mark.asyncio
-async def test_load_schema(postgresql_client):
-    await data.load_schema(postgresql_client)
+async def test_load_schema(postgres_db, database_name, postgresql_client, init_dataclasses_and_load_schema):
     table_names = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables "
                                                 "WHERE table_schema='public'")
     table_names_in_database = [x["table_name"] for x in table_names]
@@ -53,7 +54,7 @@ async def test_load_schema(postgresql_client):
 
 
 @pytest.mark.asyncio
-async def test_project(init_dataclasses):
+async def test_project(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -67,7 +68,7 @@ async def test_project(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_project_unique(init_dataclasses):
+async def test_project_unique(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -76,13 +77,13 @@ async def test_project_unique(init_dataclasses):
         await project.insert()
 
 
-def test_project_no_project_name(init_dataclasses):
+def test_project_no_project_name(init_dataclasses_and_load_schema):
     with pytest.raises(AttributeError):
         data.Project()
 
 
 @pytest.mark.asyncio
-async def test_environment(init_dataclasses):
+async def test_environment(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -99,7 +100,7 @@ async def test_environment(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_environment_no_environment_name(init_dataclasses):
+async def test_environment_no_environment_name(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
     with pytest.raises(AttributeError):
@@ -107,7 +108,7 @@ async def test_environment_no_environment_name(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_environment_no_project_id(init_dataclasses):
+async def test_environment_no_project_id(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
     with pytest.raises(AttributeError):
@@ -115,7 +116,7 @@ async def test_environment_no_project_id(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_environment_cascade_content_only(init_dataclasses):
+async def test_environment_cascade_content_only(init_dataclasses_and_load_schema):
     project = data.Project(name="proj")
     await project.insert()
 
@@ -186,7 +187,7 @@ async def test_environment_cascade_content_only(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_environment_set_setting_parameter(init_dataclasses):
+async def test_environment_set_setting_parameter(init_dataclasses_and_load_schema):
     project = data.Project(name="proj")
     await project.insert()
 
@@ -208,7 +209,7 @@ async def test_environment_set_setting_parameter(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_agent_process(init_dataclasses):
+async def test_agent_process(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -259,7 +260,7 @@ async def test_agent_process(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_agent_instance(init_dataclasses):
+async def test_agent_instance(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -308,7 +309,7 @@ async def test_agent_instance(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_agent(init_dataclasses):
+async def test_agent(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -367,7 +368,7 @@ async def test_agent(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_config_model(init_dataclasses):
+async def test_config_model(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -390,7 +391,7 @@ async def test_config_model(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_model_list(init_dataclasses):
+async def test_model_list(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -422,7 +423,7 @@ async def test_model_list(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_model_get_latest_version(init_dataclasses):
+async def test_model_get_latest_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -449,7 +450,7 @@ async def test_model_get_latest_version(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_model_set_ready(init_dataclasses):
+async def test_model_set_ready(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -480,7 +481,7 @@ async def test_model_set_ready(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_model_delete_cascade(init_dataclasses):
+async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -513,7 +514,7 @@ async def test_model_delete_cascade(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_undeployable_cache_lazy(init_dataclasses):
+async def test_undeployable_cache_lazy(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -545,7 +546,7 @@ async def test_undeployable_cache_lazy(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_undeployable_skip_cache_lazy(init_dataclasses):
+async def test_undeployable_skip_cache_lazy(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -614,7 +615,7 @@ async def populate_model(env_id, version):
 
 
 @pytest.mark.asyncio
-async def test_resource_purge_on_delete(init_dataclasses):
+async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -662,7 +663,7 @@ async def test_resource_purge_on_delete(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_issue_422(init_dataclasses):
+async def test_issue_422(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -704,7 +705,7 @@ async def test_issue_422(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_get_latest_resource(init_dataclasses):
+async def test_get_latest_resource(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -737,7 +738,7 @@ async def test_get_latest_resource(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_get_resources(init_dataclasses):
+async def test_get_resources(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -771,7 +772,7 @@ async def test_get_resources(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_get_resources_for_version(init_dataclasses):
+async def test_get_resources_for_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -817,7 +818,7 @@ async def test_get_resources_for_version(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_escaped_resources(init_dataclasses):
+async def test_escaped_resources(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -844,7 +845,7 @@ async def test_escaped_resources(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resource_provides(init_dataclasses):
+async def test_resource_provides(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -883,7 +884,7 @@ async def test_resource_provides(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resources_report(init_dataclasses):
+async def test_resources_report(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -947,7 +948,7 @@ async def test_resources_report(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resource_get_requires(init_dataclasses):
+async def test_resource_get_requires(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -976,7 +977,7 @@ async def test_resource_get_requires(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resource_get_with_state(init_dataclasses):
+async def test_resource_get_with_state(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1032,7 +1033,7 @@ async def test_resource_get_with_state(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resources_delete_cascade(init_dataclasses):
+async def test_resources_delete_cascade(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
     env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
@@ -1075,7 +1076,7 @@ async def test_resources_delete_cascade(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resource_action(init_dataclasses):
+async def test_resource_action(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1133,7 +1134,7 @@ async def test_resource_action(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_resource_action_get_logs(init_dataclasses):
+async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1184,7 +1185,7 @@ async def test_resource_action_get_logs(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_data_document_recursion(init_dataclasses):
+async def test_data_document_recursion(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1200,7 +1201,7 @@ async def test_data_document_recursion(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_code(init_dataclasses):
+async def test_code(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1255,7 +1256,7 @@ async def test_code(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_parameter(init_dataclasses):
+async def test_parameter(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1287,7 +1288,7 @@ async def test_parameter(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_dryrun(init_dataclasses):
+async def test_dryrun(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1312,7 +1313,7 @@ async def test_dryrun(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_form(init_dataclasses):
+async def test_form(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1333,7 +1334,7 @@ async def test_form(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_compile_get_reports(init_dataclasses):
+async def test_compile_get_reports(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1380,7 +1381,7 @@ async def test_compile_get_reports(init_dataclasses):
 
 
 @pytest.mark.asyncio
-async def test_compile_get_report(init_dataclasses):
+async def test_compile_get_report(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1423,3 +1424,55 @@ async def test_compile_get_report(init_dataclasses):
     report_of_compile = await data.Compile.get_report(compile2.id)
     reports = report_of_compile["reports"]
     assert len(reports) == 1
+
+
+@pytest.fixture(scope="function")
+async def dummy_db_schema(tmpdir, postgres_db, database_name, postgresql_client):
+    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema=False)
+    schema_dir = str(tmpdir.mkdir("schema_dir"))
+    config.Config.set("database", "schema_dir", schema_dir)
+    full_schema_file = os.path.join(schema_dir, "pg_schema.sql")
+    with open(full_schema_file, 'w+') as f:
+        f.write("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n"
+                "CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);\n"
+                "CREATE TABLE public.schemaversion(id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), current_version integer);\n"
+                "INSERT INTO public.schemaversion(current_version) VALUES(1);")
+
+    # Create full schema
+    db_schema = data.DBSchema()
+    await db_schema.ensure_db_schema(postgresql_client)
+    assert (await data.SchemaVersion.get_current_version()) == 1
+    yield schema_dir
+
+
+@pytest.mark.asyncio
+async def test_schema_update_success(dummy_db_schema, write_db_update_file, postgresql_client):
+    schema_dir = dummy_db_schema
+    write_db_update_file(schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")
+
+    # Execute schema update
+    db_schema = data.DBSchema()
+    await db_schema.ensure_db_schema(postgresql_client)
+
+    assert (await data.SchemaVersion.get_current_version()) == 2
+    await postgresql_client.execute("insert into tab values(2, 'test2', 'test3')")
+
+
+@pytest.mark.asyncio
+async def test_schema_update_failure(dummy_db_schema, write_db_update_file, postgresql_client):
+    schema_dir = dummy_db_schema
+    write_db_update_file(schema_dir, 2, "ALTER TABLE public.tab ADD COLUM new varchar;")  # Syntax error!
+
+    db_schema = data.DBSchema()
+    try:
+        await db_schema.ensure_db_schema(postgresql_client)  # This should fail and trigger database rollback
+    except Exception:
+        pass
+
+    assert (await data.SchemaVersion.get_current_version()) == 1
+
+    write_db_update_file(schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")  # Fix syntax error
+    await db_schema.ensure_db_schema(postgresql_client)
+
+    assert (await data.SchemaVersion.get_current_version()) == 2
+    await postgresql_client.execute("insert into tab values(2, 'test2', 'test3')")

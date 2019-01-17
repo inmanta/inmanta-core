@@ -57,7 +57,7 @@ def postgres_db(postgresql_proc):
 
 
 @pytest.fixture
-async def postgresql_client(postgres_db, database_name, clean_reset, create_schema):
+async def postgresql_client(postgres_db, database_name, clean_reset):
     client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
     try:
         yield client
@@ -66,10 +66,11 @@ async def postgresql_client(postgres_db, database_name, clean_reset, create_sche
 
 
 @pytest.fixture(scope="function")
-async def init_dataclasses(postgres_db, database_name, clean_reset, create_schema):
-    pool = await asyncpg.create_pool(host=postgres_db.host, port=postgres_db.port,
-                                     user=postgres_db.user, database=database_name)
-    data.set_connection_pool(pool)
+async def init_dataclasses_and_load_schema(tmpdir, postgres_db, database_name, database_schema_dir, clean_reset):
+
+    config.Config.load_config()
+    config.Config.set("database", "schema_dir", database_schema_dir)
+    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -86,21 +87,14 @@ def deactive_venv():
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
-@pytest.fixture(scope="session")
-def database_schema_file():
-    yield str(os.path.abspath("misc/postgresql/pg_schema.sql"))
-
-
-@pytest.fixture(scope="function", autouse=True)
-async def create_schema(postgres_db, database_name, clean_reset, database_schema_file):
-    config.Config.load_config()
-    config.Config.set("database", "schema", database_schema_file)
-    connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port,
-                                       user=postgres_db.user, database=database_name)
-    try:
-        await data.load_schema(connection)
-    finally:
-        await connection.close()
+@pytest.fixture(scope="function")
+def database_schema_dir(tmpdir):
+    src_schema_dir = str(os.path.abspath("misc/postgresql"))
+    dst_schema_dir = tmpdir.mkdir("db_schema")
+    src_full_schema_file = os.path.join(src_schema_dir, "pg_schema.sql")
+    dst_full_schema_file = os.path.join(dst_schema_dir, "pg_schema.sql")
+    shutil.copyfile(src_full_schema_file, dst_full_schema_file)
+    yield str(dst_schema_dir)
 
 
 def reset_all_objects():
@@ -178,7 +172,7 @@ def database_name():
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, postgres_db, database_name, database_schema_file):
+async def server(inmanta_config, postgres_db, database_name, database_schema_dir):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -188,7 +182,7 @@ async def server(inmanta_config, postgres_db, database_name, database_schema_fil
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "schema", database_schema_file)
+    config.Config.set("database", "schema_dir", database_schema_dir)
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -212,7 +206,7 @@ async def server(inmanta_config, postgres_db, database_name, database_schema_fil
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, postgres_db, database_name, database_schema_file, request):
+async def server_multi(inmanta_config, postgres_db, database_name, database_schema_dir, request):
 
     state_dir = tempfile.mkdtemp()
 
@@ -250,7 +244,7 @@ async def server_multi(inmanta_config, postgres_db, database_name, database_sche
     config.Config.set("database", "name", database_name)
     config.Config.set("database", "host", "localhost")
     config.Config.set("database", "port", str(postgres_db.port))
-    config.Config.set("database", "schema", database_schema_file)
+    config.Config.set("database", "schema_dir", database_schema_dir)
     config.Config.set("config", "state-dir", state_dir)
     config.Config.set("config", "log-dir", os.path.join(state_dir, "logs"))
     config.Config.set("server_rest_transport", "port", port)
@@ -330,6 +324,19 @@ async def environment_multi(client_multi, server_multi):
     cfg_env.set(env_id)
 
     yield env_id
+
+
+@pytest.fixture(scope="session")
+def write_db_update_file():
+
+    def _write_db_update_file(schema_dir, schema_version, content_file):
+        schema_updates_dir = os.path.join(schema_dir, "schema_updates")
+        if not os.path.exists(schema_updates_dir):
+            os.mkdir(schema_updates_dir)
+        schema_update_file = os.path.join(schema_updates_dir, str(schema_version) + ".sql")
+        with open(schema_update_file, 'w+') as f:
+            f.write(content_file)
+    yield _write_db_update_file
 
 
 class KeepOnFail(object):
