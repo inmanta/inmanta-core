@@ -575,7 +575,7 @@ class Environment(BaseDocument):
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(name=RESOURCE_ACTION_LOGS_RETENTION, default=7, typ="int",
-                                                validator=convert_int, doc="Amount of days to retain resource-action logs"),
+                                                validator=convert_int, doc="The number of days to retain resource-action logs"),
     }
 
     __indexes__ = [
