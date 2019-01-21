@@ -1048,8 +1048,6 @@ async def test_resource_action_log(motor, server_multi, client_multi, environmen
     res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    await server_multi.stop()  # Make sure that logs are flushed to disk
-
     resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0

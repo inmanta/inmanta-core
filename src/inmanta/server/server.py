@@ -116,7 +116,7 @@ class Server(protocol.ServerSlice):
         formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(message)s")
         self._file_handler.setFormatter(formatter)
         self._file_handler.setLevel(logging.DEBUG)
-        self._resource_action_logger = logging.getLogger("RESOURCE_ACTION_LOG_FILE")
+        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
         self._resource_action_logger.setLevel(logging.DEBUG)
         self._resource_action_logger.addHandler(self._file_handler)
 
