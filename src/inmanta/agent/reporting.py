@@ -18,7 +18,11 @@
 import logging
 import os
 import platform
-import resource
+
+try:
+    import resource
+except ImportError:
+    resource = None
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,13 +65,15 @@ reports["hostname"] = report_hostname
 def report_ips(agent):
     try:
         import netifaces
+
         alladdresses = [netifaces.ifaddresses(i) for i in netifaces.interfaces()]
-        v4 = [[y['addr'] for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]]
-        v6 = [[y['addr'] for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]]
+        v4 = [[y["addr"] for x in alladdresses if netifaces.AF_INET in x for y in x[netifaces.AF_INET]]]
+        v6 = [[y["addr"] for x in alladdresses if netifaces.AF_INET6 in x for y in x[netifaces.AF_INET6]]]
         out = {"v4": v4, "v6": v6}
         return out
     except ImportError:
         import socket
+
         return socket.gethostbyname(socket.gethostname())
 
 
@@ -96,24 +102,28 @@ reports["env"] = report_env
 
 
 def report_resources(agent):
+    if resource is None:
+        return {}
+
     ru = resource.getrusage(resource.RUSAGE_SELF)
-    out = {"utime": ru.ru_utime,
-           "stime": ru.ru_stime,
-           "maxrss": ru.ru_maxrss,
-           "ixrss": ru.ru_ixrss,
-           "idrss": ru.ru_idrss,
-           "isrss": ru.ru_isrss,
-           "minflt": ru.ru_minflt,
-           "majflt": ru.ru_majflt,
-           "nswap": ru.ru_nswap,
-           "inblock": ru.ru_inblock,
-           "oublock": ru.ru_oublock,
-           "msgsnd": ru.ru_msgsnd,
-           "msgrcv": ru.ru_msgrcv,
-           "nsignals": ru.ru_nsignals,
-           "nvcsw": ru.ru_nvcsw,
-           "nivcsw": ru.ru_nivcsw
-           }
+    out = {
+        "utime": ru.ru_utime,
+        "stime": ru.ru_stime,
+        "maxrss": ru.ru_maxrss,
+        "ixrss": ru.ru_ixrss,
+        "idrss": ru.ru_idrss,
+        "isrss": ru.ru_isrss,
+        "minflt": ru.ru_minflt,
+        "majflt": ru.ru_majflt,
+        "nswap": ru.ru_nswap,
+        "inblock": ru.ru_inblock,
+        "oublock": ru.ru_oublock,
+        "msgsnd": ru.ru_msgsnd,
+        "msgrcv": ru.ru_msgrcv,
+        "nsignals": ru.ru_nsignals,
+        "nvcsw": ru.ru_nvcsw,
+        "nivcsw": ru.ru_nivcsw,
+    }
     return out
 
 
