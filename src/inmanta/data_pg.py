@@ -1824,16 +1824,18 @@ _classes = [Project, Environment, UnknownParameter, AgentProcess, AgentInstance,
 
 class DBSchema(object):
 
+    FILE_NAME_FULL_SCHEMA_FILE = "pg_schema.sql"
+    DIR_NAME_INCREMENTAL_UPDATES = "schema_updates"
+
     def __init__(self):
         from inmanta.server import config as opt
-        self._full_schema_file = os.path.join(opt.db_schema_dir.get(), "pg_schema.sql")
-        self._dir_with_incremental_schema_updates = os.path.join(opt.db_schema_dir.get(), "schema_updates")
+        self._full_schema_file = os.path.join(opt.db_schema_dir.get(), DBSchema.FILE_NAME_FULL_SCHEMA_FILE)
+        self._dir_with_incremental_schema_updates = os.path.join(opt.db_schema_dir.get(), DBSchema.DIR_NAME_INCREMENTAL_UPDATES)
 
     async def ensure_db_schema(self, connection):
         if not await self._does_db_schema_exist(connection):
             await self._create_db_schema(connection)
-        else:
-            await self._update_db_schema(connection)
+        await self._update_db_schema(connection)
 
     async def _does_db_schema_exist(self, connection):
         tables_in_db = await connection.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")

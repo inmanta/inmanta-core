@@ -91,8 +91,8 @@ def deactive_venv():
 def database_schema_dir(tmpdir):
     src_schema_dir = str(os.path.abspath("misc/postgresql"))
     dst_schema_dir = tmpdir.mkdir("db_schema")
-    src_full_schema_file = os.path.join(src_schema_dir, "pg_schema.sql")
-    dst_full_schema_file = os.path.join(dst_schema_dir, "pg_schema.sql")
+    src_full_schema_file = os.path.join(src_schema_dir, data.DBSchema.FILE_NAME_FULL_SCHEMA_FILE)
+    dst_full_schema_file = os.path.join(dst_schema_dir, data.DBSchema.FILE_NAME_FULL_SCHEMA_FILE)
     shutil.copyfile(src_full_schema_file, dst_full_schema_file)
     yield str(dst_schema_dir)
 
@@ -330,13 +330,23 @@ async def environment_multi(client_multi, server_multi):
 def write_db_update_file():
 
     def _write_db_update_file(schema_dir, schema_version, content_file):
-        schema_updates_dir = os.path.join(schema_dir, "schema_updates")
+        schema_updates_dir = os.path.join(schema_dir, data.DBSchema.DIR_NAME_INCREMENTAL_UPDATES)
         if not os.path.exists(schema_updates_dir):
             os.mkdir(schema_updates_dir)
         schema_update_file = os.path.join(schema_updates_dir, str(schema_version) + ".sql")
         with open(schema_update_file, 'w+') as f:
             f.write(content_file)
     yield _write_db_update_file
+
+
+@pytest.fixture(scope="function")
+def get_columns_in_db_table(postgresql_client):
+    async def _get_columns_in_db_table(table_name):
+        result = await postgresql_client.fetch("SELECT column_name "
+                                               "FROM information_schema.columns "
+                                               "WHERE table_schema='public' AND table_name='" + table_name + "'")
+        return [r["column_name"] for r in result]
+    return _get_columns_in_db_table
 
 
 class KeepOnFail(object):

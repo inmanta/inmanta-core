@@ -43,17 +43,6 @@ async def test_postgres_client(postgresql_client):
 
 
 @pytest.mark.asyncio
-async def test_load_schema(postgres_db, database_name, postgresql_client, init_dataclasses_and_load_schema):
-    table_names = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables "
-                                                "WHERE table_schema='public'")
-    table_names_in_database = [x["table_name"] for x in table_names]
-    table_names_in_classes_list = [x.__name__.lower() for x in data._classes]
-    assert len(table_names_in_classes_list) == len(table_names_in_database)
-    for item in table_names_in_classes_list:
-        assert item in table_names_in_database
-
-
-@pytest.mark.asyncio
 async def test_project(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -1426,42 +1415,71 @@ async def test_compile_get_report(init_dataclasses_and_load_schema):
     assert len(reports) == 1
 
 
+@pytest.mark.asyncio
+async def test_match_tables_in_db_against_table_definitions_in_orm(postgres_db, database_name, postgresql_client,
+                                                                   init_dataclasses_and_load_schema):
+    table_names = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables "
+                                                "WHERE table_schema='public'")
+    table_names_in_database = [x["table_name"] for x in table_names]
+    table_names_in_classes_list = [x.__name__.lower() for x in data._classes]
+    assert len(table_names_in_classes_list) == len(table_names_in_database)
+    for item in table_names_in_classes_list:
+        assert item in table_names_in_database
+
+
 @pytest.fixture(scope="function")
-async def dummy_db_schema(tmpdir, postgres_db, database_name, postgresql_client):
+async def dummy_db_schema_dir(tmpdir, postgres_db, database_name, postgresql_client):
     await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema=False)
     schema_dir = str(tmpdir.mkdir("schema_dir"))
     config.Config.set("database", "schema_dir", schema_dir)
-    full_schema_file = os.path.join(schema_dir, "pg_schema.sql")
+    full_schema_file = os.path.join(schema_dir, data.DBSchema.FILE_NAME_FULL_SCHEMA_FILE)
     with open(full_schema_file, 'w+') as f:
         f.write("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n"
                 "CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);\n"
                 "CREATE TABLE public.schemaversion(id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), current_version integer);\n"
                 "INSERT INTO public.schemaversion(current_version) VALUES(1);")
-
-    # Create full schema
-    db_schema = data.DBSchema()
-    await db_schema.ensure_db_schema(postgresql_client)
-    assert (await data.SchemaVersion.get_current_version()) == 1
+    schema_version_table_exists = await postgresql_client.fetch("SELECT EXISTS(SELECT table_name "
+                                                                "FROM information_schema.tables "
+                                                                "WHERE table_schema='public' AND "
+                                                                "table_name='" + data.SchemaVersion.table_name() + "')")
+    assert not schema_version_table_exists[0]["exists"]
     yield schema_dir
 
 
 @pytest.mark.asyncio
-async def test_schema_update_success(dummy_db_schema, write_db_update_file, postgresql_client):
-    schema_dir = dummy_db_schema
-    write_db_update_file(schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")
+async def test_update_schema_when_schema_already_exists(dummy_db_schema_dir, write_db_update_file, postgresql_client,
+                                                        get_columns_in_db_table):
+    db_schema = data.DBSchema()
+    await db_schema.ensure_db_schema(postgresql_client)
+    assert (await data.SchemaVersion.get_current_version()) == 1
+
+    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")
 
     # Execute schema update
-    db_schema = data.DBSchema()
     await db_schema.ensure_db_schema(postgresql_client)
 
     assert (await data.SchemaVersion.get_current_version()) == 2
-    await postgresql_client.execute("insert into tab values(2, 'test2', 'test3')")
+    assert sorted(["id", "val", "new"]) == sorted(await get_columns_in_db_table("tab"))
 
 
 @pytest.mark.asyncio
-async def test_schema_update_failure(dummy_db_schema, write_db_update_file, postgresql_client):
-    schema_dir = dummy_db_schema
-    write_db_update_file(schema_dir, 2, "ALTER TABLE public.tab ADD COLUM new varchar;")  # Syntax error!
+async def test_create_and_update_schema_in_one_shot(dummy_db_schema_dir, write_db_update_file, postgresql_client,
+                                                    get_columns_in_db_table):
+    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;\n"
+                                                 "CREATE TABLE public.newtab(id INTEGER PRIMARY KEY);")
+    write_db_update_file(dummy_db_schema_dir, 3, "ALTER TABLE public.tab DROP COLUMN new;")
+
+    db_schema = data.DBSchema()
+    await db_schema.ensure_db_schema(postgresql_client)
+    assert (await data.SchemaVersion.get_current_version()) == 3
+
+    assert sorted(["id", "val"]) == sorted(await get_columns_in_db_table("tab"))
+    assert sorted(["id"]) == sorted(await get_columns_in_db_table("newtab"))
+
+
+@pytest.mark.asyncio
+async def test_schema_update_failure(dummy_db_schema_dir, write_db_update_file, postgresql_client, get_columns_in_db_table):
+    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUM new varchar;")  # Syntax error!
 
     db_schema = data.DBSchema()
     try:
@@ -1471,8 +1489,8 @@ async def test_schema_update_failure(dummy_db_schema, write_db_update_file, post
 
     assert (await data.SchemaVersion.get_current_version()) == 1
 
-    write_db_update_file(schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")  # Fix syntax error
+    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")  # Fix syntax error
     await db_schema.ensure_db_schema(postgresql_client)
 
     assert (await data.SchemaVersion.get_current_version()) == 2
-    await postgresql_client.execute("insert into tab values(2, 'test2', 'test3')")
+    assert sorted(["id", "val", "new"]) == sorted(await get_columns_in_db_table("tab"))
