@@ -1,3 +1,7 @@
+v 2018.3.1 (2019-01-23)
+- fixed documentation generation
+- fixed bug with SSL and autostarted agents (#892)
+
 v 2018.3 (2018-12-07)
 Changes in this release:
 - Various bugfixes and performance enhancements
