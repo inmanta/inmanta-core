@@ -517,10 +517,11 @@ agent_interval=%(agent_interval)d
 
 [agent_rest_transport]
 port=%(port)s
-host=localhost
+host=%(serveradress)s
 """ % {"agents": ",".join(agent_names), "env_id": environment_id, "port": port,
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
-            "statedir": privatestatedir, "agent_splay": agent_splay, "agent_interval": agent_interval}
+            "statedir": privatestatedir, "agent_splay": agent_splay, "agent_interval": agent_interval,
+            "serveradress": server_config.server_address.get()}
 
         if server_config.server_enable_auth.get():
             token = encode_token(["agent"], environment_id)
