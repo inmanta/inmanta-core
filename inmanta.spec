@@ -49,11 +49,11 @@ BuildRequires:  python3-devel
 Requires:       python36
 Requires:       python3-devel
 %define __python3 /usr/bin/python3.6
-%endif
 %else
 BuildRequires:  python3-devel
 Requires:       python3
 Requires:       python3-devel
+%endif
 %endif
 
 %package server
