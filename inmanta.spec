@@ -1,6 +1,6 @@
 # Use release 0 for prerelease version.
 %define release 1
-%define version 2017.2
+%define version 2018.3.1
 %define venv %{buildroot}/opt/inmanta
 %define _p3 %{venv}/bin/python3
 %define _unique_build_ids 0
@@ -41,6 +41,15 @@ BuildRequires:  python36-devel
 Requires:       python36
 Requires:       python36-devel
 %define __python3 /usr/bin/python36
+%else
+%if 0%{?fedora} >= 29
+BuildRequires:  gcc
+BuildRequires:  python36
+BuildRequires:  python3-devel
+Requires:       python36
+Requires:       python3-devel
+%define __python3 /usr/bin/python3.6
+%endif
 %else
 BuildRequires:  python3-devel
 Requires:       python3
