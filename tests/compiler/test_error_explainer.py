@@ -19,9 +19,10 @@ import pytest
 
 from inmanta import compiler
 from inmanta.ast import AttributeException
+from inmanta.compiler.help.explainer import ExplainerFactory
 
 
-def test_optional_loop(snippetcompiler):
+def test_optional_loop_forward(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -44,7 +45,7 @@ Thing(name="a")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert e.value.format_help() == """The compiler could not figure out a way to execute this model!
+    assert ExplainerFactory().explain_and_format(e.value) == """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
 In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:16) would never get a value assigned,
@@ -72,7 +73,7 @@ The procedure to solve this is the following
 """ % {"dir": snippetcompiler.project_dir}
 
 
-def test_optional_loop2(snippetcompiler):
+def test_optional_loop_reverse(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -96,7 +97,7 @@ Thing(name="a")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert e.value.format_help() == """The compiler could not figure out a way to execute this model!
+    assert ExplainerFactory().explain_and_format(e.value) == """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
 In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would never get a value assigned,
@@ -124,7 +125,7 @@ The procedure to solve this is the following
 """ % {"dir": snippetcompiler.project_dir}
 
 
-def test_optional_loop3(snippetcompiler):
+def test_optional_loop_list(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -149,10 +150,10 @@ t.other = Thing(name="b")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert e.value.format_help() == """The compiler could not figure out a way to execute this model!
+    assert ExplainerFactory().explain_and_format(e.value) == """The compiler could not figure out a way to execute this model!
 
 During compilation, the compiler has to decide when it expects a relation to have all its elements.
-In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would be complete with the values ['__config__::Thing (instantiated at %(dir)s/main.cf:18)'],
+In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would be complete with the values [__config__::Thing (instantiated at %(dir)s/main.cf:18)],
 but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was added at %(dir)s/main.cf:12:14
 
 This can mean one of two things

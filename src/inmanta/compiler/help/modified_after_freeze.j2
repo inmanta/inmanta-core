@@ -1,0 +1,53 @@
+{% if optional -%}
+The compiler could not figure out a way to execute this model!
+
+During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
+In this compiler run, it guessed that the relation '{{relation}}' on the instance {{instance}} would never get a value assigned,
+but the value {{value}} was assigned at {{location}}
+
+This can mean one of two things
+
+1- the model is incorrect. Most often, this is due to something of the form
+  `implementation mydefault for MyEntity:
+      self.relation = "default"
+   end
+
+   implement MyEntity using mydefault when not (relation is defined)
+   `
+   This is always wrong, because the relation can not at the same time be undefined and have the value "default"
+2- the model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following
+
+1- ensure the model is correct by checking that the problematic assignment at {{location}} is not conditional on the value it assigns
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3- {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: {{reverse_example}}
+4- simplify the model by relying less on `is defined` but use a boolean instead
+{%else-%}
+The compiler could not figure out a way to execute this model!
+
+During compilation, the compiler has to decide when it expects a relation to have all its elements.
+In this compiler run, it guessed that the relation '{{relation}}' on the instance {{instance}} would be complete with the values [{{values |join(',')}}],
+but the value {{value}} was added at {{location}}
+
+This can mean one of two things
+
+1- the model is incorrect. Most often, this is due to something of the form
+  `implementation mydefault for MyEntity:
+      self.relation += "default"
+   end
+
+   implement MyEntity using mydefault when std::count(relation) == 0
+   `
+   This is always wrong, because the relation can not at the same time have length 0 and contain the value "default"
+2- the model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following
+
+1- ensure the model is correct by checking that the problematic assignment at {{location}} is not conditional on the value it assigns
+2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
+    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3- {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: {{reverse_example}}
+4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
+{%endif%}

@@ -15,6 +15,7 @@ requires = [
     "typing",
     "PyJWT",
     "cryptography",
+    "jinja",
 ]
 
 setup(

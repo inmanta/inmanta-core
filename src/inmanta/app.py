@@ -454,9 +454,10 @@ def app():
             sys.excepthook(*sys.exc_info())
 
         if isinstance(e, CompilerException):
-            helpmsg = e.format_help()
+            from inmanta.compiler.help.explainer import ExplainerFactory
+            helpmsg = ExplainerFactory().explain_and_format(e)
             if helpmsg is not None:
-                print(e.format_help())
+                print(helpmsg)
 
     try:
         options.func(options)

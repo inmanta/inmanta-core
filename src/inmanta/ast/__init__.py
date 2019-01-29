@@ -497,12 +497,6 @@ class CompilerException(Exception):
 
         return out
 
-    def format_help(self) -> Optional[str]:
-        """return a text with help towards end users, explaining what to do"""
-        help_from_children = [child.format_help() for child in self.get_causes() if child.format_help() is not None]
-
-        return None if not help_from_children else "\n\n".join(help_from_children)
-
     def __str__(self) -> str:
         return self.format()
 
@@ -691,28 +685,8 @@ class ModifiedAfterFreezeException(RuntimeException):
         self.resultvariable = rv
         self.reverse = reverse
 
-    def build_reverse_hint(self):
-        # typeloop, ...
-        from inmanta.ast.statements import AssignStatement  # noqa: F811
-        from inmanta.ast.statements.generator import Constructor
-
-        if isinstance(self.stmt, AssignStatement):
-            return "%s.%s = %s" % (self.stmt.rhs.pretty_print(), self.attribute.get_name(), self.stmt.lhs.pretty_print())
-
-        if isinstance(self.stmt, Constructor):
-            # find right parameter:
-            attr = self.attribute.end.get_name()
-            if attr not in self.stmt.get_attributes():
-                attr_rhs = "?"
-            else:
-                attr_rhs = self.stmt.get_attributes()[attr].pretty_print()
-            return "%s.%s = %s" % (attr_rhs, self.attribute.get_name(), self.stmt.pretty_print())
-
-        return ""
-
     def format_help(self):
         # typeloop, ...
-        from inmanta.execute.runtime import OptionVariable
 
         if isinstance(self.resultvariable, OptionVariable):
             return """The compiler could not figure out a way to execute this model!
