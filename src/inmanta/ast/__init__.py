@@ -621,7 +621,7 @@ class CycleExcpetion(TypingException):
 
     def __init__(self, first_type: "DefineEntity", final_name: str) -> None:
         super(CycleExcpetion, self).__init__(first_type, None)
-        self.types: "List[DefineEntity]" = []
+        self.types = [] # type: List[DefineEntity]
         self.complete = False
         self.final_name = final_name
 
