@@ -82,7 +82,7 @@ Requires:       python3-inmanta
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
-%{__python3} -m venv %{venv}
+%{__python3} -m venv --symlinks %{venv}
 %{_p3} -m pip install -U --no-index --find-links deps-%{sourceversion} wheel setuptools pip
 %{_p3} -m pip install --no-index --find-links deps-%{sourceversion} inmanta
 %{_p3} -m inmanta.app
