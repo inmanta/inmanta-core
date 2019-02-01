@@ -8,6 +8,7 @@
 %define _debuginfo_subpackages 0
 %define _enable_debug_packages 0
 %define debug_package %{nil}
+# Temporary workaround! Permanent solution will be implemented with: https://github.com/inmanta/inmanta/issues/904
 %define _build_id_links none
 
 
