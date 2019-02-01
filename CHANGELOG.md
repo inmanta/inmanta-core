@@ -1,3 +1,7 @@
+v 2018.3.2 (2019-02-01)
+- Temporarily exclude the build-id symlinks from the RPM packages (#903)
+- Add spec file
+
 v 2018.3.1 (2019-01-23)
 - fixed documentation generation
 - fixed bug with SSL and autostarted agents (#892)
