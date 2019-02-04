@@ -28,5 +28,5 @@ tornado==5.1.1
 tox==3.7.0
 tox-venv==0.3.1
 typing==3.6.6
-pep8-naming==0.7.0
+pep8-naming==0.8.1
 hacking==1.1.0
