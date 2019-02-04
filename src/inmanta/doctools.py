@@ -111,6 +111,7 @@ def test_snippets():
         print("=" * 20)
     return fail
 
+
 if __name__ == '__main__':
     if not test_snippets():
         sys.exit(1)

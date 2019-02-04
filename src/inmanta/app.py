@@ -27,7 +27,7 @@
 
     Entry points
     ------------
-    \@command annotation to register new command
+    @command annotation to register new command
 """
 
 from argparse import ArgumentParser
@@ -196,7 +196,7 @@ def project(options):
 
 def deploy_parser_config(parser):
     parser.add_argument("-p", dest="project", help="The project name")
-    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
+    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated "
                         "and wildcards are supported")
     parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map",
                         default=""),
@@ -225,8 +225,8 @@ def export_parser_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
-    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been " +
-                        "submitted in the supplied file")
+    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been "
+                                                "submitted in the supplied file")
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
     parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version",
                         action="store_true", default=False)

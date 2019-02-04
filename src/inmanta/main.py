@@ -533,8 +533,8 @@ def version_report(client, environment, version, l):
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
-            click.echo(click.style("Resource type:", bold=True) +
-                       "{type} ({attr})".format(type=t, attr=agents[agent][t][0]["id_attribute_name"]))
+            click.echo(click.style("Resource type:", bold=True)
+                       + "{type} ({attr})".format(type=t, attr=agents[agent][t][0]["id_attribute_name"]))
             click.echo("-" * 72)
 
             for res in agents[agent][t]:

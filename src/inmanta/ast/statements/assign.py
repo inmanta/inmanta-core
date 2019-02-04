@@ -305,9 +305,9 @@ vm.files[path="/etc/motd"]
 
         self.type = relation.get_type()
 
-        self.type.lookup_index([(relation.end.name, root_object)] +
-                               [(k, v.execute(requires, resolver, queue))
-                                for (k, v) in self.querypart], self, target)
+        self.type.lookup_index([(relation.end.name, root_object)]
+                               + [(k, v.execute(requires, resolver, queue))
+                               for (k, v) in self.querypart], self, target)
 
     def __repr__(self) -> str:
         """

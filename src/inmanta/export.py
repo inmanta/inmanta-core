@@ -465,7 +465,7 @@ class Exporter(object):
         return hash_id
 
 
-class dependency_manager(object):  # noqa: H801
+class dependency_manager(object):  # noqa: N801
     """
     Register a function that manages dependencies in the configuration model that will be deployed.
     """
@@ -474,7 +474,7 @@ class dependency_manager(object):  # noqa: H801
         Exporter.add_dependency_manager(function)
 
 
-class export(object):  # noqa: H801
+class export(object):  # noqa: N801
     """
         A decorator that registers an export function
     """

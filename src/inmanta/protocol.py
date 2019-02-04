@@ -135,7 +135,7 @@ def decode_token(token):
         # First decode the token without verification
         header = jwt.get_unverified_header(token)
         payload = jwt.decode(token, verify=False)
-    except Exception as e:
+    except Exception:
         raise UnauhorizedError("Unable to decode provided JWT bearer token.")
 
     if "iss" not in payload:
@@ -194,7 +194,7 @@ def authorize_request(auth_data, metadata, message, config):
             ok = True
 
     if not ok:
-        raise UnauhorizedError("The authorization token does not have a valid client type for this call." +
+        raise UnauhorizedError("The authorization token does not have a valid client type for this call."
                                " (%s provided, %s expected" % (auth_data[ct_key], config[0]["client_types"]))
 
     return
@@ -249,7 +249,7 @@ class Result(object):
 
     def available(self):
         if self._multiple:
-            return len(self._result) > 0 is not None or self.code > 0
+            return len(self._result) > 0 or self.code > 0
         else:
             return self._result is not None or self.code > 0
 
@@ -405,8 +405,8 @@ class RESTBase(object):
                     all_fields.remove('sid')
 
             if len(all_fields) > 0 and argspec.varkw is None:
-                return self.return_error_msg(500, ("Request contains fields %s " % all_fields) +
-                                             "that are not declared in method and no kwargs argument is provided.", headers)
+                return self.return_error_msg(500, ("Request contains fields %s " % all_fields)
+                                             + "that are not declared in method and no kwargs argument is provided.", headers)
 
             LOGGER.debug("Calling method %s(%s)", config[1][1], ", ".join(["%s='%s'" % (name, sh(str(value)))
                                                                            for name, value in message.items()]))
@@ -658,7 +658,7 @@ class RESTTransport(RESTBase):
         return self.endpoint.validate_sid(sid)
 
 
-class handle(object):  # noqa: H801
+class handle(object):  # noqa: N801
     """
         Decorator for subclasses of an endpoint to handle protocol methods
 

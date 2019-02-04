@@ -21,7 +21,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException, \
     Locatable, Location
 from inmanta.ast.type import Type
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 try:
     from typing import TYPE_CHECKING
