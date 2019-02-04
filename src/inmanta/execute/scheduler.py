@@ -272,9 +272,9 @@ class Scheduler(object):
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = [w for w in zerowaiters if w.get_progress_potential() is not 0]
+                waitqueue = [w for w in zerowaiters if w.get_progress_potential() != 0]
                 queue.waitqueue = waitqueue
-                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() is 0]
+                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() == 0]
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
                     next = waitqueue.pop(0)

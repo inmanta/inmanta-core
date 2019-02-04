@@ -38,7 +38,7 @@ import uuid
 LOGGER = logging.getLogger(__name__)
 
 
-class provider(object):  # noqa: H801
+class provider(object):  # noqa: N801
     """
         A decorator that registers a new handler.
 
@@ -73,8 +73,8 @@ class ResourcePurged(Exception):
     """
 
 
-def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,  # noqa: H801
-          cacheNone: bool=True):
+def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,
+          cacheNone: bool=True):  # noqa: N803
     """
         decorator for methods in resource handlers to provide caching
 

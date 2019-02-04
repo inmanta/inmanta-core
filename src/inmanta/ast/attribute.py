@@ -20,7 +20,7 @@ from inmanta.ast import Locatable, RuntimeException, TypingException
 from inmanta.ast.type import TypedList, NullableType
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.execute.util import Unknown
-from typing import List
+from typing import List, Tuple
 
 try:
     from typing import TYPE_CHECKING

@@ -186,8 +186,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if from_mongo and issubclass(fields[name].field_type, enum.Enum):
                 value = fields[name].field_type[value]
 
-            if value is not None and not (value.__class__ is fields[name].field_type or
-                                          isinstance(value, fields[name].field_type)):
+            if value is not None and not (value.__class__ is fields[name].field_type
+                                          or isinstance(value, fields[name].field_type)):
                 raise TypeError("Field %s should have the correct type (%s instead of %s)" %
                                 (name, fields[name].field_type.__name__, type(value).__name__))
 

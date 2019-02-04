@@ -45,6 +45,8 @@ import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import sys
 import pkg_resources
+from typing import Optional, Dict
+
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 

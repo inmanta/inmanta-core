@@ -1516,7 +1516,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                sub_process.stderr.read_until_close(),
                                sub_process.wait_for_exit(raise_error=False)]
 
-            o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
+            o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
             if o is not None and env.repo_branch != o.group(1):
                 LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
                 result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir)
