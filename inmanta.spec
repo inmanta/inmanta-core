@@ -8,8 +8,6 @@
 %define _debuginfo_subpackages 0
 %define _enable_debug_packages 0
 %define debug_package %{nil}
-# Temporary workaround! Permanent solution will be implemented with: https://github.com/inmanta/inmanta/issues/904
-%define _build_id_links none
 
 
 %define sourceversion %{version}%{?buildid}
@@ -84,7 +82,7 @@ Requires:       python3-inmanta
 %install
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/opt/inmanta
-%{__python3} -m venv %{venv}
+%{__python3} -m venv --symlinks %{venv}
 %{_p3} -m pip install -U --no-index --find-links deps-%{sourceversion} wheel setuptools pip
 %{_p3} -m pip install --no-index --find-links deps-%{sourceversion} inmanta
 %{_p3} -m inmanta.app
@@ -93,7 +91,7 @@ mkdir -p %{buildroot}/opt/inmanta
 %define __python %{_p3}
 
 # Fix shebang
-sed -i "s|%{buildroot}||g" %{venv}/bin/*
+sed --follow-symlinks -i "s|%{buildroot}||g" %{venv}/bin/*
 find %{venv} -name RECORD | xargs sed -i "s|%{buildroot}||g"
 
 # Put symlinks
