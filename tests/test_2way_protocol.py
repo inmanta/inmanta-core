@@ -38,6 +38,7 @@ LOGGER = logging.getLogger(__name__)
 def get_status_x(tid: uuid.UUID):
     pass
 
+
 @method(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
 def get_agent_status_x(id):
     pass
@@ -97,8 +98,8 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
 
     from inmanta.config import Config
 
-    import inmanta.agent.config  # nopep8
-    import inmanta.server.config  # nopep8
+    import inmanta.agent.config  # noqa: F401
+    import inmanta.server.config  # noqa: F401
 
     if logs:
         # set logging to sensible defaults

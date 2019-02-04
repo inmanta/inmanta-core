@@ -21,7 +21,7 @@ from . import common
 from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator  # noqa: F401
 
 
-class handle(object):  # noqa: H801
+class handle(object):  # noqa: N801
     """
         Decorator for subclasses of an endpoint to handle protocol methods
 

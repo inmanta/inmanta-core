@@ -15,8 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import concurrent
-
 import inmanta.protocol.endpoints
 import inmanta.protocol.rest.server
 from inmanta.util import Scheduler

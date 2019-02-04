@@ -346,7 +346,7 @@ class RESTBase(object):
 
             return common.Response(headers=headers, status_code=code)
 
-        except exceptions.BaseException as e:
+        except exceptions.BaseException:
             LOGGER.exception("")
             raise
 

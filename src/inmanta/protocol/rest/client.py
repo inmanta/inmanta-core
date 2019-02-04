@@ -17,9 +17,7 @@
 """
 
 import re
-import uuid
-from collections import defaultdict
-from typing import Set, Dict, Callable, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, cast, Generator
+from typing import Set, Dict, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, Generator
 
 from tornado import gen
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
@@ -90,7 +88,9 @@ class RESTClient(RESTBase):
         return "%s://%s:%d" % (protocol, host, port)
 
     @gen.coroutine
-    def call(self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None) -> Generator[Any, Any, common.Result]:
+    def call(
+        self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None
+    ) -> Generator[Any, Any, common.Result]:
         if kwargs is None:
             kwargs = {}
 

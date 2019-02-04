@@ -15,8 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import logging
-
 from tornado import web
 from typing import Optional, Dict, Any
 

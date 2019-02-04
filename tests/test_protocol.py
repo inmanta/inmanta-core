@@ -24,7 +24,6 @@ import time
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from inmanta import config, protocol
-from inmanta.protocol.common import UrlMethod
 from inmanta.protocol.rest import CallArguments
 from inmanta.util import hash_file
 from inmanta.server import config as opt

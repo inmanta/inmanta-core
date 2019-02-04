@@ -30,11 +30,14 @@ import jwt
 
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, cast  # noqa: F401
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, cast, TYPE_CHECKING  # noqa: F401
 
 from inmanta import execute, const
 from inmanta import config as inmanta_config
 from . import exceptions
+
+if TYPE_CHECKING:
+    from .endpoints import CallTarget
 
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -101,7 +104,7 @@ class Request(object):
         return return_dict
 
     @classmethod
-    def from_dict(self, value: Dict[str, Any]) -> "Request":
+    def from_dict(cls, value: Dict[str, Any]) -> "Request":
         reply_id: Optional[str] = None
         if "reply_id" in value:
             reply_id = cast(str, value["reply_id"])
@@ -176,8 +179,8 @@ class MethodProperties(object):
             :param agent_server: This is a call from the Agent to the Server
             :param validate_sid: This call requires a valid session, true by default if agent_server and not api
             :param client_types: The allowed client types for this call
-            :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg to
-                                which the options apply.
+            :param arg_options: Options related to arguments passed to the method. The key of this dict is the name of the arg
+                                to which the options apply.
             :param api_version: The version of the api this method belongs to
 
         """
@@ -411,7 +414,7 @@ def gzipped_json(value: Dict[str, Any]) -> Tuple[bool, Union[bytes, str]]:
 def shorten(msg: str, max_len: int = 10) -> str:
     if len(msg) < max_len:
         return msg
-    return msg[0 : max_len - 3] + "..."
+    return msg[0: max_len - 3] + "..."
 
 
 def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> None:
@@ -518,5 +521,3 @@ class Result(object):
             Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
-
-
