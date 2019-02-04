@@ -126,3 +126,6 @@ INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 # assume we are running in a tty
 ENVIRON_FORCE_TTY = "FORCE_TTY"
+
+
+LOG_LEVEL_TRACE = 3

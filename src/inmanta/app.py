@@ -36,7 +36,6 @@ import sys
 import time
 import json
 import os
-import pwd
 import socket
 import signal
 
@@ -277,8 +276,8 @@ def export(options):
     else:
         metadata = {"message": "Manual compile on the CLI by user"}
 
-    if "cli-user" not in metadata:
-        metadata["cli-user"] = pwd.getpwuid(os.geteuid()).pw_name
+    if "cli-user" not in metadata and "USERNAME" in os.environ:
+        metadata["cli-user"] = os.environ["USERNAME"]
 
     if "hostname" not in metadata:
         metadata["hostname"] = socket.gethostname()

@@ -18,11 +18,17 @@
 
 import hashlib
 import os
-import pwd
 import subprocess
-import grp  # @UnresolvedImport
 import shutil
 import sys
+
+
+try:
+    import pwd
+    import grp  # @UnresolvedImport
+except ImportError:
+    pwd = None
+    grp = None
 
 
 try:

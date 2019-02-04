@@ -233,7 +233,8 @@ class RemoteRepo(ModuleRepo):
 
 
 def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
-    if ":" in path:
+    # check that the second char is not a colon (windows)
+    if ":" in path and path[1] != ":":
         return RemoteRepo(path)
     else:
         return LocalFileRepo(path, parent_root=root)

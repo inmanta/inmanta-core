@@ -20,6 +20,7 @@ import logging
 import time
 
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
+from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
 from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
@@ -264,6 +265,7 @@ class Scheduler(object):
                     next.unqueue()
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
+                    LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
                     next.freeze()
                     progress = True
 
@@ -279,6 +281,7 @@ class Scheduler(object):
                     if next.get_waiting_providers() > 0:
                         next.unqueue()
                     else:
+                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
                         next.freeze()
                         progress = True
 
