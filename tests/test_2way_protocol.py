@@ -99,8 +99,8 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
 
     from inmanta.config import Config
 
-    import inmanta.agent.config  # nopep8
-    import inmanta.server.config  # nopep8
+    import inmanta.agent.config  # noqa: F401
+    import inmanta.server.config  # noqa: F401
 
     if logs:
         # set logging to sensible defaults
@@ -173,8 +173,8 @@ async def check_sessions(sessions):
 async def test_timeout(unused_tcp_port):
 
     from inmanta.config import Config
-    import inmanta.agent.config  # nopep8
-    import inmanta.server.config  # nopep8
+    import inmanta.agent.config  # noqa: F401
+    import inmanta.server.config  # noqa: F401
 
     free_port = str(unused_tcp_port)
 

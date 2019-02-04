@@ -221,8 +221,8 @@ class AgentManager(ServerSlice):
 
             if env is not None:
                 for endpoint in session.endpoint_names:
-                    if ((tid, endpoint) in self.tid_endpoint_to_session and
-                            self.tid_endpoint_to_session[(tid, endpoint)] == session):
+                    if ((tid, endpoint) in self.tid_endpoint_to_session
+                            and self.tid_endpoint_to_session[(tid, endpoint)] == session):
                         del self.tid_endpoint_to_session[(tid, endpoint)]
 
                 yield self.verify_reschedule(env, session.endpoint_names)
@@ -347,7 +347,7 @@ class AgentManager(ServerSlice):
     @protocol.handle(methods.ServerAgentApiMethod.trigger_agent, agent_id="id", env="tid")
     @gen.coroutine
     def trigger_agent(self, env, agent_id):
-        raise NotImplemented()
+        raise NotImplementedError()
 
     @protocol.handle(methods.NodeMethod.list_agent_processes)
     @gen.coroutine
@@ -570,8 +570,8 @@ ssl=True
 
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
-            if (resource_id not in self._fact_resource_block_set or
-                    (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
+            if (resource_id not in self._fact_resource_block_set
+                    or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
 
                 agents = yield data.ConfigurationModel.get_agents(env.id, version)
                 yield self._ensure_agents(env, agents)

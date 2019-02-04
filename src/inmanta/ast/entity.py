@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
     from inmanta.ast.statements.define import DefineImport  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast import Namespaced
 
 
 class EntityLike(Type):
