@@ -355,7 +355,7 @@ def test_747_index_collisions(snippetcompiler):
         Test(name="A", value="b")
 
         """,
-        r"""Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:13,{dir}/main.cf:14)` (reported in Construct(Test) ({dir}/main.cf:14))
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:13,{dir}/main.cf:14)` (reported in Construct(Test) ({dir}/main.cf:14))
 caused by:
   value set twice:
 \told value: a
@@ -386,7 +386,7 @@ def test_747_index_collisions_invisible(snippetcompiler):
         end
 
         """,
-        r"""Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:15,{dir}/main.cf:15)` (reported in Construct(Test) ({dir}/main.cf:15))
+        """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:15,{dir}/main.cf:15)` (reported in Construct(Test) ({dir}/main.cf:15))
 caused by:
   value set twice:
 \told value: a
