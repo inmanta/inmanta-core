@@ -1,0 +1,26 @@
+@startuml
+
+class CallTarget {
+    handlers()
+    get_op_mapping()
+}
+
+CallTarget <|-- ServerSlice
+Endpoint <|-- Server
+Endpoint <|-- Client
+Client <|-- Agent
+
+ServerSlice "*" -- "1" Server
+CallTarget "*" -- "1" Endpoint
+
+class RESTBase {
+    execute_call()
+}
+
+RESTBase <|-- RESTClient
+RESTBase <|-- RESTServer
+
+Client -- RESTClient
+Server -- RESTServer
+
+@enduml

@@ -293,7 +293,7 @@ def test_lazy_attibutes(snippetcompiler):
         """
 entity  Thing:
    number id
-   string value
+   string value = ""
 end
 
 implement Thing using std::none

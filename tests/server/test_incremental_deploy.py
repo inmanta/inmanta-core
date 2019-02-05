@@ -48,7 +48,7 @@ class MultiVersionSetup(object):
         self.firstversion: int = 100
         self.versions: List[List[Dict[str, Any]]] = [[] for _ in range(100)]
         self.states: Dict[str, ResourceState] = {}
-        self.results: Dict[str, List[str]] = defaultdict(lambda : [])
+        self.results: Dict[str, List[str]] = defaultdict(lambda: [])
 
     def get_version(self, v: int) -> List[Dict[str, Any]]:
         return self.versions[v]
@@ -146,7 +146,6 @@ class MultiVersionSetup(object):
                 send_events=False,
             )
             assert result == 200
-
 
         allresources = {}
 
@@ -267,8 +266,9 @@ async def test_deploy(server, environment, caplog):
     for record in caplog.records:
         assert record.levelname != "WARNING"
 
+
 def strip_version(v):
-    return sub(",v=[0-9]+","", v)
+    return sub(",v=[0-9]+", "", v)
 
 
 @pytest.mark.asyncio
@@ -360,16 +360,17 @@ async def test_deploy_scenarios_added_by_send_event(server, environment, caplog)
         id1 = setup.add_resource("R1", "A1 D2", True, send_event=True)
         id2 = setup.add_resource("R2", "A1 D1", True, requires=[id1])
         id3 = setup.add_resource("R3", "A1 D1", True, requires=[id1], send_event=True)
-        id4 = setup.add_resource("R4", "A1 D1", True, requires=[id3])
-        id5 = setup.add_resource("R5", "A1 D1", False, requires=[id2])
+        setup.add_resource("R4", "A1 D1", True, requires=[id3])
+        setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
+        await setup.setup(serverdirect, env)
 
     for record in caplog.records:
         assert record.levelname != "WARNING"
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_added_by_send_event_CAD(server, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(server, environment, caplog):
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
@@ -383,11 +384,11 @@ async def test_deploy_scenarios_added_by_send_event_CAD(server, environment, cap
         id1 = setup.add_resource("R1", "A1 D2", True, send_event=False)
         id2 = setup.add_resource("R2", "A1 D1", False, requires=[id1])
         id3 = setup.add_resource("R3", "A1 D1", False, requires=[id1], send_event=True)
-        id4 = setup.add_resource("R4", "A1 D1", False, requires=[id3])
-        id5 = setup.add_resource("R5", "A1 D1", False, requires=[id2])
+        setup.add_resource("R4", "A1 D1", False, requires=[id3])
+        setup.add_resource("R5", "A1 D1", False, requires=[id2])
 
         setup.add_resource("R6", "A1 D1", False, requires=[id1], agent="agent2")
-
+        await setup.setup(serverdirect, env)
 
     for record in caplog.records:
         assert record.levelname != "WARNING"

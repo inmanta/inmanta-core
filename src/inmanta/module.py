@@ -233,7 +233,8 @@ class RemoteRepo(ModuleRepo):
 
 
 def make_repo(path: str, root: Optional[str] = None) -> Union[LocalFileRepo, RemoteRepo]:
-    if ":" in path:
+    # check that the second char is not a colon (windows)
+    if ":" in path and path[1] != ":":
         return RemoteRepo(path)
     else:
         return LocalFileRepo(path, parent_root=root)
@@ -694,7 +695,7 @@ class Module(ModuleLike):
         self._plugin_namespaces = []  # type: List[str]
 
         if not Module.is_valid_module(self._path):
-            raise InvalidModuleException(("Module %s is not a valid inmanta configuration module. Make sure that a " +
+            raise InvalidModuleException(("Module %s is not a valid inmanta configuration module. Make sure that a "
                                           "model/_init.cf file exists and a module.yml definition file.") % self._path)
 
         self.load_module_file()
@@ -713,8 +714,8 @@ class Module(ModuleLike):
         if current_version == new_version:
             LOGGER.debug("Current version is the same as the new version: %s", current_version)
 
-        new_module_def = re.sub("([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)",
-                                "\g<1>" + new_version + "\g<2>", module_def)
+        new_module_def = re.sub(r"([\s]version\s*:\s*['\"\s]?)[^\"'}\s]+(['\"]?)",
+                                r"\g<1>" + new_version + r"\g<2>", module_def)
 
         try:
             new_info = yaml.safe_load(new_module_def)

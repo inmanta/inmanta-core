@@ -33,7 +33,7 @@ class ResourceException(Exception):
     pass
 
 
-class resource(object):  # noqa: H801
+class resource(object):  # noqa: N801
     """
         A decorator that registers a new resource. The decorator must be applied to classes that inherit from
         :class:`~inmanta.resources.Resource`
@@ -201,7 +201,7 @@ class Resource(metaclass=ResourceMeta):
     fields = ("send_event",)
 
     @staticmethod
-    def get_send_event(_, obj):
+    def get_send_event(_exporter, obj):
         try:
             return obj.send_event
         except Exception:
@@ -291,7 +291,7 @@ class Resource(metaclass=ResourceMeta):
             except UnknownException as e:
                 return e.unknown
 
-        except AttributeError as e:
+        except AttributeError:
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
@@ -525,8 +525,8 @@ class Id(object):
             Parse the resource id and return the type, the hostname and the
             resource identifier.
         """
-        result = re.search("^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+)," +
-                           "(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$", resource_id)
+        result = re.search(r"^(?P<id>(?P<type>(?P<ns>[\w-]+::)+(?P<class>[\w-]+))\[(?P<hostname>[^,]+),"
+                           r"(?P<attr>[^=]+)=(?P<value>[^\]]+)\])(,v=(?P<version>[0-9]+))?$", resource_id)
 
         if result is None:
             raise Exception("Invalid id for resource %s" % resource_id)

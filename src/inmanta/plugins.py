@@ -290,7 +290,7 @@ class Plugin(object, metaclass=PluginMeta):
                 return False
 
             if self.arguments[i][0] is not None and not self._is_instance(args[i], self.argtypes[i]):
-                raise Exception(("Invalid type for argument %d of '%s', it should be " +
+                raise Exception(("Invalid type for argument %d of '%s', it should be "
                                  "%s and %s given.") % (i + 1, self.__class__.__function_name__,
                                                         self.arguments[i][1], args[i].__class__.__name__))
         return True
@@ -363,7 +363,8 @@ class Plugin(object, metaclass=PluginMeta):
         return value
 
 
-def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emits_statements: bool=False, allow_unknown: bool=False):  # noqa: H801
+def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emits_statements: bool=False,
+           allow_unknown: bool=False):  # noqa: H801
     """
         Python decorator to register functions with inmanta as plugin
 

@@ -21,7 +21,7 @@ from inmanta.execute.proxy import UnsetException
 from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException, \
     Locatable, Location
 from inmanta.ast.type import Type
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -325,8 +325,10 @@ class OptionVariable(DelayedResultVariable):
         self.value = None
         self.attribute = attribute
         self.myself = instance
+        self.location = None
 
     def set_value(self, value, location, recur=True):
+        assert location is not None
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)

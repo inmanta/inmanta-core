@@ -38,7 +38,7 @@ import uuid
 LOGGER = logging.getLogger(__name__)
 
 
-class provider(object):  # noqa: H801
+class provider(object):  # noqa: N801
     """
         A decorator that registers a new handler.
 
@@ -73,8 +73,8 @@ class ResourcePurged(Exception):
     """
 
 
-def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,  # noqa: H801
-          cacheNone: bool=True):
+def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,
+          cacheNone: bool=True):  # noqa: N803
     """
         decorator for methods in resource handlers to provide caching
 
@@ -360,14 +360,14 @@ class ResourceHandler(object):
     def set_cache(self, cache: AgentCache) -> None:
         self.cache = cache
 
-    def get_client(self) -> protocol.AgentClient:
+    def get_client(self) -> protocol.SessionClient:
         """
             Get the client instance that identifies itself with the agent session.
 
             :return: A client that is associated with the session of the agent that executes this handler.
         """
         if self._client is None:
-            self._client = protocol.AgentClient("agent", self._agent.sessionid)
+            self._client = protocol.SessionClient("agent", self._agent.sessionid)
         return self._client
 
     def process_events(self, ctx: HandlerContext, resource: resources.Resource, events: dict) -> None:

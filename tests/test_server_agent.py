@@ -375,7 +375,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
         without an agent being present.
     """
 
-    agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client_multi.create_project("env-test")
@@ -386,7 +386,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -508,7 +508,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=100)
@@ -521,7 +521,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
 
-    agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
 
     Config.set("config", "agent-interval", "100")
 
@@ -541,7 +541,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
         code_loader=False
     )
     agent.add_end_point_name("agent2")
-    agent.start()
+    await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -621,8 +621,6 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     await agent.trigger_update("env_id", "agent2")
 
     result = await client_multi.get_version(env_id, version, include_logs=True)
-    import pprint
-    pprint.pprint(result.result)
 
     def done():
         return resource_container.Provider.changecount("agent2", "key4") == 0 and \
@@ -634,7 +632,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
 
     await retry_limited(done, 100)
 
-    agent.stop()
+    await agent.stop()
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
 
 
@@ -643,7 +641,7 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     """
         dryrun and deploy a configuration model
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -655,18 +653,18 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
     resource_container.Provider.set("agent1", "key3", "value")
 
-    server.stop()
+    await server.stop()
 
     ibl = InmantaBootloader()
     server = ibl.restserver
-    ibl.start()
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    await ibl.start()
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -751,8 +749,8 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
 
-    agent.stop()
-    ibl.stop()
+    await agent.stop()
+    await ibl.stop()
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -760,7 +758,7 @@ async def test_spontaneous_deploy(resource_container, server, client):
     """
         dryrun and deploy a configuration model
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -775,7 +773,7 @@ async def test_spontaneous_deploy(resource_container, server, client):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -831,7 +829,7 @@ async def test_spontaneous_deploy(resource_container, server, client):
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -839,7 +837,7 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
     """
         dryrun and deploy a configuration model
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -849,7 +847,7 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -885,7 +883,7 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
     final_log = result.result["resources"][0]["actions"][0]["messages"][-1]
     assert "traceback" in final_log["kwargs"]
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -898,8 +896,8 @@ async def test_dual_agent(resource_container, server, client, environment):
                           code_loader=False)
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
-    myagent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await myagent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -967,12 +965,12 @@ async def test_dual_agent(resource_container, server, client, environment):
     assert resource_container.Provider.get("agent1", "key2") == "value1"
     assert resource_container.Provider.get("agent2", "key2") == "value2"
 
-    myagent.stop()
+    await myagent.stop()
 
 
 @pytest.mark.asyncio
 async def test_server_agent_api(resource_container, client, server):
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -980,10 +978,10 @@ async def test_server_agent_api(resource_container, client, server):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
     agent = Agent(environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.start()
+    await agent.start()
 
     agent = Agent(environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"}, code_loader=False)
-    agent.start()
+    await agent.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
     assert len(agentmanager.sessions) == 2
@@ -1069,8 +1067,8 @@ async def test_get_facts(resource_container, client, server):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1113,8 +1111,8 @@ async def test_purged_facts(resource_container, client, server, environment):
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1174,14 +1172,14 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     """
         dryrun and deploy a configuration model automatically
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     # allow very rapid fact refresh
     agentmanager._fact_resource_block = 0.1
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -1315,7 +1313,7 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     await get_fact('test::Fact[agent1,key=key4]')  # unknown
     await get_fact('test::Fact[agent1,key=key5]', 503)  # broken
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -1355,8 +1353,8 @@ async def test_unkown_parameters(resource_container, client, server):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1381,7 +1379,7 @@ async def test_unkown_parameters(resource_container, client, server):
     result = await client.release_version(env_id, version, True)
     assert result.code == 200
 
-    await server.get_endpoint("server").renew_expired_facts()
+    await server.get_slice("server").renew_expired_facts()
 
     env_id = uuid.UUID(env_id)
     params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
@@ -1407,8 +1405,8 @@ async def test_fail(resource_container, client, server):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
-    agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1499,10 +1497,10 @@ async def test_wait(resource_container, client, server):
     # setup agent
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
 
     # wait for agent
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1634,10 +1632,10 @@ async def test_multi_instance(resource_container, client, server):
     agent.add_end_point_name("agent2")
     agent.add_end_point_name("agent3")
 
-    agent.start()
+    await agent.start()
 
     # wait for agent
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1732,7 +1730,7 @@ async def test_cross_agent_deps(resource_container, server, client):
     """
         deploy a configuration model with cross host dependency
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     # config for recovery mechanism
@@ -1745,12 +1743,12 @@ async def test_cross_agent_deps(resource_container, server, client):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node2", environment=env_id, agent_map={"agent2": "localhost"}, code_loader=False)
     agent2.add_end_point_name("agent2")
-    agent2.start()
+    await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -1816,8 +1814,8 @@ async def test_cross_agent_deps(resource_container, server, client):
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert resource_container.Provider.get("agent2", "key3") == "value3"
 
-    agent.stop()
-    agent2.stop()
+    await agent.stop()
+    await agent2.stop()
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -1825,7 +1823,7 @@ async def test_dryrun_scale(resource_container, server, client):
     """
         test dryrun scaling
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -1836,7 +1834,7 @@ async def test_dryrun_scale(resource_container, server, client):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -1873,7 +1871,7 @@ async def test_dryrun_scale(resource_container, server, client):
     result = await client.dryrun_report(env_id, dry_run_id)
     assert result.code == 200
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -1881,7 +1879,7 @@ async def test_dryrun_failures(resource_container, server, client):
     """
         test dryrun scaling
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -1892,7 +1890,7 @@ async def test_dryrun_failures(resource_container, server, client):
 
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -1936,7 +1934,6 @@ async def test_dryrun_failures(resource_container, server, client):
 
     while result.result["dryruns"][0]["todo"] > 0:
         result = await client.dryrun_list(env_id, version)
-        print(result.result)
         await asyncio.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
@@ -1958,7 +1955,7 @@ async def test_dryrun_failures(resource_container, server, client):
     assert_handler_failed('test::FailFast[agent1,key=key2],v=%d' % version, "Handler failed")
     assert_handler_failed('test::DoesNotExist[agent1,key=key2],v=%d' % version, "Resource Deserialization Failed")
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -1966,12 +1963,12 @@ async def test_send_events(resource_container, environment, server, client):
     """
         Send and receive events within one agent
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -2015,7 +2012,7 @@ async def test_send_events(resource_container, environment, server, client):
         assert res["status"] == const.ResourceState.deployed
         assert res["change"] == const.Change.created
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -2023,17 +2020,17 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     """
         Send and receive events over agents
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     agent2.add_end_point_name("agent2")
-    agent2.start()
+    await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     version = int(time.time())
@@ -2080,8 +2077,8 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
         assert res["status"] == const.ResourceState.deployed
         assert res["change"] == const.Change.created
 
-    agent.stop()
-    agent2.stop()
+    await agent.stop()
+    await agent2.stop()
 
 
 @pytest.mark.asyncio(timeout=15)
@@ -2089,12 +2086,12 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
     """
         Send and receive events over agents with agents starting after deploy
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     agent2.add_end_point_name("agent2")
-    agent2.start()
+    await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -2137,7 +2134,7 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
     Config.set("config", "agent-splay", "0")
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
@@ -2154,8 +2151,8 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
         assert res["status"] == const.ResourceState.deployed
         assert res["change"] == const.Change.created
 
-    agent.stop()
-    agent2.stop()
+    await agent.stop()
+    await agent2.stop()
 
 
 @pytest.mark.asyncio
@@ -2163,12 +2160,12 @@ async def test_auto_deploy(server, client, resource_container, environment):
     """
         dryrun and deploy a configuration model automatically
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key2", "incorrect_value")
@@ -2226,7 +2223,7 @@ async def test_auto_deploy(server, client, resource_container, environment):
     assert resource_container.Provider.get("agent1", "key2") == "value2"
     assert not resource_container.Provider.isset("agent1", "key3")
 
-    agent.stop()
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=15)
@@ -2485,7 +2482,7 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
 
         return versions.result
 
-    project_dir = os.path.join(server.get_endpoint("server")._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice("server")._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
 
     shutil.copytree(project_source, project_dir)
@@ -2645,13 +2642,13 @@ succ    2    2    2    0
 @pytest.mark.asyncio
 async def test_deploy_and_events(client, server, environment, resource_container, self_state, dep_state):
 
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -2708,13 +2705,13 @@ async def test_deploy_and_events(client, server, environment, resource_container
 
 @pytest.mark.asyncio
 async def test_deploy_and_events_failed(client, server, environment, resource_container):
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
@@ -2769,13 +2766,13 @@ dep_states_reload = [
 @pytest.mark.asyncio(timeout=5000)
 async def test_reload(client, server, environment, resource_container, dep_state):
 
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
                   code_loader=False)
     agent.add_end_point_name("agent1")
-    agent.start()
+    await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())

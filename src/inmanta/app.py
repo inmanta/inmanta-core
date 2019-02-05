@@ -27,7 +27,7 @@
 
     Entry points
     ------------
-    \@command annotation to register new command
+    @command annotation to register new command
 """
 
 from argparse import ArgumentParser
@@ -36,14 +36,16 @@ import sys
 import time
 import json
 import os
-import pwd
 import socket
+import signal
 
 import colorlog
 from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
 from tornado.ioloop import IOLoop
+from tornado.util import TimeoutError
+from tornado import gen
 from inmanta import protocol, module, moduletool, const
 from inmanta.export import cfg_env, ModelExporter
 import yaml
@@ -55,31 +57,48 @@ LOGGER = logging.getLogger()
 
 @command("server", help_msg="Start the inmanta server")
 def start_server(options):
-    io_loop = IOLoop.current()
-
     ibl = InmantaBootloader()
-    ibl.start()
-
-    try:
-        io_loop.start()
-    except KeyboardInterrupt:
-        IOLoop.current().stop()
-        ibl.stop()
+    setup_signal_handlers(ibl.stop)
+    IOLoop.current().add_callback(ibl.start)
+    IOLoop.current().start()
 
 
 @command("agent", help_msg="Start the inmanta agent")
 def start_agent(options):
     from inmanta import agent
-    io_loop = IOLoop.current()
-
     a = agent.Agent()
-    a.start()
+    setup_signal_handlers(a.stop)
+    IOLoop.current().add_callback(a.start)
+    IOLoop.current().start()
 
+
+def setup_signal_handlers(shutdown_function):
+    """
+        Make sure that shutdown_function is called when a SIGTERM or a SIGINT interrupt occurs.
+
+        :param shutdown_function: The function that contains the shutdown logic.
+    """
+    def handle_signal(signum, frame):
+        IOLoop.current().add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+
+@gen.coroutine
+def safe_shutdown_wrapper(shutdown_function):
+    """
+        Wait 10 seconds to gracefully shutdown the instance.
+        Afterwards stop the IOLoop
+    """
+    future = shutdown_function()
     try:
-        io_loop.start()
-    except KeyboardInterrupt:
+        timeout = IOLoop.current().time() + 10
+        yield gen.with_timeout(timeout, future)
+    except TimeoutError:
+        pass
+    finally:
         IOLoop.current().stop()
-        a.stop()
 
 
 def compiler_config(parser):
@@ -177,7 +196,7 @@ def project(options):
 
 def deploy_parser_config(parser):
     parser.add_argument("-p", dest="project", help="The project name")
-    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
+    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated "
                         "and wildcards are supported")
     parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map",
                         default=""),
@@ -206,8 +225,8 @@ def export_parser_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
-    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been " +
-                        "submitted in the supplied file")
+    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been "
+                                                "submitted in the supplied file")
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
     parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version",
                         action="store_true", default=False)
@@ -257,8 +276,8 @@ def export(options):
     else:
         metadata = {"message": "Manual compile on the CLI by user"}
 
-    if "cli-user" not in metadata:
-        metadata["cli-user"] = pwd.getpwuid(os.geteuid()).pw_name
+    if "cli-user" not in metadata and "USERNAME" in os.environ:
+        metadata["cli-user"] = os.environ["USERNAME"]
 
     if "hostname" not in metadata:
         metadata["hostname"] = socket.gethostname()

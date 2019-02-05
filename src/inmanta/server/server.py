@@ -20,9 +20,9 @@ import base64
 from collections import defaultdict
 import datetime
 import difflib
-import logging
 import os
 import re
+import logging
 import sys
 import tempfile
 import time
@@ -37,7 +37,6 @@ from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
-from inmanta import methods
 from inmanta.data import Environment
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
@@ -46,7 +45,7 @@ from inmanta.server import config as opt
 import json
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
-from inmanta.protocol import encode_token
+from inmanta.protocol import encode_token, methods
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
@@ -67,39 +66,42 @@ class Server(protocol.ServerSlice):
         self._server_storage = self.check_storage()
         self._agent_no_log = agent_no_log
 
-        self._db = None
-        if database_host is None:
-            database_host = opt.db_host.get()
+        self._recompiles = defaultdict(lambda: None)
 
-        if database_port is None:
-            database_port = opt.db_port.get()
-
-        data.connect(database_host, database_port, opt.db_name.get())
-        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), database_host, database_port)
-
-        ioloop.IOLoop.current().add_callback(data.create_indexes)
-
+        self.setup_dashboard()
+        self.dryrun_lock = locks.Lock()
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
+        self._database_host = database_host
+        self._database_port = database_port
+
+    @gen.coroutine
+    def prestart(self, server):
+        self.agentmanager = server.get_slice("agentmanager")
+
+    @gen.coroutine
+    def start(self):
+        if self._database_host is None:
+            self._database_host = opt.db_host.get()
+
+        if self._database_port is None:
+            self._database_port = opt.db_port.get()
+
+        data.connect(self._database_host, self._database_port, opt.db_name.get())
+        LOGGER.info("Connected to mongodb database %s on %s:%d", opt.db_name.get(), self._database_host, self._database_port)
+
+        ioloop.IOLoop.current().add_callback(data.create_indexes)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
-        self._recompiles = defaultdict(lambda: None)
+        yield super().start()
 
-        self.setup_dashboard()
-        self.dryrun_lock = locks.Lock()
-
-    def prestart(self, server):
-        self.agentmanager = server.get_endpoint("agentmanager")
-
-    def start(self):
-        super().start()
-
+    @gen.coroutine
     def stop(self):
-        super().stop()
+        yield super().stop()
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -165,38 +167,19 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """
             Check if the server storage is configured and ready to use.
         """
+        def _ensure_directory_exist(directory, *subdirs):
+            directory = os.path.join(directory, *subdirs)
+            if not os.path.exists(directory):
+                os.mkdir(directory)
+            return directory
+
         state_dir = opt.state_dir.get()
-
-        if not os.path.exists(state_dir):
-            os.mkdir(state_dir)
-
         server_state_dir = os.path.join(state_dir, "server")
-
-        if not os.path.exists(server_state_dir):
-            os.mkdir(server_state_dir)
-
-        dir_map = {"server": server_state_dir}
-
-        file_dir = os.path.join(server_state_dir, "files")
-        dir_map["files"] = file_dir
-        if not os.path.exists(file_dir):
-            os.mkdir(file_dir)
-
-        environments_dir = os.path.join(server_state_dir, "environments")
-        dir_map["environments"] = environments_dir
-        if not os.path.exists(environments_dir):
-            os.mkdir(environments_dir)
-
-        env_agent_dir = os.path.join(server_state_dir, "agents")
-        dir_map["agents"] = env_agent_dir
-        if not os.path.exists(env_agent_dir):
-            os.mkdir(env_agent_dir)
-
-        log_dir = opt.log_dir.get()
-        if not os.path.isdir(log_dir):
-            os.mkdir(log_dir)
-        dir_map["logs"] = log_dir
-
+        dir_map = {"server": _ensure_directory_exist(state_dir, "server")}
+        dir_map["files"] = _ensure_directory_exist(server_state_dir, "files")
+        dir_map["environments"] = _ensure_directory_exist(server_state_dir, "environments")
+        dir_map["agents"] = _ensure_directory_exist(server_state_dir, "agents")
+        dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
         return dir_map
 
     @gen.coroutine
@@ -233,7 +216,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         LOGGER.info("Done renewing expired parameters")
 
-    @protocol.handle(methods.ParameterMethod.get_param, param_id="id", env="tid")
+    @protocol.handle(methods.get_param, param_id="id", env="tid")
     @gen.coroutine
     def get_param(self, env, param_id, resource_id=None):
         if resource_id is None:
@@ -298,7 +281,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return (recompile and value_updated)
 
-    @protocol.handle(methods.ParameterMethod.set_param, param_id="id", env="tid")
+    @protocol.handle(methods.set_param, param_id="id", env="tid")
     @gen.coroutine
     def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
         result = yield self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
@@ -317,7 +300,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"parameter": params[0]}
 
-    @protocol.handle(methods.ParametersMethod.set_parameters, env="tid")
+    @protocol.handle(methods.set_parameters, env="tid")
     @gen.coroutine
     def set_parameters(self, env, parameters):
         recompile = False
@@ -343,7 +326,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.ParameterMethod.delete_param, env="tid", parameter_name="id")
+    @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
     @gen.coroutine
     def delete_param(self, env, parameter_name, resource_id):
         if resource_id is None:
@@ -365,7 +348,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.ParameterMethod.list_params, env="tid")
+    @protocol.handle(methods.list_params, env="tid")
     @gen.coroutine
     def list_param(self, env, query):
         m_query = {"environment": env.id}
@@ -375,9 +358,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         params = yield data.Parameter.get_list(**m_query)
         return 200, {"parameters": params, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
 
-    @protocol.handle(methods.FormMethod.put_form, form_id="id", env="tid")
+    @protocol.handle(methods.put_form, form_id="id", env="tid")
     @gen.coroutine
-    def put_form(self, env: uuid.UUID, form_id: str, form: dict):
+    def put_form(self, env: data.Environment, form_id: str, form: dict):
         form_doc = yield data.Form.get_form(environment=env.id, form_type=form_id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
@@ -400,7 +383,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"form": {"id": form_doc.id}}
 
-    @protocol.handle(methods.FormMethod.get_form, form_id="id", env="tid")
+    @protocol.handle(methods.get_form, form_id="id", env="tid")
     @gen.coroutine
     def get_form(self, env, form_id):
         form = yield data.Form.get_form(environment=env.id, form_type=form_id)
@@ -410,13 +393,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"form": form}
 
-    @protocol.handle(methods.FormMethod.list_forms, env="tid")
+    @protocol.handle(methods.list_forms, env="tid")
     @gen.coroutine
     def list_forms(self, env):
         forms = yield data.Form.get_list(environment=env.id)
         return 200, {"forms": [{"form_id": x.id, "form_type": x.form_type} for x in forms]}
 
-    @protocol.handle(methods.FormRecords.list_records, env="tid")
+    @protocol.handle(methods.list_records, env="tid")
     @gen.coroutine
     def list_records(self, env, form_type, include_record):
         form_type = yield data.Form.get_form(environment=env.id, form_type=form_type)
@@ -431,7 +414,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         else:
             return 200, {"records": records}
 
-    @protocol.handle(methods.FormRecords.get_record, record_id="id", env="tid")
+    @protocol.handle(methods.get_record, record_id="id", env="tid")
     @gen.coroutine
     def get_record(self, env, record_id):
         record = yield data.FormRecord.get_by_id(record_id)
@@ -440,7 +423,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"record": record}
 
-    @protocol.handle(methods.FormRecords.update_record, record_id="id", env="tid")
+    @protocol.handle(methods.update_record, record_id="id", env="tid")
     @gen.coroutine
     def update_record(self, env, record_id, form):
         record = yield data.FormRecord.get_by_id(record_id)
@@ -469,7 +452,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
         return 200, {"record": record}
 
-    @protocol.handle(methods.FormRecords.create_record, env="tid")
+    @protocol.handle(methods.create_record, env="tid")
     @gen.coroutine
     def create_record(self, env, form_type, form):
         form_obj = yield data.Form.get_form(environment=env.id, form_type=form_type)
@@ -501,7 +484,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"record": record}
 
-    @protocol.handle(methods.FormRecords.delete_record, record_id="id", env="tid")
+    @protocol.handle(methods.delete_record, record_id="id", env="tid")
     @gen.coroutine
     def delete_record(self, env, record_id):
         record = yield data.FormRecord.get_by_id(record_id)
@@ -517,7 +500,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.FileMethod.upload_file, file_hash="id")
+    @protocol.handle(methods.upload_file, file_hash="id")
     @gen.coroutine
     def upload_file(self, file_hash, content):
         content = base64.b64decode(content)
@@ -537,7 +520,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.FileMethod.stat_file, file_hash="id")
+    @protocol.handle(methods.stat_file, file_hash="id")
     @gen.coroutine
     def stat_file(self, file_hash):
         file_name = os.path.join(self._server_storage["files"], file_hash)
@@ -547,7 +530,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         else:
             return 404
 
-    @protocol.handle(methods.FileMethod.get_file, file_hash="id")
+    @protocol.handle(methods.get_file, file_hash="id")
     @gen.coroutine
     def get_file(self, file_hash):
         ret, c = self.get_file_internal(file_hash)
@@ -588,7 +571,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                                  " please contact the server administrator") % (file_hash, actualhash)}
                 return 200, content
 
-    @protocol.handle(methods.FileMethod.stat_files)
+    @protocol.handle(methods.stat_files)
     @gen.coroutine
     def stat_files(self, files):
         """
@@ -602,7 +585,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"files": response}
 
-    @protocol.handle(methods.FileDiff.diff)
+    @protocol.handle(methods.diff)
     @gen.coroutine
     def file_diff(self, a, b):
         """
@@ -635,7 +618,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"diff": list(diff)}
 
-    @protocol.handle(methods.ResourceMethod.get_resource, resource_id="id", env="tid")
+    @protocol.handle(methods.get_resource, resource_id="id", env="tid")
     @gen.coroutine
     def get_resource(self, env, resource_id, logs, status, log_action, log_limit):
         resv = yield data.Resource.get(env.id, resource_id)
@@ -655,7 +638,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"resource": resv, "logs": actions}
 
-    @protocol.handle(methods.ResourceMethod.get_resources_for_agent, env="tid")
+    @protocol.handle(methods.get_resources_for_agent, env="tid")
     @gen.coroutine
     def get_resources_for_agent(self, env, agent, version):
         started = datetime.datetime.now()
@@ -691,7 +674,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     @gen.coroutine
-    def get_resource_increment_for_agent(self, env: Environment, agent:str) -> Dict[str, Any]:
+    def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Dict[str, Any]:
         started = datetime.datetime.now()
 
         cm = yield data.ConfigurationModel.get_latest_version(env.id)
@@ -720,7 +703,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    @protocol.handle(methods.VersionMethod.list_versions, env="tid")
+    @protocol.handle(methods.list_versions, env="tid")
     @gen.coroutine
     def list_version(self, env, start=None, limit=None):
         if (start is None and limit is not None) or (limit is None and start is not None):
@@ -743,7 +726,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, d
 
-    @protocol.handle(methods.VersionMethod.get_version, version_id="id", env="tid")
+    @protocol.handle(methods.get_version, version_id="id", env="tid")
     @gen.coroutine
     def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=0):
         version = yield data.ConfigurationModel.get_version(env.id, version_id)
@@ -768,7 +751,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, d
 
-    @protocol.handle(methods.VersionMethod.delete_version, version_id="id", env="tid")
+    @protocol.handle(methods.delete_version, version_id="id", env="tid")
     @gen.coroutine
     def delete_version(self, env, version_id):
         version = yield data.ConfigurationModel.get_version(env.id, version_id)
@@ -778,7 +761,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield version.delete_cascade()
         return 200
 
-    @protocol.handle(methods.VersionMethod.put_version, env="tid")
+    @protocol.handle(methods.put_version, env="tid")
     @gen.coroutine
     def put_version(self, env, version, resources, resource_state, unknowns, version_info):
         started = datetime.datetime.now()
@@ -931,7 +914,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.VersionMethod.release_version, version_id="id", env="tid")
+    @protocol.handle(methods.release_version, version_id="id", env="tid")
     @gen.coroutine
     def release_version(self, env, version_id, push):
         model = yield data.ConfigurationModel.get_version(env.id, version_id)
@@ -975,7 +958,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"model": model}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_request, version_id="id", env="tid")
+    @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
     @gen.coroutine
     def dryrun_request(self, env, version_id):
         model = yield data.ConfigurationModel.get_version(environment=env.id, version=version_id)
@@ -1024,7 +1007,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"dryrun": dryrun}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_list, env="tid")
+    @protocol.handle(methods.dryrun_list, env="tid")
     @gen.coroutine
     def dryrun_list(self, env, version=None):
         query_args = {}
@@ -1041,7 +1024,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"dryruns": [{"id": x.id, "version": x.model, "date": x.date, "total": x.total, "todo": x.todo}
                                  for x in dryruns]}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_report, dryrun_id="id", env="tid")
+    @protocol.handle(methods.dryrun_report, dryrun_id="id", env="tid")
     @gen.coroutine
     def dryrun_report(self, env, dryrun_id):
         dryrun = yield data.DryRun.get_by_id(dryrun_id)
@@ -1050,7 +1033,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"dryrun": dryrun}
 
-    @protocol.handle(methods.DryRunMethod.dryrun_update, dryrun_id="id", env="tid")
+    @protocol.handle(methods.dryrun_update, dryrun_id="id", env="tid")
     @gen.coroutine
     def dryrun_update(self, env, dryrun_id, resource, changes):
         with (yield self.dryrun_lock.acquire()):
@@ -1059,7 +1042,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.CodeMethod.upload_code, code_id="id", env="tid")
+    @protocol.handle(methods.upload_code, code_id="id", env="tid")
     @gen.coroutine
     def upload_code(self, env, code_id, resource, sources):
         code = yield data.Code.get_version(environment=env.id, version=code_id, resource=resource)
@@ -1087,7 +1070,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.CodeBatchedMethod.upload_code_batched, code_id="id", env="tid")
+    @protocol.handle(methods.upload_code_batched, code_id="id", env="tid")
     @gen.coroutine
     def upload_code_batched(self, env, code_id, resources):
         # validate
@@ -1135,7 +1118,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.CodeMethod.get_code, code_id="id", env="tid")
+    @protocol.handle(methods.get_code, code_id="id", env="tid")
     @gen.coroutine
     def get_code(self, env, code_id, resource):
         code = yield data.Code.get_version(environment=env.id, version=code_id, resource=resource)
@@ -1156,7 +1139,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
-    @protocol.handle(methods.ResourceMethod.resource_action_update, env="tid")
+    @protocol.handle(methods.resource_action_update, env="tid")
     @gen.coroutine
     def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
                                change, send_events):
@@ -1240,7 +1223,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200
 
     # Project handlers
-    @protocol.handle(methods.Project.create_project)
+    @protocol.handle(methods.create_project)
     @gen.coroutine
     def create_project(self, name):
         try:
@@ -1251,7 +1234,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"project": project}
 
-    @protocol.handle(methods.Project.delete_project, project_id="id")
+    @protocol.handle(methods.delete_project, project_id="id")
     @gen.coroutine
     def delete_project(self, project_id):
         project = yield data.Project.get_by_id(project_id)
@@ -1261,7 +1244,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield project.delete_cascade()
         return 200, {}
 
-    @protocol.handle(methods.Project.modify_project, project_id="id")
+    @protocol.handle(methods.modify_project, project_id="id")
     @gen.coroutine
     def modify_project(self, project_id, name):
         try:
@@ -1276,13 +1259,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         except pymongo.errors.DuplicateKeyError:
             return 500, {"message": "A project with name %s already exists." % name}
 
-    @protocol.handle(methods.Project.list_projects)
+    @protocol.handle(methods.list_projects)
     @gen.coroutine
     def list_projects(self):
         projects = yield data.Project.get_list()
         return 200, {"projects": projects}
 
-    @protocol.handle(methods.Project.get_project, project_id="id")
+    @protocol.handle(methods.get_project, project_id="id")
     @gen.coroutine
     def get_project(self, project_id):
         try:
@@ -1302,7 +1285,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 500
 
     # Environment handlers
-    @protocol.handle(methods.Environment.create_environment)
+    @protocol.handle(methods.create_environment)
     @gen.coroutine
     def create_environment(self, project_id, name, repository, branch):
         if (repository is None and branch is not None) or (repository is not None and branch is None):
@@ -1323,7 +1306,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield env.insert()
         return 200, {"environment": env}
 
-    @protocol.handle(methods.Environment.modify_environment, environment_id="id")
+    @protocol.handle(methods.modify_environment, environment_id="id")
     @gen.coroutine
     def modify_environment(self, environment_id, name, repository, branch):
         env = yield data.Environment.get_by_id(environment_id)
@@ -1345,7 +1328,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield env.update_fields(**fields)
         return 200, {"environment": env}
 
-    @protocol.handle(methods.Environment.get_environment, environment_id="id")
+    @protocol.handle(methods.get_environment, environment_id="id")
     @gen.coroutine
     def get_environment(self, environment_id, versions=None, resources=None):
         versions = 0 if versions is None else int(versions)
@@ -1366,7 +1349,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"environment": env_dict}
 
-    @protocol.handle(methods.Environment.list_environments)
+    @protocol.handle(methods.list_environments)
     @gen.coroutine
     def list_environments(self):
         environments = yield data.Environment.get_list()
@@ -1377,7 +1360,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"environments": dicts}  # @UndefinedVariable
 
-    @protocol.handle(methods.Environment.delete_environment, environment_id="id")
+    @protocol.handle(methods.delete_environment, environment_id="id")
     @gen.coroutine
     def delete_environment(self, environment_id):
         env = yield data.Environment.get_by_id(environment_id)
@@ -1388,7 +1371,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.EnvironmentSettings.list_settings, env="tid")
+    @protocol.handle(methods.list_settings, env="tid")
     @gen.coroutine
     def list_settings(self, env: data.Environment):
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
@@ -1409,7 +1392,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
             yield self.agentmanager.restart_agents(env)
 
-    @protocol.handle(methods.EnvironmentSettings.set_setting, env="tid", key="id")
+    @protocol.handle(methods.set_setting, env="tid", key="id")
     @gen.coroutine
     def set_setting(self, env: data.Environment, key: str, value: str):
         try:
@@ -1421,7 +1404,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         except ValueError:
             return 500, {"message": "Invalid value"}
 
-    @protocol.handle(methods.EnvironmentSettings.get_setting, env="tid", key="id")
+    @protocol.handle(methods.get_setting, env="tid", key="id")
     @gen.coroutine
     def get_setting(self, env: data.Environment, key: str):
         try:
@@ -1430,7 +1413,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         except KeyError:
             return 404
 
-    @protocol.handle(methods.EnvironmentSettings.delete_setting, env="tid", key="id")
+    @protocol.handle(methods.delete_setting, env="tid", key="id")
     @gen.coroutine
     def delete_setting(self, env: data.Environment, key: str):
         try:
@@ -1440,7 +1423,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         except KeyError:
             return 404
 
-    @protocol.handle(methods.NotifyMethod.is_compiling, environment_id="id")
+    @protocol.handle(methods.is_compiling, environment_id="id")
     @gen.coroutine
     def is_compiling(self, environment_id):
         if self._recompiles[environment_id] is self:
@@ -1448,13 +1431,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 204
 
-    @protocol.handle(methods.NotifyMethod.notify_change_get, env="id")
+    @protocol.handle(methods.notify_change_get, env="id")
     @gen.coroutine
     def notify_change_get(self, env, update):
         result = yield self.notify_change(env, update, {})
         return result
 
-    @protocol.handle(methods.NotifyMethod.notify_change, env="id")
+    @protocol.handle(methods.notify_change, env="id")
     @gen.coroutine
     def notify_change(self, env, update, metadata):
         LOGGER.info("Received change notification for environment %s", env.id)
@@ -1565,7 +1548,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                sub_process.stderr.read_until_close(),
                                sub_process.wait_for_exit(raise_error=False)]
 
-            o = re.search("\* ([^\s]+)$", out.decode(), re.MULTILINE)
+            o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
             if o is not None and env.repo_branch != o.group(1):
                 LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
                 result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir)
@@ -1615,7 +1598,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             yield data.Report.insert_many(stages)
             yield comp.insert()
 
-    @protocol.handle(methods.CompileReport.get_reports, env="tid")
+    @protocol.handle(methods.get_reports, env="tid")
     @gen.coroutine
     def get_reports(self, env, start=None, end=None, limit=None):
         argscount = len([x for x in [start, end, limit] if x is not None])
@@ -1639,7 +1622,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"reports": models}
 
-    @protocol.handle(methods.CompileReport.get_report, compile_id="id")
+    @protocol.handle(methods.get_report, compile_id="id")
     @gen.coroutine
     def get_report(self, compile_id):
         report = yield data.Compile.get_report(compile_id)
@@ -1649,7 +1632,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"report": report}
 
-    @protocol.handle(methods.Decommision.decomission_environment, env="id")
+    @protocol.handle(methods.decomission_environment, env="id")
     @gen.coroutine
     def decomission_environment(self, env, metadata):
         version = int(time.time())
@@ -1661,7 +1644,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         result = yield self.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
         return result, {"version": version}
 
-    @protocol.handle(methods.Decommision.clear_environment, env="id")
+    @protocol.handle(methods.clear_environment, env="id")
     @gen.coroutine
     def clear_environment(self, env: data.Environment):
         """
@@ -1676,7 +1659,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200
 
-    @protocol.handle(methods.EnvironmentAuth.create_token, env="tid")
+    @protocol.handle(methods.create_token, env="tid")
     @gen.coroutine
     def create_token(self, env, client_types, idempotent):
         """

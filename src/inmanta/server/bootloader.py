@@ -1,5 +1,5 @@
 """
-    Copyright 2018 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -16,29 +16,33 @@
     Contact: code@inmanta.com
 """
 from inmanta.server import server
-from inmanta.server.protocol import RESTServer
+from inmanta.server.protocol import Server, ServerSlice
 from inmanta.server.agentmanager import AgentManager
+from tornado import gen
+
+from typing import List, Generator, Any
 
 
 class InmantaBootloader(object):
-
-    def __init__(self, agent_no_log=False):
-        self.restserver = RESTServer()
+    def __init__(self, agent_no_log: bool = False) -> None:
+        self.restserver = Server()
         self.agent_no_log = agent_no_log
 
-    def get_server_slice(self):
+    def get_server_slice(self) -> server.Server:
         return server.Server(agent_no_log=self.agent_no_log)
 
-    def get_agent_manager_slice(self):
+    def get_agent_manager_slice(self) -> AgentManager:
         return AgentManager(self.restserver)
 
-    def get_server_slices(self):
+    def get_server_slices(self) -> List[ServerSlice]:
         return [self.get_server_slice(), self.get_agent_manager_slice()]
 
-    def start(self):
+    @gen.coroutine
+    def start(self) -> Generator[Any, None, None]:
         for mypart in self.get_server_slices():
-            self.restserver.add_endpoint(mypart)
-        self.restserver.start()
+            self.restserver.add_slice(mypart)
+        yield self.restserver.start()
 
-    def stop(self):
-        self.restserver.stop()
+    @gen.coroutine
+    def stop(self) -> Generator[Any, None, None]:
+        yield self.restserver.stop()

@@ -32,7 +32,7 @@ from inmanta.resources import Id
 import hashlib
 from inmanta.const import ResourceState
 from _collections import defaultdict
-from typing import Dict, List
+from typing import Dict, List, Set
 
 LOGGER = logging.getLogger(__name__)
 
@@ -189,8 +189,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if from_mongo and issubclass(fields[name].field_type, enum.Enum):
                 value = fields[name].field_type[value]
 
-            if value is not None and not (value.__class__ is fields[name].field_type or
-                                          isinstance(value, fields[name].field_type)):
+            if value is not None and not (value.__class__ is fields[name].field_type
+                                          or isinstance(value, fields[name].field_type)):
                 raise TypeError("Field %s should have the correct type (%s instead of %s)" %
                                 (name, fields[name].field_type.__name__, type(value).__name__))
 
@@ -1102,7 +1102,7 @@ class Resource(BaseDocument):
         :param resource: The resource for which this defines the state
         :param model: The configuration model (versioned) this resource state is associated with
         :param attributes: The state of this version of the resource
-        :param attribute_hash: hash of the attributes, excluding requires, provides and version, 
+        :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                                 used to determine if a resource describes the same state across versions
     """
     environment = Field(field_type=uuid.UUID, required=True)
