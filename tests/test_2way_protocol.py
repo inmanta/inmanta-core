@@ -21,28 +21,27 @@ import sys
 import uuid
 
 import colorlog
-from inmanta import methods, data
+from inmanta import data
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
-from inmanta.server.protocol import RESTServer, SessionListener, ServerSlice
+from inmanta.server.protocol import Server, SessionListener, ServerSlice
 from inmanta.server import SLICE_SESSION_MANAGER, server
-from inmanta.methods import ENV_ARG
+from inmanta.protocol.methods import ENV_OPTS
+from inmanta.protocol import method
 import importlib
 
 LOGGER = logging.getLogger(__name__)
 
 
-class StatusMethod(methods.Method):
-    __method_name__ = "status"
+@method(method_name="status", operation="GET", index=True)
+def get_status_x(tid: uuid.UUID):
+    pass
 
-    @methods.protocol(operation="GET", index=True)
-    def get_status_x(self, tid: uuid.UUID):
-        pass
 
-    @methods.protocol(operation="GET", id=True, server_agent=True, timeout=10)
-    def get_agent_status_x(self, id):
-        pass
+@method(method_name="status", operation="GET", id=True, server_agent=True, timeout=10)
+def get_agent_status_x(id):
+    pass
 
 
 # Methods need to be defined before the Client class is loaded by Python
@@ -59,7 +58,7 @@ class SessionSpy(SessionListener, ServerSlice):
     def new_session(self, session):
         self.__sessions.append(session)
 
-    @protocol.handle(StatusMethod.get_status_x)
+    @protocol.handle(get_status_x)
     async def get_status_x(self, tid):
         status_list = []
         for session in self.__sessions:
@@ -79,9 +78,9 @@ class SessionSpy(SessionListener, ServerSlice):
         return self.__sessions
 
 
-class Agent(protocol.AgentEndPoint):
+class Agent(protocol.SessionEndpoint):
 
-    @protocol.handle(StatusMethod.get_agent_status_x)
+    @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
@@ -94,7 +93,7 @@ async def get_environment(env: uuid.UUID, metadata: dict):
     return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
-@pytest.mark.asyncio(timeout=30)
+@pytest.mark.asyncio
 async def test_2way_protocol(unused_tcp_port, logs=False):
 
     from inmanta.config import Config
@@ -130,14 +129,14 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
     Config.set("cmdline_rest_transport", "port", free_port)
 
     # Disable validation of envs
-    old_get_env = ENV_ARG["getter"]
-    ENV_ARG["getter"] = get_environment
+    old_get_env = ENV_OPTS["tid"].getter
+    ENV_OPTS["tid"].getter = get_environment
 
     try:
-        rs = RESTServer()
+        rs = Server()
         server = SessionSpy()
-        rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
-        rs.add_endpoint(server)
+        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_slice(server)
         await rs.start()
 
         agent = Agent("agent")
@@ -159,7 +158,7 @@ async def test_2way_protocol(unused_tcp_port, logs=False):
         await rs.stop()
         await agent.stop()
     finally:
-        ENV_ARG["getter"] = old_get_env
+        ENV_OPTS["tid"].getter = old_get_env
 
 
 async def check_sessions(sessions):
@@ -190,15 +189,15 @@ async def test_timeout(unused_tcp_port):
     Config.set("server", "agent-timeout", "1")
 
     # Disable validation of envs
-    old_get_env = ENV_ARG["getter"]
-    ENV_ARG["getter"] = get_environment
+    old_get_env = ENV_OPTS["tid"].getter
+    ENV_OPTS["tid"].getter = get_environment
 
     try:
 
-        rs = RESTServer()
+        rs = Server()
         server = SessionSpy()
-        rs.get_endpoint(SLICE_SESSION_MANAGER).add_listener(server)
-        rs.add_endpoint(server)
+        rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
+        rs.add_slice(server)
         await rs.start()
 
         env = uuid.uuid4()
@@ -245,4 +244,4 @@ async def test_timeout(unused_tcp_port):
         await rs.stop()
         await agent.stop()
     finally:
-        ENV_ARG["getter"] = old_get_env
+        ENV_OPTS["tid"].getter = old_get_env

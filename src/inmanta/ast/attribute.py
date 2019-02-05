@@ -40,7 +40,7 @@ class Attribute(Locatable):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable=False) -> None:
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable: bool=False) -> None:
         Locatable.__init__(self)
         self.__name = name
         entity.add_attribute(self)
@@ -111,10 +111,10 @@ class Attribute(Locatable):
         out.set_type(mytype)
         return out
 
-    def is_optional(self):
+    def is_optional(self) -> bool:
         return self.__nullallble
 
-    def is_multi(self):
+    def is_multi(self) -> bool:
         return self.__multi
 
     def final(self, excns: List[Exception]) -> None:
@@ -155,10 +155,10 @@ class RelationAttribute(Attribute):
         out.set_type(self.get_type())
         return out
 
-    def is_optional(self):
+    def is_optional(self) -> bool:
         return self.low == 0
 
-    def is_multi(self):
+    def is_multi(self) -> bool:
         return self.high != 1
 
     def final(self, excns: List[Exception]) -> None:

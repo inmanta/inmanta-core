@@ -26,11 +26,10 @@ import time
 
 from tornado import gen, locks
 from inmanta import env, const
-from inmanta import methods
 from inmanta import protocol
 from inmanta.agent import handler
 from inmanta.loader import CodeLoader
-from inmanta.protocol import Scheduler, AgentEndPoint
+from inmanta.protocol import SessionEndpoint, methods
 from inmanta.resources import Resource
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
@@ -631,7 +630,7 @@ class AgentInstance(object):
             return 200
 
 
-class Agent(AgentEndPoint):
+class Agent(SessionEndpoint):
     """
         An agent to enact changes upon resources. This agent listens to the
         message bus for changes.
@@ -644,7 +643,6 @@ class Agent(AgentEndPoint):
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
         self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
-        self._sched = Scheduler()
         self.thread_pool = ThreadPoolExecutor(poolsize)
 
         if agent_map is None:
@@ -683,7 +681,7 @@ class Agent(AgentEndPoint):
                     self.add_end_point_name(name)
 
     def add_end_point_name(self, name):
-        AgentEndPoint.add_end_point_name(self, name)
+        SessionEndpoint.add_end_point_name(self, name)
 
         hostname = "local:"
         if name in self.agent_map:
@@ -703,7 +701,7 @@ class Agent(AgentEndPoint):
 
         return self._instances[name].pause()
 
-    @protocol.handle(methods.AgentState.set_state)
+    @protocol.handle(methods.set_state)
     @gen.coroutine
     def set_state(self, agent, enabled):
         if enabled:
@@ -755,7 +753,7 @@ class Agent(AgentEndPoint):
         yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
         yield self.thread_pool.submit(self._loader.deploy_version, key, source)
 
-    @protocol.handle(methods.AgentState.trigger, env="tid", agent="id")
+    @protocol.handle(methods.trigger, env="tid", agent="id")
     @gen.coroutine
     def trigger_update(self, env, agent):
         """
@@ -772,7 +770,7 @@ class Agent(AgentEndPoint):
         self.add_future(future)
         return 200
 
-    @protocol.handle(methods.AgentResourceEvent.resource_event, env="tid", agent="id")
+    @protocol.handle(methods.resource_event, env="tid", agent="id")
     @gen.coroutine
     def resource_event(self, env, agent: str, resource: str, send_events: bool,
                        state: const.ResourceState, change: const.Change, changes: dict):
@@ -792,7 +790,7 @@ class Agent(AgentEndPoint):
 
         return 200
 
-    @protocol.handle(methods.AgentDryRun.do_dryrun, env="tid", dry_run_id="id")
+    @protocol.handle(methods.do_dryrun, env="tid", dry_run_id="id")
     @gen.coroutine
     def run_dryrun(self, env, dry_run_id, agent, version):
         """
@@ -837,7 +835,7 @@ class Agent(AgentEndPoint):
 
         return dir_map
 
-    @protocol.handle(methods.AgentParameterMethod.get_parameter, env="tid")
+    @protocol.handle(methods.get_parameter, env="tid")
     @gen.coroutine
     def get_facts(self, env, agent, resource):
         if agent not in self._instances:
@@ -845,7 +843,7 @@ class Agent(AgentEndPoint):
 
         return (yield self._instances[agent].get_facts(resource))
 
-    @protocol.handle(methods.AgentReporting.get_status)
+    @protocol.handle(methods.get_status)
     @gen.coroutine
     def get_status(self):
         return 200, collect_report(self)

@@ -31,8 +31,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from tornado import httpclient
 
-from inmanta import methods
-
+from inmanta.protocol import methods
 
 LOGGER = logging.getLogger(__name__)
 

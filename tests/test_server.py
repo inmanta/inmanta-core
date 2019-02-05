@@ -43,8 +43,8 @@ async def test_autostart(server, client, environment):
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
 
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
-    sessionendpoint = server.get_endpoint(SLICE_SESSION_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     await agentmanager.ensure_agent_registered(env, "iaas_agent")
     await agentmanager.ensure_agent_registered(env, "iaas_agentx")
@@ -84,8 +84,8 @@ async def test_autostart_dual_env(client, server):
         Test auto start of agent
     """
 
-    agentmanager = server.get_endpoint("server").agentmanager
-    sessionendpoint = server.get_endpoint("session")
+    agentmanager = server.get_slice("server").agentmanager
+    sessionendpoint = server.get_slice("session")
 
     result = await client.create_project("env-test")
     assert result.code == 200
@@ -126,8 +126,8 @@ async def test_autostart_batched(client, server, environment):
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"iaas_agent": "", "iaas_agentx": ""})
 
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
-    sessionendpoint = server.get_endpoint(SLICE_SESSION_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    sessionendpoint = server.get_slice(SLICE_SESSION_MANAGER)
 
     await agentmanager.ensure_agent_registered(env, "iaas_agent")
     await agentmanager.ensure_agent_registered(env, "iaas_agentx")
@@ -170,7 +170,7 @@ async def test_version_removal(client, server):
     for _i in range(20):
         version += 1
 
-        await server.get_endpoint("server")._purge_versions()
+        await server.get_slice("server")._purge_versions()
         res = await client.put_version(tid=env_id, version=version, resources=[], unknowns=[], version_info={})
         assert res.code == 200
         result = await client.get_project(id=project_id)
@@ -900,7 +900,7 @@ async def test_tokens(server_multi, client_multi, environment):
 
     # try to access a non environment call (global)
     result = await client_multi.list_environments()
-    assert result.code == 403
+    assert result.code == 401
 
     result = await client_multi.list_versions(environment)
     assert result.code == 200
@@ -910,7 +910,7 @@ async def test_tokens(server_multi, client_multi, environment):
 
     client_multi._transport_instance.token = agent_jot
     result = await client_multi.list_versions(environment)
-    assert result.code == 403
+    assert result.code == 401
 
 
 def make_source(collector, filename, module, source, req):

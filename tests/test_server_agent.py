@@ -375,7 +375,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
         without an agent being present.
     """
 
-    agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client_multi.create_project("env-test")
@@ -521,7 +521,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
 
-    agentmanager = server_multi.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
 
     Config.set("config", "agent-interval", "100")
 
@@ -621,8 +621,6 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     await agent.trigger_update("env_id", "agent2")
 
     result = await client_multi.get_version(env_id, version, include_logs=True)
-    import pprint
-    pprint.pprint(result.result)
 
     def done():
         return resource_container.Provider.changecount("agent2", "key4") == 0 and \
@@ -643,7 +641,7 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     """
         dryrun and deploy a configuration model
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -666,7 +664,7 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     ibl = InmantaBootloader()
     server = ibl.restserver
     await ibl.start()
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -760,7 +758,7 @@ async def test_spontaneous_deploy(resource_container, server, client):
     """
         dryrun and deploy a configuration model
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -839,7 +837,7 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
     """
         dryrun and deploy a configuration model
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -899,7 +897,7 @@ async def test_dual_agent(resource_container, server, client, environment):
     myagent.add_end_point_name("agent1")
     myagent.add_end_point_name("agent2")
     await myagent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
     resource_container.Provider.set("agent2", "key1", "incorrect_value")
@@ -972,7 +970,7 @@ async def test_dual_agent(resource_container, server, client, environment):
 
 @pytest.mark.asyncio
 async def test_server_agent_api(resource_container, client, server):
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     result = await client.create_project("env-test")
     project_id = result.result["project"]["id"]
@@ -1070,7 +1068,7 @@ async def test_get_facts(resource_container, client, server):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1114,7 +1112,7 @@ async def test_purged_facts(resource_container, client, server, environment):
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1174,7 +1172,7 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     """
         dryrun and deploy a configuration model automatically
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
     # allow very rapid fact refresh
     agentmanager._fact_resource_block = 0.1
 
@@ -1356,7 +1354,7 @@ async def test_unkown_parameters(resource_container, client, server):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1381,7 +1379,7 @@ async def test_unkown_parameters(resource_container, client, server):
     result = await client.release_version(env_id, version, True)
     assert result.code == 200
 
-    await server.get_endpoint("server").renew_expired_facts()
+    await server.get_slice("server").renew_expired_facts()
 
     env_id = uuid.UUID(env_id)
     params = await data.Parameter.get_list(environment=env_id, resource_id=resource_id_wov)
@@ -1408,7 +1406,7 @@ async def test_fail(resource_container, client, server):
     agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False, poolsize=10)
     agent.add_end_point_name("agent1")
     await agent.start()
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     resource_container.Provider.set("agent1", "key", "value")
 
@@ -1502,7 +1500,7 @@ async def test_wait(resource_container, client, server):
     await agent.start()
 
     # wait for agent
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1637,7 +1635,7 @@ async def test_multi_instance(resource_container, client, server):
     await agent.start()
 
     # wait for agent
-    await retry_limited(lambda: len(server.get_endpoint("session")._sessions) == 1, 10)
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
     # set the deploy environment
     resource_container.Provider.set("agent1", "key", "value")
@@ -1732,7 +1730,7 @@ async def test_cross_agent_deps(resource_container, server, client):
     """
         deploy a configuration model with cross host dependency
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     # config for recovery mechanism
@@ -1825,7 +1823,7 @@ async def test_dryrun_scale(resource_container, server, client):
     """
         test dryrun scaling
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -1881,7 +1879,7 @@ async def test_dryrun_failures(resource_container, server, client):
     """
         test dryrun scaling
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     result = await client.create_project("env-test")
@@ -1936,7 +1934,6 @@ async def test_dryrun_failures(resource_container, server, client):
 
     while result.result["dryruns"][0]["todo"] > 0:
         result = await client.dryrun_list(env_id, version)
-        print(result.result)
         await asyncio.sleep(0.1)
 
     dry_run_id = result.result["dryruns"][0]["id"]
@@ -1966,7 +1963,7 @@ async def test_send_events(resource_container, environment, server, client):
     """
         Send and receive events within one agent
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
@@ -2023,7 +2020,7 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     """
         Send and receive events over agents
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
@@ -2089,7 +2086,7 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
     """
         Send and receive events over agents with agents starting after deploy
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
@@ -2163,7 +2160,7 @@ async def test_auto_deploy(server, client, resource_container, environment):
     """
         dryrun and deploy a configuration model automatically
     """
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
@@ -2485,7 +2482,7 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
 
         return versions.result
 
-    project_dir = os.path.join(server.get_endpoint("server")._server_storage["environments"], str(environment))
+    project_dir = os.path.join(server.get_slice("server")._server_storage["environments"], str(environment))
     project_source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "project")
 
     shutil.copytree(project_source, project_dir)
@@ -2645,7 +2642,7 @@ succ    2    2    2    0
 @pytest.mark.asyncio
 async def test_deploy_and_events(client, server, environment, resource_container, self_state, dep_state):
 
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
@@ -2708,7 +2705,7 @@ async def test_deploy_and_events(client, server, environment, resource_container
 
 @pytest.mark.asyncio
 async def test_deploy_and_events_failed(client, server, environment, resource_container):
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
@@ -2769,7 +2766,7 @@ dep_states_reload = [
 @pytest.mark.asyncio(timeout=5000)
 async def test_reload(client, server, environment, resource_container, dep_state):
 
-    agentmanager = server.get_endpoint(SLICE_AGENT_MANAGER)
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},

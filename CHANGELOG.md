@@ -15,6 +15,8 @@ Changes in this release:
 - Catch various silent test failures
 - Initialise variable for upload of version with no resources
 - Raise exception on bad export to make inmanta export fail with exit status > 0
+- Removed the non-version api (#526)
+- Refactor protocol
 - Improved lazy execution for attributes
 - Add support to run the compiler on windows
 
