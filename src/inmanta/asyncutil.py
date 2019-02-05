@@ -18,10 +18,11 @@
 import time
 
 from tornado import gen
+from typing import Callable
 
 
 @gen.coroutine
-def retry_limited(fun, timeout, interval=0.1):
+def retry_limited(fun: Callable[[], bool], timeout: float, interval: float = 0.1) -> None:
     start = time.time()
     while time.time() - start < timeout and not fun():
         yield gen.sleep(interval)

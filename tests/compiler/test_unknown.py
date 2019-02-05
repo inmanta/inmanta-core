@@ -118,7 +118,7 @@ def test_400_typeloops_2(snippetcompiler):
     end
     """,
         "Entity can not be its own parent __config__::Test[1-2],__config__::Test[1-2] "
-        + "\(reported in Entity\(Test[1-2]\) \({dir}/main.cf:[59]\)\)",
+        + r"\(reported in Entity\(Test[1-2]\) \({dir}/main.cf:[59]\)\)",
     )
 
 
