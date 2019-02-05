@@ -16,8 +16,9 @@
     Contact: code@inmanta.com
 """
 import pytest
+import os
 
-from inmanta import compiler
+from inmanta import compiler, const
 from inmanta.ast import AttributeException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
@@ -69,6 +70,63 @@ This can mean one of two things:
 The procedure to solve this is the following:
 
 1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:11 is not conditional on the value it assigns.
+2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
+4. Simplify the model by relying less on `is defined` but use a boolean instead.
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501
+
+
+def test_optional_loop_forward_tty(snippetcompiler):
+    os.environ[const.ENVIRON_FORCE_TTY] = "yes"
+    snippetcompiler.setup_for_snippet(
+        """
+entity Thing:
+    string name
+end
+
+implement Thing using std::none
+
+Thing.other [0:1] -- Thing
+
+implementation setother for Thing:
+    self.other = Thing(name="it")
+end
+
+implement Thing using setother when not (other is defined)
+
+Thing(name="a")
+"""
+    )
+    with pytest.raises(AttributeException) as e:
+        compiler.do_compile()
+
+    value = ExplainerFactory().explain_and_format(e.value)
+    del os.environ[const.ENVIRON_FORCE_TTY]
+
+    assert value == """
+\033[1mException explanation
+=====================\033[0m
+The compiler could not figure out how to execute this model.
+
+During compilation, the compiler has to decide when it expects an optional relation to remain undefined. In this compiler run, it guessed that the relation '\033[4mother\033[0m' on the instance \033[4m__config__::Thing (instantiated at %(dir)s/main.cf:16)\033[0m would never get a value assigned, but the value \033[4m__config__::Thing (instantiated at %(dir)s/main.cf:11)\033[0m was assigned at \033[4m%(dir)s/main.cf:11\033[0m
+
+This can mean one of two things:
+
+1. The model is incorrect. Most often, this is due to something of the form:
+
+    \033[1mimplementation mydefault for MyEntity:
+        self.relation = "default"
+    end
+
+    implement MyEntity using mydefault when not (relation is defined)\033[0m
+
+  This is always wrong, because the relation can not at the same time be undefined and have the value "default".
+
+2. The model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following:
+
+1. Ensure the model is correct by checking that the problematic assignment at \033[4m%(dir)s/main.cf:11\033[0m is not conditional on the value it assigns.
 2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
 4. Simplify the model by relying less on `is defined` but use a boolean instead.

@@ -24,7 +24,7 @@ from inmanta import const
 
 from abc import abstractmethod
 from typing import Optional, Dict, List, Any
-from jinja2 import Template, PackageLoader, Environment
+from jinja2 import PackageLoader, Environment
 import os
 import sys
 import re
@@ -51,6 +51,7 @@ CUSTOM_FILTERS = {
     "underline": underline,
     "noformat": noformat,
 }
+
 
 class Explainer(object):
 
