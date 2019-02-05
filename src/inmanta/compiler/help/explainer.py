@@ -22,7 +22,7 @@ from inmanta.ast.statements.generator import Constructor
 
 
 from abc import abstractmethod
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 from jinja2 import Template
 import os
 
@@ -40,7 +40,6 @@ class JinjaExplainer(Explainer):
         self.template = template
         self.acceptable_type = acceptable_type
 
-    @abstractmethod
     def can_handle(self, problem: CompilerException) -> bool:
         return isinstance(problem, self.acceptable_type)
 
@@ -60,7 +59,7 @@ class JinjaExplainer(Explainer):
         explainable = [c for c in allcauses if self.can_handle(c)]
 
         if not explainable:
-            return None
+            return []
         else:
             return [self.do_explain(x) for x in explainable]
 
@@ -68,7 +67,7 @@ class JinjaExplainer(Explainer):
         template = Template(self.get_template(problem))
         return template.render(**self.get_arguments(problem))
 
-    def get_arguments(self, problem: CompilerException) -> Dict[str, any]:
+    def get_arguments(self, problem: CompilerException) -> Dict[str, Any]:
         return {}
 
 
@@ -79,7 +78,9 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer):
 
     def build_reverse_hint(self, problem):
         if isinstance(problem.stmt, AssignStatement):
-            return "%s.%s = %s" % (problem.stmt.rhs.pretty_print(), problem.attribute.get_name(), problem.stmt.lhs.pretty_print())
+            return "%s.%s = %s" % (problem.stmt.rhs.pretty_print(),
+                                   problem.attribute.get_name(),
+                                   problem.stmt.lhs.pretty_print())
 
         if isinstance(problem.stmt, Constructor):
             # find right parameter:
@@ -90,7 +91,7 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer):
                 attr_rhs = problem.stmt.get_attributes()[attr].pretty_print()
             return "%s.%s = %s" % (attr_rhs, problem.attribute.get_name(), problem.stmt.pretty_print())
 
-    def get_arguments(self, problem: CompilerException) -> Dict[str, any]:
+    def get_arguments(self, problem: CompilerException) -> Dict[str, Any]:
         return{
             "relation": problem.attribute.get_name(),
             "instance": problem.instance,

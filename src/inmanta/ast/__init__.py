@@ -16,8 +16,6 @@
     Contact: code@inmanta.com
 """
 
-from inmanta import util
-
 from typing import Dict, Sequence, List, Optional, Union  # noqa: F401
 from abc import abstractmethod
 import traceback
@@ -621,7 +619,7 @@ class CycleExcpetion(TypingException):
 
     def __init__(self, first_type: "DefineEntity", final_name: str) -> None:
         super(CycleExcpetion, self).__init__(first_type, None)
-        self.types = [] # type: List[DefineEntity]
+        self.types = []  # type: List[DefineEntity]
         self.complete = False
         self.final_name = final_name
 
@@ -663,7 +661,7 @@ class DoubleSetException(RuntimeException):
         self.location = location
         self.newvalue = newvalue  # type: object
         self.newlocation = newlocation
-        msg = ("value set twice: \n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n"
+        msg = ("value set twice:\n\told value: %s\n\t\tset at %s\n\tnew value: %s\n\t\tset at %s\n"
                % (self.value, self.location, self.newvalue, self.newlocation))
         RuntimeException.__init__(self, stmt, msg)
 
@@ -684,80 +682,6 @@ class ModifiedAfterFreezeException(RuntimeException):
         self.location = location
         self.resultvariable = rv
         self.reverse = reverse
-
-    def format_help(self):
-        # typeloop, ...
-
-        if isinstance(self.resultvariable, OptionVariable):
-            return """The compiler could not figure out a way to execute this model!
-
-During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
-In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would never get a value assigned,
-but the value %(value)s was assigned at %(location)s
-
-This can mean one of two things
-
-1- the model is incorrect. Most often, this is due to something of the form
-  `implementation mydefault for MyEntity:
-      self.relation = "default"
-   end
-
-   implement MyEntity using mydefault when not (relation is defined)
-   `
-   This is always wrong, because the relation can not at the same time be undefined and have the value "default"
-2- the model is too complicated for the compiler to resolve.
-
-The procedure to solve this is the following
-
-1- ensure the model is correct by checking that the problematic assignment at %(location)s is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3- %(isreverse)s if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: %(reverse_example)s
-4- simplify the model by relying less on `is defined` but use a boolean instead
-""" % {
-                "relation": self.attribute.get_name(),
-                "instance": self.instance,
-                "value": self.value,
-                "location": self.location,
-                "isreverse": "[applies]" if self.reverse else "[does not apply here]",
-                "reverse_example": "" if not self.reverse else self.build_reverse_hint()
-            }
-        else:
-            # is list
-            return """The compiler could not figure out a way to execute this model!
-
-During compilation, the compiler has to decide when it expects a relation to have all its elements.
-In this compiler run, it guessed that the relation '%(relation)s' on the instance %(instance)s would be complete with the values %(values)s,
-but the value %(value)s was added at %(location)s
-
-This can mean one of two things
-
-1- the model is incorrect. Most often, this is due to something of the form
-  `implementation mydefault for MyEntity:
-      self.relation += "default"
-   end
-
-   implement MyEntity using mydefault when std::count(relation) == 0
-   `
-   This is always wrong, because the relation can not at the same time have length 0 and contain the value "default"
-2- the model is too complicated for the compiler to resolve.
-
-The procedure to solve this is the following
-
-1- ensure the model is correct by checking that the problematic assignment at %(location)s is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3- %(isreverse)s if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: %(reverse_example)s
-4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
-""" % {
-                "relation": self.attribute.get_name(),
-                "values": [str(x) for x in self.resultvariable.value],
-                "instance": self.instance,
-                "value": self.value,
-                "location": self.location,
-                "isreverse": "[applies]" if self.reverse else "[does not apply here]",
-                "reverse_example": "" if not self.reverse else self.build_reverse_hint()
-            }
 
 
 class DuplicateException(TypingException):

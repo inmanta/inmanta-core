@@ -357,12 +357,12 @@ def test_747_index_collisions(snippetcompiler):
         """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:13,{dir}/main.cf:14)` (reported in Construct(Test) ({dir}/main.cf:14))
 caused by:
-  value set twice: 
+  value set twice:
 \told value: a
 \t\tset at {dir}/main.cf:13
 \tnew value: b
 \t\tset at {dir}/main.cf:14
- (reported in Construct(Test) ({dir}/main.cf:14))""",  # nopep8
+ (reported in Construct(Test) ({dir}/main.cf:14))""",  # noqa: E501
     )
 
 
@@ -388,10 +388,10 @@ def test_747_index_collisions_invisible(snippetcompiler):
         """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:15,{dir}/main.cf:15)` (reported in Construct(Test) ({dir}/main.cf:15))
 caused by:
-  value set twice: 
+  value set twice:
 \told value: a
 \t\tset at {dir}/main.cf:15:34
 \tnew value: b
 \t\tset at {dir}/main.cf:15:34
- (reported in Construct(Test) ({dir}/main.cf:15))""",  # nopep8
+ (reported in Construct(Test) ({dir}/main.cf:15))""",  # noqa: E501
     )

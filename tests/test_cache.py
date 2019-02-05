@@ -287,11 +287,11 @@ class CacheTests(unittest.TestCase):
         assert seq.count == 1
         assert None is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
         assert seq.count == 2
-        assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
         assert seq.count == 3
-        assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
         assert seq.count == 3
-        assert "A" is cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
+        assert "A" == cache.get_or_else("testx", seq, resource=resource, version=version, cache_none=False)
         assert seq.count == 3
 
     def test_decorator(self):

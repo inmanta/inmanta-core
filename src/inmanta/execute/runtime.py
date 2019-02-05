@@ -22,7 +22,7 @@ from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException,
     AttributeException, \
     Locatable, Location, ModifiedAfterFreezeException
 from inmanta.ast.type import Type
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -343,6 +343,7 @@ class OptionVariable(DelayedResultVariable):
         self.location = None
 
     def set_value(self, value, location, recur=True):
+        assert location is not None
         if self.hasValue:
             if self.value is None:
                 raise ModifiedAfterFreezeException(

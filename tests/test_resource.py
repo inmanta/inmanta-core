@@ -101,7 +101,7 @@ def test_resource_base_with_method_key(snippetcompiler):
         fields = ("key", "value", "agent", "serialize")
 
         @staticmethod
-        def get_serialize(_, resource):
+        def get_serialize(_exporter, resource):
             return resource.key
 
     snippetcompiler.setup_for_snippet("""
@@ -134,7 +134,7 @@ def test_resource_with_keyword(snippetcompiler):
         fields = ("key", "value", "agent", "model")
 
         @staticmethod
-        def get_model(_, resource):
+        def get_model(_exporter, resource):
             return resource.key
 
     snippetcompiler.setup_for_snippet("""

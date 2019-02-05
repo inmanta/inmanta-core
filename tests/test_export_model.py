@@ -112,7 +112,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def test_basic_model_export(snippetcompiler):
-    snippetcompiler.setup_for_snippet("""
+    snippetcompiler.setup_for_snippet(r"""
 typedef hoststring as string matching /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/
 
 entity One:

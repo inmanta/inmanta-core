@@ -68,9 +68,9 @@ The procedure to solve this is the following
 1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:11 is not conditional on the value it assigns
 2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
     This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3- [does not apply here] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: 
+3- [does not apply here] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation
 4- simplify the model by relying less on `is defined` but use a boolean instead
-""" % {"dir": snippetcompiler.project_dir}
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
 def test_optional_loop_reverse(snippetcompiler):
@@ -122,7 +122,7 @@ The procedure to solve this is the following
     This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- [applies] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
 4- simplify the model by relying less on `is defined` but use a boolean instead
-""" % {"dir": snippetcompiler.project_dir}
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
 def test_optional_loop_list(snippetcompiler):
@@ -175,4 +175,4 @@ The procedure to solve this is the following
     This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
 3- [applies] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
 4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
-""" % {"dir": snippetcompiler.project_dir}
+""" % {"dir": snippetcompiler.project_dir}  # noqa: E501

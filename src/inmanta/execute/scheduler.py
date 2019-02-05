@@ -20,6 +20,7 @@ import logging
 import time
 
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
+from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
 from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
@@ -269,21 +270,23 @@ class Scheduler(object):
                     next.unqueue()
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
+                    LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
                     next.freeze()
                     progress = True
 
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = [w for w in zerowaiters if w.get_progress_potential() is not 0]
+                waitqueue = [w for w in zerowaiters if w.get_progress_potential() != 0]
                 queue.waitqueue = waitqueue
-                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() is 0]
+                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() == 0]
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
                     next = waitqueue.pop(0)
                     if next.get_waiting_providers() > 0:
                         next.unqueue()
                     else:
+                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
                         next.freeze()
                         progress = True
 

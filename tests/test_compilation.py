@@ -55,7 +55,7 @@ class CompilerBaseTest(object):
 
 class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_1")
 
@@ -70,7 +70,7 @@ class TestBaseCompile(CompilerBaseTest, unittest.TestCase):
 
 class TestForCompile(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_2")
 
@@ -82,7 +82,7 @@ class TestForCompile(CompilerBaseTest, unittest.TestCase):
 
 class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index_collission")
 
@@ -93,7 +93,7 @@ class TestIndexCompileCollision(CompilerBaseTest, unittest.TestCase):
 
 class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_index")
 
@@ -123,7 +123,7 @@ class TestIndexCompile(CompilerBaseTest, unittest.TestCase):
 
 class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_test_double_assign")
 
@@ -134,7 +134,7 @@ class TestDoubleSet(CompilerBaseTest, unittest.TestCase):
 
 class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_138")
 
@@ -146,7 +146,7 @@ class TestCompileIssue138(CompilerBaseTest, unittest.TestCase):
 
 class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_plugin_typing")
 
@@ -172,7 +172,7 @@ class TestCompileluginTyping(CompilerBaseTest, unittest.TestCase):
 
 class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
 
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
         CompilerBaseTest.__init__(self, "compile_plugin_typing", "invalid.cf")
 
