@@ -45,31 +45,33 @@ Thing(name="a")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert ExplainerFactory().explain_and_format(e.value) == """The compiler could not figure out a way to execute this model!
+    assert ExplainerFactory().explain_and_format(e.value) == """
+Exception explanation
+=====================
+The compiler could not figure out how to execute this model.
 
-During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
-In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:16) would never get a value assigned,
-but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was assigned at %(dir)s/main.cf:11
+During compilation, the compiler has to decide when it expects an optional relation to remain undefined. In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:16) would never get a value assigned, but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was assigned at %(dir)s/main.cf:11
 
-This can mean one of two things
+This can mean one of two things:
 
-1- the model is incorrect. Most often, this is due to something of the form
-  `implementation mydefault for MyEntity:
-      self.relation = "default"
-   end
+1. The model is incorrect. Most often, this is due to something of the form:
 
-   implement MyEntity using mydefault when not (relation is defined)
-   `
-   This is always wrong, because the relation can not at the same time be undefined and have the value "default"
-2- the model is too complicated for the compiler to resolve.
+    implementation mydefault for MyEntity:
+        self.relation = "default"
+    end
 
-The procedure to solve this is the following
+    implement MyEntity using mydefault when not (relation is defined)
 
-1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:11 is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3- [does not apply here] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation
-4- simplify the model by relying less on `is defined` but use a boolean instead
+  This is always wrong, because the relation can not at the same time be undefined and have the value "default".
+
+2. The model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following:
+
+1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:11 is not conditional on the value it assigns.
+2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3. [does not apply here] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation.
+4. Simplify the model by relying less on `is defined` but use a boolean instead.
 """ % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
@@ -97,31 +99,33 @@ Thing(name="a")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert ExplainerFactory().explain_and_format(e.value) == """The compiler could not figure out a way to execute this model!
+    assert ExplainerFactory().explain_and_format(e.value) == """
+Exception explanation
+=====================
+The compiler could not figure out how to execute this model.
 
-During compilation, the compiler has to decide when it expects an optional relation to remain undefined.
-In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would never get a value assigned,
-but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was assigned at %(dir)s/main.cf:12:14
+During compilation, the compiler has to decide when it expects an optional relation to remain undefined. In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would never get a value assigned, but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was assigned at %(dir)s/main.cf:12:14
 
-This can mean one of two things
+This can mean one of two things:
 
-1- the model is incorrect. Most often, this is due to something of the form
-  `implementation mydefault for MyEntity:
-      self.relation = "default"
-   end
+1. The model is incorrect. Most often, this is due to something of the form:
 
-   implement MyEntity using mydefault when not (relation is defined)
-   `
-   This is always wrong, because the relation can not at the same time be undefined and have the value "default"
-2- the model is too complicated for the compiler to resolve.
+    implementation mydefault for MyEntity:
+        self.relation = "default"
+    end
 
-The procedure to solve this is the following
+    implement MyEntity using mydefault when not (relation is defined)
 
-1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3- [applies] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
-4- simplify the model by relying less on `is defined` but use a boolean instead
+  This is always wrong, because the relation can not at the same time be undefined and have the value "default".
+
+2. The model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following:
+
+1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns.
+2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t.
+4. Simplify the model by relying less on `is defined` but use a boolean instead.
 """ % {"dir": snippetcompiler.project_dir}  # noqa: E501
 
 
@@ -150,29 +154,35 @@ t.other = Thing(name="b")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    assert ExplainerFactory().explain_and_format(e.value) == """The compiler could not figure out a way to execute this model!
+    print(ExplainerFactory().explain_and_format(e.value))
+    assert ExplainerFactory().explain_and_format(e.value) == """
+Exception explanation
+=====================
+The compiler could not figure out how to execute this model.
 
 During compilation, the compiler has to decide when it expects a relation to have all its elements.
-In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would be complete with the values [__config__::Thing (instantiated at %(dir)s/main.cf:18)],
-but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was added at %(dir)s/main.cf:12:14
+In this compiler run, it guessed that the relation 'other' on the instance __config__::Thing (instantiated at %(dir)s/main.cf:17) would be complete with the values [__config__::Thing (instantiated at %(dir)s/main.cf:18)], but the value __config__::Thing (instantiated at %(dir)s/main.cf:11) was added at %(dir)s/main.cf:12:14
 
-This can mean one of two things
+This can mean one of two things:
 
-1- the model is incorrect. Most often, this is due to something of the form
-  `implementation mydefault for MyEntity:
+1. The model is incorrect. Most often, this is due to something of the form:
+
+    implementation mydefault for MyEntity:
       self.relation += "default"
-   end
+    end
 
-   implement MyEntity using mydefault when std::count(relation) == 0
-   `
+    implement MyEntity using mydefault when std::count(relation) == 0
+
+
    This is always wrong, because the relation can not at the same time have length 0 and contain the value "default"
-2- the model is too complicated for the compiler to resolve.
+
+2. The model is too complicated for the compiler to resolve.
 
 The procedure to solve this is the following
 
-1- ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns
-2- report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta.
-    This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
-3- [applies] if the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
-4- simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause
+1. Ensure the model is correct by checking that the problematic assignment at %(dir)s/main.cf:12:14 is not conditional on the value it assigns.
+2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3. [applies] If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: self.other = t
+4. Simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause.
+
 """ % {"dir": snippetcompiler.project_dir}  # noqa: E501

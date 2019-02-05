@@ -19,13 +19,38 @@ from inmanta.ast import CompilerException, ModifiedAfterFreezeException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor
+from inmanta import const
 
 
 from abc import abstractmethod
 from typing import Optional, Dict, List, Any
-from jinja2 import Template
+from jinja2 import Template, PackageLoader, Environment
 import os
+import sys
+import re
 
+
+def bold(content: str=None) -> str:
+    if content is None:
+        return "\033[1m"
+    return "\033[1m{0}\033[0m".format(content)
+
+
+def underline(content: str=None) -> str:
+    if content is None:
+        return "\033[4m"
+    return "\033[4m{0}\033[0m".format(content)
+
+
+def noformat(content: str=None) -> str:
+    return "\033[0m"
+
+
+CUSTOM_FILTERS = {
+    "bold": bold,
+    "underline": underline,
+    "noformat": noformat,
+}
 
 class Explainer(object):
 
@@ -64,7 +89,13 @@ class JinjaExplainer(Explainer):
             return [self.do_explain(x) for x in explainable]
 
     def do_explain(self, problem: CompilerException) -> str:
-        template = Template(self.get_template(problem))
+        env = Environment(
+            loader=PackageLoader('inmanta.compiler.help'),
+        )
+        for name, filter in CUSTOM_FILTERS.items():
+            env.filters[name] = filter
+
+        template = env.get_template(self.template)
         return template.render(**self.get_arguments(problem))
 
     def get_arguments(self, problem: CompilerException) -> Dict[str, Any]:
@@ -104,6 +135,11 @@ class ModifiedAfterFreezeExplainer(JinjaExplainer):
         }
 
 
+def escape_ansi(line):
+    ansi_escape = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
+    return ansi_escape.sub('', line)
+
+
 class ExplainerFactory(object):
 
     def get_explainers(self) -> List[Explainer]:
@@ -117,4 +153,13 @@ class ExplainerFactory(object):
         if not raw:
             return None
         else:
-            return "\n\n".join(raw)
+            pre = """
+\033[1mException explanation
+=====================\033[0m
+"""
+            pre += "\n\n".join(raw)
+
+            if (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ:
+                return pre
+            else:
+                return escape_ansi(pre)
