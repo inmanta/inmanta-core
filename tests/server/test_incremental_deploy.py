@@ -169,7 +169,7 @@ async def test_deploy(server, environment, caplog):
     """
     with caplog.at_level(logging.WARNING):
         # acquire raw server
-        serverdirect = server.get_endpoint(SLICE_SERVER)
+        serverdirect = server.get_slice(SLICE_SERVER)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -275,7 +275,7 @@ def strip_version(v):
 async def test_deploy_scenarios(server, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
-        serverdirect = server.get_endpoint(SLICE_SERVER)
+        serverdirect = server.get_slice(SLICE_SERVER)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -304,7 +304,7 @@ async def test_deploy_scenarios(server, environment, caplog):
 async def test_deploy_scenarios_removed_req_by_increment(server, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
-        serverdirect = server.get_endpoint(SLICE_SERVER)
+        serverdirect = server.get_slice(SLICE_SERVER)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -325,7 +325,7 @@ async def test_deploy_scenarios_removed_req_by_increment(server, environment, ca
 async def test_deploy_scenarios_removed_req_by_increment2(server, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
-        serverdirect = server.get_endpoint(SLICE_SERVER)
+        serverdirect = server.get_slice(SLICE_SERVER)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -350,7 +350,7 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
 async def test_deploy_scenarios_added_by_send_event(server, environment, caplog):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
-        serverdirect = server.get_endpoint(SLICE_SERVER)
+        serverdirect = server.get_slice(SLICE_SERVER)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
@@ -374,7 +374,7 @@ async def test_deploy_scenarios_added_by_send_event_cad(server, environment, cap
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
-        serverdirect = server.get_endpoint(SLICE_SERVER)
+        serverdirect = server.get_slice(SLICE_SERVER)
 
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))

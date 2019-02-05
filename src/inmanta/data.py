@@ -1650,7 +1650,7 @@ class ConfigurationModel(BaseDocument):
 
             provides = original_provides[current]
             work.extend(provides)
-            outset.extend(provides)
+            outset.update(provides)
 
         # close the increment
         out = []
