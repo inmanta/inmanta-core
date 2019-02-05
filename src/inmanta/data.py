@@ -1097,11 +1097,13 @@ class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
 
-        :param environment The environment this resource version is defined in
-        :param rid The id of the resource and its version
-        :param resource The resource for which this defines the state
-        :param model The configuration model (versioned) this resource state is associated with
-        :param attributes The state of this version of the resource
+        :param environment: The environment this resource version is defined in
+        :param rid: The id of the resource and its version
+        :param resource: The resource for which this defines the state
+        :param model: The configuration model (versioned) this resource state is associated with
+        :param attributes: The state of this version of the resource
+        :param attribute_hash: hash of the attributes, excluding requires, provides and version, 
+                                used to determine if a resource describes the same state across versions
     """
     environment = Field(field_type=uuid.UUID, required=True)
     model = Field(field_type=int, required=True)
