@@ -29,7 +29,10 @@ from tornado import gen
 
 from inmanta import const
 from inmanta.resources import Id
-
+import hashlib
+from inmanta.const import ResourceState
+from _collections import defaultdict
+from typing import Dict, List, Set
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1094,11 +1097,13 @@ class Resource(BaseDocument):
     """
         A specific version of a resource. This entity contains the desired state of a resource.
 
-        :param environment The environment this resource version is defined in
-        :param rid The id of the resource and its version
-        :param resource The resource for which this defines the state
-        :param model The configuration model (versioned) this resource state is associated with
-        :param attributes The state of this version of the resource
+        :param environment: The environment this resource version is defined in
+        :param rid: The id of the resource and its version
+        :param resource: The resource for which this defines the state
+        :param model: The configuration model (versioned) this resource state is associated with
+        :param attributes: The state of this version of the resource
+        :param attribute_hash: hash of the attributes, excluding requires, provides and version,
+                                used to determine if a resource describes the same state across versions
     """
     environment = Field(field_type=uuid.UUID, required=True)
     model = Field(field_type=int, required=True)
@@ -1117,6 +1122,7 @@ class Resource(BaseDocument):
 
     # State related
     attributes = Field(field_type=dict)
+    attribute_hash = Field(field_type=str)
     status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
@@ -1130,6 +1136,14 @@ class Resource(BaseDocument):
         dict(keys=[("environment", pymongo.ASCENDING), ("resource_version_id", pymongo.ASCENDING)], unique=True),
     ]
 
+    def make_hash(self):
+        character = "|".join(sorted([str(k) + "||" + str(v)
+                                     for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
+        m = hashlib.md5()
+        m.update(self.resource_id.encode())
+        m.update(character.encode())
+        self.attribute_hash = m.hexdigest()
+
     @classmethod
     @gen.coroutine
     def get_resources(cls, environment, resource_version_ids):
@@ -1137,6 +1151,19 @@ class Resource(BaseDocument):
             Get all resources listed in resource_version_ids
         """
         cursor = cls._coll.find({"environment": environment, "resource_version_id": {"$in": resource_version_ids}})
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cls(from_mongo=True, **cursor.next_object()))
+
+        return resources
+
+    @classmethod
+    @gen.coroutine
+    def get_resources_for_attribute_hash(cls, environment, hashes):
+        """
+            Get all resources listed in resource_version_ids
+        """
+        cursor = cls._coll.find({"environment": environment, "attribute_hash": {"$in": hashes}})
         resources = []
         while (yield cursor.fetch_next):
             resources.append(cls(from_mongo=True, **cursor.next_object()))
@@ -1221,15 +1248,26 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
-    def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False):
+    def get_resources_for_version(cls,
+                                  environment,
+                                  version,
+                                  agent=None,
+                                  include_attributes=True,
+                                  no_obj=False,
+                                  include_undefined=True):
         projection = None
         if not include_attributes:
             projection = {"attributes": False}
 
+        filter = {"environment": environment, "model": version}
+
         if agent is not None:
-            cursor = cls._coll.find({"environment": environment, "model": version, "agent": agent}, projection)
-        else:
-            cursor = cls._coll.find({"environment": environment, "model": version}, projection)
+            filter["agent"] = agent
+
+        if not include_undefined:
+            filter["status"] = {"$nin": [const.ResourceState.undefined.name, const.ResourceState.skipped_for_undefined.name]}
+
+        cursor = cls._coll.find(filter, projection)
 
         resources = []
         while (yield cursor.fetch_next):
@@ -1341,9 +1379,14 @@ class Resource(BaseDocument):
         return dct
 
     def to_dict(self):
+        self.make_hash()
         dct = BaseDocument.to_dict(self)
         dct["id"] = dct["resource_version_id"]
         return dct
+
+    def _to_dict(self, mongo_pk=False):
+        self.make_hash()
+        return BaseDocument._to_dict(self, mongo_pk=mongo_pk)
 
 
 class ConfigurationModel(BaseDocument):
@@ -1508,6 +1551,116 @@ class ConfigurationModel(BaseDocument):
             yield ConfigurationModel._coll.update_one({"environment": self.environment, "version": self.version},
                                                       {"$set": {"skipped_for_undeployable": self.skipped_for_undeployable}})
         return self.skipped_for_undeployable
+
+    @gen.coroutine
+    def get_increment(self):
+        """
+        Find resources incremented by this version compared to deployment state transitions per resource
+
+        available/skipped/unavailable -> next version
+        not present -> increment
+        error -> increment
+        Deployed and same hash -> not increment
+        deployed and different hash -> increment
+         """
+
+        # get resources for agent
+        resources = yield Resource.get_resources_for_version(self.environment, self.version, include_undefined=False)
+
+        # to increment
+        increment = []
+        # todo in this verions
+        work = list(resources)
+
+        # get versions
+        cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
+                                           ).sort("version", pymongo.DESCENDING)
+        versions = []
+        while (yield cursor.fetch_next):
+            versions.append(cursor.next_object()["version"])
+
+        for version in versions:
+            # todo in next verion
+            next = []
+
+            vresources = yield Resource.get_resources_for_version(self.environment, version, include_attributes=False)
+            id_to_resource = {r.resource_id: r for r in vresources}
+
+            for res in work:
+                # not present -> increment
+                if res.resource_id not in id_to_resource:
+                    increment.append(res)
+                    continue
+
+                ores = id_to_resource[res.resource_id]
+
+                # available/skipped/unavailable -> next version
+                if ores.status in [ResourceState.available, ResourceState.skipped, ResourceState.unavailable]:
+                    next.append(res)
+
+                # error -> increment
+                elif ores.status in [ResourceState.failed, ResourceState.cancelled]:
+                    increment.append(res)
+
+                elif ores.status == ResourceState.deployed:
+                    if res.attribute_hash == ores.attribute_hash:
+                        #  Deployed and same hash -> not increment
+                        continue
+                    else:
+                        # Deployed and different hash -> increment
+                        increment.append(res)
+                else:
+                    LOGGER.warning("Resource in unexpected state: %s, %s", ores.status, ores.resource_version_id)
+                    increment.append(res)
+
+            work = next
+            if not work:
+                break
+        if work:
+            increment.extend(work)
+
+        # patch up the graph
+        # 1-include stuff for send-events.
+        # 2-adapt requires/provides to get closured set
+
+        outset = set((res.resource_version_id for res in increment))  # type: Set[str]
+        allids = {res.resource_version_id: res for res in resources}  # type: Dict[str,Resource]
+        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
+        send_events = []  # type: List[str]
+
+        # build lookup tables
+        for res in resources:
+            for req in res.attributes["requires"]:
+                original_provides[req].append(res.resource_version_id)
+            if "send_event" in res.attributes and res.attributes["send_event"]:
+                send_events.append(res.resource_version_id)
+
+        # recursively include stuff potentially receiving events from nodes in the increment
+        work = list(outset)
+        done = set()
+        while work:
+            current = work.pop()
+            if current not in send_events:
+                # not sending events, so no receivers
+                continue
+
+            if current in done:
+                continue
+            done.add(current)
+
+            provides = original_provides[current]
+            work.extend(provides)
+            outset.update(provides)
+
+        # close the increment
+        out = []
+        for resvid in outset:
+            res = allids[resvid]
+            requires = [r for r in res.attributes["requires"] if r in outset]
+            res.attributes["requires"] = requires
+            out.append(res)
+
+        return out
 
 
 class Code(BaseDocument):

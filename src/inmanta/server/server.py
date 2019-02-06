@@ -33,9 +33,11 @@ import shutil
 import dateutil
 import pymongo
 from tornado import gen, locks, process, ioloop
+from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
+from inmanta.data import Environment
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -658,6 +660,36 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         resource_ids = []
         for rv in resources:
+            deploy_model.append(rv.to_dict())
+            resource_ids.append(rv.resource_version_id)
+
+        now = datetime.datetime.now()
+        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
+                                 action_id=uuid.uuid4(), started=started, finished=now,
+                                 messages=[data.LogLine.log(logging.INFO,
+                                                            "Resource version pulled by client for agent %(agent)s state",
+                                                            agent=agent)])
+        yield ra.insert()
+
+        return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
+
+    @gen.coroutine
+    def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Dict[str, Any]:
+        started = datetime.datetime.now()
+
+        cm = yield data.ConfigurationModel.get_latest_version(env.id)
+        if cm is None:
+            return 404, {"message": "No version available"}
+
+        version = cm.version
+
+        resources = yield cm.get_increment()
+
+        deploy_model = []
+        resource_ids = []
+        for rv in resources:
+            if rv.agent != agent:
+                continue
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
