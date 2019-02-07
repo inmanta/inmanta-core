@@ -149,7 +149,10 @@ class ExplainerFactory(object):
     def explain(self, problem: CompilerException) -> List[str]:
         return [explanation for explainer in self.get_explainers() for explanation in explainer.explain(problem)]
 
-    def explain_and_format(self, problem: CompilerException) -> Optional[str]:
+    def explain_and_format(self, problem: CompilerException, plain: bool = True) -> Optional[str]:
+        """
+            :param plain: remove tty color codes, only return plain text
+        """
         raw = self.explain(problem)
         if not raw:
             return None
@@ -160,7 +163,7 @@ class ExplainerFactory(object):
 """
             pre += "\n\n".join(raw)
 
-            if (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ:
+            if not plain:
                 return pre
             else:
                 return escape_ansi(pre)

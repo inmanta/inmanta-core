@@ -356,6 +356,10 @@ def cmd_parser():
     return parser
 
 
+def _is_on_tty() -> bool:
+    return (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
+
+
 def _get_default_stream_handler():
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setLevel(logging.INFO)
@@ -386,7 +390,7 @@ def _convert_to_log_level(level):
 
 def _get_log_formatter_for_stream_handler(timed):
     log_format = "%(asctime)s " if timed else ""
-    if (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ:
+    if _is_on_tty():
         log_format += "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s"
         formatter = colorlog.ColoredFormatter(
             log_format,
@@ -454,7 +458,7 @@ def app():
 
         if isinstance(e, CompilerException):
             from inmanta.compiler.help.explainer import ExplainerFactory
-            helpmsg = ExplainerFactory().explain_and_format(e)
+            helpmsg = ExplainerFactory().explain_and_format(e, plain=not _is_on_tty())
             if helpmsg is not None:
                 print(helpmsg)
 
