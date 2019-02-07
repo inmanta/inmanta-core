@@ -19,14 +19,12 @@ from inmanta.ast import CompilerException, ModifiedAfterFreezeException
 from inmanta.execute.runtime import OptionVariable
 from inmanta.ast.statements import AssignStatement
 from inmanta.ast.statements.generator import Constructor
-from inmanta import const
 
 
 from abc import abstractmethod
 from typing import Optional, Dict, List, Any
 from jinja2 import PackageLoader, Environment
 import os
-import sys
 import re
 
 

@@ -16,9 +16,8 @@
     Contact: code@inmanta.com
 """
 import pytest
-import os
 
-from inmanta import compiler, const
+from inmanta import compiler
 from inmanta.ast import AttributeException
 from inmanta.compiler.help.explainer import ExplainerFactory
 
