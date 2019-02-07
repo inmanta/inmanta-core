@@ -77,7 +77,6 @@ The procedure to solve this is the following:
 
 
 def test_optional_loop_forward_tty(snippetcompiler):
-    os.environ[const.ENVIRON_FORCE_TTY] = "yes"
     snippetcompiler.setup_for_snippet(
         """
 entity Thing:
@@ -100,8 +99,7 @@ Thing(name="a")
     with pytest.raises(AttributeException) as e:
         compiler.do_compile()
 
-    value = ExplainerFactory().explain_and_format(e.value)
-    del os.environ[const.ENVIRON_FORCE_TTY]
+    value = ExplainerFactory().explain_and_format(e.value, plain=False)
 
     assert value == """
 \033[1mException explanation
