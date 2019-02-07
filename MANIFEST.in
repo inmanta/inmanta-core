@@ -3,6 +3,7 @@ graft docs
 include tox.ini
 include setup.py
 
+recursive-include src *.j2
 recursive-include docs *
 recursive-include misc *
 recursive-include tests *

@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,18 +15,3 @@
 
     Contact: code@inmanta.com
 """
-
-from inmanta.ast import CompilerException, Range
-
-
-class ParserException(CompilerException):
-    """Exception occurring during the parsing of the code"""
-
-    def __init__(self, location: Range, value, msg=None):
-        if msg is None:
-            msg = "Syntax error at token %s" % value
-        else:
-            msg = "Syntax error %s" % msg
-        CompilerException.__init__(self, msg)
-        self.set_location(location)
-        self.value = value

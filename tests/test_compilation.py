@@ -183,5 +183,5 @@ class TestCompileluginTypingErr(CompilerBaseTest, unittest.TestCase):
         print(text)
         assert text == """Exception in plugin test::badtype (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))
 caused by:
-  Invalid type for value 'a', should be type test::Item""".format(
+  Invalid type for value 'a', should be type test::Item (reported in test::badtype(c1.items) ({dir}/invalid.cf:16))""".format(
             dir=self.project_dir)
