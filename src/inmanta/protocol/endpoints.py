@@ -35,7 +35,7 @@ from tornado import ioloop, gen
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
 
-NoneGen = Generator[Any, Any, NoReturn]
+NoneGen = Generator[Any, Any, None]
 
 
 class CallTarget(object):
