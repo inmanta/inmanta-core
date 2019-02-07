@@ -19,6 +19,7 @@ Changes in this release:
 - Refactor protocol
 - Improved lazy execution for attributes
 - Add support to run the compiler on windows
+- Added exception explainer to compiler for 'modified after freeze' (#876)
 
 v 2018.3 (2018-12-07)
 Changes in this release:
