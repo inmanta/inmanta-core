@@ -24,7 +24,7 @@ import random
 import uuid
 import time
 
-from tornado import gen, locks
+from tornado import gen, locks, ioloop
 from inmanta import env, const
 from inmanta import protocol
 from inmanta.agent import handler
@@ -313,6 +313,15 @@ class ResourceScheduler(object):
         self.ratelimiter = ratelimiter
         self.version = 0
 
+    def get_scheduled_resource_actions(self):
+        return list(self.generation.values())
+
+    def finished(self):
+        for resource_action in self.generation.values():
+            if not resource_action.is_done():
+                return False
+        return True
+
     def reload(self, resources, undeployable={}, reason: str="RELOAD"):
         version = resources[0].id.get_version
 
@@ -320,6 +329,7 @@ class ResourceScheduler(object):
 
         for ra in self.generation.values():
             ra.cancel()
+        # TODO: Should we yield here to ensure that all running tasks are finished???
 
         gid = uuid.uuid4()
         LOGGER.debug("Running %s for reason: %s" % (gid, reason))
@@ -395,6 +405,9 @@ class AgentInstance(object):
         self._getting_resources = False
         self._get_resource_timeout = 0
 
+        self._is_repair_running = False
+        self._start_repair_when_deployment_finishes = False
+
     @property
     def environment(self):
         return self.process.environment
@@ -457,7 +470,7 @@ class AgentInstance(object):
         return provider
 
     @gen.coroutine
-    def get_latest_version_for_agent(self, reason="Unknown"):
+    def get_latest_version_for_agent(self, reason="Unknown", incremental_deploy=False, is_repair_run=False):
         """
             Get the latest version for the given agent (this is also how we are notified)
         """
@@ -466,11 +479,15 @@ class AgentInstance(object):
         with (yield self.critical_ratelimiter.acquire()):
             if not self._can_get_resources():
                 return
+
             LOGGER.debug("Getting latest resources for %s" % self.name)
             self._getting_resources = True
             start = time.time()
             try:
-                result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name)
+                if incremental_deploy:
+                    result = yield self.get_client().get_resource_increment_for_agent(tid=self._env_id, agent=self.name)
+                else:
+                    result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name)
             finally:
                 self._getting_resources = False
             end = time.time()
@@ -501,7 +518,34 @@ class AgentInstance(object):
                     LOGGER.exception("Failed to receive update")
 
                 if len(resources) > 0:
-                    self._nq.reload(resources, undeployable, reason=reason)
+                    # Set start repair flags correctly
+                    is_normal_deploy_running = self._is_normal_deploy_running()
+                    if (not is_repair_run and self._is_repair_running) or \
+                       (is_repair_run and is_normal_deploy_running):
+                        self._start_repair_when_deployment_finishes = True
+                    elif is_repair_run and self._start_repair_when_deployment_finishes:
+                        self._start_repair_when_deployment_finishes = False
+
+                    # Never interrupt a normal deploy with a repair deploy
+                    if not is_repair_run or (is_repair_run and not is_normal_deploy_running):
+                        self._nq.reload(resources, undeployable, reason=reason)
+                        self._is_repair_running = is_repair_run
+                        scheduled_resource_actions = self._nq.get_scheduled_resource_actions()
+                        ioloop.IOLoop.current().add_callback(self.mark_deployment_as_finished, scheduled_resource_actions)
+
+    def _is_normal_deploy_running(self):
+        return not self._nq.finished() and not self._is_repair_running
+
+    @gen.coroutine
+    def mark_deployment_as_finished(self, resource_actions):
+        futures = [resource_action.future for resource_action in resource_actions]
+        yield futures  # Wait until deployment finishes
+        with (yield self.critical_ratelimiter.acquire()):
+            if self._nq.finished():
+                self._is_repair_running = False
+                if self._start_repair_when_deployment_finishes:
+                    ioloop.IOLoop.current().add_callback(self.get_latest_version_for_agent, reason="REPAIR",
+                                                         incremental_deploy=False, is_repair_run=True)
 
     @gen.coroutine
     def dryrun(self, dry_run_id, version):
