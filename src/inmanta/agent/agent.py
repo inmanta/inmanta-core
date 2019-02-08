@@ -329,7 +329,6 @@ class ResourceScheduler(object):
 
         for ra in self.generation.values():
             ra.cancel()
-        # TODO: Should we yield here to ensure that all running tasks are finished???
 
         gid = uuid.uuid4()
         LOGGER.debug("Running %s for reason: %s" % (gid, reason))
@@ -518,23 +517,21 @@ class AgentInstance(object):
                     LOGGER.exception("Failed to receive update")
 
                 if len(resources) > 0:
-                    # Set start repair flags correctly
-                    is_normal_deploy_running = self._is_normal_deploy_running()
-                    if (not is_repair_run and self._is_repair_running) or \
-                       (is_repair_run and is_normal_deploy_running):
+                    is_normal_deploy_running = self._nq.finished() and not self._is_repair_running
+                    normal_deploy_interrupts_repair_run = not is_repair_run and self._is_repair_running
+                    repair_run_scheduled_during_normal_deploy = is_repair_run and is_normal_deploy_running
+
+                    # A normal deploy will interrupt a repair run --> Restart repair after normal deploy
+                    # A repair run cannot interrupt a normal deploy --> Postpone repair until the normal deploy finishes
+                    if normal_deploy_interrupts_repair_run or repair_run_scheduled_during_normal_deploy:
                         self._start_repair_when_deployment_finishes = True
-                    elif is_repair_run and self._start_repair_when_deployment_finishes:
-                        self._start_repair_when_deployment_finishes = False
 
                     # Never interrupt a normal deploy with a repair deploy
-                    if not is_repair_run or (is_repair_run and not is_normal_deploy_running):
+                    if not repair_run_scheduled_during_normal_deploy:
                         self._nq.reload(resources, undeployable, reason=reason)
                         self._is_repair_running = is_repair_run
                         scheduled_resource_actions = self._nq.get_scheduled_resource_actions()
                         ioloop.IOLoop.current().add_callback(self.mark_deployment_as_finished, scheduled_resource_actions)
-
-    def _is_normal_deploy_running(self):
-        return not self._nq.finished() and not self._is_repair_running
 
     @gen.coroutine
     def mark_deployment_as_finished(self, resource_actions):
@@ -544,7 +541,8 @@ class AgentInstance(object):
             if self._nq.finished():
                 self._is_repair_running = False
                 if self._start_repair_when_deployment_finishes:
-                    ioloop.IOLoop.current().add_callback(self.get_latest_version_for_agent, reason="REPAIR",
+                    self._start_repair_when_deployment_finishes = False
+                    ioloop.IOLoop.current().add_callback(self.get_latest_version_for_agent, reason="Repair",
                                                          incremental_deploy=False, is_repair_run=True)
 
     @gen.coroutine
