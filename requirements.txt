@@ -21,7 +21,7 @@ pytest-timeout==1.3.3
 six==1.12.0
 sphinx-argparse==0.2.5
 sphinx-autodoc-annotation==1.0-1
-sphinx-rtd-theme==0.4.2
+sphinx-rtd-theme==0.4.3
 sphinx==1.8.4
 texttable==1.6.0
 tornado==5.1.1
