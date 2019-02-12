@@ -91,7 +91,7 @@ mkdir -p %{buildroot}/opt/inmanta
 %define __python %{_p3}
 
 # Fix shebang
-find %{venv}/bin/ -type f | xargs -I id sed -i "s|%{buildroot}||g" id
+find %{venv}/bin/ -type f | xargs sed -i "s|%{buildroot}||g"
 find %{venv} -name RECORD | xargs sed -i "s|%{buildroot}||g"
 
 # Put symlinks
