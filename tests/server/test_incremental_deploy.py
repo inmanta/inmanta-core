@@ -150,8 +150,8 @@ class MultiVersionSetup(object):
         allresources = {}
 
         for agent, results in self.results.items():
-            result, payload = await serverdirect.get_resource_increment_for_agent(
-                env, agent
+            result, payload = await serverdirect.get_resources_for_agent(
+                env, agent, version=None, incremental_deploy=True
             )
 
             assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(
@@ -258,10 +258,16 @@ async def test_deploy(server, environment, caplog):
         )
         assert res == 200
 
-        result, payload = await serverdirect.get_resource_increment_for_agent(
-            env, "agent1"
+        result, payload = await serverdirect.get_resources_for_agent(
+            env, "agent1", version=None, incremental_deploy=True
         )
         assert len(payload["resources"]) == 0
+
+        # Cannot request increment for specific version
+        result, _ = await serverdirect.get_resources_for_agent(env, "agent1", version=version, incremental_deploy=True)
+        assert result == 500
+        result, _ = await serverdirect.get_resources_for_agent(env, "agent1", version=v2, incremental_deploy=True)
+        assert result == 500
 
     for record in caplog.records:
         assert record.levelname != "WARNING"

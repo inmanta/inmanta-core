@@ -435,7 +435,8 @@ class AgentInstance(object):
             yield self.get_latest_version_for_agent("Auto deploy")
 
         self._enabled = action
-        self.process._sched.add_action(action, self._deploy_interval, self._splay_value)
+        if self._deploy_interval > 0:
+            self.process._sched.add_action(action, self._deploy_interval, self._splay_value)
         return 200, "unpaused"
 
     def pause(self):
@@ -483,10 +484,8 @@ class AgentInstance(object):
             self._getting_resources = True
             start = time.time()
             try:
-                if incremental_deploy:
-                    result = yield self.get_client().get_resource_increment_for_agent(tid=self._env_id, agent=self.name)
-                else:
-                    result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name)
+                result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name,
+                                                                         incremental_deploy=incremental_deploy)
             finally:
                 self._getting_resources = False
             end = time.time()
@@ -517,7 +516,7 @@ class AgentInstance(object):
                     LOGGER.exception("Failed to receive update")
 
                 if len(resources) > 0:
-                    is_normal_deploy_running = self._nq.finished() and not self._is_repair_running
+                    is_normal_deploy_running = not self._nq.finished() and not self._is_repair_running
                     normal_deploy_interrupts_repair_run = not is_repair_run and self._is_repair_running
                     repair_run_scheduled_during_normal_deploy = is_repair_run and is_normal_deploy_running
 

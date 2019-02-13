@@ -312,11 +312,14 @@ def resource_container():
 
     waiter = Condition()
 
-    async def wait_for_done_with_waiters(client, env_id, version):
+    async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None):
         # unhang waiters
         result = await client.get_version(env_id, version)
         assert result.code == 200
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            if wait_for_this_amount_of_resources_in_done \
+               and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0:
+                break
             result = await client.get_version(env_id, version)
             logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
             if result.result["model"]["done"] > 0:
@@ -2812,3 +2815,457 @@ async def test_reload(client, server, environment, resource_container, dep_state
     assert result.result["model"]["done"] == len(resources)
 
     assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")
+
+
+async def _deploy_resources(client, environment, resources, version, push=False):
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # expire rate limiting
+    await asyncio.sleep(0.5)
+    # do a deploy
+    result = await client.release_version(environment, version, push)
+    assert result.code == 200
+
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == len(resources)
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    return result
+
+
+async def _wait_until_deployment_finishes(client, environment, version):
+    result = await client.get_version(environment, version)
+    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+        result = await client.get_version(environment, version)
+        await asyncio.sleep(0.1)
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_repair_postponed_due_to_running_deploy(resource_container, server, client, environment):
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-interval", "0")
+    agent_name = "agent1"
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"},
+                          code_loader=False)
+    myagent.add_end_point_name("agent1")
+    await myagent.start()
+    myagent_instance = myagent._instances[agent_name]
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    version1 = int(time.time())
+    resources_version_1 = [{'key': 'key1',
+                            'value': 'value2',
+                            'id': 'test::Resource[agent1,key=key1],v=%d' % version1,
+                            'send_event': False,
+                            'purged': False,
+                            'requires': []
+                           },
+                          ]
+
+    await _deploy_resources(client, environment, resources_version_1, version1)
+
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await asyncio.sleep(0.5)
+    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+
+    await _wait_until_deployment_finishes(client, environment, version1)
+
+    # Wait until Repair finishes
+    while resource_container.Provider.readcount(agent_name, "key1") != 2 \
+          or resource_container.Provider.changecount(agent_name, "key1") != 2:
+        await asyncio.sleep(0.1)
+
+    assert resource_container.Provider.readcount(agent_name, "key1") == 2
+    assert resource_container.Provider.changecount(agent_name, "key1") == 2
+
+    await myagent.stop()
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_repair_interrupted_by_deploy_request(resource_container, server, client, environment):
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-interval", "0")
+    agent_name = "agent1"
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
+    myagent.add_end_point_name("agent1")
+    await myagent.start()
+    myagent_instance = myagent._instances[agent_name]
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [{'key': 'key1',
+                'value': 'value2',
+                'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                'send_event': False,
+                'purged': False,
+                'requires': []
+                },
+               {'key': 'key2',
+                'value': 'value2',
+                'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                'send_event': False,
+                'purged': False,
+                'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                },
+               {'key': 'key3',
+                'value': value_resource_three,
+                'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                'send_event': False,
+                'purged': False,
+                'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                }
+               ]
+
+    version1 = int(time.time())
+    resources_version_1 = get_resources(version1, "value2")
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources_version_1, version1)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await resource_container.wait_for_done_with_waiters(client, environment, version1)
+
+    # # Interrupt repair with deploy
+    await asyncio.sleep(0.5)
+    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+    await asyncio.sleep(0.5)
+    version2 = int(time.time())
+    resources_version_2 = get_resources(version2, "value3")
+    await _deploy_resources(client, environment, resources_version_2, version2)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await asyncio.sleep(0.5)
+
+    resource_container.waiter.acquire()
+    resource_container.waiter.notifyAll()
+    resource_container.waiter.release()
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version1)
+    await resource_container.wait_for_done_with_waiters(client, environment, version2,
+                                                        wait_for_this_amount_of_resources_in_done=1)
+
+    timeout = 10
+    now = time.time()
+    while resource_container.Provider.readcount(agent_name, "key1") != 3 \
+          or resource_container.Provider.changecount(agent_name, "key1") != 3 \
+          or resource_container.Provider.readcount(agent_name, "key3") != 3 \
+          or resource_container.Provider.changecount(agent_name, "key3") != 3:
+
+        if int(time.time()) > int(now + timeout):
+            break
+        resource_container.waiter.acquire()
+        resource_container.waiter.notifyAll()
+        resource_container.waiter.release()
+        await asyncio.sleep(0.1)
+
+    # Initial deployment:
+    #   * All resources are deployed successfully
+    # First repair run:
+    #   * test::Resource[agent1,key=key1] deployed successfully
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled (interrupted by deployment)
+    # Incremental deploy:
+    #   * test::Resource[agent1,key=key3] is deployed successfully
+    # Second repair run (resume suspended repair run):
+    #   * All resources are deployed successfully
+    assert resource_container.Provider.readcount(agent_name, "key1") == 3
+    assert resource_container.Provider.changecount(agent_name, "key1") == 3
+    assert resource_container.Provider.readcount(agent_name, "key3") == 3
+    assert resource_container.Provider.changecount(agent_name, "key3") == 3
+
+    await myagent.stop()
+
+
+@pytest.mark.asyncio
+async def test_repair_during_repair(resource_container, server, client, environment):
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-interval", "0")
+    agent_name = "agent1"
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
+    myagent.add_end_point_name("agent1")
+    await myagent.start()
+    myagent_instance = myagent._instances[agent_name]
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    version = int(time.time())
+    resources = [{'key': 'key1',
+                'value': 'value2',
+                'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                'send_event': False,
+                'purged': False,
+                'requires': []
+                },
+               {'key': 'key2',
+                'value': 'value2',
+                'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                'send_event': False,
+                'purged': False,
+                'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                },
+               {'key': 'key3',
+                'value': "value2",
+                'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                'send_event': False,
+                'purged': False,
+                'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                }
+               ]
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources, version)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+    # # Interrupt repair with deploy
+    await asyncio.sleep(0.5)
+    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+    await asyncio.sleep(0.5)
+    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+    await asyncio.sleep(0.5)
+
+    timeout = 10
+    now = time.time()
+    while resource_container.Provider.readcount(agent_name, "key1") != 3 \
+          or resource_container.Provider.changecount(agent_name, "key1") != 3 \
+          or resource_container.Provider.readcount(agent_name, "key3") != 2 \
+          or resource_container.Provider.changecount(agent_name, "key3") != 2:
+
+        resource_container.waiter.acquire()
+        resource_container.waiter.notifyAll()
+        resource_container.waiter.release()
+        if int(time.time()) > int(now + timeout):
+            break
+        await asyncio.sleep(0.1)
+
+    # Initial deployment:
+    #   * All resources are deployed successfully
+    # First repair run:
+    #   * test::Resource[agent1,key=key1] deployed successfully
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled
+    # Second repair run:
+    #   * All resources are deployed successfully
+    assert resource_container.Provider.readcount(agent_name, "key1") == 3
+    assert resource_container.Provider.changecount(agent_name, "key1") == 3
+    assert resource_container.Provider.readcount(agent_name, "key3") == 2
+    assert resource_container.Provider.changecount(agent_name, "key3") == 2
+
+    await myagent.stop()
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_deploy_during_deploy(resource_container, server, client, environment):
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-interval", "0")
+    agent_name = "agent1"
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
+    myagent.add_end_point_name("agent1")
+    await myagent.start()
+    myagent_instance = myagent._instances[agent_name]
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [{'key': 'key1',
+                 'value': 'value2',
+                 'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': []
+                 },
+                {'key': 'key2',
+                 'value': 'value2',
+                 'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                 },
+                {'key': 'key3',
+                 'value': value_resource_three,
+                 'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                 }
+                ]
+
+    version1 = int(time.time())
+    resources_version_1 = get_resources(version1, "value2")
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources_version_1, version1)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await asyncio.sleep(0.5)
+    version2 = int(time.time())
+    resources_version_2 = get_resources(version2, "value3")
+    await _deploy_resources(client, environment, resources_version_2, version2)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version1,
+                                                        wait_for_this_amount_of_resources_in_done=2)
+    await resource_container.wait_for_done_with_waiters(client, environment, version2,
+                                                        wait_for_this_amount_of_resources_in_done=2)
+
+    # Deployment version1:
+    #   * test::Resource[agent1,key=key1] is deployed successfully;
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled
+    # Deployment version2:
+    #   * test::Resource[agent1,key=key1] is not included in the increment
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are deployed
+    assert resource_container.Provider.readcount(agent_name, "key1") == 1
+    assert resource_container.Provider.changecount(agent_name, "key1") == 1
+    assert resource_container.Provider.readcount(agent_name, "key3") == 1
+    assert resource_container.Provider.changecount(agent_name, "key3") == 1
+
+    await myagent.stop()
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_full_deploy_interrupts_incremental_deploy(resource_container, server, client, environment):
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-interval", "0")
+    agent_name = "agent1"
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
+    myagent.add_end_point_name("agent1")
+    await myagent.start()
+    myagent_instance = myagent._instances[agent_name]
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [{'key': 'key1',
+                 'value': 'value2',
+                 'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': []
+                 },
+                {'key': 'key2',
+                 'value': 'value2',
+                 'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                 },
+                {'key': 'key3',
+                 'value': value_resource_three,
+                 'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                 }
+                ]
+
+    version1 = int(time.time())
+    resources_version_1 = get_resources(version1, "value2")
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources_version_1, version1)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await asyncio.sleep(0.5)
+    version2 = int(time.time())
+    resources_version_2 = get_resources(version2, "value3")
+    await _deploy_resources(client, environment, resources_version_2, version2)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=False, is_repair_run=False)
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version1,
+                                                        wait_for_this_amount_of_resources_in_done=2)
+    await resource_container.wait_for_done_with_waiters(client, environment, version2)
+
+    # Incremental deploy:
+    #   * test::Resource[agent1,key=key1] is deployed successfully;
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled
+    # Full deploy:
+    #   * All resources are deployed successfully
+    assert resource_container.Provider.readcount(agent_name, "key1") == 2
+    assert resource_container.Provider.changecount(agent_name, "key1") == 2
+    assert resource_container.Provider.readcount(agent_name, "key3") == 1
+    assert resource_container.Provider.changecount(agent_name, "key3") == 1
+
+    await myagent.stop()
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_incremental_deploy_interrupts_full_deploy(resource_container, server, client, environment):
+    resource_container.Provider.reset()
+    config.Config.set("config", "agent-interval", "0")
+    agent_name = "agent1"
+    myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
+    myagent.add_end_point_name("agent1")
+    await myagent.start()
+    myagent_instance = myagent._instances[agent_name]
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key1", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [{'key': 'key1',
+                 'value': 'value2',
+                 'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': []
+                 },
+                {'key': 'key2',
+                 'value': 'value2',
+                 'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                 },
+                {'key': 'key3',
+                 'value': value_resource_three,
+                 'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                 }
+                ]
+
+    version1 = int(time.time())
+    resources_version_1 = get_resources(version1, "value2")
+
+    # Initial deploy
+    await _deploy_resources(client, environment, resources_version_1, version1)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=False, is_repair_run=False)
+    await asyncio.sleep(0.5)
+    version2 = int(time.time())
+    resources_version_2 = get_resources(version2, "value3")
+    await _deploy_resources(client, environment, resources_version_2, version2)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version1,
+                                                        wait_for_this_amount_of_resources_in_done=2)
+    await resource_container.wait_for_done_with_waiters(client, environment, version2,
+                                                        wait_for_this_amount_of_resources_in_done=2)
+
+    # Full deploy:
+    #   * test::Resource[agent1,key=key1] is deployed successfully;
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled
+    # Incremental deploy:
+    #   * test::Resource[agent1,key=key2] is not included in the increment
+    #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are deployed successfully
+    assert resource_container.Provider.readcount(agent_name, "key1") == 1
+    assert resource_container.Provider.changecount(agent_name, "key1") == 1
+    assert resource_container.Provider.readcount(agent_name, "key3") == 1
+    assert resource_container.Provider.changecount(agent_name, "key3") == 1
+
+    await myagent.stop()
