@@ -470,7 +470,7 @@ a = /[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}
 
 def test_regex_escape():
     statements = parse_code(
-        """
+        r"""
 a = /\/1/
 """
     )
@@ -483,7 +483,7 @@ a = /\/1/
 
 def test_regex_twice():
     statements = parse_code(
-        """
+        r"""
 a = /\/1/
 b = "v"
 c = /\/1/

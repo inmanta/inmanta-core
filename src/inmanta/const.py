@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -119,6 +119,7 @@ class Compilestate(Enum):
 
 EXPORT_META_DATA = "export_metadata"
 META_DATA_COMPILE_STATE = "inmanta:compile:state"
+INMANTA_MT_HEADER = "X-Inmanta-tid"
 
 
 # For testing

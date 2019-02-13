@@ -938,14 +938,34 @@ async def test_get_resources_for_version(data_module):
         await res.insert()
         resource_ids_version_two.append(res.resource_version_id)
 
+    async def make_with_status(i, status):
+        res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent3,path=/tmp/file%d],v=3" % i,
+                                status=status,
+                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        await res.insert()
+        return res.resource_version_id
+
+    d = await make_with_status(1, const.ResourceState.deployed)
+    s = await make_with_status(2, const.ResourceState.skipped)
+    su = await make_with_status(3, const.ResourceState.skipped_for_undefined)
+    u = await make_with_status(4, const.ResourceState.undefined)
+
     resources = await data.Resource.get_resources_for_version(env.id, 1)
     assert len(resources) == 10
     assert sorted(resource_ids_version_one) == sorted([x.resource_version_id for x in resources])
     resources = await data.Resource.get_resources_for_version(env.id, 2)
     assert len(resources) == 10
     assert sorted(resource_ids_version_two) == sorted([x.resource_version_id for x in resources])
-    resources = await data.Resource.get_resources_for_version(env.id, 3)
+    resources = await data.Resource.get_resources_for_version(env.id, 4)
     assert resources == []
+
+    resources = await data.Resource.get_resources_for_version(env.id, 3)
+    assert len(resources) == 4
+    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, u, su])
+
+    resources = await data.Resource.get_resources_for_version(env.id, 3, include_undefined=False)
+    assert len(resources) == 2
+    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s])
 
 
 @pytest.mark.asyncio
@@ -1000,6 +1020,37 @@ async def test_resource_provides(data_module):
     assert len(res2.provides) == 0
     assert res1.provides[0] == res2.resource_version_id
     assert res2.provides == []
+
+
+@pytest.mark.asyncio
+async def test_resource_hash(data_module):
+    env_id = uuid.uuid4()
+    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=2",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=3",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    await res1.insert()
+    await res2.insert()
+    await res3.insert()
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
+
+    readres = await data.Resource.get_resources(env_id,
+                                                [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
+    res1, res2, res3 = readres
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
 
 
 @pytest.mark.asyncio

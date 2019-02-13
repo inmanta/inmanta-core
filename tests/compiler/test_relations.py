@@ -511,9 +511,9 @@ caused by:
         creds = Credentials()
         creds.file = creds
         """,
-        """Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` (reported in creds.file = creds ({dir}/main.cf:10))
+        r"""Could not set attribute `file` on instance `__config__::Credentials (instantiated at {dir}/main.cf:9)` (reported in creds.file = creds ({dir}/main.cf:10))
 caused by:
-  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))""",  # nopep8
+  Invalid class type for __config__::Credentials (instantiated at {dir}/main.cf:9), should be std::File (reported in creds.file = creds ({dir}/main.cf:10))""",  # noqa: E501
     )
 
 
@@ -549,6 +549,6 @@ def test_670_assign_on_relation(snippetcompiler):
         h.files.path = "1"
 
         """,
-        "The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
-        " \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)",
+        r"The object at h.files is not an Entity but a <class 'list'> with value \[std::ConfigFile [0-9a-fA-F]+\]"
+        r" \(reported in h.files.path = '1' \({dir}/main.cf:5\)\)",
     )

@@ -18,10 +18,11 @@
 
 from inmanta.execute.util import Unknown
 from inmanta.execute.proxy import UnsetException
-from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, AttributeException, \
-    Locatable, Location
+from inmanta.ast import RuntimeException, NotFoundException, DoubleSetException, OptionalValueException, \
+    AttributeException, \
+    Locatable, Location, ModifiedAfterFreezeException
 from inmanta.ast.type import Type
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -252,9 +253,23 @@ class ListVariable(DelayedResultVariable):
                         return
                     for subvalue in value:
                         if subvalue not in self.value:
-                            raise RuntimeException(None, "List modified after freeze")
+                            raise ModifiedAfterFreezeException(
+                                self,
+                                instance=self.myself,
+                                attribute=self.attribute,
+                                value=value,
+                                location=location,
+                                reverse=not recur
+                            )
                 else:
-                    raise RuntimeException(None, "List modified after freeze")
+                    raise ModifiedAfterFreezeException(
+                        self,
+                        instance=self.myself,
+                        attribute=self.attribute,
+                        value=value,
+                        location=location,
+                        reverse=not recur
+                    )
 
         if isinstance(value, list):
             if len(value) == 0:
@@ -330,6 +345,15 @@ class OptionVariable(DelayedResultVariable):
     def set_value(self, value, location, recur=True):
         assert location is not None
         if self.hasValue:
+            if self.value is None:
+                raise ModifiedAfterFreezeException(
+                    self,
+                    instance=self.myself,
+                    attribute=self.attribute,
+                    value=value,
+                    location=location,
+                    reverse=not recur
+                )
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
 

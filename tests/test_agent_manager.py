@@ -223,7 +223,7 @@ async def test_api(motor):
     assert_equal_ish(shouldbe, all_agents)
 
     async def dummy_status():
-        return Result(False, 200, "X")
+        return Result(200, "X")
 
     ts1.get_client().get_status.side_effect = dummy_status
     report = await am.get_agent_process_report(agentid)
