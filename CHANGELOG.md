@@ -8,7 +8,7 @@ Changes in this release:
 - Updated to Tornado 5, moving from tornado ioloop to the standard python async framework (#765)
 - Extend mypy type annotations
 - Use files for all logs and split out logs, stdout and stderr in autostarted agents (#824, #234)
-- Introduce incremental deploy (#791)
+- Introduce incremental deploy (#791, #794)
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
 - Remove all io_loop references and only use current ioloop (#847)

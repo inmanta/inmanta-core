@@ -45,7 +45,9 @@ from inmanta.const import ResourceState
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
-ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter', 'wait_for_done_with_waiters'])
+ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter',
+                                                     'wait_for_done_with_waiters',
+                                                     'wait_for_condition_with_waiters'])
 
 
 @fixture(scope="function")
@@ -312,23 +314,40 @@ def resource_container():
 
     waiter = Condition()
 
-    async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None):
+    async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None,
+                                         timeout=10):
         # unhang waiters
         result = await client.get_version(env_id, version)
         assert result.code == 200
+        now = time.time()
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+            if now + timeout < time.time():
+                raise Exception("Timeout")
             if wait_for_this_amount_of_resources_in_done \
                and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0:
                 break
             result = await client.get_version(env_id, version)
             logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
-            if result.result["model"]["done"] > 0:
-                waiter.acquire()
-                waiter.notifyAll()
-                waiter.release()
+            waiter.acquire()
+            waiter.notifyAll()
+            waiter.release()
             await asyncio.sleep(0.1)
 
         return result
+
+    async def wait_for_condition_with_waiters(wait_condition, timeout=10):
+        """
+            Wait until wait_condition() returns false
+        """
+        now = time.time()
+        while wait_condition():
+            if now + timeout < time.time():
+                raise Exception("Timeout")
+            logger.info("waiting with waiters")
+            waiter.acquire()
+            waiter.notifyAll()
+            waiter.release()
+            await asyncio.sleep(0.1)
 
     @provider("test::Wait", name="test_wait")
     class Wait(ResourceHandler):
@@ -366,7 +385,8 @@ def resource_container():
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
 
-    return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters, waiter=waiter)
+    return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters,
+                             waiter=waiter, wait_for_condition_with_waiters=wait_for_condition_with_waiters)
 
 
 @pytest.mark.asyncio(timeout=150)
@@ -949,15 +969,7 @@ async def test_dual_agent(resource_container, server, client, environment):
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 4
 
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        resource_container.waiter.acquire()
-        resource_container.waiter.notifyAll()
-        resource_container.waiter.release()
-        await asyncio.sleep(0.1)
+    result = await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     assert result.result["model"]["done"] == len(resources)
     assert result.result["model"]["result"] == const.VersionState.success.name
@@ -2837,11 +2849,13 @@ async def _deploy_resources(client, environment, resources, version, push=False)
     return result
 
 
-async def _wait_until_deployment_finishes(client, environment, version):
-    result = await client.get_version(environment, version)
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
+async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
+
+    async def is_deployment_finished():
         result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
+
+    await retry_limited(is_deployment_finished, timeout)
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -2869,11 +2883,9 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
                            ]
 
     await _deploy_resources(client, environment, resources_version_1, version1)
-
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
-    await asyncio.sleep(0.5)
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
-
     await _wait_until_deployment_finishes(client, environment, version1)
 
     # Wait until Repair finishes
@@ -2936,37 +2948,26 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
     await resource_container.wait_for_done_with_waiters(client, environment, version1)
 
-    # # Interrupt repair with deploy
-    await asyncio.sleep(0.5)
+    # Interrupt repair with deploy
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
-    await asyncio.sleep(0.5)
-    version2 = int(time.time())
+    version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2)
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
     await asyncio.sleep(0.5)
 
-    resource_container.waiter.acquire()
-    resource_container.waiter.notifyAll()
-    resource_container.waiter.release()
-
-    await resource_container.wait_for_done_with_waiters(client, environment, version1)
     await resource_container.wait_for_done_with_waiters(client, environment, version2,
                                                         wait_for_this_amount_of_resources_in_done=1)
 
-    timeout = 10
-    now = time.time()
-    while resource_container.Provider.readcount(agent_name, "key1") != 3 \
-            or resource_container.Provider.changecount(agent_name, "key1") != 3 \
-            or resource_container.Provider.readcount(agent_name, "key3") != 3 \
-            or resource_container.Provider.changecount(agent_name, "key3") != 3:
+    def wait_condition():
+        return resource_container.Provider.readcount(agent_name, "key1") != 3 \
+               or resource_container.Provider.changecount(agent_name, "key1") != 3 \
+               or resource_container.Provider.readcount(agent_name, "key3") != 3 \
+               or resource_container.Provider.changecount(agent_name, "key3") != 3
 
-        if int(time.time()) > int(now + timeout):
-            break
-        resource_container.waiter.acquire()
-        resource_container.waiter.notifyAll()
-        resource_container.waiter.release()
-        await asyncio.sleep(0.1)
+    await resource_container.wait_for_condition_with_waiters(wait_condition)
 
     # Initial deployment:
     #   * All resources are deployed successfully
@@ -2975,7 +2976,7 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     #   * test::Resource[agent1,key=key2] and test::Resource[agent1,key=key3] are cancelled (interrupted by deployment)
     # Incremental deploy:
     #   * test::Resource[agent1,key=key3] is deployed successfully
-    # Second repair run (resume suspended repair run):
+    # Second repair run (Start a new repair, since the previous one was interrupted):
     #   * All resources are deployed successfully
     assert resource_container.Provider.readcount(agent_name, "key1") == 3
     assert resource_container.Provider.changecount(agent_name, "key1") == 3
@@ -3033,26 +3034,19 @@ async def test_repair_during_repair(resource_container, server, client, environm
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
-    # # Interrupt repair with deploy
-    await asyncio.sleep(0.5)
+    # Interrupt repair with a repair
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
-    await asyncio.sleep(0.5)
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
-    await asyncio.sleep(0.5)
 
-    timeout = 10
-    now = time.time()
-    while resource_container.Provider.readcount(agent_name, "key1") != 3 \
-            or resource_container.Provider.changecount(agent_name, "key1") != 3 \
-            or resource_container.Provider.readcount(agent_name, "key3") != 2 \
-            or resource_container.Provider.changecount(agent_name, "key3") != 2:
+    def wait_condition():
+        return resource_container.Provider.readcount(agent_name, "key1") != 3 \
+               or resource_container.Provider.changecount(agent_name, "key1") != 3 \
+               or resource_container.Provider.readcount(agent_name, "key3") != 2 \
+               or resource_container.Provider.changecount(agent_name, "key3") != 2
 
-        resource_container.waiter.acquire()
-        resource_container.waiter.notifyAll()
-        resource_container.waiter.release()
-        if int(time.time()) > int(now + timeout):
-            break
-        await asyncio.sleep(0.1)
+    await resource_container.wait_for_condition_with_waiters(wait_condition)
 
     # Initial deployment:
     #   * All resources are deployed successfully
@@ -3118,14 +3112,12 @@ async def test_deploy_during_deploy(resource_container, server, client, environm
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
-    await asyncio.sleep(0.5)
-    version2 = int(time.time())
+    version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2)
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
 
-    await resource_container.wait_for_done_with_waiters(client, environment, version1,
-                                                        wait_for_this_amount_of_resources_in_done=2)
     await resource_container.wait_for_done_with_waiters(client, environment, version2,
                                                         wait_for_this_amount_of_resources_in_done=2)
 
@@ -3192,14 +3184,12 @@ async def test_full_deploy_interrupts_incremental_deploy(resource_container, ser
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
-    await asyncio.sleep(0.5)
-    version2 = int(time.time())
+    version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2)
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=False, is_repair_run=False)
 
-    await resource_container.wait_for_done_with_waiters(client, environment, version1,
-                                                        wait_for_this_amount_of_resources_in_done=2)
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
     # Incremental deploy:
@@ -3264,14 +3254,12 @@ async def test_incremental_deploy_interrupts_full_deploy(resource_container, ser
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=False, is_repair_run=False)
-    await asyncio.sleep(0.5)
-    version2 = int(time.time())
+    version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2)
+    await retry_limited(myagent_instance._can_get_resources, 10)  # Prevent problems with rate limiter
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
 
-    await resource_container.wait_for_done_with_waiters(client, environment, version1,
-                                                        wait_for_this_amount_of_resources_in_done=2)
     await resource_container.wait_for_done_with_waiters(client, environment, version2,
                                                         wait_for_this_amount_of_resources_in_done=2)
 
