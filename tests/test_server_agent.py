@@ -2865,8 +2865,8 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
                             'send_event': False,
                             'purged': False,
                             'requires': []
-                           },
-                          ]
+                            },
+                           ]
 
     await _deploy_resources(client, environment, resources_version_1, version1)
 
@@ -2878,11 +2878,13 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
 
     # Wait until Repair finishes
     while resource_container.Provider.readcount(agent_name, "key1") != 2 \
-          or resource_container.Provider.changecount(agent_name, "key1") != 2:
+            or resource_container.Provider.changecount(agent_name, "key1") != 2:
         await asyncio.sleep(0.1)
 
     assert resource_container.Provider.readcount(agent_name, "key1") == 2
     assert resource_container.Provider.changecount(agent_name, "key1") == 2
+
+    assert resource_container.Provider.get("agent1", "key1") == "value2"
 
     await myagent.stop()
 
@@ -2904,27 +2906,27 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
 
     def get_resources(version, value_resource_three):
         return [{'key': 'key1',
-                'value': 'value2',
-                'id': 'test::Resource[agent1,key=key1],v=%d' % version,
-                'send_event': False,
-                'purged': False,
-                'requires': []
-                },
-               {'key': 'key2',
-                'value': 'value2',
-                'id': 'test::Wait[agent1,key=key2],v=%d' % version,
-                'send_event': False,
-                'purged': False,
-                'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
-                },
-               {'key': 'key3',
-                'value': value_resource_three,
-                'id': 'test::Resource[agent1,key=key3],v=%d' % version,
-                'send_event': False,
-                'purged': False,
-                'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
-                }
-               ]
+                 'value': 'value2',
+                 'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': []
+                 },
+                {'key': 'key2',
+                 'value': 'value2',
+                 'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                 },
+                {'key': 'key3',
+                 'value': value_resource_three,
+                 'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                 }
+                ]
 
     version1 = int(time.time())
     resources_version_1 = get_resources(version1, "value2")
@@ -2955,9 +2957,9 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     timeout = 10
     now = time.time()
     while resource_container.Provider.readcount(agent_name, "key1") != 3 \
-          or resource_container.Provider.changecount(agent_name, "key1") != 3 \
-          or resource_container.Provider.readcount(agent_name, "key3") != 3 \
-          or resource_container.Provider.changecount(agent_name, "key3") != 3:
+            or resource_container.Provider.changecount(agent_name, "key1") != 3 \
+            or resource_container.Provider.readcount(agent_name, "key3") != 3 \
+            or resource_container.Provider.changecount(agent_name, "key3") != 3:
 
         if int(time.time()) > int(now + timeout):
             break
@@ -2980,6 +2982,10 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     assert resource_container.Provider.readcount(agent_name, "key3") == 3
     assert resource_container.Provider.changecount(agent_name, "key3") == 3
 
+    assert resource_container.Provider.get("agent1", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.get("agent1", "key3") == "value3"
+
     await myagent.stop()
 
 
@@ -3000,27 +3006,27 @@ async def test_repair_during_repair(resource_container, server, client, environm
 
     version = int(time.time())
     resources = [{'key': 'key1',
-                'value': 'value2',
-                'id': 'test::Resource[agent1,key=key1],v=%d' % version,
-                'send_event': False,
-                'purged': False,
-                'requires': []
-                },
-               {'key': 'key2',
-                'value': 'value2',
-                'id': 'test::Wait[agent1,key=key2],v=%d' % version,
-                'send_event': False,
-                'purged': False,
-                'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
-                },
-               {'key': 'key3',
-                'value': "value2",
-                'id': 'test::Resource[agent1,key=key3],v=%d' % version,
-                'send_event': False,
-                'purged': False,
-                'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
-                }
-               ]
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'requires': []
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                  },
+                 {'key': 'key3',
+                  'value': "value2",
+                  'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                  }
+                 ]
 
     # Initial deploy
     await _deploy_resources(client, environment, resources, version)
@@ -3037,9 +3043,9 @@ async def test_repair_during_repair(resource_container, server, client, environm
     timeout = 10
     now = time.time()
     while resource_container.Provider.readcount(agent_name, "key1") != 3 \
-          or resource_container.Provider.changecount(agent_name, "key1") != 3 \
-          or resource_container.Provider.readcount(agent_name, "key3") != 2 \
-          or resource_container.Provider.changecount(agent_name, "key3") != 2:
+            or resource_container.Provider.changecount(agent_name, "key1") != 3 \
+            or resource_container.Provider.readcount(agent_name, "key3") != 2 \
+            or resource_container.Provider.changecount(agent_name, "key3") != 2:
 
         resource_container.waiter.acquire()
         resource_container.waiter.notifyAll()
@@ -3059,6 +3065,10 @@ async def test_repair_during_repair(resource_container, server, client, environm
     assert resource_container.Provider.changecount(agent_name, "key1") == 3
     assert resource_container.Provider.readcount(agent_name, "key3") == 2
     assert resource_container.Provider.changecount(agent_name, "key3") == 2
+
+    assert resource_container.Provider.get("agent1", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.get("agent1", "key3") == "value2"
 
     await myagent.stop()
 
@@ -3130,6 +3140,10 @@ async def test_deploy_during_deploy(resource_container, server, client, environm
     assert resource_container.Provider.readcount(agent_name, "key3") == 1
     assert resource_container.Provider.changecount(agent_name, "key3") == 1
 
+    assert resource_container.Provider.get("agent1", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.get("agent1", "key3") == "value3"
+
     await myagent.stop()
 
 
@@ -3197,6 +3211,10 @@ async def test_full_deploy_interrupts_incremental_deploy(resource_container, ser
     assert resource_container.Provider.changecount(agent_name, "key1") == 2
     assert resource_container.Provider.readcount(agent_name, "key3") == 1
     assert resource_container.Provider.changecount(agent_name, "key3") == 1
+
+    assert resource_container.Provider.get("agent1", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     await myagent.stop()
 
@@ -3267,5 +3285,9 @@ async def test_incremental_deploy_interrupts_full_deploy(resource_container, ser
     assert resource_container.Provider.changecount(agent_name, "key1") == 1
     assert resource_container.Provider.readcount(agent_name, "key3") == 1
     assert resource_container.Provider.changecount(agent_name, "key3") == 1
+
+    assert resource_container.Provider.get("agent1", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key2") == "value2"
+    assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     await myagent.stop()
