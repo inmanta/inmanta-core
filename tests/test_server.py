@@ -19,7 +19,6 @@
 import time
 import logging
 import uuid
-import os
 
 from utils import retry_limited
 import pytest
@@ -31,7 +30,6 @@ from uuid import UUID
 from inmanta.util import hash_file
 from inmanta.export import upload_code, unknown_parameters
 import asyncio
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1030,24 +1028,3 @@ async def test_legacy_code(motor, server_multi, client_multi, environment):
     res = await agent.get_code(tid=environment, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
-
-
-@pytest.mark.asyncio(timeout=30)
-async def test_resource_action_log(motor, server_multi, client_multi, environment):
-    version = 1
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert res.code == 200
-
-    resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
-    assert os.path.isfile(resource_action_log)
-    assert os.stat(resource_action_log).st_size != 0
