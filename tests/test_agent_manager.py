@@ -327,6 +327,7 @@ async def test_db_clean(motor):
     # failover
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
     await am.clean_db()
 
     # one session
