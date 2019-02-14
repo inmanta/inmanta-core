@@ -2862,7 +2862,6 @@ dep_states_reload = [
 @pytest.mark.parametrize("dep_state", dep_states_reload, ids=lambda x: x.name)
 @pytest.mark.asyncio(timeout=5000)
 async def test_reload(client, server, environment, resource_container, dep_state):
-
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
@@ -2942,8 +2941,7 @@ async def _wait_until_deployment_finishes(client, environment, version, timeout=
 @pytest.mark.asyncio(timeout=30)
 async def test_repair_postponed_due_to_running_deploy(resource_container, server, client, environment):
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+    config.Config.set("config", "agent-interval", "0")
     agent_name = "agent1"
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"},
                           code_loader=False)
@@ -2987,8 +2985,7 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
 @pytest.mark.asyncio(timeout=30)
 async def test_repair_interrupted_by_deploy_request(resource_container, server, client, environment):
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+    config.Config.set("config", "agent-interval", "0")
     agent_name = "agent1"
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
@@ -3077,8 +3074,7 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
 @pytest.mark.asyncio
 async def test_repair_during_repair(resource_container, server, client, environment):
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+    config.Config.set("config", "agent-interval", "0")
     agent_name = "agent1"
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
@@ -3155,8 +3151,7 @@ async def test_repair_during_repair(resource_container, server, client, environm
 @pytest.mark.asyncio(timeout=30)
 async def test_deploy_during_deploy(resource_container, server, client, environment):
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+    config.Config.set("config", "agent-interval", "0")
     agent_name = "agent1"
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
@@ -3228,8 +3223,7 @@ async def test_deploy_during_deploy(resource_container, server, client, environm
 @pytest.mark.asyncio(timeout=30)
 async def test_full_deploy_interrupts_incremental_deploy(resource_container, server, client, environment):
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+    config.Config.set("config", "agent-interval", "0")
     agent_name = "agent1"
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")
@@ -3299,8 +3293,7 @@ async def test_full_deploy_interrupts_incremental_deploy(resource_container, ser
 @pytest.mark.asyncio(timeout=30)
 async def test_incremental_deploy_interrupts_full_deploy(resource_container, server, client, environment):
     resource_container.Provider.reset()
-    config.Config.set("config", "agent-deploy-interval", "0")
-    config.Config.set("config", "agent-repair-interval", "0")
+    config.Config.set("config", "agent-interval", "0")
     agent_name = "agent1"
     myagent = agent.Agent(hostname="node1", environment=environment, agent_map={agent_name: "localhost"}, code_loader=False)
     myagent.add_end_point_name("agent1")

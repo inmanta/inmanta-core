@@ -55,7 +55,10 @@ class VirtualEnv(object):
         python_name = os.path.basename(sys.executable)
 
         # check if the virtual env exists
-        python_bin = os.path.join(self.env_path, "bin", python_name)
+        if sys.platform == "win32":
+            python_bin = os.path.join(self.env_path, "Scripts", python_name)
+        else:
+            python_bin = os.path.join(self.env_path, "bin", python_name)
 
         if not os.path.exists(python_bin):
             # venv requires some care when the .env folder already exists
@@ -100,17 +103,17 @@ class VirtualEnv(object):
         # Copyright (c) 2009 Ian Bicking, The Open Planning Project
         # Copyright (c) 2011-2016 The virtualenv developers
 
-        binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
-        base = os.path.dirname(binpath)
+        if sys.platform == "win32":
+            binpath = os.path.abspath(os.path.join(self.env_path, "Scripts"))
+            base = os.path.dirname(binpath)
+            site_packages = os.path.join(base, "Lib", "site-packages")
+        else:
+            binpath = os.path.abspath(os.path.join(self.env_path, "bin"))
+            base = os.path.dirname(binpath)
+            site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
 
         old_os_path = os.environ.get("PATH", "")
         os.environ["PATH"] = binpath + os.pathsep + old_os_path
-
-        if sys.platform == "win32":
-            site_packages = os.path.join(base, "Lib", "site-packages")
-        else:
-            site_packages = os.path.join(base, "lib", "python%s" % sys.version[:3], "site-packages")
-
         prev_sys_path = list(sys.path)
 
         site.addsitedir(site_packages)

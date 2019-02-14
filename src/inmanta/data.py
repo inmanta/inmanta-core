@@ -508,6 +508,7 @@ AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
+RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 
 
 class Setting(object):
@@ -585,6 +586,8 @@ class Environment(BaseDocument):
                                      "is either an empty string or an agent map string.", agent_restart=True),
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
+        RESOURCE_ACTION_LOGS_RETENTION: Setting(name=RESOURCE_ACTION_LOGS_RETENTION, default=7, typ="int",
+                                                validator=convert_int, doc="The number of days to retain resource-action logs"),
     }
 
     __indexes__ = [
@@ -989,9 +992,20 @@ class FormRecord(BaseDocument):
 
 
 class LogLine(DataDocument):
+
     @property
     def msg(self):
         return self._data["msg"]
+
+    @property
+    def args(self):
+        return self._data["args"]
+
+    def get_log_level_as_int(self):
+        return self._data["level"].value
+
+    def write_to_logger(self, logger):
+        logger.log(self.get_log_level_as_int(), self.msg, *self.args)
 
     @classmethod
     def log(cls, level, msg, timestamp=None, **kwargs):
@@ -1100,6 +1114,15 @@ class ResourceAction(BaseDocument):
         if len(self._updates) > 0:
             yield ResourceAction._coll.update_one(query, self._updates)
             self._updates = {}
+
+    @classmethod
+    @gen.coroutine
+    def purge_logs(cls):
+        environments = yield Environment.get_list()
+        for env in environments:
+            time_to_retain_logs = yield env.get(RESOURCE_ACTION_LOGS_RETENTION)
+            keep_logs_until = datetime.datetime.now() - datetime.timedelta(days=time_to_retain_logs)
+            yield cls._coll.delete_many({"started": {"$lt": keep_logs_until}})
 
 
 class Resource(BaseDocument):
