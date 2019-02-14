@@ -128,7 +128,7 @@ class Server(endpoints.Endpoint):
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         LOGGER.debug("Stopping Server Rest Endpoint")
-        self._transport.stop()
+        yield self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
             yield endpoint.stop()
 

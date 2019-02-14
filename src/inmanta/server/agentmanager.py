@@ -19,6 +19,8 @@
 
 from tornado import gen
 from tornado import locks
+from tornado import process
+
 
 from inmanta.config import Config
 from inmanta import data
@@ -31,12 +33,12 @@ import os
 from datetime import datetime
 import time
 import sys
-import subprocess
 import uuid
 from inmanta.server.protocol import ServerSlice, SessionListener
 from inmanta.server import config as opt
 from inmanta.protocol import encode_token, methods
 from inmanta.resources import Id
+import asyncio
 
 
 LOGGER = logging.getLogger(__name__)
@@ -79,6 +81,14 @@ set_parameters
 """
 
 
+@gen.coroutine
+def wait_for_proc_bounded(procs, timeout=1.0):
+    try:
+        yield asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]), timeout)
+    except asyncio.TimeoutError:
+        LOGGER.warn("Agent processes did not close in time")
+
+
 class AgentManager(ServerSlice, SessionListener):
     '''
     This class contains all server functionality related to the management of agents
@@ -106,6 +116,8 @@ class AgentManager(ServerSlice, SessionListener):
         self.tid_endpoint_to_session = {}
 
         self.closesessionsonstart = closesessionsonstart
+
+        self.running = False
 
     @gen.coroutine
     def prestart(self, server):
@@ -138,12 +150,14 @@ class AgentManager(ServerSlice, SessionListener):
 
     @gen.coroutine
     def start(self):
+        self.running = True
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
 
     @gen.coroutine
     def stop(self):
+        self.running = False
         yield self.terminate_agents()
 
     # Agent Management
@@ -197,6 +211,8 @@ class AgentManager(ServerSlice, SessionListener):
 
     @gen.coroutine
     def expire_session(self, session: protocol.Session, now):
+        if not self.running:
+            return
         with (yield self.session_lock.acquire()):
             tid = session.tid
             sid = session.id
@@ -263,6 +279,8 @@ class AgentManager(ServerSlice, SessionListener):
         """
              only call under session lock
         """
+        if not self.running:
+            return
         tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
         agents = yield [data.Agent.get(env.id, endpoint) for endpoint in no_primary]
@@ -331,7 +349,7 @@ class AgentManager(ServerSlice, SessionListener):
                 errhandle = open(errfile, "wb+")
 
             # TODO: perhaps show in dashboard?
-            return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle)
+            return process.Subprocess(inmanta_path + args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle)
         finally:
             if outhandle is not None:
                 outhandle.close()
@@ -476,7 +494,8 @@ class AgentManager(ServerSlice, SessionListener):
 
         if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
             LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
-            self._agent_procs[env.id].terminate()
+            self._agent_procs[env.id].proc.terminate()
+            yield wait_for_proc_bounded([self._agent_procs[env.id]])
 
         self._agent_procs[env.id] = proc
 
@@ -490,7 +509,8 @@ class AgentManager(ServerSlice, SessionListener):
     @gen.coroutine
     def terminate_agents(self):
         for proc in self._agent_procs.values():
-            proc.terminate()
+            proc.proc.terminate()
+        yield wait_for_proc_bounded(self._agent_procs.values())
 
     @gen.coroutine
     def _make_agent_config(self, env: data.Environment, agent_names: list, agent_map: dict) -> str:
@@ -621,8 +641,10 @@ ssl=True
         """
         LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
         if env.id in self._agent_procs:
-            self._agent_procs[env.id].terminate()
+            self._agent_procs[env.id].proc.terminate()
             del self._agent_procs[env.id]
+
+        wait_for_proc_bounded(self._agent_procs.values())
 
         LOGGER.debug("Expiring all sessions for %s", env.id)
         sessions = yield self.get_environment_sessions(env.id)

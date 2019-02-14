@@ -246,3 +246,5 @@ class RESTServer(RESTBase):
         LOGGER.debug("Stopping Server Rest Endpoint")
         if self._http_server is not None:
             self._http_server.stop()
+
+        yield self._http_server.close_all_connections()
