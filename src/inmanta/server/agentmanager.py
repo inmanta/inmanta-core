@@ -101,7 +101,7 @@ class AgentManager(ServerSlice, SessionListener):
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
 
-        self._agent_procs = {}  # env uuid -> subprocess.Popen
+        self._agent_procs = {}  # env uuid -> process.SubProcess
 
         # back-off timer for fact requests
         self._fact_resource_block = fact_back_off
