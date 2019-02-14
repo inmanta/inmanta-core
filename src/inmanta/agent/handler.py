@@ -122,6 +122,7 @@ class HandlerContext(object):
     """
         Context passed to handler methods for state related "things"
     """
+
     def __init__(self, resource, dry_run=False, action_id=None):
         self._resource = resource
         self._dry_run = dry_run
@@ -324,6 +325,7 @@ class ResourceHandler(object):
         :param agent: The agent that is executing this handler.
         :param io: The io object to use.
     """
+
     def __init__(self, agent, io=None) -> None:
         self._agent = agent
 
@@ -387,8 +389,8 @@ class ResourceHandler(object):
 
             In case of failure of agent, server or the system being managed, delivery of events can not be guaranteed.
             Update events can be lost unrecoverably in case the agent or server fails after the update was performed, but before
-            the event was emitted.
-            In the current implementation, start of a new deploy while another is in progress can also cause updates to be lost.
+            the event was emitted. In the current implementation, start of a new deploy while another is in progress can also
+            causes updates to be lost.
 
             However, while event delivery can not be guaranteed, convergence to the desired state can be reliably detected.
             If the record of the convergence is lost, it will be retried until it is recorded.
@@ -547,7 +549,6 @@ class ResourceHandler(object):
             else:
                 ctx.set_status(const.ResourceState.dry)
 
-            self.post(ctx, resource)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
@@ -556,6 +557,12 @@ class ResourceHandler(object):
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s",
                           resource_id=resource.id, exception=repr(e))
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception("An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                              resource_id=resource.id, exception=repr(e))
 
     def facts(self, ctx: HandlerContext, resource: resources.Resource) -> dict:
         """
@@ -579,9 +586,15 @@ class ResourceHandler(object):
             :param resource: The resource to query facts for.
             :return: A dict with fact names as keys and facts values.
         """
-        self.pre(ctx, resource)
-        facts = self.facts(ctx, resource)
-        self.post(ctx, resource)
+        try:
+            self.pre(ctx, resource)
+            facts = self.facts(ctx, resource)
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception("An error occurred after getting facts about %(resource_id)s (exception: %(exception)s",
+                              resource_id=resource.id, exception=repr(e))
 
         return facts
 
@@ -732,7 +745,6 @@ class CRUDHandler(ResourceHandler):
             else:
                 ctx.set_status(const.ResourceState.dry)
 
-            self.post(ctx, resource)
         except SkipResource as e:
             ctx.set_status(const.ResourceState.skipped)
             ctx.warning(msg="Resource %(resource_id)s was skipped: %(reason)s", resource_id=resource.id, reason=e.args)
@@ -741,6 +753,12 @@ class CRUDHandler(ResourceHandler):
             ctx.set_status(const.ResourceState.failed)
             ctx.exception("An error occurred during deployment of %(resource_id)s (exception: %(exception)s)",
                           resource_id=resource.id, exception=repr(e), traceback=traceback.format_exc())
+        finally:
+            try:
+                self.post(ctx, resource)
+            except Exception as e:
+                ctx.exception("An error occurred after deployment of %(resource_id)s (exception: %(exception)s",
+                              resource_id=resource.id, exception=repr(e))
 
 
 class Commander(object):

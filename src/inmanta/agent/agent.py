@@ -657,7 +657,8 @@ class AgentInstance(object):
                                   for name, value in result.items()]
                     yield self.get_client().set_parameters(tid=self._env_id, parameters=parameters)
                     finished = datetime.datetime.now()
-                    yield self.get_client().resource_action_update(tid=self._env_id, resource_ids=[resource_obj.id.resource_str()],
+                    yield self.get_client().resource_action_update(tid=self._env_id,
+                                                                   resource_ids=[resource_obj.id.resource_str()],
                                                                    action_id=ctx.action_id,
                                                                    action=const.ResourceAction.getfact,
                                                                    started=started,

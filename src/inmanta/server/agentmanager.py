@@ -84,7 +84,11 @@ set_parameters
 @gen.coroutine
 def wait_for_proc_bounded(procs, timeout=1.0):
     try:
-        yield asyncio.wait_for(asyncio.gather(*[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]), timeout)
+        yield asyncio.wait_for(
+            asyncio.gather(
+                *[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]
+            ),
+            timeout)
     except asyncio.TimeoutError:
         LOGGER.warn("Agent processes did not close in time")
 
