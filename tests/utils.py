@@ -17,13 +17,20 @@
 """
 import time
 import asyncio
+import inspect
 
 
 async def retry_limited(fun, timeout):
+    async def fun_wrapper():
+        if inspect.iscoroutinefunction(fun):
+            return (await fun())
+        else:
+            return fun()
+
     start = time.time()
-    while time.time() - start < timeout and not fun():
+    while time.time() - start < timeout and not (await fun_wrapper()):
         await asyncio.sleep(0.1)
-    if not fun():
+    if not (await fun_wrapper()):
         raise AssertionError("Bounded wait failed")
 
 

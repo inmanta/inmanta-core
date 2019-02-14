@@ -397,7 +397,7 @@ def get_resource(
 
 
 @method(method_name="resource", operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
-def get_resources_for_agent(tid: uuid.UUID, agent: str, version: int = None):
+def get_resources_for_agent(tid: uuid.UUID, agent: str, version: int = None, incremental_deploy: bool = False):
     """
         Return the most recent state for the resources associated with agent, or the version requested
 
@@ -405,6 +405,8 @@ def get_resources_for_agent(tid: uuid.UUID, agent: str, version: int = None):
         :param agent: The agent
         :param version: The version to retrieve. If none, the latest available version is returned. With a specific version
                         that version is returned, even if it has not been released yet.
+        :param incremental_deploy: Indicates whether the server should only return the resources that changed since the
+                                   previous deployment.
     """
 
 

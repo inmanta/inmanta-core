@@ -673,7 +673,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.get_resources_for_agent, env="tid")
     @gen.coroutine
-    def get_resources_for_agent(self, env, agent, version):
+    def get_resources_for_agent(self, env: Environment, agent: str, version: str, incremental_deploy: bool) -> Dict[str, Any]:
+        if incremental_deploy:
+            if version is not None:
+                return 500, {"message": "Cannot request increment for a specific version"}
+            result = yield self.get_resource_increment_for_agent(env, agent)
+        else:
+            result = yield self.get_all_resources_for_agent(env, agent, version)
+        return result
+
+    @gen.coroutine
+    def get_all_resources_for_agent(self, env: Environment, agent: str, version: str) -> Dict[str, Any]:
         started = datetime.datetime.now()
         if version is None:
             cm = yield data.ConfigurationModel.get_latest_version(env.id)
