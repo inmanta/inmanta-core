@@ -125,9 +125,8 @@ def resource_container():
             if self.fail(resource.id.get_agent_name(), resource.key):
                 raise Exception("Failed")
 
-            self.touch(resource.id.get_agent_name(), resource.key)
-
             if "purged" in changes:
+                self.touch(resource.id.get_agent_name(), resource.key)
                 if changes["purged"]["desired"]:
                     self.delete(resource.id.get_agent_name(), resource.key)
                     ctx.set_purged()
@@ -136,6 +135,7 @@ def resource_container():
                     ctx.set_created()
 
             elif "value" in changes:
+                self.touch(resource.id.get_agent_name(), resource.key)
                 self.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
 
@@ -2888,13 +2888,14 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
     await _wait_until_deployment_finishes(client, environment, version1)
 
-    # Wait until Repair finishes
-    while resource_container.Provider.readcount(agent_name, "key1") != 2 \
-            or resource_container.Provider.changecount(agent_name, "key1") != 2:
-        await asyncio.sleep(0.1)
+    def wait_condition():
+        return resource_container.Provider.readcount(agent_name, "key1") != 2 \
+            or resource_container.Provider.changecount(agent_name, "key1") != 1
+
+    await resource_container.wait_for_condition_with_waiters(wait_condition)
 
     assert resource_container.Provider.readcount(agent_name, "key1") == 2
-    assert resource_container.Provider.changecount(agent_name, "key1") == 2
+    assert resource_container.Provider.changecount(agent_name, "key1") == 1
 
     assert resource_container.Provider.get("agent1", "key1") == "value2"
 
@@ -2963,9 +2964,9 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
 
     def wait_condition():
         return resource_container.Provider.readcount(agent_name, "key1") != 3 \
-               or resource_container.Provider.changecount(agent_name, "key1") != 3 \
-               or resource_container.Provider.readcount(agent_name, "key3") != 3 \
-               or resource_container.Provider.changecount(agent_name, "key3") != 3
+            or resource_container.Provider.changecount(agent_name, "key1") != 1 \
+            or resource_container.Provider.readcount(agent_name, "key3") != 3 \
+            or resource_container.Provider.changecount(agent_name, "key3") != 2
 
     await resource_container.wait_for_condition_with_waiters(wait_condition)
 
@@ -2979,9 +2980,9 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     # Second repair run (Start a new repair, since the previous one was interrupted):
     #   * All resources are deployed successfully
     assert resource_container.Provider.readcount(agent_name, "key1") == 3
-    assert resource_container.Provider.changecount(agent_name, "key1") == 3
+    assert resource_container.Provider.changecount(agent_name, "key1") == 1
     assert resource_container.Provider.readcount(agent_name, "key3") == 3
-    assert resource_container.Provider.changecount(agent_name, "key3") == 3
+    assert resource_container.Provider.changecount(agent_name, "key3") == 2
 
     assert resource_container.Provider.get("agent1", "key1") == "value2"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
@@ -3042,9 +3043,9 @@ async def test_repair_during_repair(resource_container, server, client, environm
 
     def wait_condition():
         return resource_container.Provider.readcount(agent_name, "key1") != 3 \
-               or resource_container.Provider.changecount(agent_name, "key1") != 3 \
-               or resource_container.Provider.readcount(agent_name, "key3") != 2 \
-               or resource_container.Provider.changecount(agent_name, "key3") != 2
+            or resource_container.Provider.changecount(agent_name, "key1") != 1 \
+            or resource_container.Provider.readcount(agent_name, "key3") != 2 \
+            or resource_container.Provider.changecount(agent_name, "key3") != 1
 
     await resource_container.wait_for_condition_with_waiters(wait_condition)
 
@@ -3056,9 +3057,9 @@ async def test_repair_during_repair(resource_container, server, client, environm
     # Second repair run:
     #   * All resources are deployed successfully
     assert resource_container.Provider.readcount(agent_name, "key1") == 3
-    assert resource_container.Provider.changecount(agent_name, "key1") == 3
+    assert resource_container.Provider.changecount(agent_name, "key1") == 1
     assert resource_container.Provider.readcount(agent_name, "key3") == 2
-    assert resource_container.Provider.changecount(agent_name, "key3") == 2
+    assert resource_container.Provider.changecount(agent_name, "key3") == 1
 
     assert resource_container.Provider.get("agent1", "key1") == "value2"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
@@ -3198,7 +3199,7 @@ async def test_full_deploy_interrupts_incremental_deploy(resource_container, ser
     # Full deploy:
     #   * All resources are deployed successfully
     assert resource_container.Provider.readcount(agent_name, "key1") == 2
-    assert resource_container.Provider.changecount(agent_name, "key1") == 2
+    assert resource_container.Provider.changecount(agent_name, "key1") == 1
     assert resource_container.Provider.readcount(agent_name, "key3") == 1
     assert resource_container.Provider.changecount(agent_name, "key3") == 1
 
