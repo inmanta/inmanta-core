@@ -2179,7 +2179,7 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
 
 
 @pytest.mark.asyncio(timeout=15)
-@pytest.mark.skip(reason="""Rewrite when a full deploy can be requested from the server.
+@pytest.mark.xfail(reason="""Rewrite when a full deploy can be requested from the server.
 * First deploy: test::Resource[agent2,key=key2] is deployed successfully.
 * When agent1 starts, an auto-deploy is triggered. This is an incremental deploy that does not include
 test::Resource[agent2,key=key2] since it is already deployed. As such the events are not included as well.
