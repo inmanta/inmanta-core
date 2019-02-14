@@ -516,10 +516,9 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     result = await client_multi.get_version(env_id, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client_multi.get_version(env_id, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client_multi, env_id, version)
 
+    result = await client_multi.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
 
     assert resource_container.Provider.isset("agent1", "key1")
@@ -619,10 +618,9 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
     result = await client_multi.get_version(env_id, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client_multi.get_version(env_id, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client_multi, env_id, version)
 
+    result = await client_multi.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
     assert result.code == 200
 
@@ -761,10 +759,9 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(env_id, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, env_id, version)
 
+    result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
 
     assert resource_container.Provider.isset("agent1", "key1")
@@ -841,10 +838,9 @@ async def test_spontaneous_deploy(resource_container, server, client):
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(env_id, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, env_id, version)
 
+    result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
 
     assert resource_container.Provider.isset("agent1", "key1")
@@ -895,10 +891,9 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
     result = await client.get_version(env_id, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(env_id, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, env_id, version)
 
+    result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
 
     result = await client.get_version(env_id, version, include_logs=True)
@@ -1171,10 +1166,10 @@ async def test_purged_facts(resource_container, client, server, environment):
 
     result = await client.get_version(environment, version)
     assert result.code == 200
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
 
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
 
     # The resource facts should be purged
@@ -1317,10 +1312,7 @@ async def test_get_facts_extended(server, client, resource_container, environmen
     result = await client.release_version(environment, version, True)
     assert result.code == 200
 
-    result = await client.get_version(environment, version)
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
     await get_fact('test::Fact[agent1,key=key1]')  # undeployable
     await get_fact('test::Fact[agent1,key=key2]')  # normal
@@ -1473,10 +1465,10 @@ async def test_fail(resource_container, client, server):
 
     result = await client.get_version(env_id, version)
     assert result.code == 200
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(env_id, version)
-        await asyncio.sleep(0.1)
 
+    await _wait_until_deployment_finishes(client, env_id, version)
+
+    result = await client.get_version(env_id, version)
     assert result.result["model"]["done"] == len(resources)
 
     states = {x["id"]: x["status"] for x in result.result["resources"]}
@@ -2015,9 +2007,7 @@ async def test_send_events(resource_container, environment, server, client):
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
     events = resource_container.Provider.getevents("agent1", "key1")
     assert len(events) == 1
@@ -2077,9 +2067,7 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent2", "key2") == "value2"
@@ -2152,9 +2140,7 @@ async def test_send_events_cross_agent_restart(resource_container, environment, 
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
     assert resource_container.Provider.get("agent1", "key1") == "value1"
 
@@ -2227,10 +2213,9 @@ async def test_auto_deploy(server, client, resource_container, environment):
     assert result.result["model"]["total"] == 3
     assert result.result["model"]["result"] == "deploying"
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
+    result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
 
     assert resource_container.Provider.isset("agent1", "key1")
@@ -2699,10 +2684,9 @@ async def test_deploy_and_events(client, server, environment, resource_container
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
+    result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
 
     # verify against result matrices
@@ -2762,10 +2746,9 @@ async def test_deploy_and_events_failed(client, server, environment, resource_co
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
+    result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
 
 
@@ -2820,10 +2803,9 @@ async def test_reload(client, server, environment, resource_container, dep_state
     result = await client.get_version(environment, version)
     assert result.code == 200
 
-    while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
-        result = await client.get_version(environment, version)
-        await asyncio.sleep(0.1)
+    await _wait_until_deployment_finishes(client, environment, version)
 
+    result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
 
     assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")
