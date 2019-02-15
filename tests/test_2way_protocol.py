@@ -85,10 +85,6 @@ class Agent(protocol.SessionEndpoint):
         return 200, {"status": "ok", "agents": self.end_point_names}
 
 
-importlib.reload(protocol)
-importlib.reload(server.protocol)
-
-
 async def get_environment(env: uuid.UUID, metadata: dict):
     return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 

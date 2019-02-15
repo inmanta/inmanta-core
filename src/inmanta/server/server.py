@@ -63,8 +63,8 @@ class Server(protocol.ServerSlice):
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
-        self._server_storage = self.check_storage()
-        self._agent_no_log = agent_no_log
+        self._server_storage: Dict[str, str] = self.check_storage()
+        self._agent_no_log: bool = agent_no_log
 
         self._recompiles = defaultdict(lambda: None)
 
