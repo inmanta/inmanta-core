@@ -22,6 +22,7 @@ import datetime
 import enum
 import logging
 import uuid
+import warnings
 
 from motor import motor_tornado
 import pymongo
@@ -617,7 +618,8 @@ class Environment(BaseDocument):
         if key in self._renamed_settings_map:
             name_deprecated_setting = self._renamed_settings_map[key]
             if name_deprecated_setting in self.settings and key not in self.settings:
-                LOGGER.warning("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key))
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
+                              category=DeprecationWarning)
                 return self.settings[name_deprecated_setting]
 
         if key in self.settings:

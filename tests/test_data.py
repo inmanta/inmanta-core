@@ -381,17 +381,17 @@ async def test_environment_deprecated_setting(data_module, caplog):
         await env.set(deprecated_option, 22)
         caplog.clear()
         assert (await env.get(new_option)) == 22
-        "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
+        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
 
         await env.set(new_option, 23)
         caplog.clear()
         assert (await env.get(new_option)) == 23
-        "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
+        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
         await env.unset(deprecated_option)
         caplog.clear()
         assert (await env.get(new_option)) == 23
-        "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
+        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 
 @pytest.mark.asyncio

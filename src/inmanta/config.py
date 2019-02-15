@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import uuid
+import warnings
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -233,7 +234,8 @@ class Option(object):
             has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
             has_new_option = cfg.has_option(self.section, self.name)
             if has_deprecated_option and not has_new_option:
-                LOGGER.warning("Config option %s is deprecated. use %s instead." % (self.predecessor_option.name, self.name))
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
+                              category=DeprecationWarning)
                 return self.predecessor_option.get()
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
