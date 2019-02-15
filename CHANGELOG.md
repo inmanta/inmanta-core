@@ -9,6 +9,7 @@ Changes in this release:
 - Extend mypy type annotations
 - Use files for all logs and split out logs, stdout and stderr in autostarted agents (#824, #234)
 - Introduce incremental deploy (#791, #794)
+- Introduce deploying resource state (#931)
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
 - Remove all io_loop references and only use current ioloop (#847)
