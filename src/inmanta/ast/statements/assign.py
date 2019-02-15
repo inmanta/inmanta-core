@@ -20,7 +20,7 @@
 
 from . import ReferenceStatement
 from inmanta.ast.type import List, Dict
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement, Resumer
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
@@ -102,7 +102,7 @@ class CreateDict(ReferenceStatement):
         return "Dict()"
 
 
-class SetAttribute(AssignStatement):
+class SetAttribute(AssignStatement, Resumer):
     """
         Set an attribute of a given instance to a given value
     """
@@ -116,7 +116,7 @@ class SetAttribute(AssignStatement):
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
-        HangUnit(queue, resolver, reqs, None, self)
+        HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(self,
                requires: typing.Dict[object, object],
@@ -185,6 +185,7 @@ class Assign(AssignStatement):
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         target = resolver.lookup(self.name)
+        assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value)
 
@@ -224,7 +225,7 @@ class MapLookup(ReferenceStatement):
         return "%s[%s]" % (repr(self.themap), repr(self.key))
 
 
-class IndexLookup(ReferenceStatement):
+class IndexLookup(ReferenceStatement, Resumer):
     """
         Lookup a value in a dictionary
     """
@@ -280,7 +281,7 @@ vm.files[path="/etc/motd"]
         ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
         self.rootobject = rootobject
         self.relation = str(relation)
-        self.querypart = [(str(n), e) for n, e in query]
+        self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
@@ -303,11 +304,17 @@ vm.files[path="/etc/motd"]
         if not isinstance(relation, RelationAttribute):
             raise TypingException(self, "short index lookup is only possible on relations, %s is an attribute" % relation)
 
+        if relation.end is None:
+            raise TypingException(
+                self,
+                "short index lookup is only possible on bi-drectional relations, %s unidirectional" % relation)
+
         self.type = relation.get_type()
 
-        self.type.lookup_index([(relation.end.name, root_object)]
-                               + [(k, v.execute(requires, resolver, queue))
-                               for (k, v) in self.querypart], self, target)
+        args: typing.List[typing.Tuple[str, object]] = [(relation.end.name, root_object)]
+        args = args + [(k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart]
+
+        self.type.lookup_index(args, self, target)
 
     def __repr__(self) -> str:
         """

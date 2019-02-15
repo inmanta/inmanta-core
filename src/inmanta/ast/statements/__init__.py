@@ -111,7 +111,7 @@ class ExpressionStatement(DynamicStatement):
 class Resumer(ExpressionStatement):
 
     def resume(self,
-               requires: Dict[object, ResultVariable],
+               requires: Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:

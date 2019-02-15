@@ -99,6 +99,8 @@ class Attribute(Locatable):
         else:
             mytype = (self.__type)
 
+        out: ResultVariable["Instance"]
+
         if(self.__nullallble):
             # be a 0-1 relation
             self.end = None

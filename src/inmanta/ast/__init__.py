@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
-    from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.statements.define import DefineImport, DefineEntity  # noqa: F401
@@ -279,7 +279,7 @@ class Namespace(Namespaced):
                 raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
-    def lookup(self, name: str) -> "Type":
+    def lookup(self, name: str) -> "Union[Type, ResultVariable]":
         if "::" not in name:
             return self.get_scope().direct_lookup(name)
 
@@ -513,7 +513,8 @@ class RuntimeException(CompilerException):
 
     def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
         for cause in self.get_causes():
-            cause.set_statement(stmt, replace)
+            if isinstance(cause, RuntimeException):
+                cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
             self.set_location(stmt.get_location())
@@ -620,7 +621,7 @@ class CycleExcpetion(TypingException):
     """Exception raised when a type is its own parent (type cycle)"""
 
     def __init__(self, first_type: "DefineEntity", final_name: str) -> None:
-        super(CycleExcpetion, self).__init__(first_type, None)
+        super(CycleExcpetion, self).__init__(first_type, "")
         self.types = []  # type: List[DefineEntity]
         self.complete = False
         self.final_name = final_name
