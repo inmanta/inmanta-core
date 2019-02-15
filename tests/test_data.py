@@ -369,6 +369,32 @@ async def test_environment_set_setting_parameter(data_module):
 
 
 @pytest.mark.asyncio
+async def test_environment_depricated_setting(data_module, caplog):
+    project = data.Project(name="proj")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    for (depricated_option, new_option) in [(data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL),
+                                            (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)]:
+        await env.set(depricated_option, 22)
+        caplog.clear()
+        assert (await env.get(new_option)) == 22
+        "Config option %s is depricated. Use %s instead." % (depricated_option, new_option) in caplog.text
+
+        await env.set(new_option, 23)
+        caplog.clear()
+        assert (await env.get(new_option)) == 23
+        "Config option %s is depricated. Use %s instead." % (depricated_option, new_option) not in caplog.text
+
+        await env.unset(depricated_option)
+        caplog.clear()
+        assert (await env.get(new_option)) == 23
+        "Config option %s is depricated. Use %s instead." % (depricated_option, new_option) not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_agent_process(data_module):
     project = data.Project(name="test")
     await project.insert()

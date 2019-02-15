@@ -39,10 +39,20 @@ agent_names = \
     Option("config", "agent-names", "$node-name",
            "Names of the agents this instance should deploy configuration for", is_str)
 
+agent_interval = \
+    Option("config", "agent-interval", 600, """[DEPRICATED] The run interval of the agent.	
+Every run-interval seconds, the agent will check the current state of its resources against to desired state model""", is_time)
+
+agent_splay = \
+    Option("config", "agent-splay", 600, """[DEPRICATED] The splaytime added to the runinterval.	
+Set this to 0 to disable splaytime.	
+ At startup the agent will choose a random number between 0 and "agent_splay.	
+It will wait this number of second before performing the first deploy.	
+Each subsequent deploy will start agent-interval seconds after the previous one.""", is_time)
+
 agent_antisplay = \
     Option("config", "agent-run-at-start", False,
            "run the agent at startup, even if a splay time is set", is_bool)
-
 
 agent_reconnect_delay = \
     Option("config", "agent-reconnect-delay", 5,
@@ -54,14 +64,15 @@ server_timeout = \
 
 agent_deploy_interval = \
     Option("config", "agent-deploy-interval", 600,
-           "The number of seconds between two deployment runs of the agent.", is_time)
+           "The number of seconds between two deployment runs of the agent.", is_time, predecessor_option=agent_interval)
 agent_deploy_splay_time = \
     Option("config", "agent-deploy-splay-time", 600,
            """The splaytime added to the agent-deploy-interval. Set this to 0 to disable the splaytime.
 
 At startup the agent will choose a random number between 0 and agent-deploy-splay-time.
 It will wait this number of second before performing the first deployment run.
-Each subsequent repair deployment will start agent-deploy-interval seconds after the previous one.""", is_time)
+Each subsequent repair deployment will start agent-deploy-interval seconds after the previous one.""", is_time,
+           predecessor_option=agent_splay)
 
 agent_repair_interval = \
     Option("config", "agent-repair-interval", 86400,

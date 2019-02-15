@@ -24,6 +24,11 @@ Changes in this release:
 - Added exception explainer to compiler for 'modified after freeze' (#876)
 - Added logging of resource actions on the server and purging of resource actions in the database (#533)
 
+DEPRICATIONS:
+- The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 
+depricated in favour of agent-deploy-interval, agent-deploy-splay-time, autostart_agent_deploy_interval 
+and autostart_agent_deploy_splay_time respectively. The depricated options will be removed in release XXXXXX.
+
 v 2018.3 (2018-12-07)
 Changes in this release:
 - Various bugfixes and performance enhancements

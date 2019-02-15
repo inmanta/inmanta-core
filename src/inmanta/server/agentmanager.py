@@ -506,8 +506,10 @@ class AgentManager(ServerSlice, SessionListener):
         port = Config.get("server_rest_transport", "port", "8888")
 
         privatestatedir = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
+
         agent_deploy_splay = yield env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
         agent_deploy_interval = yield env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
+
         agent_repair_splay = yield env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
         agent_repair_interval = yield env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
