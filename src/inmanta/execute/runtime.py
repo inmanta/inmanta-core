@@ -31,6 +31,9 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
+    from inmanta.ast.statements import Statement
+    from inmanta.ast.attribute import Attribute
+
 
 
 class ResultCollector(object):
@@ -45,7 +48,17 @@ class ResultCollector(object):
         raise Exception("Not Implemented" + str(type(self)))
 
 
-class ResultVariable(ResultCollector):
+class Promise(object):
+
+    def __init__(self, owner: "ListVariable", provider: "Statement"):
+        self.provider: "Optional[Statement]" = provider
+        self.owner = owner
+
+    def set_value(self, value: object, location: Location, recur: bool=True) -> None:
+        self.owner.set_promised_value(self, value, location, recur)
+
+
+class ResultVariable(ResultCollector, Promise):
     """
         A ResultVariable is like a future
          - it has a list of waiters
@@ -57,36 +70,37 @@ class ResultVariable(ResultCollector):
 
         In order to assist heuristic evaluation, result variables keep track of any statement that will assign a value to it
     """
+    location: Location
 
-    def __init__(self, value: object=None):
-        self.provider = None
-        self.waiters = []
-        self.value = value
-        self.hasValue = False
-        self.type = None  # type: Optional[Type]
+    def __init__(self, value: object=None) -> None:
+        self.provider: "Optional[Statement]" = None
+        self.waiters: "List[Waiter]" = []
+        self.value: object = value
+        self.hasValue: bool = False
+        self.type: Optional[Type] = None
 
-    def set_type(self, mytype: Type):
+    def set_type(self, mytype: Type) -> None:
         self.type = mytype
 
-    def set_provider(self, provider):
+    def set_provider(self, provider: "Statement") -> None:
         # no checking for double set, this is done in the actual assignment
         self.provider = provider
 
-    def get_promise(self, provider):
+    def get_promise(self, provider: "Statement") -> Promise:
         """Alternative for set_provider for better handling of ListVariables."""
         self.provider = provider
         return self
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         return self.hasValue
 
-    def waitfor(self, waiter):
+    def waitfor(self, waiter: "Waiter") -> None:
         if self.is_ready():
             waiter.ready(self)
         else:
             self.waiters.append(waiter)
 
-    def set_value(self, value, location, recur=True):
+    def set_value(self, value: object, location: Location, recur: bool=True) -> None:
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
@@ -100,28 +114,28 @@ class ResultVariable(ResultCollector):
         for waiter in self.waiters:
             waiter.ready(self)
 
-    def get_value(self):
+    def get_value(self) -> object:
         if not self.hasValue:
             raise UnsetException("Value not available", self)
 
         return self.value
 
-    def can_get(self):
+    def can_get(self) -> bool:
         return self.hasValue
 
-    def freeze(self):
+    def freeze(self) -> None:
         pass
 
-    def receive_result(self, value, location):
+    def receive_result(self, value: object, location: Location) -> None:
         pass
 
-    def listener(self, resulcollector, location):
+    def listener(self, resulcollector: ResultCollector, location: Location) -> None:
         """
             add a listener to report new values to, only for lists
         """
         pass
 
-    def is_multi(self):
+    def is_multi(self) -> bool:
         return False
 
 
@@ -132,12 +146,12 @@ class AttributeVariable(ResultVariable):
         when assigned a value, it will also assign a value to its inverse relation
     """
 
-    def __init__(self, attribute, instance):
+    def __init__(self, attribute: "Attribute", instance: "Instance"):
         self.attribute = attribute
         self.myself = instance
         ResultVariable.__init__(self)
 
-    def set_value(self, value, location, recur=True):
+    def set_value(self, value: object, location: Location, recur: bool=True) -> None:
         if self.hasValue:
             if self.value != value:
                 raise DoubleSetException(None, self.value, self.location, value, location)
@@ -150,6 +164,7 @@ class AttributeVariable(ResultVariable):
         self.hasValue = True
         # set counterpart
         if self.attribute.end and recur:
+            assert isinstance(value, Instance)
             value.set_attribute(self.attribute.end.name, self.myself, location, False)
         for waiter in self.waiters:
             waiter.ready(self)
@@ -204,16 +219,6 @@ class DelayedResultVariable(ResultVariable):
     def get_progress_potential(self):
         """How many are actually waiting for us """
         return len(self.waiters)
-
-
-class Promise(object):
-
-    def __init__(self, owner, provider):
-        self.provider = provider
-        self.owner = owner
-
-    def set_value(self, value, location, recur=True):
-        self.owner.set_promised_value(self, value, location, recur)
 
 
 class ListVariable(DelayedResultVariable):
@@ -468,7 +473,7 @@ class Waiter(object):
         self.waitcount = self.waitcount + 1
         waitable.waitfor(self)
 
-    def ready(self, other):
+    def ready(self, other: ResultVariable) -> None:
         self.waitcount = self.waitcount - 1
         if self.waitcount == 0:
             self.queue.add_running(self)

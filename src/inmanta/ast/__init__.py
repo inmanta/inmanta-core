@@ -656,7 +656,7 @@ class NotFoundException(RuntimeException):
 
 class DoubleSetException(RuntimeException):
 
-    def __init__(self, stmt: "Statement", value: object, location: Location, newvalue: object, newlocation: Location) -> None:
+    def __init__(self, stmt: "Optional[Statement]", value: object, location: Location, newvalue: object, newlocation: Location) -> None:
         self.value = value  # type: object
         self.location = location
         self.newvalue = newvalue  # type: object
