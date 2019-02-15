@@ -92,7 +92,7 @@ class Type(Locatable):
     """
 
     @classmethod
-    def validate(cls, value):
+    def validate(cls, value: object) -> None:
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type

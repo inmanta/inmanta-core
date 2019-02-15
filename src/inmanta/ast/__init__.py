@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     import inmanta.ast.statements  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
     from inmanta.ast.type import Type, NamedType  # noqa: F401
-    from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable  # noqa: F401
+    from inmanta.execute.runtime import ExecutionContext, Instance, DelayedResultVariable, ResultVariable  # noqa: F401
     from inmanta.ast.statements import Statement, AssignStatement  # noqa: F401
     from inmanta.ast.entity import Entity  # noqa: F401
     from inmanta.ast.statements.define import DefineImport, DefineEntity  # noqa: F401
@@ -107,8 +107,10 @@ class Range(Location):
 
 class Locatable(object):
 
+    _location: Location
+
     def __init__(self) -> None:
-        self._location = None  # type: Optional[Location]
+        self._location = None
 
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
@@ -277,7 +279,7 @@ class Namespace(Namespaced):
                 raise DuplicateException(ns, self.visible_namespaces[name], "Two import statements have the same name")
         self.visible_namespaces[name] = ns
 
-    def lookup(self, name: str) -> "Type":
+    def lookup(self, name: str) -> "Union[Type, ResultVariable]":
         if "::" not in name:
             return self.get_scope().direct_lookup(name)
 
@@ -511,7 +513,8 @@ class RuntimeException(CompilerException):
 
     def set_statement(self, stmt: "Locatable", replace: bool = True) -> None:
         for cause in self.get_causes():
-            cause.set_statement(stmt, replace)
+            if isinstance(cause, RuntimeException):
+                cause.set_statement(stmt, replace)
 
         if replace or self.stmt is None:
             self.set_location(stmt.get_location())
@@ -593,7 +596,7 @@ class AttributeException(WrappingRuntimeException):
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
-    def __init__(self, instance: "Instance", attribute: str) -> None:
+    def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" %
                                   (instance, attribute))
         self.instance = instance
@@ -618,7 +621,7 @@ class CycleExcpetion(TypingException):
     """Exception raised when a type is its own parent (type cycle)"""
 
     def __init__(self, first_type: "DefineEntity", final_name: str) -> None:
-        super(CycleExcpetion, self).__init__(first_type, None)
+        super(CycleExcpetion, self).__init__(first_type, "")
         self.types = []  # type: List[DefineEntity]
         self.complete = False
         self.final_name = final_name
@@ -656,7 +659,12 @@ class NotFoundException(RuntimeException):
 
 class DoubleSetException(RuntimeException):
 
-    def __init__(self, stmt: "Statement", value: object, location: Location, newvalue: object, newlocation: Location) -> None:
+    def __init__(self,
+                 stmt: "Optional[Statement]",
+                 value: object,
+                 location: Location,
+                 newvalue: object,
+                 newlocation: Location) -> None:
         self.value = value  # type: object
         self.location = location
         self.newvalue = newvalue  # type: object
@@ -670,7 +678,7 @@ class ModifiedAfterFreezeException(RuntimeException):
 
     def __init__(self,
                  rv: "DelayedResultVariable",
-                 instance: "Entity",
+                 instance: "Instance",
                  attribute: "Attribute",
                  value: object,
                  location: Location,

@@ -56,7 +56,7 @@ class Reference(ExpressionStatement):
         out = {self.name: var}  # type : Dict[object, ResultVariable]
         return out
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self.name]
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -99,7 +99,7 @@ class AttributeReferenceHelper(Locatable):
         self.resultcollector = resultcollector
 
     def resume(self,
-               requires: Dict[object, ResultVariable],
+               requires: Dict[object, object],
                resolver: Resolver,
                queue_scheduler: QueueScheduler,
                target: ResultVariable) -> None:
@@ -130,7 +130,7 @@ class AttributeReferenceHelper(Locatable):
                 attr.listener(self.resultcollector, self.location)
             ExecutionUnit(queue_scheduler, resolver, self.target, {"x": attr}, self)
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # Attribute is ready, return it,
         return self.attr.get_value()
 
@@ -181,7 +181,7 @@ class IsDefinedReferenceHelper(Locatable):
         except RuntimeException:
             self.target.set_value(False, self.location)
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue_scheduler: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue_scheduler: QueueScheduler) -> object:
         # Attribute is ready, return it,
         return self.attr.get_value()
 
@@ -220,7 +220,7 @@ class AttributeReference(Reference):
         HangUnit(queue, resolver, self.instance.requires_emit(resolver, queue), None, resumer)
         return {self: temp}
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 

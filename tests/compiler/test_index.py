@@ -309,6 +309,43 @@ z = h1.files[name="f1"]
     assert z is f1h1
 
 
+def test_394_short_index_bad(snippetcompiler):
+    snippetcompiler.setup_for_error(
+        """implementation none for std::Entity:
+
+end
+
+entity Host:
+    string name
+    string blurp
+end
+
+entity File:
+    string name
+end
+
+implement Host using none
+implement File using none
+
+Host.files [0:] -- File
+File.host [1] -- Host
+
+index Host(name)
+index File(host, name)
+
+h1 = Host(name="h1", blurp="blurp1")
+
+h1.files = f1h1
+h1.files = f2h1
+
+f1h1=File(host=h1,name="f1")
+f2h1=File(host=h1,name="f2")
+
+z = h1.files[name="f1"]
+""", "short index lookup is only possible on bi-drectional relations, __config__::Host.files is unidirectional"
+     " (reported in h1.files[[('name', 'f1')]] ({dir}/main.cf:31))")
+
+
 def test_511_index_on_default(snippetcompiler):
     snippetcompiler.setup_for_snippet(
         """
