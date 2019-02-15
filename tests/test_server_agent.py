@@ -3409,3 +3409,48 @@ async def test_bad_post_events(resource_container, environment, server, client, 
     # Nothing is reported as events don't have pre and post
 
     await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_inprogress(resource_container, client, server, environment):
+    """
+        Test retrieving facts from the agent
+    """
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = int(time.time())
+
+    resource_id_wov = "test::Wait[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{'key': 'key',
+                  'value': 'value',
+                  'id': resource_id,
+                  'requires': [],
+                  'purged': False,
+                  'send_event': False,
+                  }]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+
+    async def in_progress():
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        res = result.result["resources"][0]
+        status = res["status"]
+        return status == "deploying"
+
+    await retry_limited(in_progress, 30)
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+    await agent.stop()

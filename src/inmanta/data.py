@@ -1622,7 +1622,7 @@ class ConfigurationModel(BaseDocument):
                     next.append(res)
 
                 # error -> increment
-                elif ores.status in [ResourceState.failed, ResourceState.cancelled]:
+                elif ores.status in [ResourceState.failed, ResourceState.cancelled, ResourceState.deploying]:
                     increment.append(res)
 
                 elif ores.status == ResourceState.deployed:

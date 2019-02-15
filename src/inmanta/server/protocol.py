@@ -34,6 +34,7 @@ import asyncio
 import time
 import uuid
 import abc
+from asyncio.tasks import ensure_future
 
 
 LOGGER = logging.getLogger(__name__)
@@ -177,7 +178,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        IOLoop.current().add_future(future, handle_result)
+        IOLoop.current().add_future(ensure_future(future), handle_result)
 
     def schedule(self, call: Callable, interval: int = 60) -> None:
         self._sched.add_action(call, interval)

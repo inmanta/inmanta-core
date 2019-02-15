@@ -25,7 +25,7 @@ class ResourceState(Enum):
     dry = 3
     deployed = 4
     failed = 5
-    queued = 6  # Unused
+    deploying = 6
     available = 7
     cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
     undefined = 9  # The state of this resource is unknown at this moment in the orchestration process

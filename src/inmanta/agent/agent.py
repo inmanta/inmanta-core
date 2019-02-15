@@ -149,6 +149,15 @@ class ResourceAction(object):
         return success, send_event
 
     @gen.coroutine
+    def send_in_progress(self, action_id, start):
+        yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
+                                                                 resource_ids=[str(self.resource.id)],
+                                                                 action_id=action_id,
+                                                                 action=const.ResourceAction.deploy,
+                                                                 started=start,
+                                                                 status=ResourceState.deploying)
+
+    @gen.coroutine
     def execute(self, dummy, generation, cache):
         LOGGER.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.version)
@@ -203,8 +212,10 @@ class ResourceAction(object):
                 ctx.set_status(const.ResourceState.skipped)
                 success = False
                 send_event = False
+                yield self.send_in_progress(ctx.action_id, start)
                 yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True)
             else:
+                yield self.send_in_progress(ctx.action_id, start)
                 success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache)
 
             LOGGER.info("end run %s", self.resource)
@@ -382,9 +393,9 @@ class AgentInstance(object):
 
         # multi threading control
         # threads to setup connections
-        self.provider_thread_pool = ThreadPoolExecutor(1)
+        self.provider_thread_pool = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % name)
         # threads to work
-        self.thread_pool = ThreadPoolExecutor(process.poolsize)
+        self.thread_pool = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
         self.ratelimiter = locks.Semaphore(process.poolsize)
 
         self._env_id = process._env_id
@@ -406,6 +417,11 @@ class AgentInstance(object):
 
         self._is_repair_running = False
         self._start_repair_when_deployment_finishes = False
+
+    @gen.coroutine
+    def stop(self):
+        self.provider_thread_pool.shutdown(wait=False)
+        self.thread_pool.shutdown(wait=False)
 
     @property
     def environment(self):
@@ -692,7 +708,7 @@ class Agent(SessionEndpoint):
         self.poolsize = poolsize
         self.ratelimiter = locks.Semaphore(poolsize)
         self.critical_ratelimiter = locks.Semaphore(cricital_pool_size)
-        self.thread_pool = ThreadPoolExecutor(poolsize)
+        self.thread_pool = ThreadPoolExecutor(poolsize, thread_name_prefix="mainpool")
 
         if agent_map is None:
             agent_map = cfg.agent_map.get()
@@ -728,6 +744,13 @@ class Agent(SessionEndpoint):
                         name = name.replace("$node-name", self.node_name)
 
                     self.add_end_point_name(name)
+
+    @gen.coroutine
+    def stop(self):
+        yield super(Agent, self).stop()
+        self.thread_pool.shutdown(wait=False)
+        for instance in self._instances.values():
+            yield instance.stop()
 
     def add_end_point_name(self, name):
         SessionEndpoint.add_end_point_name(self, name)
