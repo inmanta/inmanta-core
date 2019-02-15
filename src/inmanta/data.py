@@ -569,7 +569,7 @@ class Environment(BaseDocument):
         PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
                                      doc="Push a new version when it has been autodeployed.", validator=convert_boolean),
         AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
-                                 doc="[DEPRICATED] Splay time for autostarted agents.", validator=convert_int),
+                                 doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,
                                                  doc="The deployment interval of the autostarted agents.",
                                                  validator=convert_int),
@@ -589,7 +589,7 @@ class Environment(BaseDocument):
                                      doc="A dict with key the name of agents that should be automatically started. The value "
                                      "is either an empty string or an agent map string.", agent_restart=True),
         AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int", validator=convert_int,
-                                          doc="[DEPRICATED] Agent interval for autostarted agents in seconds",
+                                          doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
                                           agent_restart=True),
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
@@ -598,7 +598,7 @@ class Environment(BaseDocument):
     }
 
     _renamed_settings_map = {AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
-                             AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY}  # name new_option -> name depricated_option
+                             AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY}  # name new_option -> name deprecated_option
 
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING), ("project", pymongo.ASCENDING)], unique=True)
@@ -615,10 +615,10 @@ class Environment(BaseDocument):
             raise KeyError()
 
         if key in self._renamed_settings_map:
-            name_depricated_setting = self._renamed_settings_map[key]
-            if name_depricated_setting in self.settings and key not in self.settings:
-                LOGGER.warning("Config option %s is depricated. Use %s instead." % (name_depricated_setting, key))
-                return self.settings[name_depricated_setting]
+            name_deprecated_setting = self._renamed_settings_map[key]
+            if name_deprecated_setting in self.settings and key not in self.settings:
+                LOGGER.warning("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key))
+                return self.settings[name_deprecated_setting]
 
         if key in self.settings:
             return self.settings[key]

@@ -40,11 +40,11 @@ agent_names = \
            "Names of the agents this instance should deploy configuration for", is_str)
 
 agent_interval = \
-    Option("config", "agent-interval", 600, """[DEPRICATED] The run interval of the agent.	
+    Option("config", "agent-interval", 600, """[DEPRECATED] The run interval of the agent.	
 Every run-interval seconds, the agent will check the current state of its resources against to desired state model""", is_time)
 
 agent_splay = \
-    Option("config", "agent-splay", 600, """[DEPRICATED] The splaytime added to the runinterval.	
+    Option("config", "agent-splay", 600, """[DEPRECATED] The splaytime added to the runinterval.	
 Set this to 0 to disable splaytime.	
  At startup the agent will choose a random number between 0 and "agent_splay.	
 It will wait this number of second before performing the first deploy.	
