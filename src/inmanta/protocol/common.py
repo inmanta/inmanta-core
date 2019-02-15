@@ -417,7 +417,7 @@ def shorten(msg: str, max_len: int = 10) -> str:
     return msg[0: max_len - 3] + "..."
 
 
-def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> None:
+def encode_token(client_types: List[str], environment: str = None, idempotent: bool = False, expire: float = None) -> str:
     cfg = inmanta_config.AuthJWTConfig.get_sign_config()
 
     payload = {"iss": cfg.issuer, "aud": [cfg.audience], const.INMANTA_URN + "ct": ",".join(client_types)}
@@ -488,7 +488,7 @@ class Result(object):
         self.code = code
         self._callback = None
 
-    def get_result(self):
+    def get_result(self) -> Dict[str, Any]:
         """
             Only when the result is marked as available the result can be returned
         """

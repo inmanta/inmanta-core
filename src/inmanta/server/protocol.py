@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 import inmanta.protocol.endpoints
-import inmanta.protocol.rest.server
 from inmanta.util import Scheduler
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
@@ -28,7 +27,7 @@ from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
-from typing import Dict, Tuple, Callable, Optional, List, Union, Any
+from typing import Dict, Tuple, Callable, Optional, List, Union, Any, Generator
 
 import logging
 import asyncio
@@ -128,7 +127,7 @@ class Server(endpoints.Endpoint):
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
         LOGGER.debug("Stopping Server Rest Endpoint")
-        self._transport.stop()
+        yield self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
             yield endpoint.stop()
 
@@ -147,19 +146,19 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
 
     @abc.abstractmethod
     @gen.coroutine
-    def prestart(self, server: Server) -> None:
+    def prestart(self, server: Server) -> Generator[Any, Any, None]:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
     @gen.coroutine
     @abc.abstractmethod
-    def start(self) -> None:
+    def start(self) -> Generator[Any, Any, None]:
         """
             Start the server slice.
         """
 
     @abc.abstractmethod
     @gen.coroutine
-    def stop(self) -> None:
+    def stop(self) -> Generator[Any, Any, None]:
         pass
 
     name = property(lambda self: self._name)

@@ -19,10 +19,12 @@
 
 from tornado import gen
 from tornado import locks
+from tornado import process
+
 
 from inmanta.config import Config
 from inmanta import data
-from inmanta.server import protocol, SLICE_AGENT_MANAGER
+from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
 
@@ -31,12 +33,19 @@ import os
 from datetime import datetime
 import time
 import sys
-import subprocess
 import uuid
-from inmanta.server.protocol import ServerSlice, SessionListener
+from inmanta.server.protocol import ServerSlice, SessionListener, SessionManager, ReturnClient
 from inmanta.server import config as opt
 from inmanta.protocol import encode_token, methods
 from inmanta.resources import Id
+import asyncio
+
+from typing import Optional, Dict, Any, List, Generator, Tuple
+from uuid import UUID
+from inmanta.server.server import Server
+
+Apireturn = Generator[Any, Any, Tuple[int, Dict[str, Any]]]
+NoneGen = Generator[Any, Any, None]
 
 
 LOGGER = logging.getLogger(__name__)
@@ -79,48 +88,68 @@ set_parameters
 """
 
 
+@gen.coroutine
+def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=1.0) -> NoneGen:
+    try:
+        yield asyncio.wait_for(
+            asyncio.gather(
+                *[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]
+            ),
+            timeout)
+    except asyncio.TimeoutError:
+        LOGGER.warning("Agent processes did not close in time")
+
+
 class AgentManager(ServerSlice, SessionListener):
     '''
     This class contains all server functionality related to the management of agents
     '''
 
-    def __init__(self, restserver, closesessionsonstart=True, fact_back_off=None):
+    def __init__(self, restserver: protocol.Server, closesessionsonstart: bool=True, fact_back_off: int=None) -> None:
         super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
         self.restserver = restserver
 
         if fact_back_off is None:
             fact_back_off = opt.server_fact_resource_block.get()
 
-        self._agent_procs = {}  # env uuid -> subprocess.Popen
+        self._agent_procs: Dict[UUID, process.Subprocess] = {}  # env uuid -> process.SubProcess
 
         # back-off timer for fact requests
-        self._fact_resource_block = fact_back_off
+        self._fact_resource_block: int = fact_back_off
         # per resource time of last fact request
-        self._fact_resource_block_set = {}
+        self._fact_resource_block_set: Dict[str, float] = {}
 
         # session lock
         self.session_lock = locks.Lock()
         # all sessions
-        self.sessions = {}
+        self.sessions: Dict[UUID, protocol.Session] = {}
         # live sessions
-        self.tid_endpoint_to_session = {}
+        self.tid_endpoint_to_session: Dict[Tuple[UUID, str], protocol.Session] = {}
 
-        self.closesessionsonstart = closesessionsonstart
+        self.closesessionsonstart: bool = closesessionsonstart
+
+        self.running: bool = False
 
     @gen.coroutine
-    def prestart(self, server):
+    def prestart(self, server: protocol.Server) -> NoneGen:
         yield ServerSlice.prestart(self, server)
-        self._server = server.get_slice("server")
-        self._server_storage = self._server._server_storage
-        server.get_slice("session").add_listener(self)
 
-    def new_session(self, session):
+        preserver = server.get_slice(SLICE_SERVER)
+        assert isinstance(preserver, Server)
+        self._server: Server = preserver
+        self._server_storage: Dict[str, str] = self._server._server_storage
+
+        presession = server.get_slice(SLICE_SESSION_MANAGER)
+        assert isinstance(presession, SessionManager)
+        presession.add_listener(self)
+
+    def new_session(self, session: protocol.Session) -> None:
         self.add_future(self.register_session(session, datetime.now()))
 
-    def expire(self, session, timeout):
+    def expire(self, session: protocol.Session, timeout: float) -> None:
         self.add_future(self.expire_session(session, datetime.now()))
 
-    def seen(self, session, endpoint_names):
+    def seen(self, session: protocol.Session, endpoint_names: List[str]) -> None:
         if set(session.endpoint_names) != set(endpoint_names):
             LOGGER.warning("Agent endpoint set changed, this should not occur, update ignored (was %s is %s)" %
                            (set(session.endpoint_names), set(endpoint_names)))
@@ -128,7 +157,7 @@ class AgentManager(ServerSlice, SessionListener):
         self.add_future(self.flush_agent_presence(session, datetime.now()))
 
     # From server
-    def get_agent_client(self, tid: uuid.UUID, endpoint):
+    def get_agent_client(self, tid: uuid.UUID, endpoint: str) -> Optional[ReturnClient]:
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
         key = (tid, endpoint)
@@ -137,18 +166,20 @@ class AgentManager(ServerSlice, SessionListener):
         return None
 
     @gen.coroutine
-    def start(self):
+    def start(self) -> NoneGen:
+        self.running = True
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
 
     @gen.coroutine
-    def stop(self):
+    def stop(self) -> NoneGen:
+        self.running = False
         yield self.terminate_agents()
 
     # Agent Management
     @gen.coroutine
-    def ensure_agent_registered(self, env: data.Environment, nodename: str):
+    def ensure_agent_registered(self, env: data.Environment, nodename: str) -> Generator[Any, Any, data.Agent]:
         """
             Make sure that an agent has been created in the database
         """
@@ -161,14 +192,14 @@ class AgentManager(ServerSlice, SessionListener):
                 return agent
 
     @gen.coroutine
-    def create_default_agent(self, env: data.Environment, nodename: str):
+    def create_default_agent(self, env: data.Environment, nodename: str) -> Generator[Any, Any, data.Agent]:
         saved = data.Agent(environment=env.id, name=nodename, paused=False)
         yield saved.insert()
         yield self.verify_reschedule(env, [nodename])
         return saved
 
     @gen.coroutine
-    def register_session(self, session: protocol.Session, now):
+    def register_session(self, session: protocol.Session, now: float) -> Generator[Any, Any, data.Agent]:
         with (yield self.session_lock.acquire()):
             tid = session.tid
             sid = session.id
@@ -196,7 +227,9 @@ class AgentManager(ServerSlice, SessionListener):
                 yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
-    def expire_session(self, session: protocol.Session, now):
+    def expire_session(self, session: protocol.Session, now: float) -> NoneGen:
+        if not self.running:
+            return
         with (yield self.session_lock.acquire()):
             tid = session.tid
             sid = session.id
@@ -228,7 +261,7 @@ class AgentManager(ServerSlice, SessionListener):
                 yield self.verify_reschedule(env, session.endpoint_names)
 
     @gen.coroutine
-    def get_environment_sessions(self, env_id: uuid.UUID):
+    def get_environment_sessions(self, env_id: uuid.UUID) -> Generator[Any, Any, List[protocol.Session]]:
         """
             Get a list of all sessions for the given environment id
         """
@@ -242,7 +275,7 @@ class AgentManager(ServerSlice, SessionListener):
         return session_list
 
     @gen.coroutine
-    def flush_agent_presence(self, session: protocol.Session, now):
+    def flush_agent_presence(self, session: protocol.Session, now: float) -> NoneGen:
         tid = session.tid
         sid = session.id
 
@@ -259,10 +292,12 @@ class AgentManager(ServerSlice, SessionListener):
         yield aps.update_fields(last_seen=now)
 
     @gen.coroutine
-    def verify_reschedule(self, env, enpoints):
+    def verify_reschedule(self, env: data.Environment, enpoints: str) -> NoneGen:
         """
              only call under session lock
         """
+        if not self.running:
+            return
         tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
         agents = yield [data.Agent.get(env.id, endpoint) for endpoint in no_primary]
@@ -271,7 +306,7 @@ class AgentManager(ServerSlice, SessionListener):
             yield self.reschedule(env, agent)
 
     @gen.coroutine
-    def reschedule(self, env, agent):
+    def reschedule(self, env: data.Environment, agent: data.Agent) -> NoneGen:
         """
              only call under session lock
         """
@@ -291,14 +326,18 @@ class AgentManager(ServerSlice, SessionListener):
         yield agent.update_fields(primary=None, last_failover=datetime.now())
 
     @gen.coroutine
-    def _set_primary(self, env: data.Environment, agent: data.Agent, instance: data.AgentInstance, session: protocol.Session):
+    def _set_primary(self,
+                     env: data.Environment,
+                     agent: data.Agent,
+                     instance: data.AgentInstance,
+                     session: protocol.Session) -> NoneGen:
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
         yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
         self.add_future(session.get_client().set_state(agent.name, True))
 
     @gen.coroutine
-    def clean_db(self):
+    def clean_db(self) -> NoneGen:
         with (yield self.session_lock.acquire()):
             LOGGER.debug("Cleaning server session DB")
 
@@ -316,7 +355,11 @@ class AgentManager(ServerSlice, SessionListener):
                 yield agent.update_fields(primary=None)
 
     # utils
-    def _fork_inmanta(self, args, outfile, errfile, cwd=None):
+    def _fork_inmanta(self,
+                      args: List[str],
+                      outfile: Optional[str],
+                      errfile: Optional[str],
+                      cwd: Optional[str]=None) -> process.Subprocess:
         """
             Fork an inmanta process from the same code base as the current code
         """
@@ -331,7 +374,7 @@ class AgentManager(ServerSlice, SessionListener):
                 errhandle = open(errfile, "wb+")
 
             # TODO: perhaps show in dashboard?
-            return subprocess.Popen(inmanta_path + args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle)
+            return process.Subprocess(inmanta_path + args, cwd=cwd, env=os.environ.copy(), stdout=outhandle, stderr=errhandle)
         finally:
             if outhandle is not None:
                 outhandle.close()
@@ -341,17 +384,17 @@ class AgentManager(ServerSlice, SessionListener):
     # External APIS
     @protocol.handle(methods.get_agent_process, agent_id="id")
     @gen.coroutine
-    def get_agent_process(self, agent_id):
+    def get_agent_process(self, agent_id: str) -> Apireturn:
         return (yield self.get_agent_process_report(agent_id))
 
     @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
     @gen.coroutine
-    def trigger_agent(self, env, agent_id):
+    def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
         raise NotImplementedError()
 
     @protocol.handle(methods.list_agent_processes)
     @gen.coroutine
-    def list_agent_processes(self, environment, expired):
+    def list_agent_processes(self, environment: Optional[UUID], expired: bool) -> Apireturn:
         if environment is not None:
             env = yield data.Environment.get_by_id(environment)
             if env is None:
@@ -384,7 +427,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     @protocol.handle(methods.list_agents, env="tid")
     @gen.coroutine
-    def list_agents(self, env):
+    def list_agents(self, env: Optional[data.Environment]) -> Apireturn:
         if env is not None:
             tid = env.id
             ags = yield data.Agent.get_list(environment=tid)
@@ -395,19 +438,19 @@ class AgentManager(ServerSlice, SessionListener):
 
     @protocol.handle(methods.get_state, env="tid")
     @gen.coroutine
-    def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str):
-        tid = env.id
+    def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
+        tid: UUID = env.id
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
         key = (tid, agent)
         if key in self.tid_endpoint_to_session:
-            session = self.tid_endpoint_to_session[(tid, agent)]
+            session = self.tid_endpoint_to_session[key]
             if session.id == sid:
                 return 200, {"enabled": True}
         return 200, {"enabled": False}
 
     @gen.coroutine
-    def get_agent_process_report(self, apid: uuid.UUID):
+    def get_agent_process_report(self, apid: uuid.UUID) -> Apireturn:
         ap = yield data.AgentProcess.get_by_id(apid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
@@ -420,7 +463,10 @@ class AgentManager(ServerSlice, SessionListener):
 
     # Start/stop agents
     @gen.coroutine
-    def _ensure_agents(self, env: data.Environment, agents: list, restart: bool=False):
+    def _ensure_agents(self,
+                       env: data.Environment,
+                       agents: List[str],
+                       restart: bool=False) -> Generator[Any, Any, bool]:
         """
             Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
@@ -428,6 +474,7 @@ class AgentManager(ServerSlice, SessionListener):
             :param agents: A list of agent names that possibly should be started in this environment.
             :param restart: Restart all agents even if the list of agents is up to date.
         """
+        agent_map: Dict[str, str]
         agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
@@ -448,11 +495,13 @@ class AgentManager(ServerSlice, SessionListener):
         return False
 
     @gen.coroutine
-    def __do_start_agent(self, agents, env):
+    def __do_start_agent(self, agents: List[str], env: data.Environment) -> Generator[Any, Any, bool]:
         """
             Start an agent process for the given agents in the given environment
         """
+        agent_map: Dict[str, str]
         agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
+        config: str
         config = yield self._make_agent_config(env, agents, agent_map)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
@@ -464,8 +513,8 @@ class AgentManager(ServerSlice, SessionListener):
             fd.write(config)
 
         if not self._server._agent_no_log:
-            out = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
-            err = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
+            out: Optional[str] = os.path.join(self._server_storage["logs"], "agent-%s.out" % env.id)
+            err: Optional[str] = os.path.join(self._server_storage["logs"], "agent-%s.err" % env.id)
         else:
             out = None
             err = None
@@ -475,8 +524,9 @@ class AgentManager(ServerSlice, SessionListener):
                                   out, err)
 
         if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
-            LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].pid)
-            self._agent_procs[env.id].terminate()
+            LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].proc.pid)
+            self._agent_procs[env.id].proc.terminate()
+            yield wait_for_proc_bounded([self._agent_procs[env.id]])
 
         self._agent_procs[env.id] = proc
 
@@ -484,16 +534,20 @@ class AgentManager(ServerSlice, SessionListener):
         yield retry_limited(lambda: self.get_agent_client(env.id, agents[0]) is not None, 5)
         # yield sleep(2)
 
-        LOGGER.debug("Started new agent with PID %s", proc.pid)
+        LOGGER.debug("Started new agent with PID %s", proc.proc.pid)
         return True
 
     @gen.coroutine
-    def terminate_agents(self):
+    def terminate_agents(self) -> NoneGen:
         for proc in self._agent_procs.values():
-            proc.terminate()
+            proc.proc.terminate()
+        yield wait_for_proc_bounded(self._agent_procs.values())
 
     @gen.coroutine
-    def _make_agent_config(self, env: data.Environment, agent_names: list, agent_map: dict) -> str:
+    def _make_agent_config(self,
+                           env: data.Environment,
+                           agent_names: List[str],
+                           agent_map: Dict[str, str]) -> Generator[Any, Any, str]:
         """
             Generate the config file for the process that hosts the autostarted agents
 
@@ -503,14 +557,18 @@ class AgentManager(ServerSlice, SessionListener):
             :return: A string that contains the config file content.
         """
         environment_id = str(env.id)
-        port = Config.get("server_rest_transport", "port", "8888")
+        port: int = Config.get("server_rest_transport", "port", "8888")
 
         privatestatedir = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
+        agent_deploy_splay: int
         agent_deploy_splay = yield env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
+        agent_deploy_interval: int
         agent_deploy_interval = yield env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
 
+        agent_repair_splay: int
         agent_repair_splay = yield env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
+        agent_repair_interval: int
         agent_repair_interval = yield env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
         # generate config file
@@ -542,8 +600,8 @@ host=%(serveradress)s
 token=%s
     """ % (token)
 
-        ssl_cert = server_config.server_ssl_key.get()
-        ssl_ca = server_config.server_ssl_ca_cert.get()
+        ssl_cert: Optional[str] = server_config.server_ssl_key.get()
+        ssl_ca: Optional[str] = server_config.server_ssl_ca_cert.get()
 
         if ssl_ca is not None and ssl_cert is not None:
             # override CA
@@ -562,7 +620,7 @@ ssl=True
     # Parameters
 
     @gen.coroutine
-    def _request_parameter(self, env_id: uuid.UUID, resource_id):
+    def _request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
         """
             Request the value of a parameter from an agent
         """
@@ -575,8 +633,8 @@ ssl=True
             if res is None:
                 return 404, {"message": "The resource has no recent version."}
 
-            rid = Id.parse_id(res.resource_version_id)
-            version = rid.version
+            rid: Id = Id.parse_id(res.resource_version_id)
+            version: int = rid.version
 
             # only request facts of a resource every _fact_resource_block time
             now = time.time()
@@ -602,7 +660,7 @@ ssl=True
             return 404, {"message": "resource_id parameter is required."}
 
     @gen.coroutine
-    def start_agents(self):
+    def start_agents(self) -> NoneGen:
         """
             Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
             is called on server start.
@@ -616,7 +674,7 @@ ssl=True
                 yield self._ensure_agents(env, agent_list)
 
     @gen.coroutine
-    def restart_agents(self, env):
+    def restart_agents(self, env: data.Environment) -> NoneGen:
         agents = yield data.Agent.get_list(environment=env.id)
         autostart = yield env.get(data.AUTOSTART_ON_START)
         if autostart:
@@ -624,16 +682,19 @@ ssl=True
             yield self._ensure_agents(env, agent_list, True)
 
     @gen.coroutine
-    def stop_agents(self, env):
+    def stop_agents(self, env: data.Environment) -> NoneGen:
         """
             Stop all agents for this environment and close sessions
         """
         LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
         if env.id in self._agent_procs:
-            self._agent_procs[env.id].terminate()
+            self._agent_procs[env.id].proc.terminate()
             del self._agent_procs[env.id]
 
+        wait_for_proc_bounded(self._agent_procs.values())
+
         LOGGER.debug("Expiring all sessions for %s", env.id)
+        sessions: List[protocol.Session]
         sessions = yield self.get_environment_sessions(env.id)
         for session in sessions:
             session.expire(0)

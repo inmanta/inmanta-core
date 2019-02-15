@@ -102,6 +102,13 @@ def resource_container():
         """
         fields = ("key", "value", "purged")
 
+    @resource("test::BadPost", agent="agent", id_attribute="key")
+    class BadPostR(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged")
+
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
 
@@ -312,6 +319,12 @@ def resource_container():
         def process_events(self, ctx, resource, events):
             raise Exception()
 
+    @provider("test::BadPost", name="test_bad_posts")
+    class BadPost(Provider):
+
+        def post(self, ctx, resource) -> None:
+            raise Exception()
+
     waiter = Condition()
 
     async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None,
@@ -385,8 +398,9 @@ def resource_container():
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
 
-    return ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters,
-                             waiter=waiter, wait_for_condition_with_waiters=wait_for_condition_with_waiters)
+    yield ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters,
+                            waiter=waiter, wait_for_condition_with_waiters=wait_for_condition_with_waiters)
+    Provider.reset()
 
 
 @pytest.mark.asyncio(timeout=150)
@@ -3366,3 +3380,119 @@ async def test_incremental_deploy_interrupts_full_deploy(resource_container, ser
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     await myagent.stop()
+
+
+@pytest.mark.asyncio
+async def test_bad_post_get_facts(resource_container, client, server, environment, caplog):
+    """
+        Test retrieving facts from the agent
+    """
+    caplog.set_level(logging.ERROR)
+
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = int(time.time())
+
+    resource_id_wov = "test::BadPost[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{'key': 'key',
+                  'value': 'value',
+                  'id': resource_id,
+                  'requires': [],
+                  'purged': False,
+                  'send_event': False,
+                  }]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    caplog.clear()
+
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    assert "An error occurred after deployment of test::BadPost[agent1,key=key]" in caplog.text
+    caplog.clear()
+
+    result = await client.get_param(environment, "length", resource_id_wov)
+    assert result.code == 503
+
+    env_uuid = uuid.UUID(environment)
+    params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+    while len(params) < 3:
+        params = await data.Parameter.get_list(environment=env_uuid, resource_id=resource_id_wov)
+        await asyncio.sleep(0.1)
+
+    result = await client.get_param(environment, "key1", resource_id_wov)
+    assert result.code == 200
+
+    assert "An error occurred after getting facts about test::BadPost" in caplog.text
+
+    await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_bad_post_events(resource_container, environment, server, client, caplog):
+    """
+        Send and receive events within one agent
+    """
+    caplog.set_level(logging.ERROR)
+
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    res_id_1 = 'test::BadPost[agent1,key=key1],v=%d' % version
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': res_id_1,
+                  'send_event': False,
+                  'purged': False,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'requires': [],
+                  'purged': False,
+                  }
+                 ]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    caplog.clear()
+    # do a deploy
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    events = resource_container.Provider.getevents("agent1", "key1")
+    assert len(events) == 1
+    for res_id, res in events[0].items():
+        assert res_id.agent_name == "agent1"
+        assert res_id.attribute_value == "key2"
+        assert res["status"] == const.ResourceState.deployed
+        assert res["change"] == const.Change.created
+
+    assert "An error occurred after deployment of test::BadPost[agent1,key=key1]" in caplog.text
+    caplog.clear()
+
+    # Nothing is reported as events don't have pre and post
+
+    await agent.stop()

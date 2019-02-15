@@ -520,7 +520,7 @@ class Id(object):
         return obj
 
     @classmethod
-    def parse_id(cls, resource_id):
+    def parse_id(cls, resource_id: str) -> "Id":
         """
             Parse the resource id and return the type, the hostname and the
             resource identifier.

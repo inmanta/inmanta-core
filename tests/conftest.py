@@ -46,6 +46,7 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import sys
 import pkg_resources
 from typing import Optional, Dict
+from inmanta import protocol
 
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
@@ -216,7 +217,6 @@ async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
 
     if auth:
         config.Config.set("server", "auth", "true")
-        from inmanta import protocol
 
     for x, ct in [("server", None),
                   ("server_rest_transport", None),
@@ -269,28 +269,19 @@ async def server_multi(inmanta_config, mongo_db, mongo_client, request, motor):
 
 @pytest.fixture(scope="function")
 def client(server):
-    from inmanta import protocol
-
     client = protocol.Client("client")
-
     yield client
 
 
 @pytest.fixture(scope="function")
 def client_multi(server_multi):
-    from inmanta import protocol
-
     client = protocol.Client("client")
-
     yield client
 
 
 @pytest.fixture(scope="function")
 def sync_client_multi(server_multi):
-    from inmanta import protocol
-
     client = protocol.SyncClient("client")
-
     yield client
 
 
