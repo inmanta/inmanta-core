@@ -48,7 +48,7 @@ class CreateList(ReferenceStatement):
         self.items = items
 
     def execute(self,
-                requires: typing.Dict[object, ResultVariable],
+                requires: typing.Dict[object, object],
                 resolver: Resolver,
                 queue: QueueScheduler) -> object:
         """
@@ -86,7 +86,7 @@ class CreateDict(ReferenceStatement):
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Create this list
         """
@@ -119,7 +119,7 @@ class SetAttribute(AssignStatement):
         HangUnit(queue, resolver, reqs, None, self)
 
     def resume(self,
-               requires: typing.Dict[object, ResultVariable],
+               requires: typing.Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:
@@ -206,7 +206,7 @@ class MapLookup(ReferenceStatement):
         self.key = key
         self.location = themap.get_location().merge(key.location)
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         mapv = self.themap.execute(requires, resolver, queue)
         if not isinstance(mapv, dict):
             raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
@@ -250,13 +250,13 @@ class IndexLookup(ReferenceStatement):
         return {self: temp}
 
     def resume(self,
-               requires: typing.Dict[object, ResultVariable],
+               requires: typing.Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:
         self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def __repr__(self) -> str:
@@ -288,7 +288,7 @@ vm.files[path="/etc/motd"]
         self.type = None
 
     def resume(self,
-               requires: typing.Dict[object, ResultVariable],
+               requires: typing.Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:
@@ -326,7 +326,7 @@ class StringFormat(ReferenceStatement):
         self._format_string = format_string
         self._variables = variables
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)

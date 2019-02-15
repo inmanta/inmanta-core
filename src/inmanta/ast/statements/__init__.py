@@ -97,7 +97,7 @@ class ExpressionStatement(DynamicStatement):
         """
         raise Exception("Not Implemented" + str(type(self)))
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             execute the expression, give the values provided in the requires dict.
             These values correspond to the values requested via requires_emit
@@ -106,6 +106,25 @@ class ExpressionStatement(DynamicStatement):
 
     def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         return self.requires_emit(resolver, queue)
+
+
+class Resumer(ExpressionStatement):
+
+    def resume(self,
+               requires: Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
+        pass
+
+
+class RawResumer(ExpressionStatement):
+
+    def resume(self,
+               equires: Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue_scheduler: QueueScheduler) -> None:
+        pass
 
 
 class ReferenceStatement(ExpressionStatement):
@@ -178,7 +197,7 @@ class Literal(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return {}
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
     def execute_direct(self, requires: Dict[object, object]) -> object:

@@ -80,7 +80,7 @@ class IsDefined(ReferenceStatement):
         RawUnit(queue, resolver, self.attr.requires_emit(resolver, queue), resumer)
         return {self: temp}
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         # helper returned: return result
         return requires[self]
 

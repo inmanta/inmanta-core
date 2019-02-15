@@ -107,8 +107,10 @@ class Range(Location):
 
 class Locatable(object):
 
+    _location: Location
+
     def __init__(self) -> None:
-        self._location = None  # type: Optional[Location]
+        self._location = None
 
     def set_location(self, location: Location) -> None:
         assert location is not None and location.lnr > 0
@@ -593,7 +595,7 @@ class AttributeException(WrappingRuntimeException):
 class OptionalValueException(RuntimeException):
     """Exception raised when an optional value is accessed that has no value (and is frozen)"""
 
-    def __init__(self, instance: "Instance", attribute: str) -> None:
+    def __init__(self, instance: "Instance", attribute: "Attribute") -> None:
         RuntimeException.__init__(self, instance, "Optional variable accessed that has no value (%s.%s)" %
                                   (instance, attribute))
         self.instance = instance
@@ -656,7 +658,12 @@ class NotFoundException(RuntimeException):
 
 class DoubleSetException(RuntimeException):
 
-    def __init__(self, stmt: "Optional[Statement]", value: object, location: Location, newvalue: object, newlocation: Location) -> None:
+    def __init__(self,
+                 stmt: "Optional[Statement]",
+                 value: object,
+                 location: Location,
+                 newvalue: object,
+                 newlocation: Location) -> None:
         self.value = value  # type: object
         self.location = location
         self.newvalue = newvalue  # type: object
@@ -670,7 +677,7 @@ class ModifiedAfterFreezeException(RuntimeException):
 
     def __init__(self,
                  rv: "DelayedResultVariable",
-                 instance: "Entity",
+                 instance: "Instance",
                  attribute: "Attribute",
                  value: object,
                  location: Location,

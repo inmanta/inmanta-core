@@ -20,7 +20,7 @@ from inmanta.ast import Locatable, RuntimeException, TypingException
 from inmanta.ast.type import TypedList, NullableType
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.execute.util import Unknown
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -42,7 +42,7 @@ class Attribute(Locatable):
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable: bool=False) -> None:
         Locatable.__init__(self)
-        self.__name = name
+        self.__name: str = name
         entity.add_attribute(self)
         self.__entity = entity
         self.__type = value_type
@@ -50,6 +50,7 @@ class Attribute(Locatable):
         self.__nullallble = nullable
         self.low = 0 if nullable else 1
         self.comment = None  # type: str
+        self.end: Optional[RelationAttribute] = None
 
     def get_type(self) -> "Type":
         """
@@ -128,7 +129,7 @@ class RelationAttribute(Attribute):
 
     def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
         Attribute.__init__(self, entity, value_type, name)
-        self.end = None  # type: RelationAttribute
+        self.end: Optional[RelationAttribute] = None
         self.low = 1
         self.high = 1
         self.depends = False
