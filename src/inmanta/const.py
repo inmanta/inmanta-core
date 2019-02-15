@@ -93,6 +93,7 @@ class ResourceAction(Enum):
     pull = 3
     deploy = 4
     dryrun = 5
+    getfact = 6
     other = 8
 
 

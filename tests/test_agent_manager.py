@@ -83,6 +83,7 @@ async def test_primary_selection(motor):
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
 
     async def assert_agent(name: str, state: str, sid: UUID):
         agent = await data.Agent.get(env.id, name)
@@ -163,6 +164,7 @@ async def test_api(motor):
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
@@ -267,6 +269,7 @@ async def test_db_clean(motor):
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
 
     async def assert_agent(name: str, state: str, sid: UUID):
         agent = await data.Agent.get(env.id, name)
@@ -324,6 +327,7 @@ async def test_db_clean(motor):
     # failover
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
     await am.clean_db()
 
     # one session

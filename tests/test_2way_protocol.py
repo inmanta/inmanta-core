@@ -26,10 +26,9 @@ import pytest
 from tornado.gen import sleep
 from utils import retry_limited
 from inmanta.server.protocol import Server, SessionListener, ServerSlice
-from inmanta.server import SLICE_SESSION_MANAGER, server
+from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol import method
-import importlib
 
 LOGGER = logging.getLogger(__name__)
 
@@ -83,10 +82,6 @@ class Agent(protocol.SessionEndpoint):
     @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
-
-
-importlib.reload(protocol)
-importlib.reload(server.protocol)
 
 
 async def get_environment(env: uuid.UUID, metadata: dict):
