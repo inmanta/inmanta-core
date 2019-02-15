@@ -286,9 +286,11 @@ def sync_client_multi(server_multi):
     yield client
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def capture_warnings():
     logging.captureWarnings(True)
+    yield
+    logging.captureWarnings(False)
 
 
 @pytest.fixture(scope="function")
