@@ -202,7 +202,7 @@ class AgentManager(ServerSlice, SessionListener):
     def register_session(self, session: protocol.Session, now: float) -> Generator[Any, Any, data.Agent]:
         with (yield self.session_lock.acquire()):
             tid = session.tid
-            sid = session.id
+            sid = session.get_id()
             nodename = session.nodename
 
             self.sessions[sid] = session
@@ -232,7 +232,7 @@ class AgentManager(ServerSlice, SessionListener):
             return
         with (yield self.session_lock.acquire()):
             tid = session.tid
-            sid = session.id
+            sid = session.get_id()
 
             LOGGER.debug("expiring session %s", sid)
 
@@ -277,7 +277,7 @@ class AgentManager(ServerSlice, SessionListener):
     @gen.coroutine
     def flush_agent_presence(self, session: protocol.Session, now: float) -> NoneGen:
         tid = session.tid
-        sid = session.id
+        sid = session.get_id()
 
         env = yield data.Environment.get_by_id(tid)
         if env is None:
@@ -559,7 +559,7 @@ class AgentManager(ServerSlice, SessionListener):
         environment_id = str(env.id)
         port: int = Config.get("server_rest_transport", "port", "8888")
 
-        privatestatedir = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
+        privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
         agent_deploy_splay: int
         agent_deploy_splay = yield env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)

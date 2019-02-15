@@ -2,7 +2,7 @@ from inmanta.config import Config
 import inmanta.agent.config as cfg
 
 
-def test_environment_depricated_setting(caplog):
+def test_environment_depricated_options(caplog):
     for (depricated_option, new_option) in [(cfg.agent_interval, cfg.agent_deploy_interval),
                                             (cfg.agent_splay, cfg.agent_deploy_splay_time)]:
 
