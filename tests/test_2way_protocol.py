@@ -26,10 +26,9 @@ import pytest
 from tornado.gen import sleep
 from utils import retry_limited
 from inmanta.server.protocol import Server, SessionListener, ServerSlice
-from inmanta.server import SLICE_SESSION_MANAGER, server
+from inmanta.server import SLICE_SESSION_MANAGER
 from inmanta.protocol.methods import ENV_OPTS
 from inmanta.protocol import method
-import importlib
 
 LOGGER = logging.getLogger(__name__)
 
