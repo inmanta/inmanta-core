@@ -138,6 +138,9 @@ class RelationAttribute(Attribute):
         self.source_annotations = []
         self.target_annotations = []
 
+    def __str__(self) -> str:
+        return "%s.%s" % (self.get_entity().get_full_name(), self.name)
+
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
 

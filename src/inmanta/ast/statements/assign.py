@@ -307,7 +307,7 @@ vm.files[path="/etc/motd"]
         if relation.end is None:
             raise TypingException(
                 self,
-                "short index lookup is only possible on bi-drectional relations, %s unidirectional" % relation)
+                "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation)
 
         self.type = relation.get_type()
 
