@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import uuid
+import warnings
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -215,18 +216,27 @@ class Option(object):
     :param documentation: the documentation for this option
     :param validator: a function responsible for turning the string representation of the option into the correct type.
         Its docstring is used as representation for the type of the option.
+    :param predecessor_option: The Option that was deprecated in favour of this option.
     """
 
-    def __init__(self, section, name, default, documentation, validator=is_str):
+    def __init__(self, section, name, default, documentation, validator=is_str, predecessor_option=None):
         self.section = section
         self.name = _normalize_name(name)
         self.validator = validator
         self.documentation = documentation
         self.default = default
+        self.predecessor_option = predecessor_option
         Config.register_option(self)
 
     def get(self):
         cfg = Config._get_instance()
+        if self.predecessor_option:
+            has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
+            has_new_option = cfg.has_option(self.section, self.name)
+            if has_deprecated_option and not has_new_option:
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
+                              category=DeprecationWarning)
+                return self.predecessor_option.get()
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
 

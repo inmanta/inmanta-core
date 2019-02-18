@@ -438,6 +438,8 @@ def app():
         log_level = _convert_to_log_level(options.verbose)
         stream_handler.setLevel(log_level)
 
+    logging.captureWarnings(True)
+
     # Load the configuration
     Config.load_config(options.config_file)
 

@@ -8,7 +8,7 @@ Changes in this release:
 - Updated to Tornado 5, moving from tornado ioloop to the standard python async framework (#765)
 - Extend mypy type annotations
 - Use files for all logs and split out logs, stdout and stderr in autostarted agents (#824, #234)
-- Introduce incremental deploy (#791, #794)
+- Introduce incremental deploy (#791, #794, #793)
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
 - Remove all io_loop references and only use current ioloop (#847)
@@ -23,6 +23,11 @@ Changes in this release:
 - Add support to run the compiler on windows
 - Added exception explainer to compiler for 'modified after freeze' (#876)
 - Added logging of resource actions on the server and purging of resource actions in the database (#533)
+
+DEPRECATIONS:
+- The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 
+deprecated in favour of agent-deploy-interval, agent-deploy-splay-time, autostart_agent_deploy_interval 
+and autostart_agent_deploy_splay_time respectively. The deprecated options will be removed in release 2019.2
 
 v 2018.3 (2018-12-07)
 Changes in this release:
