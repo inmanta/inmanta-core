@@ -40,6 +40,8 @@ class MultiVersionSetup(object):
       A - available/skipped/unavailable
       E - error
       D - deployed
+      d - deploying
+      p - processing events
       S - skipped for undefined
       U - undefined
     """
@@ -65,6 +67,9 @@ class MultiVersionSetup(object):
 
         if code == "d":
             return ResourceState.deploying
+
+        if code == "p":
+            return ResourceState.processing_events
 
         if code == "S":
             return ResourceState.skipped_for_undefined
@@ -303,6 +308,7 @@ async def test_deploy_scenarios(server, environment, caplog):
         setup.add_resource("R10", "A1 A1 D1", False)
         setup.add_resource("R13", "A1 A1 A1 A1 A1", True)
         setup.add_resource("R14", "A1 A1 d1 D1", True)
+        setup.add_resource("R15", "A1 A1 p1 D1", True)
 
         await setup.setup(serverdirect, env)
 

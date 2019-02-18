@@ -88,19 +88,34 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache,
+    def send_in_progress(self, action_id, start, status=ResourceState.deploying):
+        yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
+                                                                 resource_ids=[str(self.resource.id)],
+                                                                 action_id=action_id,
+                                                                 action=const.ResourceAction.deploy,
+                                                                 started=start,
+                                                                 status=status)
+
+    @gen.coroutine
+    def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, start: float,
                  event_only: bool=False) -> Tuple[bool, bool]:
         """
             :param ctx The context to use during execution of this deploy
             :param events Possible events that are available for this resource
             :param cache The cache instance to use
             :param event_only: don't execute, only do event propagation
+            :param state: start time
             :return (success, send_event) Return whether the execution was successful and whether a change event should be sent
                                           to provides of this resource.
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s",
                   deploy_id=self.gid, resource_id=self.resource_id)
         provider = None
+
+        if not event_only:
+            yield self.send_in_progress(ctx.action_id, start)
+        else:
+            yield self.send_in_progress(ctx.action_id, start, status=ResourceState.processing_events)
 
         # setup provider
         try:
@@ -134,6 +149,8 @@ class ResourceAction(object):
 
         # event processing
         if len(events) > 0 and provider.can_process_events():
+            if not event_only:
+                yield self.send_in_progress(ctx.action_id, start, status=ResourceState.processing_events)
             try:
                 ctx.info("Sending events to %(resource_id)s because of modified dependencies",
                          resource_id=str(self.resource.id))
@@ -147,15 +164,6 @@ class ResourceAction(object):
         cache.close_version(self.resource_id.version)
 
         return success, send_event
-
-    @gen.coroutine
-    def send_in_progress(self, action_id, start):
-        yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
-                                                                 resource_ids=[str(self.resource.id)],
-                                                                 action_id=action_id,
-                                                                 action=const.ResourceAction.deploy,
-                                                                 started=start,
-                                                                 status=ResourceState.deploying)
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
@@ -212,11 +220,9 @@ class ResourceAction(object):
                 ctx.set_status(const.ResourceState.skipped)
                 success = False
                 send_event = False
-                yield self.send_in_progress(ctx.action_id, start)
-                yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True)
+                yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
             else:
-                yield self.send_in_progress(ctx.action_id, start)
-                success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache)
+                success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
             LOGGER.info("end run %s", self.resource)
 
