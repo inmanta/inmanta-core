@@ -67,7 +67,7 @@ class SubConstructor(GeneratorStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires: Dict[object, ResultVariable], instance: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], instance: Resolver, queue: QueueScheduler) -> object:
         """
             Evaluate this statement
         """
@@ -275,7 +275,7 @@ class Constructor(GeneratorStatement):
 
         return direct_requires
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler):
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
         """
             Evaluate this statement.
         """

@@ -23,6 +23,7 @@ import string
 import shutil
 from tempfile import mktemp
 import socket
+import logging
 
 
 import pytest
@@ -283,6 +284,13 @@ def client_multi(server_multi):
 def sync_client_multi(server_multi):
     client = protocol.SyncClient("client")
     yield client
+
+
+@pytest.fixture(scope="function", autouse=True)
+def capture_warnings():
+    logging.captureWarnings(True)
+    yield
+    logging.captureWarnings(False)
 
 
 @pytest.fixture(scope="function")

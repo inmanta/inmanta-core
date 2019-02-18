@@ -560,10 +560,17 @@ class AgentManager(ServerSlice, SessionListener):
         port: int = Config.get("server_rest_transport", "port", "8888")
 
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
-        agent_splay: int
-        agent_splay = yield env.get(data.AUTOSTART_SPLAY)
-        agent_interval: int
-        agent_interval = yield env.get(data.AUTOSTART_AGENT_INTERVAL)
+
+        agent_deploy_splay: int
+        agent_deploy_splay = yield env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
+        agent_deploy_interval: int
+        agent_deploy_interval = yield env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
+
+        agent_repair_splay: int
+        agent_repair_splay = yield env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
+        agent_repair_interval: int
+        agent_repair_interval = yield env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+
         # generate config file
         config = """[config]
 heartbeat-interval = 60
@@ -572,16 +579,20 @@ state-dir=%(statedir)s
 agent-names = %(agents)s
 environment=%(env_id)s
 agent-map=%(agent_map)s
-agent_splay=%(agent_splay)d
-agent_interval=%(agent_interval)d
+
+agent-deploy-splay-time=%(agent_deploy_splay)d
+agent-deploy-interval=%(agent_deploy_interval)d
+agent-repair-splay-time=%(agent_repair_splay)d
+agent-repair-interval=%(agent_repair_interval)d
 
 [agent_rest_transport]
 port=%(port)s
 host=%(serveradress)s
 """ % {"agents": ",".join(agent_names), "env_id": environment_id, "port": port,
             "agent_map": ",".join(["%s=%s" % (k, v) for (k, v) in agent_map.items()]),
-            "statedir": privatestatedir, "agent_splay": agent_splay, "agent_interval": agent_interval,
-            "serveradress": server_config.server_address.get()}
+            "statedir": privatestatedir, "agent_deploy_splay": agent_deploy_splay,
+            "agent_deploy_interval": agent_deploy_interval, "agent_repair_splay": agent_repair_splay,
+            "agent_repair_interval": agent_repair_interval, "serveradress": server_config.server_address.get()}
 
         if server_config.server_enable_auth.get():
             token = encode_token(["agent"], environment_id)
