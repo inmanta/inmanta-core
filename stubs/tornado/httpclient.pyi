@@ -4,6 +4,7 @@ import ssl
 import datetime
 
 from tornado import httputil
+from tornado.concurrent import Future
 
 
 class HTTPRequest(object):
