@@ -440,17 +440,17 @@ async def test_environment_settings(client, server, environment):
     assert "settings" in result.result
     assert len(result.result["settings"]) == 1
 
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_SPLAY, value=20)
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value=20)
     assert result.code == 200
 
-    result = await client.set_setting(tid=environment, id=data.AUTOSTART_SPLAY, value="30")
+    result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, value="30")
     assert result.code == 200
 
-    result = await client.get_setting(tid=environment, id=data.AUTOSTART_SPLAY)
+    result = await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
     assert result.code == 200
     assert result.result["value"] == 30
 
-    result = await client.delete_setting(tid=environment, id=data.AUTOSTART_SPLAY)
+    result = await client.delete_setting(tid=environment, id=data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
     assert result.code == 200
 
     result = await client.set_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP, value={"agent1": "", "agent2": "localhost",

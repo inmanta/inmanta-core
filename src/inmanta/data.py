@@ -22,6 +22,7 @@ import datetime
 import enum
 import logging
 import uuid
+import warnings
 
 from motor import motor_tornado
 import pymongo
@@ -501,6 +502,10 @@ def convert_agent_map(value):
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
 AUTOSTART_SPLAY = "autostart_splay"
+AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
+AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
+AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
+AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
@@ -565,21 +570,36 @@ class Environment(BaseDocument):
         PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
                                      doc="Push a new version when it has been autodeployed.", validator=convert_boolean),
         AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
-                                 doc="Splay time for autostarted agents.", validator=convert_int),
+                                 doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
+        AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,
+                                                 doc="The deployment interval of the autostarted agents.",
+                                                 validator=convert_int),
+        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, typ="int", default=600,
+                                                   doc="The splay time on the deployment interval of the autostarted agents.",
+                                                   validator=convert_int),
+        AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(name=AUTOSTART_AGENT_REPAIR_INTERVAL, typ="int", default=86400,
+                                                 doc="The repair interval of the autostarted agents.",
+                                                 validator=convert_int),
+        AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME, typ="int", default=600,
+                                                   doc="The splay time on the repair interval of the autostarted agents.",
+                                                   validator=convert_int),
         AUTOSTART_ON_START: Setting(name=AUTOSTART_ON_START, default=True, typ="bool", validator=convert_boolean,
                                     doc="Automatically start agents when the server starts instead of only just in time."),
         AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={"internal": "local:"}, typ="dict",
                                      validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
                                      "is either an empty string or an agent map string.", agent_restart=True),
-        AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int",
-                                          validator=convert_int,
-                                          doc="Agent interval for autostarted agents in seconds", agent_restart=True),
+        AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int", validator=convert_int,
+                                          doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
+                                          agent_restart=True),
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
         RESOURCE_ACTION_LOGS_RETENTION: Setting(name=RESOURCE_ACTION_LOGS_RETENTION, default=7, typ="int",
                                                 validator=convert_int, doc="The number of days to retain resource-action logs"),
     }
+
+    _renamed_settings_map = {AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
+                             AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY}  # name new_option -> name deprecated_option
 
     __indexes__ = [
         dict(keys=[("name", pymongo.ASCENDING), ("project", pymongo.ASCENDING)], unique=True)
@@ -594,6 +614,13 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
+
+        if key in self._renamed_settings_map:
+            name_deprecated_setting = self._renamed_settings_map[key]
+            if name_deprecated_setting in self.settings and key not in self.settings:
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
+                              category=DeprecationWarning)
+                return self.settings[name_deprecated_setting]
 
         if key in self.settings:
             return self.settings[key]

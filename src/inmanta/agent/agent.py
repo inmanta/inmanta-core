@@ -405,12 +405,18 @@ class AgentInstance(object):
         # init
         self._cache = AgentCache()
         self._nq = ResourceScheduler(self, self.process.environment, name, self._cache, ratelimiter=self.ratelimiter)
-        self._enabled = None
+        self._time_triggered_actions = set()
+        self._enabled = False
 
         # do regular deploys
-        self._deploy_interval = cfg.agent_interval.get()
-        self._splay_interval = cfg.agent_splay.get()
-        self._splay_value = random.randint(0, self._splay_interval)
+        self._deploy_interval = cfg.agent_deploy_interval.get()
+        deploy_splay_time = cfg.agent_deploy_splay_time.get()
+        self._deploy_splay_value = random.randint(0, deploy_splay_time)
+
+        # do regular repair runs
+        self._repair_interval = cfg.agent_repair_interval.get()
+        repair_splay_time = cfg.agent_repair_splay_time.get()
+        self._repair_splay_value = random.randint(0, repair_splay_time)
 
         self._getting_resources = False
         self._get_resource_timeout = 0
@@ -435,36 +441,54 @@ class AgentInstance(object):
         return self._uri
 
     def is_enabled(self):
-        return self._enabled is not None
+        return self._enabled
 
     def add_future(self, future):
         self.process.add_future(future)
 
     def unpause(self):
-        if self._enabled is not None:
+        if self.is_enabled():
             return 200, "already running"
 
         LOGGER.info("Agent assuming primary role for %s" % self.name)
 
-        @gen.coroutine
-        def action():
-            yield self.get_latest_version_for_agent("Auto deploy")
-
-        self._enabled = action
-        if self._deploy_interval > 0:
-            self.process._sched.add_action(action, self._deploy_interval, self._splay_value)
+        self._enable_time_triggers()
+        self._enabled = True
         return 200, "unpaused"
 
     def pause(self):
-        if self._enabled is None:
+        if not self.is_enabled():
             return 200, "already paused"
 
         LOGGER.info("Agent lost primary role for %s" % self.name)
 
-        token = self._enabled
-        self.process._sched.remove(token)
-        self._enabled = None
+        self._disable_time_triggers()
+        self._enabled = False
         return 200, "paused"
+
+    def _enable_time_triggers(self):
+
+        @gen.coroutine
+        def deploy_action():
+            yield self.get_latest_version_for_agent(reason="Auto deploy", incremental_deploy=True, is_repair_run=False)
+
+        @gen.coroutine
+        def repair_action():
+            yield self.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+
+        if self._deploy_interval > 0:
+            self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
+        if self._repair_interval > 0:
+            self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
+
+    def _enable_time_trigger(self, action, interval, splay):
+        self.process._sched.add_action(action, interval, splay)
+        self._time_triggered_actions.add(action)
+
+    def _disable_time_triggers(self):
+        for action in self._time_triggered_actions:
+            self.process._sched.remove(action)
+        self._time_triggered_actions.clear()
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
         self._nq.notify_ready(resourceid, send_events, state, change, changes)
