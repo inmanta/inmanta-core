@@ -26,6 +26,7 @@ from collections import defaultdict
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
+from inmanta.const import AgentTriggerMethod
 import click
 import texttable
 from time import sleep
@@ -439,12 +440,18 @@ def version_list(client, environment):
 
 @version.command(name="release")
 @click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--push", "-p", help="Push the version to the deployment agents", is_flag=True)
+@click.option("--push", "-p",
+              help="Push an incremental or a full deploy of the configuration model to the deployment agents",
+              type=click.Choice(['incremental', 'full']))
 @click.argument("version")
 @click.pass_obj
 def version_release(client, environment, push, version):
     env_id = client.to_environment_id(environment)
-    x = client.do_request("release_version", "model", dict(tid=env_id, id=version, push=push))
+    if push:
+        trigger_method = AgentTriggerMethod['push_' + push + '_deploy']
+        x = client.do_request("release_version", "model", dict(tid=env_id, id=version, agent_trigger_method=trigger_method))
+    else:
+        x = client.do_request("release_version", "model", dict(tid=env_id, id=version))
 
     print_table(('Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'),
                 ((x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']),))

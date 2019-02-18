@@ -100,6 +100,12 @@ class ResourceAction(Enum):
 STATE_UPDATE = [ResourceAction.deploy]
 
 
+class AgentTriggerMethod(Enum):
+    no_push = 1
+    push_incremental_deploy = 2
+    push_full_deploy = 3
+
+
 class LogLevel(Enum):
     CRITICAL = 50
     ERROR = 40

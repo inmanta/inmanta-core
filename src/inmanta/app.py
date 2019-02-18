@@ -228,8 +228,8 @@ def export_parser_config(parser):
     parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been "
                                                 "submitted in the supplied file")
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
-    parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version",
-                        action="store_true", default=False)
+    parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version with the given deployment method",
+                        action="store", choices=['incremental', 'full'])
     parser.add_argument("-m", dest="model", help="Also export the complete model",
                         action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
@@ -319,7 +319,8 @@ def export(options):
         conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
-        conn.release_version(tid, version, True)
+        agent_trigger_method = const.AgentTriggerMethod['push_' + options.deploy + '_deploy']
+        conn.release_version(tid, version, agent_trigger_method)
 
 
 log_levels = {

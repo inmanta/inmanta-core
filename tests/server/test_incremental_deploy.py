@@ -126,7 +126,7 @@ class MultiVersionSetup(object):
                 )
                 assert res == 200
 
-                result, _ = await serverdirect.release_version(env, version, push=False)
+                result, _ = await serverdirect.release_version(env, version, const.AgentTriggerMethod.no_push)
                 assert result == 200
         for rid, state in self.states.items():
             # Start the deploy
@@ -218,7 +218,7 @@ async def test_deploy(server, environment, caplog):
         )
         assert res == 200
 
-        result, _ = await serverdirect.release_version(env, version, push=False)
+        result, _ = await serverdirect.release_version(env, version, const.AgentTriggerMethod.no_push)
         assert result == 200
 
         resource_ids = [x["id"] for x in resources]
