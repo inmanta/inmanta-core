@@ -344,7 +344,8 @@ async def test_resource_update(client, server, environment):
     # Start the deploy
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", now)
+    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", now,
+                                                  status=const.ResourceState.deployed)
     assert(result.code == 200)
 
     # Get the status from a resource
@@ -359,6 +360,7 @@ async def test_resource_update(client, server, environment):
 
     # Send some logs
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
+                                                  status=const.ResourceState.deployed,
                                                   messages=[data.LogLine.log(const.LogLevel.INFO,
                                                                              "Test log %(a)s %(b)s", a="a", b="b")])
     assert(result.code == 200)

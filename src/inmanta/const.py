@@ -25,11 +25,12 @@ class ResourceState(Enum):
     dry = 3
     deployed = 4
     failed = 5
-    queued = 6  # Unused
+    deploying = 6
     available = 7
     cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
     undefined = 9  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = 10  # This resource depends on an undefined resource
+    processing_events = 11
 
 
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
@@ -48,6 +49,8 @@ States set by agent
 3. deployed
 4. unavailable
 5. cancelled
+6. deploying
+7. processing_events
 
 Each deploy sets the agent state again, all agent states can transition to all agent states
 
@@ -55,15 +58,20 @@ States that are in the action log, but not actual states
 1. dry
 
 
-                                           +-----> skipped     -<--------+
-                                           |                             |
-                                           +-----> failed      -<--------+
-                                           |                             |
-    +---------------->  available  +-------------> unavailable -<--------+
-    |                                      |                             |
-    |                                      +-----> deployed    -<--------+
-    |                                      |                             |
-+---+---------+                            +-----> cancelled   -<--------+
+
+                                           +-----> deploying        -<--------+
+                                           |                                  |
+                                           +-----> processing_events-<--------+
+                                           |                                  |
+                                           +-----> skipped          -<--------+
+                                           |                                  |
+                                           +-----> failed           -<--------+
+                                           |                                  |
+    +---------------->  available  +-------------> unavailable      -<--------+
+    |                                      |                                  |
+    |                                      +-----> deployed         -<--------+
+    |                                      |                                  |
++---+---------+                            +-----> cancelled        -<--------+
 | compiler    +------> undefined
 +---+---------+
     |

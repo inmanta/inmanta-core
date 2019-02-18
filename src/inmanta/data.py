@@ -1645,11 +1645,16 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res.resource_id]
 
                 # available/skipped/unavailable -> next version
-                if ores.status in [ResourceState.available, ResourceState.skipped, ResourceState.unavailable]:
+                if ores.status in [ResourceState.available,
+                                   ResourceState.skipped,
+                                   ResourceState.unavailable]:
                     next.append(res)
 
                 # error -> increment
-                elif ores.status in [ResourceState.failed, ResourceState.cancelled]:
+                elif ores.status in [ResourceState.failed,
+                                     ResourceState.cancelled,
+                                     ResourceState.deploying,
+                                     ResourceState.processing_events]:
                     increment.append(res)
 
                 elif ores.status == ResourceState.deployed:

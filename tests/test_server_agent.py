@@ -81,6 +81,13 @@ def resource_container():
         """
         fields = ("key", "value", "purged")
 
+    @resource("test::WaitEvent", agent="agent", id_attribute="key")
+    class WaitER(Resource):
+        """
+            A file on a filesystem
+        """
+        fields = ("key", "value", "purged")
+
     @resource("test::Noprov", agent="agent", id_attribute="key")
     class NoProv(Resource):
         """
@@ -397,6 +404,31 @@ def resource_container():
             if "value" in changes:
                 Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
+
+    @provider("test::WaitEvent", name="test_wait_Event")
+    class WaitE(Provider):
+
+        def __init__(self, agent, io=None):
+            super().__init__(agent, io)
+            self.traceid = uuid.uuid4()
+
+        def check_resource(self, ctx, resource):
+            current = resource.clone()
+            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+
+            if not current.purged:
+                current.value = Provider.get(resource.id.get_agent_name(), resource.key)
+            else:
+                current.value = None
+
+            return current
+
+        def process_events(self, ctx, resource, events):
+            logger.info("Hanging Event waiter %s", self.traceid)
+            waiter.acquire()
+            waiter.wait()
+            waiter.release()
+            logger.info("Releasing Event waiter %s", self.traceid)
 
     yield ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters,
                             waiter=waiter, wait_for_condition_with_waiters=wait_for_condition_with_waiters)
@@ -3494,5 +3526,101 @@ async def test_bad_post_events(resource_container, environment, server, client, 
     caplog.clear()
 
     # Nothing is reported as events don't have pre and post
+
+    await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_inprogress(resource_container, client, server, environment):
+    """
+        Test retrieving facts from the agent
+    """
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = int(time.time())
+
+    resource_id_wov = "test::Wait[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{'key': 'key',
+                  'value': 'value',
+                  'id': resource_id,
+                  'requires': [],
+                  'purged': False,
+                  'send_event': False,
+                  }]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+
+    async def in_progress():
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        res = result.result["resources"][0]
+        status = res["status"]
+        return status == "deploying"
+
+    await retry_limited(in_progress, 30)
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+    await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_eventprocessing(resource_container, client, server, environment):
+    """
+        Test retrieving facts from the agent
+    """
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
+
+    resource_container.Provider.set("agent1", "key", "value")
+
+    version = int(time.time())
+
+    resource_id_wov = "test::WaitEvent[agent1,key=key]"
+    resource_id = "%s,v=%d" % (resource_id_wov, version)
+
+    resources = [{'key': 'key',
+                  'value': 'value',
+                  'id': resource_id,
+                  'purged': False,
+                  'send_event': False,
+                  'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Resource[agent1,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'requires': [],
+                  'purged': False,
+                  }]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    result = await client.release_version(environment, version, True)
+    assert result.code == 200
+
+    async def in_progress():
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        status = sorted([res["status"] for res in result.result["resources"]])
+        return status == ["deployed", "processing_events"]
+
+    await retry_limited(in_progress, 30)
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     await agent.stop()

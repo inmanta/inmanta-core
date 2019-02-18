@@ -1240,7 +1240,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         yield resource_action.save()
 
-        if done and action in const.STATE_UPDATE:
+        if action in const.STATE_UPDATE and not done:
+            if status is None:
+                return 500, {"message": "Cannot perform state update without a status."}
+            for res in resources:
+                yield res.update_fields(status=status)
+        elif action in const.STATE_UPDATE and done:
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)
