@@ -3595,7 +3595,6 @@ async def test_eventprocessing(resource_container, client, server, environment):
     resources = [{'key': 'key',
                   'value': 'value',
                   'id': resource_id,
-                  'requires': [],
                   'purged': False,
                   'send_event': False,
                   'requires': ['test::Resource[agent1,key=key2],v=%d' % version],
@@ -3617,7 +3616,7 @@ async def test_eventprocessing(resource_container, client, server, environment):
     async def in_progress():
         result = await client.get_version(environment, version)
         assert result.code == 200
-        status = sorted([res["status"] for res in result.result["resources"]]) 
+        status = sorted([res["status"] for res in result.result["resources"]])
         return status == ["deployed", "processing_events"]
 
     await retry_limited(in_progress, 30)
