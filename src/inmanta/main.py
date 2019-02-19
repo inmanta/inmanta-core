@@ -713,9 +713,9 @@ def record_list(client: Client, environment: str, form_type: str, show_all: bool
         result = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type))
         data = []
         for p in result:
-            data.append((p["id"], p['changed'])),
+            data.append([p["id"], p['changed']])
 
-        print_table(('Record ID', 'Changed'), data)
+        print_table(['Record ID', 'Changed'], data)
     else:
         result = client.get_list("list_records", "records", arguments=dict(tid=tid, form_type=form_type, include_record=True))
         fields = []
@@ -724,7 +724,7 @@ def record_list(client: Client, environment: str, form_type: str, show_all: bool
             fields = p["fields"].keys()
             values = [p["id"], p['changed']]
             values.extend(p["fields"].values())
-            data.append(values),
+            data.append(values)
 
         allfields = ['Record ID', 'Changed']
         allfields.extend(fields)
@@ -756,8 +756,9 @@ def record_create(client: Client, environment: str, form_type: str, field: List[
     result = client.get_list("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=fields))
 
     values = []
-    for k in sorted(result["fields"].keys()):
-        values.append([k, result["fields"][k]])
+    fields = cast(List[Dict[str, str]], result["fields"])
+    for k in sorted(fields.keys()):
+        values.append([k, fields[k]])
 
     print_table(["Field", "Value"], values)
 
@@ -778,7 +779,10 @@ def record_update(client: Client, environment: str, record: str, field: List[str
 
         fields[parts[0].strip()] = parts[1].strip()
 
-    result = client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
+    result = cast(
+        Dict[str, Dict[str, str]],
+        client.do_request("update_record", "record", arguments=dict(tid=tid, id=record, form=fields))
+    )
 
     values = []
     for k in sorted(result["fields"].keys()):
