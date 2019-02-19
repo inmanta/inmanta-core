@@ -3553,7 +3553,11 @@ async def test_push_incremental_deploy(resource_container, environment, server, 
     result = await client.release_version(environment, version2, const.AgentTriggerMethod.push_incremental_deploy)
     assert result.code == 200
 
+    result = await client.get_version(environment, version2)
+    now = time.time()
     while (result.result["model"]["total"] - result.result["model"]["done"]) > 1:
+        if now + 30 < time.time():
+            raise Exception("Timeout")
         result = await client.get_version(environment, version2)
         await asyncio.sleep(0.1)
 
