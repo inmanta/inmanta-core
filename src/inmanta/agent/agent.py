@@ -180,7 +180,10 @@ class ResourceAction(object):
             ctx = handler.HandlerContext(self.resource)
 
             LOGGER.info("start run %s %s", self.gid, self.resource.id)
-            ctx.debug("start run for resource with id %(deploy_id)s", deploy_id=self.gid)
+            ctx.debug("start run for resource %(resource)s with id %(deploy_id)s",
+                      resource=str(self.resource.id),
+                      deploy_id=self.gid)
+
             self.running = True
             if self.is_done():
                 # Action is cancelled
@@ -225,6 +228,9 @@ class ResourceAction(object):
                 success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
             LOGGER.info("end run %s", self.resource)
+            ctx.debug("end run for resource %(resource)s with id %(deploy_id)s",
+                      resource=str(self.resource.id),
+                      deploy_id=self.gid)
 
             end = datetime.datetime.now()
             changes = {str(self.resource.id): ctx.changes}
