@@ -21,10 +21,14 @@ import inspect
 import logging
 import re
 
-from inmanta.execute import util
+from inmanta.execute import util, runtime
 from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
 from inmanta.module import Project
 
+from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from inmanta import export
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,13 +50,13 @@ class resource(object):  # noqa: N801
                       but it can navigate relations (this value cannot be mapped). For example, the agent argument could be
                       ``host.name``
     """
-    _resources = {}
+    _resources: Dict[str, Tuple[Type["Resource"], Dict[str, str]]] = {}
 
     def __init__(self, name: str, id_attribute: str, agent: str):
         self._cls_name = name
         self._options = {"agent": agent, "name": id_attribute}
 
-    def __call__(self, cls):
+    def __call__(self, cls: Type["Resource"]) -> None:
         """
         The wrapping
         """
@@ -64,19 +68,19 @@ class resource(object):  # noqa: N801
         return cls
 
     @classmethod
-    def validate(cls):
+    def validate(cls) -> None:
         for resource, _ in cls._resources.values():
             resource.validate()
 
     @classmethod
-    def get_entity_resources(cls):
+    def get_entity_resources(cls) -> Iterator[str]:
         """
         Returns a list of entity types for which a resource has been registered
         """
         return cls._resources.keys()
 
     @classmethod
-    def get_class(cls, name):
+    def get_class(cls, name: str) -> Tuple[Optional[Type["Resource"]], Optional[Dict[str, str]]]:
         """
         Get the class definition for the given entity.
         """
@@ -86,7 +90,7 @@ class resource(object):  # noqa: N801
         return (None, None)
 
     @classmethod
-    def sources(cls) -> dict:
+    def sources(cls) -> Dict:
         """
         Get all source files that define resources
         """
@@ -97,7 +101,6 @@ class resource(object):  # noqa: N801
             resource_to_sources[name] = sources
             file_name = inspect.getsourcefile(resource)
 
-            source_code = ""
             with open(file_name, "r") as fd:
                 source_code = fd.read()
 
@@ -114,7 +117,10 @@ class resource(object):  # noqa: N801
         return resource_to_sources
 
     @classmethod
-    def reset(cls):
+    def reset(cls) -> None:
+        """
+            Clear the list of registered resources
+        """
         cls._resources = {}
 
 
@@ -130,7 +136,7 @@ class IgnoreResourceException(Exception):
     """
 
 
-def to_id(entity):
+def to_id(entity: runtime.Instance) -> Optional[str]:
     """
         Convert an entity from the model to its resource id
     """
@@ -151,8 +157,8 @@ def to_id(entity):
 class ResourceMeta(type):
 
     @classmethod
-    def _get_parent_fields(cls, bases):
-        fields = []
+    def _get_parent_fields(cls, bases: Type["Resource"]) -> List[str]:
+        fields: List[str] = []
         for base in bases:
             if "fields" in base.__dict__:
                 if not isinstance(base.__dict__["fields"], (tuple, list)):
@@ -201,14 +207,14 @@ class Resource(metaclass=ResourceMeta):
     fields = ("send_event",)
 
     @staticmethod
-    def get_send_event(_exporter, obj):
+    def get_send_event(_exporter: "export.Exporter", obj: "Resource") -> bool:
         try:
             return obj.send_event
         except Exception:
             return False
 
     @classmethod
-    def convert_requires(cls, resources: dict, ignored_resources: set):
+    def convert_requires(cls, resources: Dict[runtime.Instance, "Resource"], ignored_resources: Set[runtime.Instance]) -> None:
         """
             Convert all requires
 
@@ -217,7 +223,7 @@ class Resource(metaclass=ResourceMeta):
         """
         for res in resources.values():
             final_requires = set()
-            initial_requires = [x for x in res.requires]
+            initial_requires: List["Resource"] = [x for x in res.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -237,7 +243,7 @@ class Resource(metaclass=ResourceMeta):
             res.requires = final_requires
 
     @classmethod
-    def object_to_id(cls, model_object, entity_name, attribute_name, agent_attribute):
+    def object_to_id(cls, model_object: runtime.Instance, entity_name: str, attribute_name: str, agent_attribute: str) -> "Id":
         """
         Convert the given object to a textual id
 
@@ -272,7 +278,7 @@ class Resource(metaclass=ResourceMeta):
         return Id(entity_name, agent_value, attribute_name, attribute_value)
 
     @classmethod
-    def map_field(cls, exporter, entity_name, field_name, model_object):
+    def map_field(cls, exporter: "export.Exporter", entity_name: str, field_name: str, model_object: runtime.Instance) -> str:
         try:
             try:
                 if hasattr(cls, "get_" + field_name):
@@ -295,7 +301,7 @@ class Resource(metaclass=ResourceMeta):
             raise AttributeError("Attribute %s does not exist on entity of type %s" % (field_name, entity_name))
 
     @classmethod
-    def create_from_model(cls, exporter, entity_name, model_object):
+    def create_from_model(cls, exporter: "export.Exporter", entity_name: str, model_object: runtime.Instance) -> "Resource":
         """
         Build a resource from a given configuration model entity
         """
@@ -319,7 +325,7 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def deserialize(cls, obj_map):
+    def deserialize(cls, obj_map: Dict[str, Any]) -> "Resource":
         """
         Deserialize the resource from the given dictionary
         """
@@ -343,7 +349,7 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def validate(cls):
+    def validate(cls) -> None:
         for field in cls.fields:
             if field.startswith("_"):
                 raise ResourceException("Resource field names can not start with _, reported in %s" % cls.__name__)
@@ -354,8 +360,8 @@ class Resource(metaclass=ResourceMeta):
     def __init__(self, _id):
         self.id = _id
         self.version = 0
-        self.requires = set()
-        self.unknowns = set()
+        self.requires: Set["Resource"] = set()
+        self.unknowns: Set[str] = set()
         self.model = None
 
         if not hasattr(self.__class__, "fields"):
@@ -365,23 +371,23 @@ class Resource(metaclass=ResourceMeta):
             for field in self.__class__.fields:
                 setattr(self, field, None)
 
-    def set_version(self, version):
+    def set_version(self, version: int) -> None:
         """
             Set the version of this resource
         """
         self.version = version
         self.id.version = version
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         if isinstance(value, util.Unknown):
             self.unknowns.add(name)
 
         self.__dict__[name] = value
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.id)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
     def clone(self, **kwargs) -> "Resource":
@@ -396,7 +402,7 @@ class Resource(metaclass=ResourceMeta):
 
         return res
 
-    def serialize(self):
+    def serialize(self) -> Dict[str, Any]:
         """
             Serialize this resource to its dictionary representation
         """
@@ -411,7 +417,7 @@ class Resource(metaclass=ResourceMeta):
 
         return dictionary
 
-    def is_type(self, type_name: str):
+    def is_type(self, type_name: str) -> bool:
         return str(self.model._get_instance().get_type()) == type_name
 
 
@@ -429,7 +435,7 @@ class ManagedResource(Resource):
     fields = ("managed",)
 
     @staticmethod
-    def get_managed(exp, obj):
+    def get_managed(exp, obj: "ManagedResource") -> bool:
         if not obj.managed:
             raise IgnoreResourceException()
         return obj.managed
@@ -440,14 +446,14 @@ class Id(object):
         A unique id that idenfies a resource that is managed by an agent
     """
 
-    def __init__(self, entity_type, agent_name, attribute, attribute_value, version=0):
+    def __init__(self, entity_type: str, agent_name: str, attribute: str, attribute_value: str, version: int = 0) -> None:
         self._entity_type = entity_type
         self._agent_name = agent_name
         self._attribute = attribute
         self._attribute_value = attribute_value
         self._version = version
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {"entity_type": self._entity_type,
                 "agent_name": self.agent_name,
                 "attribute": self.attribute,
@@ -455,28 +461,28 @@ class Id(object):
                 "version": self.version
                 }
 
-    def get_entity_type(self):
+    def get_entity_type(self) -> str:
         return self._entity_type
 
-    def get_agent_name(self):
+    def get_agent_name(self) -> str:
         return self._agent_name
 
-    def get_attribute(self):
+    def get_attribute(self) -> str:
         return self._attribute
 
-    def get_attribute_value(self):
+    def get_attribute_value(self) -> str:
         return self._attribute_value
 
-    def get_version(self):
+    def get_version(self) -> int:
         return self._version
 
-    def set_version(self, version):
+    def set_version(self, version: int) -> None:
         if self._version > 0:
             raise AttributeError("can't set attribute version")
 
         self._version = version
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self._version > 0:
             return "%(type)s[%(agent)s,%(attribute)s=%(value)s],v=%(version)s" % {
                 "type": self._entity_type,
@@ -494,7 +500,7 @@ class Id(object):
     def __eq__(self, other):
         return str(self) == str(other) and type(self) == type(other)
 
-    def resource_str(self):
+    def resource_str(self) -> str:
         return "%(type)s[%(agent)s,%(attribute)s=%(value)s]" % {
             "type": self._entity_type,
             "agent": self._agent_name,
@@ -502,7 +508,7 @@ class Id(object):
             "value": self._attribute_value,
         }
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
     def get_instance(self):

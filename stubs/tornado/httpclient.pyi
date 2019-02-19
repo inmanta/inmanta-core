@@ -50,6 +50,7 @@ class HTTPRequest(object):
 class HTTPResponse(object):
     code: int
     body: str
+    request_time: float
 
 
 class AsyncHTTPClient:
