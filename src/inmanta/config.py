@@ -30,7 +30,6 @@ import warnings
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
-from inmanta.protocol.endpoints import NoneGen
 from tornado import httpclient
 
 from inmanta.protocol import methods
