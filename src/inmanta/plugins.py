@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import ExpressionStatement, DynamicStatement
     from inmanta.compiler import Compiler
 
+
 class Context(object):
     """
         An instance of this class is used to pass context to the plugin

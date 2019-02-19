@@ -30,7 +30,7 @@ import click
 import texttable
 from time import sleep
 
-from typing import Optional, cast, Dict, Any, Union, List
+from typing import Optional, cast, Dict, Any, List
 
 
 class Client(object):
@@ -51,7 +51,9 @@ class Client(object):
 
         self._client = protocol.SyncClient("cmdline")
 
-    def do_request(self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}, allow_none: bool=False) -> Optional[Dict[str, Any]]:
+    def do_request(
+        self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}, allow_none: bool=False
+    ) -> Optional[Dict[str, Any]]:
         """
             Do a request and return the response
         """
