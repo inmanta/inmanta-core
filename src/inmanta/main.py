@@ -308,7 +308,7 @@ port=%(port)s
 
     print_table(
         ['Environment ID', 'Environment name', 'Project ID', 'Project name'],
-        [[env["id"], env["name"], project_data["id"], project_data["name"]],]
+        [[env["id"], env["name"], project_data["id"], project_data["name"]]]
     )
 
 
@@ -505,7 +505,13 @@ def param_list(client: Client, environment: str) -> None:
     parameters = cast(List[Dict[str, str]], result["parameters"])
     for p in parameters:
         data.append(
-            [p["resource_id"], p['name'], p['source'], p['updated'], str(float(datetime.datetime.strptime(p["updated"], ISOFMT) < when))]
+            [
+                p["resource_id"],
+                p['name'],
+                p['source'],
+                p['updated'],
+                str(float(datetime.datetime.strptime(p["updated"], ISOFMT) < when))
+            ]
         )
 
     print_table(['Resource', 'Name', 'Source', 'Updated', 'Expired'], data)
@@ -827,7 +833,10 @@ def monitor_deploy(client: Client, environment: str) -> None:
                 bar.update(done - last)
                 last = done
             sleep(1)
-            version = cast(Dict[str, Dict[str, int]], client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0)))
+            version = cast(
+                Dict[str, Dict[str, int]],
+                client.get_dict("get_version", arguments=dict(tid=tid, id=int(ident), limit=0))
+            )
             done = version["model"]["done"]
         if done != last:
             bar.update(done - last)
