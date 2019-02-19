@@ -30,7 +30,7 @@ import click
 import texttable
 from time import sleep
 
-from typing import Optional, cast, Dict, Any
+from typing import Optional, cast, Dict, Any, Union, List
 
 
 class Client(object):
@@ -89,7 +89,7 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def to_project_id(self, ref):
+    def to_project_id(self, ref: str) -> uuid.UUID:
         """
             Convert ref to a uuid
         """
@@ -115,7 +115,7 @@ class Client(object):
 
         return project_id
 
-    def to_environment_id(self, ref, project_id=None):
+    def to_environment_id(self, ref: str, project_id: uuid.UUID=None) -> uuid.UUID:
         """
             Convert ref to an env uuid, optionally scoped to a project
         """
@@ -142,7 +142,7 @@ class Client(object):
 
         return env_id
 
-    def to_form_id(self, ref, environment):
+    def to_form_id(self, ref: str, environment: uuid.UUID) -> uuid.UUID:
         """
             Convert ref to a form uuid
         """
@@ -169,7 +169,7 @@ class Client(object):
         return env_id
 
 
-def print_table(header, rows, data_type=None):
+def print_table(header: List[str], rows: List[List[str]], data_type: List[str]=None) -> None:
     width, _ = click.get_terminal_size()
 
     table = texttable.Texttable(max_width=width)
