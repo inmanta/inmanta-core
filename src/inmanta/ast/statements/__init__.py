@@ -18,6 +18,7 @@
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
 from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named, Anchor
 from typing import Any, Dict, List, Tuple  # noqa: F401
+from typing import Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -214,6 +215,7 @@ class DefinitionStatement(Statement):
 
 
 class TypeDefinitionStatement(DefinitionStatement, Named):
+    comment: Optional[str]
 
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
@@ -221,6 +223,7 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
+        self.comment = None
 
     def register_types(self) -> Tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)

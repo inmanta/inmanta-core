@@ -22,14 +22,15 @@ import logging
 from . import DefinitionStatement
 from inmanta.ast.type import ConstraintType, Type
 from inmanta.ast.attribute import Attribute, RelationAttribute
-from inmanta.ast.entity import Implementation, Entity, Default, Implement
+from inmanta.ast.entity import Implementation, Entity, Default, Implement, EntityLike
 from inmanta.ast.constraint.expression import Equals
 from inmanta.ast.statements import TypeDefinitionStatement, Statement, ExpressionStatement, Literal, BiStatement
 from inmanta.ast import Namespace, TypingException, DuplicateException, TypeNotFoundException, NotFoundException,\
     LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor, IndexException, Import
-from typing import List
-from inmanta.execute.runtime import ResultVariable, ExecutionUnit
+from typing import List, Optional, Dict, Tuple
+from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
 from inmanta.ast.blocks import BasicBlock
+from inmanta.ast.statements.generator import Constructor
 
 
 LOGGER = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ LOGGER = logging.getLogger(__name__)
 class DefineAttribute(Statement):
 
     def __init__(self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement=None,
-                 multi=False, remove_default=True, nullable=False) -> None:
+                 multi: bool=False, remove_default: bool=True, nullable: bool=False) -> None:
         """
             if default_value is None, this is an explicit removal of a default value
         """
@@ -55,11 +56,13 @@ class DefineEntity(TypeDefinitionStatement):
     """
         Define a new entity in the configuration
     """
+    comment: Optional[str]
+    type: Entity
 
     def __init__(self,
                  namespace: Namespace,
                  lname: LocatableString,
-                 comment: LocatableString,
+                 comment: Optional[LocatableString],
                  parents: List[LocatableString],
                  attributes: List[DefineAttribute]) -> None:
         name = str(lname)
@@ -82,7 +85,7 @@ class DefineEntity(TypeDefinitionStatement):
         self.type = Entity(self.name, namespace)
         self.type.location = lname.location
 
-    def add_attribute(self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement=None):
+    def add_attribute(self, attr_type: LocatableString, name: LocatableString, default_value: ExpressionStatement=None) -> None:
         """
             Add an attribute to this entity
         """
@@ -95,8 +98,12 @@ class DefineEntity(TypeDefinitionStatement):
         return "Entity(%s)" % self.name
 
     def get_full_parent_names(self) -> List[str]:
+        def resolve_parent(parent: str) -> str:
+            ptype = self.namespace.get_type(str(parent))
+            assert isinstance(ptype, Entity), "Parents of entities should be entities, but %s is a %s" % (parent, type(ptype))
+            return ptype.get_full_name()
         try:
-            return [self.namespace.get_type(str(parent)).get_full_name() for parent in self.parents]
+            return [resolve_parent(parent) for parent in self.parents]
         except TypeNotFoundException as e:
             e.set_statement(self)
             raise e
@@ -109,7 +116,7 @@ class DefineEntity(TypeDefinitionStatement):
             entity_type = self.type
             entity_type.comment = self.comment
 
-            add_attributes = {}
+            add_attributes: Dict[str, Attribute] = {}
             for attribute in self.attributes:
                 attr_type = self.namespace.get_type(str(attribute.type))
                 if not isinstance(attr_type, (Type, type)):
@@ -173,6 +180,9 @@ class DefineImplementation(TypeDefinitionStatement):
         @param name: The name of the implementation
     """
 
+    comment: Optional[str]
+    type: Implementation
+
     def __init__(self,
                  namespace: Namespace,
                  name: LocatableString,
@@ -184,12 +194,11 @@ class DefineImplementation(TypeDefinitionStatement):
         self.block = statements
         self.entity = str(target_type)
 
+        self.comment = None
         if comment is not None:
-            comment = str(comment)
+            self.comment = str(comment)
 
-        self.comment = comment
-
-        self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), comment)
+        self.type = Implementation(str(self.name), self.block, self.namespace, str(target_type), self.comment)
         self.type.location = name.get_location()
         self.anchors = [TypeReferenceAnchor(target_type.get_location(), namespace, str(target_type))]
         self.anchors.extend(statements.get_anchors())
@@ -200,12 +209,15 @@ class DefineImplementation(TypeDefinitionStatement):
         """
         return "Implementation(%s)" % self.name
 
-    def evaluate(self) -> str:
+    def evaluate(self) -> None:
         """
             Evaluate this statement in the given scope
         """
         try:
             cls = self.namespace.get_type(self.entity)
+            if not isinstance(cls, Entity):
+                raise TypingException(self, "Implementation can only be define for an Entity, but %s is a %s" %
+                                      (self.entity, type(self.entity)))
             self.type.set_type(cls)
             self.copy_location(self.type)
         except TypeNotFoundException as e:
@@ -214,6 +226,7 @@ class DefineImplementation(TypeDefinitionStatement):
 
 
 class DefineImplementInherits(DefinitionStatement):
+    comment: Optional[str]
 
     def __init__(self, entity_name: LocatableString, comment: LocatableString=None):
         DefinitionStatement.__init__(self)
@@ -225,20 +238,22 @@ class DefineImplementInherits(DefinitionStatement):
         self.location = entity_name.get_location()
         self.anchors.append(TypeReferenceAnchor(entity_name.get_location(), entity_name.namespace, str(entity_name)))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             Returns a representation of this class
         """
         return "ImplementParent(%s)" % (self.entity)
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this statement.
         """
         try:
             entity_type = self.namespace.get_type(self.entity)
 
-            entity_type = entity_type.get_entity()
+            if not isinstance(entity_type, Entity):
+                raise TypingException(self, "Implementation can only be define for an Entity, but %s is a %s" %
+                                      (self.entity, type(self.entity)))
 
             entity_type.implements_inherits = True
         except TypeNotFoundException as e:
@@ -254,11 +269,12 @@ class DefineImplement(DefinitionStatement):
         @param implementations: A list of implementations
         @param whem: A clause that determines when this implementation is "active"
     """
+    comment: Optional[str]
 
     def __init__(self,
                  entity_name: LocatableString,
                  implementations: List[LocatableString],
-                 select: ExpressionStatement=None,
+                 select: ExpressionStatement,
                  comment: LocatableString=None) -> None:
         DefinitionStatement.__init__(self)
         self.entity = str(entity_name)
@@ -273,18 +289,22 @@ class DefineImplement(DefinitionStatement):
         else:
             self.comment = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             Returns a representation of this class
         """
         return "Implement(%s)" % (self.entity)
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this statement.
         """
         try:
             entity_type = self.namespace.get_type(str(self.entity))
+
+            if not isinstance(entity_type, EntityLike):
+                raise TypingException(self, "Implementation can only be define for an Entity, but %s is a %s" %
+                                      (self.entity, type(self.entity)))
 
             entity_type = entity_type.get_entity()
 
@@ -299,6 +319,7 @@ class DefineImplement(DefinitionStatement):
 
                 # check if the implementation has the correct type
                 impl_obj = self.namespace.get_type(_impl)
+                assert isinstance(impl_obj, Implementation), "%s is not and implementation" % (_impl)
 
                 if (impl_obj.entity is not None and not
                         (entity_type is impl_obj.entity or entity_type.is_parent(impl_obj.entity))):
@@ -323,25 +344,31 @@ class DefineTypeConstraint(TypeDefinitionStatement):
         @param name: The name of the new  type
         @param basetype: The name of the type that is "refined"
     """
+    comment: Optional[str]
+    __expression: ExpressionStatement
+    type: ConstraintType
 
-    def __init__(self, namespace, name: LocatableString, basetype: LocatableString, expression):
+    def __init__(self,
+                 namespace: Namespace,
+                 name: LocatableString,
+                 basetype: LocatableString,
+                 expression: ExpressionStatement) -> None:
         TypeDefinitionStatement.__init__(self, namespace, str(name))
         self.basetype = str(basetype)
         self.anchors.append(TypeReferenceAnchor(basetype.get_location(), namespace, str(basetype)))
         self.anchors.extend(expression.get_anchors())
-        self.__expression = None
         self.set_expression(expression)
         self.type = ConstraintType(self.namespace, str(name))
         self.type.location = name.get_location()
         self.comment = None
 
-    def get_expression(self):
+    def get_expression(self) -> ExpressionStatement:
         """
             Get the expression that constrains the basetype
         """
         return self.__expression
 
-    def set_expression(self, expression):
+    def set_expression(self, expression: ExpressionStatement) -> None:
         """
             Set the expression that constrains the basetype. This expression
             should reference the value that will be assign to a variable of this
@@ -362,15 +389,15 @@ class DefineTypeConstraint(TypeDefinitionStatement):
 
         self.__expression = expression
 
-    expression = property(get_expression, set_expression)
+    expression: ExpressionStatement = property(get_expression, set_expression)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             A representation of this definition
         """
         return "Type(%s)" % self.name
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this statement.
         """
@@ -391,27 +418,32 @@ class DefineTypeDefault(TypeDefinitionStatement):
         @param name: The name of the new type
         @param class_ctor: A constructor statement
     """
+    type: Default
 
-    def __init__(self, namespace, name: LocatableString, class_ctor):
+    def __init__(self, namespace: Namespace, name: LocatableString, class_ctor: Constructor):
         TypeDefinitionStatement.__init__(self, namespace, str(name))
-        self.type = Default(self.name)
+        self.type = Default(namespace, self.name)
         self.ctor = class_ctor
         self.comment = None
         self.type.location = name.get_location()
         self.anchors.extend(class_ctor.get_anchors())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             Get a representation of this default
         """
         return "Constructor(%s, %s)" % (self.name, self.ctor)
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this statement.
         """
         # the base class
         type_class = self.namespace.get_type(self.ctor.class_type)
+
+        if not isinstance(type_class, EntityLike):
+            raise TypingException(self, "Default can only be define for an Entity, but %s is a %s" %
+                                  (self.ctor.class_type, self.ctor.class_type))
 
         self.type.comment = self.comment
 
@@ -422,12 +454,16 @@ class DefineTypeDefault(TypeDefinitionStatement):
             default.add_default(name, value)
 
 
+Relationside = Tuple[LocatableString, LocatableString, Tuple[Optional[int], Optional[int]]]
+
+
 class DefineRelation(BiStatement):
     """
         Define a relation
     """
+    annotation_expression: List[Tuple[ResultVariable, ExpressionStatement]]
 
-    def __init__(self, left, right, annotations=[]):
+    def __init__(self, left: Relationside, right: Relationside, annotations: List[ExpressionStatement]=[]) -> None:
         DefinitionStatement.__init__(self)
         # for later evaluation
         self.annotation_expression = [(ResultVariable(), exp) for exp in annotations]
@@ -441,16 +477,15 @@ class DefineRelation(BiStatement):
         self.left = left
         self.right = right
 
-        self.requires = None
         self.comment = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The represenation of this relation
         """
         return "Relation(%s, %s)" % (self.left[0], self.right[0])
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Add this relation to the participating ends
         """
@@ -466,6 +501,8 @@ class DefineRelation(BiStatement):
                 "Can not define relation on a default constructor %s, use base type instead: %s " % (
                     left.name, left.get_entity().get_full_name())
             )
+
+        assert isinstance(left, Entity), "%s is not an entity" % left
 
         if left.get_attribute_from_related(str(self.right[1])) is not None:
             raise DuplicateException(self, left.get_attribute_from_related(str(self.right[1])),
@@ -484,6 +521,8 @@ class DefineRelation(BiStatement):
                 "Can not define relation on a default constructor %s, use base type instead: %s " % (
                     right.name, right.get_entity().get_full_name())
             )
+
+        assert isinstance(right, Entity), "%s is not an entity" % left
 
         if right.get_attribute_from_related(str(self.left[1])) is not None:
             raise DuplicateException(self, right.get_attribute_from_related(str(self.left[1])),
@@ -512,7 +551,7 @@ class DefineRelation(BiStatement):
             left_end.end = right_end
             right_end.end = left_end
 
-    def emit(self, resolver, queue) -> None:
+    def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         for rv, exp in self.annotation_expression:
             reqs = exp.requires_emit(resolver, queue)
             ExecutionUnit(queue, resolver, rv, reqs, exp)
@@ -527,7 +566,7 @@ class DefineIndex(DefinitionStatement):
         This defines an index over attributes in an entity
     """
 
-    def __init__(self, entity_type: LocatableString, attributes):
+    def __init__(self, entity_type: LocatableString, attributes: List[LocatableString]):
         DefinitionStatement.__init__(self)
         self.type = str(entity_type)
         self.attributes = [str(a) for a in attributes]
@@ -535,20 +574,22 @@ class DefineIndex(DefinitionStatement):
         self.anchors.extend([AttributeReferenceAnchor(x.get_location(), entity_type.namespace,
                                                       str(entity_type), str(x)) for x in attributes])
 
-    def types(self, recursive=False):
+    def types(self, recursive: bool=False) -> List[Tuple[str, str]]:
         """
             @see Statement#types
         """
         return [("type", self.type)]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "index %s(%s)" % (self.type, ", ".join(self.attributes))
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Add the index to the entity
         """
-        entity_type = self.namespace.get_type(self.type).get_entity()
+        entity_like = self.namespace.get_type(self.type)
+        assert isinstance(entity_like, EntityLike), "%s is not an entity or default" % entity_like
+        entity_type = entity_like.get_entity()
 
         allattributes = entity_type.get_all_attribute_names()
         for attribute in self.attributes:
@@ -573,38 +614,39 @@ class PluginStatement(TypeDefinitionStatement):
         This statement defines a plugin function
     """
 
-    def __init__(self, namespace, name, function_class):
+    def __init__(self, namespace: Namespace, name: str, function_class) -> None:
         TypeDefinitionStatement.__init__(self, namespace, name)
         self._name = name
         self._function_class = function_class
         self.type = self._function_class(namespace)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
             The representation of this function
         """
         return "Function(%s)" % self._name
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this plugin
         """
+        pass
 
 
 class DefineImport(TypeDefinitionStatement, Import):
 
-    def __init__(self, name: LocatableString, toname: LocatableString):
+    def __init__(self, name: LocatableString, toname: LocatableString) -> None:
         DefinitionStatement.__init__(self)
         self.name = str(name)
         self.toname = str(toname)
 
-    def register_types(self):
+    def register_types(self) -> None:
         self.target = self.namespace.get_ns_from_string(self.name)
         if self.target is None:
             raise TypeNotFoundException(self.name, self.namespace)
         self.namespace.import_ns(self.toname, self)
 
-    def evaluate(self):
+    def evaluate(self) -> None:
         """
             Evaluate this plugin
         """
