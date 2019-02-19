@@ -25,7 +25,7 @@ from inmanta.execute import util, runtime
 from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
 from inmanta.module import Project
 
-from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING
+from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -204,7 +204,9 @@ class Resource(metaclass=ResourceMeta):
         itself and all superclasses. If a field it not available directly in the model object the serializer will look for
         static methods in the class with the name "get_$fieldname".
     """
-    fields = ("send_event",)
+    fields: Tuple[str, ...] = ("send_event",)
+    model: DynamicProxy
+    map: Dict[str, Callable[["export.Exporter", DynamicProxy], Any]]
 
     @staticmethod
     def get_send_event(_exporter: "export.Exporter", obj: "Resource") -> bool:
@@ -223,7 +225,7 @@ class Resource(metaclass=ResourceMeta):
         """
         for res in resources.values():
             final_requires = set()
-            initial_requires: List["Resource"] = [x for x in res.requires]
+            initial_requires: List["Id"] = [x for x in res.requires]
 
             for r in initial_requires:
                 if r in resources:
@@ -307,7 +309,7 @@ class Resource(metaclass=ResourceMeta):
         """
         cls, options = resource.get_class(entity_name)
 
-        if cls is None:
+        if cls is None or options is None:
             raise TypeError("No resource class registered for entity %s" % entity_name)
 
         # build the id of the object
@@ -357,12 +359,11 @@ class Resource(metaclass=ResourceMeta):
                 raise ResourceException("Resource %s is a reserved keyword and not a valid field name, reported in %s" %
                                         (field, cls.__name__))
 
-    def __init__(self, _id):
+    def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
-        self.requires: Set["Resource"] = set()
+        self.requires: Set["Id"] = set()
         self.unknowns: Set[str] = set()
-        self.model = None
 
         if not hasattr(self.__class__, "fields"):
             raise Exception("A resource should have a list of fields")
@@ -390,7 +391,7 @@ class Resource(metaclass=ResourceMeta):
     def __repr__(self) -> str:
         return str(self)
 
-    def clone(self, **kwargs) -> "Resource":
+    def clone(self, **kwargs: Any) -> "Resource":
         """
             Create a clone of this resource. The given kwargs can be used to override attributes.
 
@@ -494,10 +495,10 @@ class Id(object):
 
         return self.resource_str()
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(str(self))
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return str(self) == str(other) and type(self) == type(other)
 
     def resource_str(self) -> str:
@@ -511,7 +512,7 @@ class Id(object):
     def __repr__(self) -> str:
         return str(self)
 
-    def get_instance(self):
+    def get_instance(self) -> Optional[Resource]:
         """
             Create an instance of this class and set the identifying attribute already
         """
@@ -537,10 +538,10 @@ class Id(object):
         if result is None:
             raise Exception("Invalid id for resource %s" % resource_id)
 
-        version = result.group("version")
+        version_match: str = result.group("version")
 
-        if version is not None:
-            version = int(version)
+        if version_match is not None:
+            version = int(version_match)
         else:
             version = 0
 

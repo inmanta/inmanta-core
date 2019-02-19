@@ -19,37 +19,44 @@
 import inspect
 import subprocess
 import os
-import typing
 
 from inmanta.execute.proxy import DynamicProxy
 from inmanta.execute.util import Unknown
 from inmanta.ast import Namespace, CompilerException, TypeNotFoundException, RuntimeException
-from inmanta.execute.runtime import ExecutionUnit
+from inmanta.execute.runtime import ExecutionUnit, Resolver, QueueScheduler, ResultVariable
 from inmanta.ast.type import TypedList
+from inmanta import protocol
 
+from typing import Optional, Callable, List, TYPE_CHECKING, TypeVar, Any, Type
+
+T = TypeVar("T")
+
+if TYPE_CHECKING:
+    from inmanta.ast.statements.call import FunctionCall
+    from inmanta.ast.statements import ExpressionStatement, DynamicStatement
+    from inmanta.compiler import Compiler
 
 class Context(object):
     """
         An instance of this class is used to pass context to the plugin
     """
-    __client = None
+    __client: Optional[protocol.Client] = None
     __sync_client = None
 
     @classmethod
-    def __get_client(cls):
+    def __get_client(cls) -> protocol.Client:
         if cls.__client is None:
-            from inmanta import protocol
             cls.__client = protocol.Client("compiler")
         return cls.__client
 
-    def __init__(self, resolver, queue, owner, result):
+    def __init__(self, resolver: Resolver, queue: QueueScheduler, owner: "FunctionCall", result: ResultVariable) -> None:
         self.resolver = resolver
         self.queue = queue
         self.owner = owner
         self.result = result
         self.compiler = queue.get_compiler()
 
-    def emit_expression(self, stmt):
+    def emit_expression(self, stmt: ExpressionStatement) -> None:
         """
             Add a new statement
         """
@@ -58,7 +65,7 @@ class Context(object):
         reqs = stmt.requires_emit(self.resolver, self.queue)
         ExecutionUnit(self.queue, self.resolver, self.result, reqs, stmt, provides=False)
 
-    def get_resolver(self):
+    def get_resolver(self) -> Resolver:
         return self.resolver
 
     def get_type(self, name: str):
@@ -70,13 +77,13 @@ class Context(object):
         except KeyError:
             raise TypeNotFoundException(name, self.owner.namespace)
 
-    def get_queue_scheduler(self):
+    def get_queue_scheduler(self) -> QueueScheduler:
         return self.queue
 
-    def get_compiler(self):
+    def get_compiler(self) -> Compiler:
         return self.queue.get_compiler()
 
-    def get_data_dir(self):
+    def get_data_dir(self) -> str:
         """
             Get the path to the data dir (and create if it does not exist yet
         """
@@ -87,16 +94,15 @@ class Context(object):
 
         return data_dir
 
-    def get_client(self):
+    def get_client(self) -> protocol.Client:
         return self.__class__.__get_client()
 
-    def get_sync_client(self):
+    def get_sync_client(self) -> protocol.SyncClient:
         if self.__class__.__sync_client is None:
-            from inmanta import protocol
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: typing.Callable, timeout: int=5):
+    def run_sync(self, function: Callable[[...], T], timeout: int=5) -> T:
         """
             Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
             main use for this function is to use the inmanta internal rpc to communicate with the server.
@@ -157,7 +163,7 @@ class Plugin(object, metaclass=PluginMeta):
         This class models a plugin that can be called from the language.
     """
 
-    def __init__(self, namespace: Namespace):
+    def __init__(self, namespace: Namespace) -> None:
         self.ns = namespace
 
         self._context = -1
@@ -170,7 +176,7 @@ class Plugin(object, metaclass=PluginMeta):
 
         self.new_statement = None
 
-    def normalize(self):
+    def normalize(self) -> None:
         self.resolver = self.namespace
         self.argtypes = [self.to_type(x[1], self.namespace) for x in self.arguments]
         self.returntype = self.to_type(self._return, self.namespace)
@@ -208,7 +214,7 @@ class Plugin(object, metaclass=PluginMeta):
 
         return arguments
 
-    def add_argument(self, arg_type, arg_type_name, arg_name, optional=False):
+    def add_argument(self, arg_type, arg_type_name, arg_name, optional=False) -> None:
         """
             Add an argument at the next position, of given type.
         """
@@ -262,7 +268,7 @@ class Plugin(object, metaclass=PluginMeta):
 
         return resolver.get_type(arg_type)
 
-    def _is_instance(self, value, arg_type):
+    def _is_instance(self, value: Any, arg_type: Type) -> bool:
         """
             Check if value is of arg_type
         """
@@ -274,7 +280,7 @@ class Plugin(object, metaclass=PluginMeta):
 
         return isinstance(value, arg_type)
 
-    def check_args(self, args):
+    def check_args(self, args: List[Any]) -> bool:
         """
             Check if the arguments of the call match the function signature
         """
@@ -295,7 +301,7 @@ class Plugin(object, metaclass=PluginMeta):
                                                         self.arguments[i][1], args[i].__class__.__name__))
         return True
 
-    def emit_statement(self):
+    def emit_statement(self) -> DynamicStatement:
         """
             This method is called to determine if the plugin call pushes a new
             statement
@@ -311,7 +317,7 @@ class Plugin(object, metaclass=PluginMeta):
         """
         return DynamicProxy.return_value(self._scope.get_variable(name, scope).value)
 
-    def check_requirements(self):
+    def check_requirements(self) -> None:
         """
             Check if the plug-in has all it requires
         """
@@ -363,8 +369,8 @@ class Plugin(object, metaclass=PluginMeta):
         return value
 
 
-def plugin(function: typing.Callable=None, commands: typing.List[str]=None, emits_statements: bool=False,
-           allow_unknown: bool=False):  # noqa: H801
+def plugin(function: Callable=None, commands: List[str]=None, emits_statements: bool=False,
+           allow_unknown: bool=False) -> None:  # noqa: H801
     """
         Python decorator to register functions with inmanta as plugin
 
