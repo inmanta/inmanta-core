@@ -30,26 +30,28 @@ import click
 import texttable
 from time import sleep
 
+from typing import Optional, cast, Dict, Any
+
 
 class Client(object):
     log = logging.getLogger(__name__)
 
-    def __init__(self, host, port):
+    def __init__(self, host: Optional[str], port: Optional[int]) -> None:
         if host is None:
-            self.host = cmdline_rest_transport.host.get()
+            self.host = cast(str, cmdline_rest_transport.host.get())
         else:
             self.host = host
             Config.set("cmdline_rest_transport", "host", host)
 
         if port is None:
-            self.port = cmdline_rest_transport.port.get()
+            self.port = cast(int, cmdline_rest_transport.port.get())
         else:
             self.port = port
             Config.set("cmdline_rest_transport", "port", str(port))
 
         self._client = protocol.SyncClient("cmdline")
 
-    def do_request(self, method_name, key_name=None, arguments={}, allow_none=False):
+    def do_request(self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}, allow_none: bool=False) -> Optional[Dict[str, Any]]:
         """
             Do a request and return the response
         """

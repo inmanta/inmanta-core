@@ -56,7 +56,7 @@ class Context(object):
         self.result = result
         self.compiler = queue.get_compiler()
 
-    def emit_expression(self, stmt: ExpressionStatement) -> None:
+    def emit_expression(self, stmt: "ExpressionStatement") -> None:
         """
             Add a new statement
         """
@@ -80,7 +80,7 @@ class Context(object):
     def get_queue_scheduler(self) -> QueueScheduler:
         return self.queue
 
-    def get_compiler(self) -> Compiler:
+    def get_compiler(self) -> "Compiler":
         return self.queue.get_compiler()
 
     def get_data_dir(self) -> str:
@@ -102,7 +102,7 @@ class Context(object):
             self.__class__.__sync_client = protocol.SyncClient("compiler")
         return self.__class__.__sync_client
 
-    def run_sync(self, function: Callable[[...], T], timeout: int=5) -> T:
+    def run_sync(self, function: Callable[..., T], timeout: int=5) -> T:
         """
             Execute the async function and return its result. This method takes care of starting and stopping the ioloop. The
             main use for this function is to use the inmanta internal rpc to communicate with the server.
@@ -301,7 +301,7 @@ class Plugin(object, metaclass=PluginMeta):
                                                         self.arguments[i][1], args[i].__class__.__name__))
         return True
 
-    def emit_statement(self) -> DynamicStatement:
+    def emit_statement(self) -> "DynamicStatement":
         """
             This method is called to determine if the plugin call pushes a new
             statement
