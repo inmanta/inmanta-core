@@ -9,3 +9,4 @@ class HTTPServerRequest:
     body: str
     query_arguments: Dict[str, List[bytes]]
     headers: httputil.HTTPHeaders
+    remote_ip: str

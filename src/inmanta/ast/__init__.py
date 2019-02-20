@@ -152,7 +152,7 @@ class LocatableString(object):
     def get_value(self) -> str:
         return self.value
 
-    def get_location(self) -> Location:
+    def get_location(self) -> Range:
         return self.location
 
     def __str__(self) -> str:

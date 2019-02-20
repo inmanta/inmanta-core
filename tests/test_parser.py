@@ -199,7 +199,6 @@ Test tests [0:] -- [5:10] Foo bars
 
     assert rel.left[2] == (0, None)
     assert rel.right[2] == (5, 10)
-    assert statements[0].requires is None
 
 
 def test_relation_2():
@@ -225,7 +224,6 @@ Test tests [3] -- [:10] Foo bars
 
     assert rel.left[2] == (3, 3)
     assert rel.right[2] == (None, 10)
-    assert statements[0].requires is None
 
 
 def test_new_relation():
@@ -251,7 +249,6 @@ Test.bar [1] -- Foo.tests [5:10]
 
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
-    assert statements[0].requires is None
 
 
 def test_new_relation_with_annotations():
@@ -277,7 +274,6 @@ Test.bar [1] foo,bar Foo.tests [5:10]
 
     assert rel.left[2] == (5, 10)
     assert rel.right[2] == (1, 1)
-    assert statements[0].requires is None
     assert len(rel.annotations) == 2
     assert rel.annotation_expression[0][1].name == "foo"
     assert rel.annotation_expression[1][1].name == "bar"
@@ -306,7 +302,6 @@ Test.bar [1] -- Foo
 
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
-    assert statements[0].requires is None
 
 
 def test_new_relation_with_annotations_unidir():
@@ -332,7 +327,6 @@ Test.bar [1] foo,bar Foo
 
     assert rel.left[2] is None
     assert rel.right[2] == (1, 1)
-    assert statements[0].requires is None
     assert len(rel.annotations) == 2
     assert rel.annotation_expression[0][1].name == "foo"
     assert rel.annotation_expression[1][1].name == "bar"

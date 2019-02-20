@@ -49,7 +49,7 @@ class Attribute(Locatable):
         self.__multi = multi
         self.__nullallble = nullable
         self.low = 0 if nullable else 1
-        self.comment = None  # type: str
+        self.comment = None  # type: Optional[str]
         self.end: Optional[RelationAttribute] = None
 
     def get_type(self) -> "Type":
@@ -58,7 +58,7 @@ class Attribute(Locatable):
         """
         return self.__type
 
-    type = property(get_type)
+    type: "Type" = property(get_type)
 
     def get_name(self) -> str:
         """
@@ -128,7 +128,6 @@ class RelationAttribute(Attribute):
     """
         An attribute that is a relation
     """
-
     def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
         Attribute.__init__(self, entity, value_type, name)
         self.end: Optional[RelationAttribute] = None
