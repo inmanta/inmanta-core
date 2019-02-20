@@ -80,7 +80,7 @@ def merge_lnr_to_string(p: YaccProduction, starttoken: int = 1, endtoken: int = 
     p[0] = LocatableString(v, Range(file, startline, startchar, endline, endchar), endchar, namespace)
 
 
-def attach_from_string(p: YaccProduction, token=1):
+def attach_from_string(p: YaccProduction, token: int = 1) -> None:
     v = p[0]
     v.location = p[token].location
     v.namespace = p[token].namespace
