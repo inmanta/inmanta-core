@@ -48,7 +48,7 @@ tokens = [
 ] + sorted(list(reserved.values()))
 
 
-def t_ID(t):  # noqa: N802
+def t_ID(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'[a-zA-Z_][a-zA-Z_0-9-]*'
     t.type = reserved.get(t.value, 'ID')  # Check for reserved words
     if t.value[0].isupper():
@@ -64,41 +64,41 @@ def t_ID(t):  # noqa: N802
     return t
 
 
-def t_SEP(t):  # noqa: N802
+def t_SEP(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'[:]{2}'
     return t
 
 
-def t_REL(t):  # noqa: N802
+def t_REL(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'--|->|<-'
     return t
 
 
-def t_CMP_OP(t):  # noqa: N802
+def t_CMP_OP(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'!=|==|>=|<=|<|>'
     return t
 
 
-def t_PEQ(t):  # noqa: N802
+def t_PEQ(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'[+]='
     return t
 
 
-def t_COMMENT(t):  # noqa: N802
+def t_COMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r'\#.*?\n'
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
     pass
 
 
-def t_JCOMMENT(t):  # noqa: N802
+def t_JCOMMENT(t: lex.LexToken) -> None:  # noqa: N802
     r'\//.*?\n'
     t.lexer.lineno += 1
     t.lexer.linestart = t.lexer.lexpos
     pass
 
 
-def t_begin_mls(t):
+def t_begin_mls(t: lex.LexToken) -> lex.LexToken:
     r'["]{3}'
     t.lexer.begin('mls')
     t.type = "MLS"
@@ -115,7 +115,7 @@ def t_begin_mls(t):
     return t
 
 
-def t_mls_end(t):
+def t_mls_end(t: lex.LexToken) -> lex.LexToken:
     r'.*["]{3}'
     t.lexer.begin('INITIAL')
     t.type = "MLS_END"
@@ -133,31 +133,31 @@ def t_mls_end(t):
     return t
 
 
-def t_mls_MLS(t):  # noqa: N802
+def t_mls_MLS(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'.+'
     return t
 
 
-def t_FLOAT(t):  # noqa: N802
+def t_FLOAT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'[-]?[0-9]*[.][0-9]+'
     t.value = float(t.value)
     return t
 
 
-def t_INT(t):  # noqa: N802
+def t_INT(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'[-]?[0-9]+'
     t.value = int(t.value)
     return t
 
 
-def t_STRING_EMPTY(t):  # noqa: N802
+def t_STRING_EMPTY(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'(\"\")|(\'\')'
     t.type = "STRING"
     t.value = ""
     return t
 
 
-def t_STRING(t):  # noqa: N802
+def t_STRING(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'(\".*?[^\\]\")|(\'.*?[^\\]\')'
     t.value = bytes(t.value[1:-1], "utf-8").decode("unicode_escape")
     lexer = t.lexer
@@ -172,7 +172,7 @@ def t_STRING(t):  # noqa: N802
     return t
 
 
-def t_REGEX(t):  # noqa: N802
+def t_REGEX(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'/([^/]|\\/)*?[^\\]/'
     value = Reference("self")  # anonymous value
     expr = Regex(value, t.value[1:-1])
@@ -181,13 +181,13 @@ def t_REGEX(t):  # noqa: N802
 
 
 # Define a rule so we can track line numbers
-def t_newline(t):  # noqa: N802
+def t_newline(t: lex.LexToken) -> None:  # noqa: N802
     r'\n+'
     t.lexer.lineno += len(t.value)
     t.lexer.linestart = t.lexer.lexpos
 
 
-def t_mls_newline(t):  # noqa: N802
+def t_mls_newline(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     r'\n+'
     t.lexer.lineno += len(t.value)
     t.lexer.linestart = t.lexer.lexpos
@@ -202,7 +202,7 @@ t_mls_ignore = ''
 # Error handling rule
 
 
-def t_ANY_error(t):  # noqa: N802
+def t_ANY_error(t: lex.LexToken) -> lex.LexToken:  # noqa: N802
     value = t.value
     if len(value) > 10:
         value = value[:10]
