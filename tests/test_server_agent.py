@@ -2944,7 +2944,6 @@ async def _deploy_resources(client, environment, resources, version, agent_trigg
 
 
 async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
-
     async def is_deployment_finished():
         result = await client.get_version(environment, version)
         return result.result["model"]["total"] - result.result["model"]["done"] <= 0
@@ -3499,7 +3498,7 @@ async def test_bad_post_events(resource_container, environment, server, client, 
 
 
 @pytest.mark.asyncio
-async def test_push_incremental_deploy(resource_container, environment, server, client):
+async def test_push_incremental_deploy(resource_container, environment, server, client, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
@@ -3573,7 +3572,7 @@ async def test_push_incremental_deploy(resource_container, environment, server, 
 
 
 @pytest.mark.asyncio
-async def test_push_full_deploy(resource_container, environment, server, client):
+async def test_push_full_deploy(resource_container, environment, server, client, no_agent_backoff):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
