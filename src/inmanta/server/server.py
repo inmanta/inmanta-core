@@ -37,7 +37,7 @@ from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
-from inmanta.data import Environment
+from inmanta.data import Environment, LogLine
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -985,6 +985,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield self.resource_action_update(env, skippable, action_id=uuid.uuid4(),
                                           started=now, finished=now, status=const.ResourceState.skipped_for_undefined,
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
+                                          change=const.Change.nochange, send_events=False)
+
+        # all resources already deployed
+        deployed = yield model.get_increment(negative=True)
+        logline = {"level": "INFO", "msg": "Setting deployed due to known good status", "timestamp": now, "args": []}
+        yield self.resource_action_update(env, deployed, action_id=uuid.uuid4(),
+                                          started=now, finished=now, status=const.ResourceState.deployed,
+                                          # does this require a different ResourceAction?
+                                          action=const.ResourceAction.deploy, changes={}, messages=[logline],
                                           change=const.Change.nochange, send_events=False)
 
         if push:
