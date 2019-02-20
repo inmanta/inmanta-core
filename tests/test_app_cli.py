@@ -24,7 +24,7 @@ import shutil
 from inmanta.app import cmd_parser
 from inmanta.config import Config
 from inmanta.const import VersionState
-from asyncio import subprocess
+from tornado import process
 import asyncio
 
 
@@ -126,16 +126,16 @@ vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
             "--server_address", str(server_host)]
     args += push_method
 
-    process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = process.Subprocess(args, stdout=process.Subprocess.STREAM, stderr=process.Subprocess.STREAM)
     try:
-        await asyncio.wait_for(process.communicate(), timeout=30)
+        await proc.wait_for_exit()
     except asyncio.TimeoutError as e:
-        process.kill()
-        await process.communicate()
+        proc.proc.kill()
+        await proc.communicate()
         raise e
 
     # Make sure exitcode is zero
-    assert process.returncode == 0
+    assert proc.returncode == 0
 
     result = await client.list_versions(env_id)
     assert result.code == 200
