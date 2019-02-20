@@ -129,8 +129,11 @@ async def test_agent(server, client, environment, cli):
     assert result.exit_code == 0
 
 
+@pytest.mark.parametrize("push_method", [([]),
+                                         (["-p", "incremental"]),
+                                         (["-p", "full"])])
 @pytest.mark.asyncio
-async def test_version(server, client, environment, cli):
+async def test_version(server, client, environment, cli, push_method):
     version = "12345"
     resources = [{'key': 'key1',
                   'value': 'value1',
@@ -163,7 +166,7 @@ async def test_version(server, client, environment, cli):
     assert version in result.output
     assert "pending" in result.output
 
-    result = await cli.run("version", "release", "-e", environment, version)
+    result = await cli.run("version", "release", "-e", environment, version, *push_method)
     assert result.exit_code == 0
     assert version in result.output
 
