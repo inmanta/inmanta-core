@@ -129,7 +129,7 @@ class Compilestate(Enum):
 EXPORT_META_DATA = "export_metadata"
 META_DATA_COMPILE_STATE = "inmanta:compile:state"
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-
+VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
 
 # For testing
 
