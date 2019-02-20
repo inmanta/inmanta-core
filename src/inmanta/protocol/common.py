@@ -208,6 +208,11 @@ class MethodProperties(object):
         MethodProperties.methods[function.__name__] = self
         function.__method_properties__ = self
 
+        # validate client types
+        for ct in self._client_types:
+            if ct not in const.VALID_CLIENT_TYPES:
+                raise Exception("Invalid client type %s specified for function %s" % (ct, function))
+
     @property
     def operation(self) -> str:
         return self._operation
