@@ -89,6 +89,7 @@ def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
     process.Subprocess.uninitialize()
+    asyncio.set_child_watcher(None)
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
