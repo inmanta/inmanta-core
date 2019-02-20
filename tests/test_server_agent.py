@@ -3542,7 +3542,6 @@ async def test_push_incremental_deploy(resource_container, environment, server, 
     assert resource_container.Provider.get("agent1", "key2") == "value1"
 
     # Second version deployed with incremental deploy
-    resource_container.Provider.set("agent1", "key1", "value2")
     version2 = version + 1
     resources_version2 = get_resources(version2, "value2")
 
@@ -3562,8 +3561,13 @@ async def test_push_incremental_deploy(resource_container, environment, server, 
         await asyncio.sleep(0.1)
 
     # Make sure increment was deployed
-    assert resource_container.Provider.get("agent1", "key1") == "value2"
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
+
+    assert resource_container.Provider.readcount("agent1", "key1") == 1
+    assert resource_container.Provider.changecount("agent1", "key1") == 1
+    assert resource_container.Provider.readcount("agent1", "key2") == 2
+    assert resource_container.Provider.changecount("agent1", "key2") == 2
 
     await agent.stop()
 
@@ -3612,7 +3616,6 @@ async def test_push_full_deploy(resource_container, environment, server, client)
     assert resource_container.Provider.get("agent1", "key2") == "value1"
 
     # Second version deployed with incremental deploy
-    resource_container.Provider.set("agent1", "key1", "value2")
     version2 = version + 1
     resources_version2 = get_resources(version2, "value2")
 
@@ -3628,5 +3631,10 @@ async def test_push_full_deploy(resource_container, environment, server, client)
     # Make sure increment was deployed
     assert resource_container.Provider.get("agent1", "key1") == "value1"
     assert resource_container.Provider.get("agent1", "key2") == "value2"
+
+    assert resource_container.Provider.readcount("agent1", "key1") == 2
+    assert resource_container.Provider.changecount("agent1", "key1") == 1
+    assert resource_container.Provider.readcount("agent1", "key2") == 2
+    assert resource_container.Provider.changecount("agent1", "key2") == 2
 
     await agent.stop()
