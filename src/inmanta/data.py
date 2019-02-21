@@ -497,6 +497,7 @@ def convert_agent_map(value):
 
     return value
 
+
 def convert_agent_trigger_method(value):
     value = str(value)
     valid_values = [x.name for x in const.AgentTriggerMethod]
