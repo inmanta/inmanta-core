@@ -440,15 +440,15 @@ def version_list(client, environment):
 
 @version.command(name="release")
 @click.option("--environment", "-e", help="The environment to use", required=True)
-@click.option("--push", "-p",
-              help="Push an incremental or a full deploy of the configuration model to the deployment agents",
-              type=click.Choice(['incremental', 'full']))
+@click.option("--push", "-p", help="Push the version to the deployment agents", is_flag=True)
+@click.option("--full", help="Make the agents execute a full deploy instead of an incremental deploy. "
+                             "Should be used together with the --push option", is_flag=True)
 @click.argument("version")
 @click.pass_obj
-def version_release(client, environment, push, version):
+def version_release(client, environment, push, full, version):
     env_id = client.to_environment_id(environment)
     if push:
-        trigger_method = AgentTriggerMethod['push_' + push + '_deploy']
+        trigger_method = AgentTriggerMethod.get_agent_trigger_method(push, full)
         x = client.do_request("release_version", "model", dict(tid=env_id, id=version, agent_trigger_method=trigger_method))
     else:
         x = client.do_request("release_version", "model", dict(tid=env_id, id=version))

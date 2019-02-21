@@ -85,8 +85,8 @@ def test_help_sub(inmanta_config, capsys):
 
 
 @pytest.mark.parametrize("push_method", [([]),
-                                         (["-d", "incremental"]),
-                                         (["-d", "full"])])
+                                         (["-d"]),
+                                         (["-d", "--full"])])
 @pytest.mark.asyncio
 async def test_export(tmpdir, server, client, push_method):
     server_port = Config.get("client_rest_transport", "port")
@@ -128,8 +128,7 @@ vm1=ip::Host(name="non-existing-machine", os=redhat::centos7, ip="127.0.0.1")
 
     process = await subprocess.create_subprocess_exec(*args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
-        out, err = await asyncio.wait_for(process.communicate(), timeout=30)
-        print(out, err)
+        await asyncio.wait_for(process.communicate(), timeout=30)
     except asyncio.TimeoutError as e:
         process.kill()
         await process.communicate()

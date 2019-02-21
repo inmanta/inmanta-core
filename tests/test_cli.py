@@ -130,8 +130,8 @@ async def test_agent(server, client, environment, cli):
 
 
 @pytest.mark.parametrize("push_method", [([]),
-                                         (["-p", "incremental"]),
-                                         (["-p", "full"])])
+                                         (["-p"]),
+                                         (["-p", "--full"])])
 @pytest.mark.asyncio
 async def test_version(server, client, environment, cli, push_method):
     version = "12345"
