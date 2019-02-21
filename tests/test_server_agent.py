@@ -1038,8 +1038,8 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
 
     result = await client.get_version(env_id, version, include_logs=True)
 
-    final_log = result.result["resources"][0]["actions"][0]["messages"][-1]
-    assert "traceback" in final_log["kwargs"]
+    logs = result.result["resources"][0]["actions"][0]["messages"]
+    assert any("traceback" in log["kwargs"] for log in logs), "\n".join(result.result["resources"][0]["actions"][0]["messages"])
 
     await agent.stop()
 
