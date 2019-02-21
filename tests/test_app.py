@@ -106,7 +106,7 @@ def test_colorama_package_not_available():
         As such, this package should not be available.
     """
     with pytest.raises(ModuleNotFoundError):
-        import colorama
+        import colorama  # noqa: F401
 
 
 @pytest.mark.parametrize("log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines", [
