@@ -57,7 +57,7 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     return (args, log_dir)
 
 
-def run_without_tty(args, env=[]):
+def run_without_tty(args, env={}):
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
@@ -99,19 +99,33 @@ def get_compiled_regexes(regexes, timed):
     return result
 
 
+@pytest.mark.dependency()
+def test_colorama_package_not_available():
+    """
+        The colorama package turns the colored characters in TTY-based terminal into uncolored characters.
+        As such, this package should not be available.
+    """
+    with pytest.raises(ModuleNotFoundError):
+        import colorama
+
+
 @pytest.mark.parametrize("log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines", [
-    (3, False, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
-    (2, False, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
-    (3, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
-                      r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
-    (2, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
-     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint']),
-    (3, True, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
-    (2, True, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
-    (3, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
-                     r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
-    (2, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
-     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'])
+    pytest.param(3, False, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
+    pytest.param(2, False, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
+    pytest.param(3, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
+                                  r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], [],
+                 marks=pytest.mark.dependency(depends=["test_colorama_package_not_available"])),
+    pytest.param(2, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
+                 [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'],
+                 marks=pytest.mark.dependency(depends=["test_colorama_package_not_available"])),
+    pytest.param(3, True, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
+    pytest.param(2, True, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
+    pytest.param(3, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
+                                 r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], [],
+                 marks=pytest.mark.dependency(depends=["test_colorama_package_not_available"])),
+    pytest.param(2, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
+                 [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'],
+                 marks=pytest.mark.dependency(depends=["test_colorama_package_not_available"]))
 ])
 @pytest.mark.timeout(20)
 def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
@@ -127,14 +141,16 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 
 
 @pytest.mark.parametrize("log_level, with_tty, regexes_required_lines, regexes_forbidden_lines", [
-    (3, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
-                r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
-    (2, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
-     [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
-    (3, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
-               r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
-    (2, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
-     [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'])
+    pytest.param(3, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
+                            r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
+    pytest.param(2, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
+                 [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
+    pytest.param(3, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
+                           r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], [],
+                 marks=pytest.mark.dependency(depends=["test_colorama_package_not_available"])),
+    pytest.param(2, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
+                 [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'],
+                 marks=pytest.mark.dependency(depends=["test_colorama_package_not_available"]))
 ])
 @pytest.mark.timeout(60)
 def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
