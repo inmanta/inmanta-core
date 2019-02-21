@@ -3557,7 +3557,7 @@ async def test_inprogress(resource_container, client, server, environment):
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
-    result = await client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     async def in_progress():
@@ -3609,7 +3609,7 @@ async def test_eventprocessing(resource_container, client, server, environment):
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
-    result = await client.release_version(environment, version, True)
+    result = await client.release_version(environment, version, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     async def in_progress():
