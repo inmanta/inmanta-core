@@ -990,6 +990,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
                                           change=const.Change.nochange, send_events=False)
 
+        # all resources already deployed
+        deployed = yield model.get_increment(negative=True)
+        logline = {"level": "INFO", "msg": "Setting deployed due to known good status", "timestamp": now, "args": []}
+        yield self.resource_action_update(env, deployed, action_id=uuid.uuid4(),
+                                          started=now, finished=now, status=const.ResourceState.deployed,
+                                          # does this require a different ResourceAction?
+                                          action=const.ResourceAction.deploy, changes={}, messages=[logline],
+                                          change=const.Change.nochange, send_events=False)
+
         trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
 
         if trigger_agent:
