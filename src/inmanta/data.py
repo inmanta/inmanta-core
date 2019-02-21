@@ -1616,9 +1616,11 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     @gen.coroutine
-    def get_increment(self):
+    def get_increment(self, negative: bool=False):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
+
+        :param negative: find resources not in the increment
 
         available/skipped/unavailable -> next version
         not present -> increment
@@ -1632,6 +1634,7 @@ class ConfigurationModel(BaseDocument):
 
         # to increment
         increment = []
+        not_incrememt = []
         # todo in this verions
         work = list(resources)
 
@@ -1673,7 +1676,7 @@ class ConfigurationModel(BaseDocument):
                 elif ores.status == ResourceState.deployed:
                     if res.attribute_hash == ores.attribute_hash:
                         #  Deployed and same hash -> not increment
-                        continue
+                        not_incrememt.append(res)
                     else:
                         # Deployed and different hash -> increment
                         increment.append(res)
@@ -1686,6 +1689,9 @@ class ConfigurationModel(BaseDocument):
                 break
         if work:
             increment.extend(work)
+
+        if negative:
+            return [res.resource_version_id for res in not_incrememt]
 
         # patch up the graph
         # 1-include stuff for send-events.
