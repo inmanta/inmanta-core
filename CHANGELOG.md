@@ -8,7 +8,7 @@ Changes in this release:
 - Updated to Tornado 5, moving from tornado ioloop to the standard python async framework (#765)
 - Extend mypy type annotations
 - Use files for all logs and split out logs, stdout and stderr in autostarted agents (#824, #234)
-- Introduce incremental deploy (#791, #794, #793)
+- Introduce incremental deploy (#791, #794, #793, #795)
 - Introduce deploying resource state (#931)
 - Introduce request_timeout option for transport settings
 - Port unit tests to pytest-asyncio and fix deprecation warnings (#743)
@@ -29,6 +29,10 @@ DEPRECATIONS:
 - The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 
 deprecated in favour of agent-deploy-interval, agent-deploy-splay-time, autostart_agent_deploy_interval 
 and autostart_agent_deploy_splay_time respectively. The deprecated options will be removed in release 2019.2
+- The environment setting push_on_auto_deploy is deprecated. It will be replaced with the setting 
+agent_trigger_method_on_auto_deploy, which allows you to specify whether the agents should receive a push notification
+for the new deployment and whether the agents should perform an incremental or a full deployment when they receive a trigger 
+from the autodeploy.  
 
 v 2018.3 (2018-12-07)
 Changes in this release:
