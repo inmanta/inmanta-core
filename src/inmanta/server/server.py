@@ -954,13 +954,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
             push = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
-            yield self.release_version(env, version, push)
+            if push:
+                yield self.release_version(env, version, const.AgentTriggerMethod.push_full_deploy)
+            else:
+                yield self.release_version(env, version, const.AgentTriggerMethod.no_push)
 
         return 200
 
     @protocol.handle(methods.release_version, version_id="id", env="tid")
     @gen.coroutine
-    def release_version(self, env, version_id, push):
+    def release_version(self, env, version_id, agent_trigger_method=const.AgentTriggerMethod.no_push):
         model = yield data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
@@ -987,7 +990,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
                                           change=const.Change.nochange, send_events=False)
 
-        if push:
+        trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
+
+        if trigger_agent:
             # fetch all resource in this cm and create a list of distinct agents
             agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
             yield self.agentmanager._ensure_agents(env, agents)
@@ -995,7 +1000,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for agent in agents:
                 client = self.get_agent_client(env.id, agent)
                 if client is not None:
-                    future = client.trigger(env.id, agent)
+                    incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                    future = client.trigger(env.id, agent, incremental_deploy)
                     self.add_future(future)
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)

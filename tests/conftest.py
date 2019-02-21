@@ -33,7 +33,7 @@ import pymongo
 from motor import motor_asyncio
 from inmanta.module import Project
 from inmanta import resources, export
-from inmanta.agent import handler
+from inmanta.agent import handler, agent
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
@@ -89,6 +89,7 @@ def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
     process.Subprocess.uninitialize()
+    asyncio.set_child_watcher(None)
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
@@ -138,6 +139,14 @@ def motor(mongo_db, mongo_client, event_loop):
 async def data_module(motor):
     data.use_motor(motor)
     await data.create_indexes()
+
+
+@pytest.fixture(scope="function")
+def no_agent_backoff():
+    backoff = agent.GET_RESOURCE_BACKOFF
+    agent.GET_RESOURCE_BACKOFF = 0
+    yield
+    agent.GET_RESOURCE_BACKOFF = backoff
 
 
 def get_free_tcp_port():

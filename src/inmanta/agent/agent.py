@@ -863,7 +863,7 @@ class Agent(SessionEndpoint):
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     @gen.coroutine
-    def trigger_update(self, env, agent):
+    def trigger_update(self, env, agent, incremental_deploy):
         """
             Trigger an update
         """
@@ -874,7 +874,8 @@ class Agent(SessionEndpoint):
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
-        future = self._instances[agent].get_latest_version_for_agent(reason="call to trigger_update")
+        future = self._instances[agent].get_latest_version_for_agent(reason="call to trigger_update",
+                                                                     incremental_deploy=incremental_deploy)
         self.add_future(future)
         return 200
 
