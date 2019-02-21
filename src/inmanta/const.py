@@ -108,6 +108,21 @@ class ResourceAction(Enum):
 STATE_UPDATE = [ResourceAction.deploy]
 
 
+class AgentTriggerMethod(Enum):
+    no_push = 1
+    push_incremental_deploy = 2
+    push_full_deploy = 3
+
+    @classmethod
+    def get_agent_trigger_method(cls, push, is_full_deploy):
+        if not push:
+            return cls.no_push
+        elif is_full_deploy:
+            return cls.push_full_deploy
+        else:
+            return cls.push_incremental_deploy
+
+
 class LogLevel(Enum):
     CRITICAL = 50
     ERROR = 40
@@ -129,7 +144,7 @@ class Compilestate(Enum):
 EXPORT_META_DATA = "export_metadata"
 META_DATA_COMPILE_STATE = "inmanta:compile:state"
 INMANTA_MT_HEADER = "X-Inmanta-tid"
-
+VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
 
 # For testing
 

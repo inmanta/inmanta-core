@@ -304,7 +304,8 @@ port=%(server_port)s
 
         # release the version!
         if not dry_run:
-            self._client.release_version(tid=self._environment_id, id=version, push=True)
+            self._client.release_version(tid=self._environment_id, id=version,
+                                         agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
             self.progress_deploy_report(version)
 
         else:

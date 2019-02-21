@@ -291,6 +291,20 @@ async def test_method_properties():
 
 
 @pytest.mark.asyncio
+async def test_invalid_client_type():
+    """
+        Test invalid client ype
+    """
+    with pytest.raises(Exception) as e:
+        @protocol.method(method_name="test", operation="PUT", client_types=["invalid"])
+        def test_method(name):
+            """
+                Create a new project
+            """
+        assert "Invalid client type invalid specified for function" in str(e)
+
+
+@pytest.mark.asyncio
 async def test_call_arguments_defaults():
     """
         Test processing RPC messages

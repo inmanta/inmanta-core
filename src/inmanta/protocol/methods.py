@@ -28,9 +28,6 @@ from tornado import gen
 from typing import Any
 
 
-VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
-
-
 @gen.coroutine
 def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     metadata[const.INMANTA_URN + "env"] = str(env)
@@ -498,13 +495,15 @@ def put_version(
 
 
 @method(method_name="version", operation="POST", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
-def release_version(tid: uuid.UUID, id: int, push: bool):
+def release_version(tid: uuid.UUID, id: int, agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.no_push):
     """
         Release version of the configuration model for deployment.
 
         :param tid: The id of the environment
         :param id: The version of the CM to deploy
-        :param push: Notify all agents to deploy the version
+        :param agent_trigger_method Indicates whether the agents should receive a push notification for the deployment and
+                                    how the agents should perform the deploy (incremental deploy vs full deploy) when a push
+                                    notification was requested
     """
 
 
@@ -947,12 +946,13 @@ def set_state(agent: str, enabled: bool):
     arg_options=AGENT_ENV_OPTS,
     client_types=[],
 )
-def trigger(tid: uuid.UUID, id: str):
+def trigger(tid: uuid.UUID, id: str, incremental_deploy: bool):
     """
         Request an agent to reload resources
 
         :param tid The environment this agent is defined in
         :param id The name of the agent
+        :param incremental_deploy Indicates whether the agent should perform an incremental deploy or a full deploy
     """
 
 

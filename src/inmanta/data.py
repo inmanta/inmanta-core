@@ -29,7 +29,6 @@ import pymongo
 from tornado import gen
 
 from inmanta import const
-from inmanta.resources import Id
 import hashlib
 from inmanta.const import ResourceState
 from _collections import defaultdict
@@ -1350,6 +1349,7 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
+        from inmanta.resources import Id
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),

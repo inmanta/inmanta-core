@@ -31,8 +31,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
 from tornado import httpclient
-
-from inmanta.protocol import methods
+from inmanta import const
 
 from typing import Optional, Callable, TypeVar, Generic, Dict, List, cast, Union
 
@@ -447,7 +446,7 @@ class AuthJWTConfig(object):
 
         self.client_types = is_list(self._config["client_types"])
         for ct in self.client_types:
-            if ct not in methods.VALID_CLIENT_TYPES:
+            if ct not in const.VALID_CLIENT_TYPES:
                 raise ValueError("invalid client_type %s in %s" % (ct, self.section))
 
         if "expire" in self._config:

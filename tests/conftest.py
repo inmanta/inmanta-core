@@ -33,7 +33,7 @@ import pymongo
 from motor import motor_asyncio
 from inmanta.module import Project
 from inmanta import resources, export
-from inmanta.agent import handler
+from inmanta.agent import handler, agent
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
@@ -89,6 +89,7 @@ def reset_all():
     resources.resource.reset()
     export.Exporter.reset()
     process.Subprocess.uninitialize()
+    asyncio.set_child_watcher(None)
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
@@ -138,6 +139,14 @@ def motor(mongo_db, mongo_client, event_loop):
 async def data_module(motor):
     data.use_motor(motor)
     await data.create_indexes()
+
+
+@pytest.fixture(scope="function")
+def no_agent_backoff():
+    backoff = agent.GET_RESOURCE_BACKOFF
+    agent.GET_RESOURCE_BACKOFF = 0
+    yield
+    agent.GET_RESOURCE_BACKOFF = backoff
 
 
 def get_free_tcp_port():
@@ -498,6 +507,7 @@ def snippetcompiler(snippetcompiler_global):
 
 class CLI(object):
     async def run(self, *args):
+        # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
@@ -510,7 +520,10 @@ class CLI(object):
                 catch_exceptions=False
             )
 
-        return await asyncio.get_event_loop().run_in_executor(None, invoke)
+        result = await asyncio.get_event_loop().run_in_executor(None, invoke)
+        # reset to default again
+        del os.environ["COLUMNS"]
+        return result
 
 
 @pytest.fixture
