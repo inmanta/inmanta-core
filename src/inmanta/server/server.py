@@ -29,6 +29,7 @@ import time
 from uuid import UUID
 import uuid
 import shutil
+import warnings
 
 import dateutil
 import pymongo
@@ -953,11 +954,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         auto_deploy = yield env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
-            if push:
-                yield self.release_version(env, version, const.AgentTriggerMethod.push_full_deploy)
-            else:
-                yield self.release_version(env, version, const.AgentTriggerMethod.no_push)
+            push_on_auto_deploy = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
+            agent_trigger_method_on_autodeploy = yield env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
+            agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
+
+            # Ensure backward compatibility
+            if push_on_auto_deploy and agent_trigger_method_on_autodeploy is const.AgentTriggerMethod.no_push:
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (data.PUSH_ON_AUTO_DEPLOY,
+                                                                                   data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
+                agent_trigger_method_on_autodeploy = const.AgentTriggerMethod.push_full_deploy
+
+            yield self.release_version(env, version, agent_trigger_method_on_autodeploy)
 
         return 200
 

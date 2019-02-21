@@ -498,8 +498,17 @@ def convert_agent_map(value):
     return value
 
 
+def convert_agent_trigger_method(value):
+    value = str(value)
+    valid_values = [x.name for x in const.AgentTriggerMethod]
+    if value not in valid_values:
+        raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ','.join(valid_values)))
+    return value
+
+
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
+AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
 AUTOSTART_SPLAY = "autostart_splay"
 AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
 AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
@@ -567,7 +576,12 @@ class Environment(BaseDocument):
                              doc="When this boolean is set to true, the orchestrator will automatically release a new version "
                                  "that was compiled by the orchestrator itself.", validator=convert_boolean),
         PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
-                                     doc="Push a new version when it has been autodeployed.", validator=convert_boolean),
+                                     doc="[DEPRECATED] Push a new version when it has been autodeployed.",
+                                     validator=convert_boolean),
+        AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, typ="str",
+                                                     default=const.AgentTriggerMethod.no_push.name,
+                                                     validator=convert_agent_trigger_method,
+                                                     doc="The agent trigger method to use when " + AUTO_DEPLOY + " is enabled"),
         AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
                                  doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,
