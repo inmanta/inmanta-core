@@ -23,7 +23,7 @@ import tornado
 from tornado import gen, httpserver, web, routing
 
 import inmanta.protocol.endpoints
-from inmanta import config as inmanta_config
+from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
 
@@ -162,7 +162,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if args:
             raise Exception("Only named groups are support in url patterns")
 
-        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token"
+        allow_headers = "Origin, Accept, Content-Type, X-Requested-With, X-CSRF-Token, %s" % const.INMANTA_MT_HEADER
         if len(self._transport.headers):
             allow_headers += ", " + ", ".join(self._transport.headers)
 

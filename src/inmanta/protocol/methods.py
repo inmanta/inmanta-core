@@ -28,9 +28,6 @@ from tornado import gen
 from typing import Any
 
 
-VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
-
-
 @gen.coroutine
 def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     metadata[const.INMANTA_URN + "env"] = str(env)

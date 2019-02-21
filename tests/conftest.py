@@ -507,6 +507,7 @@ def snippetcompiler(snippetcompiler_global):
 
 class CLI(object):
     async def run(self, *args):
+        # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
@@ -519,7 +520,10 @@ class CLI(object):
                 catch_exceptions=False
             )
 
-        return await asyncio.get_event_loop().run_in_executor(None, invoke)
+        result = await asyncio.get_event_loop().run_in_executor(None, invoke)
+        # reset to default again
+        del os.environ["COLUMNS"]
+        return result
 
 
 @pytest.fixture

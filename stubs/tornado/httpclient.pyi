@@ -4,6 +4,7 @@ import ssl
 import datetime
 
 from tornado import httputil
+from tornado.concurrent import Future
 
 
 class HTTPRequest(object):
@@ -49,6 +50,7 @@ class HTTPRequest(object):
 class HTTPResponse(object):
     code: int
     body: str
+    request_time: float
 
 
 class AsyncHTTPClient:

@@ -29,7 +29,6 @@ import pymongo
 from tornado import gen
 
 from inmanta import const
-from inmanta.resources import Id
 import hashlib
 from inmanta.const import ResourceState
 from _collections import defaultdict
@@ -1350,6 +1349,7 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
+        from inmanta.resources import Id
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
@@ -1645,11 +1645,16 @@ class ConfigurationModel(BaseDocument):
                 ores = id_to_resource[res.resource_id]
 
                 # available/skipped/unavailable -> next version
-                if ores.status in [ResourceState.available, ResourceState.skipped, ResourceState.unavailable]:
+                if ores.status in [ResourceState.available,
+                                   ResourceState.skipped,
+                                   ResourceState.unavailable]:
                     next.append(res)
 
                 # error -> increment
-                elif ores.status in [ResourceState.failed, ResourceState.cancelled]:
+                elif ores.status in [ResourceState.failed,
+                                     ResourceState.cancelled,
+                                     ResourceState.deploying,
+                                     ResourceState.processing_events]:
                     increment.append(res)
 
                 elif ores.status == ResourceState.deployed:
