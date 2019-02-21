@@ -3115,7 +3115,7 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     assert resource_container.Provider.readcount(agent_name, "key1") >= 2
     assert resource_container.Provider.changecount(agent_name, "key1") >= 1
     assert resource_container.Provider.readcount(agent_name, "key3") >= 2
-    assert resource_container.Provider.readcount(agent_name, "key3") >= 2
+    assert resource_container.Provider.changecount(agent_name, "key3") >= 2
 
     def wait_condition():
         print(20 * "-")
