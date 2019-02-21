@@ -37,7 +37,7 @@ from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
-from inmanta.data import Environment, LogLine
+from inmanta.data import Environment
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
