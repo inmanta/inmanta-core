@@ -781,12 +781,22 @@ class Agent(SessionEndpoint):
 
                     self.add_end_point_name(name)
 
+        # cache reference to THIS ioloop for handlers to push requests on it
+        # defer to start, just to be sure
+        self._io_loop = None
+
     @gen.coroutine
     def stop(self):
         yield super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             yield instance.stop()
+
+    @gen.coroutine
+    def start(self):
+        # cache reference to THIS ioloop for handlers to push requests on it
+        self._io_loop = ioloop.IOLoop.current()
+        yield super(Agent, self).start()
 
     def add_end_point_name(self, name):
         SessionEndpoint.add_end_point_name(self, name)

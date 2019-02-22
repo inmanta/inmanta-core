@@ -31,8 +31,8 @@ import pytest
 from _pytest.fixtures import fixture
 
 from inmanta import agent, data, const, execute, config
-from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext
-from inmanta.resources import resource, Resource
+from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext, CRUDHandler, ResourcePurged
+from inmanta.resources import resource, Resource, PurgeableResource, IgnoreResourceException
 import inmanta.agent.agent
 from inmanta.agent.agent import Agent
 from utils import retry_limited, assert_equal_ish, UNKWN
@@ -331,6 +331,63 @@ def resource_container():
 
         def post(self, ctx, resource) -> None:
             raise Exception()
+
+    @resource("test::AgentConfig", agent="agent", id_attribute="agentname")
+    class AgentConfig(PurgeableResource):
+        """
+            A resource that can modify the agentmap for autostarted agents
+        """
+        fields = ("agentname", "uri", "autostart")
+
+        @staticmethod
+        def get_autostart(exp, obj):
+            try:
+                if not obj.autostart:
+                    raise IgnoreResourceException()
+            except Exception as e:
+                # When this attribute is not set, also ignore it
+                raise IgnoreResourceException() from e
+            return obj.autostart
+
+    @provider("test::AgentConfig", name="agentrest")
+    class AgentConfigHandler(CRUDHandler):
+        def _get_map(self) -> dict:
+            def call():
+                return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
+
+            value = self.run_sync(call)
+            return value.result["value"]
+
+        def _set_map(self, agent_config: dict) -> None:
+            def call():
+                return self.get_client().set_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP,
+                                                     value=agent_config)
+
+            return self.run_sync(call)
+
+        def read_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
+            agent_config = self._get_map()
+            ctx.set("map", agent_config)
+
+            if resource.agentname not in agent_config:
+                raise ResourcePurged()
+
+            resource.uri = agent_config[resource.agentname]
+
+        def create_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
+            agent_config = ctx.get("map")
+            agent_config[resource.agentname] = resource.uri
+            self._set_map(agent_config)
+
+        def delete_resource(self, ctx: HandlerContext, resource: AgentConfig) -> None:
+            agent_config = ctx.get("map")
+            del agent_config[resource.agentname]
+            self._set_map(agent_config)
+
+        def update_resource(self, ctx: HandlerContext, changes: dict, resource: AgentConfig) -> None:
+            agent_config = ctx.get("map")
+            agent_config[resource.agentname] = resource.uri
+            self._set_map(agent_config)
 
     waiter = Condition()
 
@@ -3840,3 +3897,39 @@ async def test_push_full_deploy(resource_container, environment, server, client,
     assert resource_container.Provider.changecount("agent1", "key2") == 2
 
     await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_agent_run_sync(resource_container, environment, server, client):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    version = int(time.time())
+
+    def get_resources(version):
+        return [{'agentname': 'agent2',
+                 'uri': 'localhost',
+                 'autostart': 'true',
+                 'id': 'test::AgentConfig[agent1,agentname=agent2],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': [],
+                 'purge_on_delete': False
+                 }
+                ]
+    result = await client.put_version(tid=environment, version=version, resources=get_resources(version), unknowns=[],
+                                      version_info={})
+    assert result.code == 200
+
+    result = await client.release_version(environment, version, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    assert 'agent2' in (await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP)).result["value"]

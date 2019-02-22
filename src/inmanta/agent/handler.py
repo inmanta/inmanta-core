@@ -26,7 +26,7 @@ from collections import defaultdict
 import typing
 
 
-from tornado import concurrent, ioloop
+from tornado import concurrent
 
 
 from inmanta.agent.io import get_io
@@ -335,6 +335,8 @@ class ResourceHandler(object):
             self._io = io
 
         self._client = None
+        # explicit ioloop reference, as we don't want the ioloop for the current thread, but the one for the agent
+        self._ioloop = agent.process._io_loop
 
     def run_sync(self, func: typing.Callable) -> typing.Any:
         """
@@ -355,7 +357,8 @@ class ResourceHandler(object):
                     concurrent.chain_future(result, f)
             except Exception as e:
                 f.set_exception(e)
-        ioloop.IOLoop.current().add_callback(run)
+
+        self._ioloop.add_callback(run)
 
         return f.result()
 
