@@ -322,7 +322,7 @@ def export(options):
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
         agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.deploy, options.full_deploy)
-        conn.release_version(tid, version, agent_trigger_method)
+        conn.release_version(tid, version, False, agent_trigger_method)
 
 
 log_levels = {

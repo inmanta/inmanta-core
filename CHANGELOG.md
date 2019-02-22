@@ -32,7 +32,9 @@ and autostart_agent_deploy_splay_time respectively. The deprecated options will 
 - The environment setting push_on_auto_deploy is deprecated. It will be replaced with the setting 
 agent_trigger_method_on_auto_deploy, which allows you to specify whether the agents should receive a push notification
 for the new deployment and whether the agents should perform an incremental or a full deployment when they receive a trigger 
-from the autodeploy.  
+from the autodeploy. The deprecated option will be removed in release 2019.2
+- The push option in the release_version() API call to the Inmanta server is deprecated. It will be replaced with the 
+agent_trigger_method option. The deprecated option will be removed in release 2019.2   
 
 v 2018.3 (2018-12-07)
 Changes in this release:

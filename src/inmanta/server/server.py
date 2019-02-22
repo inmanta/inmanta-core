@@ -964,13 +964,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                                                                    data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
                 agent_trigger_method_on_autodeploy = const.AgentTriggerMethod.push_full_deploy
 
-            yield self.release_version(env, version, agent_trigger_method_on_autodeploy)
+            yield self.release_version(env, version, False, agent_trigger_method_on_autodeploy)
 
         return 200
 
     @protocol.handle(methods.release_version, version_id="id", env="tid")
     @gen.coroutine
-    def release_version(self, env, version_id, agent_trigger_method=const.AgentTriggerMethod.no_push):
+    def release_version(self, env, version_id, push, agent_trigger_method=const.AgentTriggerMethod.no_push):
         model = yield data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
@@ -1006,7 +1006,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                           action=const.ResourceAction.deploy, changes={}, messages=[logline],
                                           change=const.Change.nochange, send_events=False)
 
-        trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
+        # Ensure backward compatibility
+        if push and agent_trigger_method is const.AgentTriggerMethod.no_push:
+            warnings.warn("The push option in the release_version() API call is deprecated. "
+                          "Use the agent_trigger_method option instead.")
+            trigger_agent = True
+        else:
+            trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
 
         if trigger_agent:
             # fetch all resource in this cm and create a list of distinct agents

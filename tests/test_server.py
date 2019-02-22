@@ -239,7 +239,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
     assert result.code == 200
     assert result.result["count"] == 1
 
-    result = await client_multi.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client_multi.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     result = await client_multi.get_version(environment, version)
@@ -336,7 +336,7 @@ async def test_resource_update(client, server, environment):
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert(res.code == 200)
 
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     resource_ids = [x["id"] for x in resources]
@@ -520,7 +520,7 @@ async def test_purge_on_delete_requires(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     now = datetime.now()
@@ -652,7 +652,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     assert result.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     now = datetime.now()
@@ -741,7 +741,7 @@ async def test_purge_on_delete(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     now = datetime.now()
@@ -827,7 +827,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     now = datetime.now()
@@ -863,7 +863,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.no_push)
     assert result.code == 200
 
     now = datetime.now()
@@ -1055,3 +1055,37 @@ async def test_resource_action_log(motor, server_multi, client_multi, environmen
     resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
+
+
+@pytest.mark.parametrize("push,agent_trigger_method", [(True, const.AgentTriggerMethod.no_push),
+                                                       (True, const.AgentTriggerMethod.push_incremental_deploy),
+                                                       (True, const.AgentTriggerMethod.push_full_deploy),
+                                                       (False, const.AgentTriggerMethod.no_push),
+                                                       (False, const.AgentTriggerMethod.push_incremental_deploy),
+                                                       (False, const.AgentTriggerMethod.push_full_deploy)])
+@pytest.mark.asyncio(timeout=30)
+async def test_backwards_compatibility_release_version_api_call(server, client, environment, caplog, push,
+                                                                agent_trigger_method):
+    version = 1
+    resources = [{'group': 'root',
+                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
+                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
+                  'owner': 'root',
+                  'path': '/etc/sysconfig/network',
+                  'permissions': 644,
+                  'purged': False,
+                  'reload': False,
+                  'requires': [],
+                  'version': version}]
+    res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert res.code == 200
+    result = await client.release_version(environment, version, push, agent_trigger_method)
+    assert result.code == 200
+
+    log_lines = '\n'.join(caplog.messages)
+    target_line = "The push option in the release_version() API call is deprecated. " \
+                  "Use the agent_trigger_method option instead."
+    if push and agent_trigger_method == const.AgentTriggerMethod.no_push:
+        assert target_line in log_lines
+    else:
+        assert target_line not in log_lines

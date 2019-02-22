@@ -495,12 +495,14 @@ def put_version(
 
 
 @method(method_name="version", operation="POST", id=True, arg_options=ENV_OPTS, client_types=["api", "compiler"])
-def release_version(tid: uuid.UUID, id: int, agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.no_push):
+def release_version(tid: uuid.UUID, id: int, push: bool = False,
+                    agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.no_push):
     """
         Release version of the configuration model for deployment.
 
         :param tid: The id of the environment
         :param id: The version of the CM to deploy
+        :param push: [DEPRECATED] Notify all agents to deploy the version
         :param agent_trigger_method Indicates whether the agents should receive a push notification for the deployment and
                                     how the agents should perform the deploy (incremental deploy vs full deploy) when a push
                                     notification was requested
