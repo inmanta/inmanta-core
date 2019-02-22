@@ -499,6 +499,8 @@ def convert_agent_map(value):
 
 
 def convert_agent_trigger_method(value):
+    if isinstance(value, const.AgentTriggerMethod):
+        return value
     value = str(value)
     valid_values = [x.name for x in const.AgentTriggerMethod]
     if value not in valid_values:
@@ -576,12 +578,13 @@ class Environment(BaseDocument):
                              doc="When this boolean is set to true, the orchestrator will automatically release a new version "
                                  "that was compiled by the orchestrator itself.", validator=convert_boolean),
         PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
-                                     doc="[DEPRECATED] Push a new version when it has been autodeployed.",
+                                     doc="Push a new version when it has been autodeployed.",
                                      validator=convert_boolean),
         AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, typ="str",
-                                                     default=const.AgentTriggerMethod.no_push.name,
+                                                     default=const.AgentTriggerMethod.push_full_deploy.name,
                                                      validator=convert_agent_trigger_method,
-                                                     doc="The agent trigger method to use when " + AUTO_DEPLOY + " is enabled"),
+                                                     doc="The agent trigger method to use when "
+                                                         + PUSH_ON_AUTO_DEPLOY + " is enabled"),
         AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
                                  doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,

@@ -109,15 +109,12 @@ STATE_UPDATE = [ResourceAction.deploy]
 
 
 class AgentTriggerMethod(Enum):
-    no_push = 1
-    push_incremental_deploy = 2
-    push_full_deploy = 3
+    push_incremental_deploy = 1
+    push_full_deploy = 2
 
     @classmethod
-    def get_agent_trigger_method(cls, push, is_full_deploy):
-        if not push:
-            return cls.no_push
-        elif is_full_deploy:
+    def get_agent_trigger_method(cls, is_full_deploy):
+        if is_full_deploy:
             return cls.push_full_deploy
         else:
             return cls.push_incremental_deploy

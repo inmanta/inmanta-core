@@ -29,10 +29,6 @@ DEPRECATIONS:
 - The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 
 deprecated in favour of agent-deploy-interval, agent-deploy-splay-time, autostart_agent_deploy_interval 
 and autostart_agent_deploy_splay_time respectively. The deprecated options will be removed in release 2019.2
-- The environment setting push_on_auto_deploy is deprecated. It will be replaced with the setting 
-agent_trigger_method_on_auto_deploy, which allows you to specify whether the agents should receive a push notification
-for the new deployment and whether the agents should perform an incremental or a full deployment when they receive a trigger 
-from the autodeploy. The deprecated option will be removed in release 2019.2
 
 v 2018.3 (2018-12-07)
 Changes in this release:

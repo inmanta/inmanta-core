@@ -479,8 +479,9 @@ def version_list(client: Client, environment: str) -> None:
 def version_release(client: Client, environment: str, push: bool, full: bool, version: str) -> None:
     env_id = client.to_environment_id(environment)
     if push:
-        trigger_method = AgentTriggerMethod.get_agent_trigger_method(push, full)
-        x = client.get_dict("release_version", "model", dict(tid=env_id, id=version, agent_trigger_method=trigger_method))
+        trigger_method = AgentTriggerMethod.get_agent_trigger_method(full)
+        x = client.get_dict("release_version", "model", dict(tid=env_id, id=version, push=True,
+                                                             agent_trigger_method=trigger_method))
     else:
         x = client.get_dict("release_version", "model", dict(tid=env_id, id=version))
 
