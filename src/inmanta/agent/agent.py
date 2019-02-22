@@ -23,6 +23,7 @@ import os
 import random
 import uuid
 import time
+import asyncio
 
 from tornado import gen, locks, ioloop
 from inmanta import env, const
@@ -30,43 +31,48 @@ from inmanta import protocol
 from inmanta.agent import handler
 from inmanta.loader import CodeLoader
 from inmanta.protocol import SessionEndpoint, methods
-from inmanta.resources import Resource
+from inmanta.resources import Resource, Id
 from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 from inmanta.const import ResourceState
-from typing import Tuple
+from typing import Tuple, Optional, Generator, Any
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
 
+NoneGen = Generator[Any, Any, None]
 
 class ResourceActionResult(object):
 
-    def __init__(self, success, receive_events, cancel):
+    def __init__(self, success: bool, receive_events: bool, cancel:bool) -> None:
         self.success = success
         self.receive_events = receive_events
         self.cancel = cancel
 
-    def __add__(self, other):
+    def __add__(self, other: "ResourceActionResult") -> "ResourceActionResult":
         return ResourceActionResult(self.success and other.success,
                                     self.receive_events or other.receive_events,
                                     self.cancel or other.cancel)
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
         return "%r %r %r" % (self.success, self.receive_events, self.cancel)
 
 
 class ResourceAction(object):
 
-    def __init__(self, scheduler, resource, gid):
+    resource: Resource
+    resource_id: Id
+    future: asyncio.Future[ResourceActionResult]
+
+    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID) -> None:
         """
             :param gid A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler = scheduler
         self.resource = resource
-        if self.resource is not None:
+        if resource is not None:
             self.resource_id = resource.id
         self.future = Future()
         self.running = False
@@ -76,19 +82,19 @@ class ResourceAction(object):
         self.changes = None
         self.undeployable = None
 
-    def is_running(self):
+    def is_running(self) -> bool:
         return self.running
 
-    def is_done(self):
+    def is_done(self) -> bool:
         return self.future.done()
 
-    def cancel(self):
+    def cancel(self) -> None:
         if not self.is_running() and not self.is_done():
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def send_in_progress(self, action_id, start, status=ResourceState.deploying):
+    def send_in_progress(self, action_id: uuid.UUID, start: float, status:ResourceState =ResourceState.deploying) -> NoneGen:
         yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
                                                                  resource_ids=[str(self.resource.id)],
                                                                  action_id=action_id,
@@ -98,7 +104,7 @@ class ResourceAction(object):
 
     @gen.coroutine
     def _execute(self, ctx: handler.HandlerContext, events: dict, cache: AgentCache, start: float,
-                 event_only: bool=False) -> Tuple[bool, bool]:
+                 event_only: bool=False) -> Generator[Any, Any, Tuple[bool, bool]]:
         """
             :param ctx The context to use during execution of this deploy
             :param events Possible events that are available for this resource
