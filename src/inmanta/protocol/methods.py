@@ -502,7 +502,7 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False,
 
         :param tid: The id of the environment
         :param id: The version of the CM to deploy
-        :param push: [DEPRECATED] Notify all agents to deploy the version
+        :param push: Notify all agents to deploy the version
         :param agent_trigger_method Indicates whether the agents should receive a push notification for the deployment and
                                     how the agents should perform the deploy (incremental deploy vs full deploy) when a push
                                     notification was requested
