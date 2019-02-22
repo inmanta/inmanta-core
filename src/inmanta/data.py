@@ -459,7 +459,9 @@ class Project(BaseDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        yield Environment.delete_all(project=self.id)
+        environments = yield Environment.get_list(project=self.id)
+        for env in environments:
+            yield env.delete_cascade()
         yield self.delete()
 
 
