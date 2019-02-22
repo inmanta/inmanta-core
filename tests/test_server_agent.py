@@ -3774,8 +3774,11 @@ async def test_push_incremental_deploy(resource_container, environment, server, 
     await agent.stop()
 
 
+@pytest.mark.parametrize("push, agent_trigger_method", [(True, const.AgentTriggerMethod.no_push),
+                                                        (False, const.AgentTriggerMethod.push_full_deploy),
+                                                        (True, const.AgentTriggerMethod.push_full_deploy)])
 @pytest.mark.asyncio
-async def test_push_full_deploy(resource_container, environment, server, client, no_agent_backoff):
+async def test_push_full_deploy(resource_container, environment, server, client, no_agent_backoff, push, agent_trigger_method):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     config.Config.set("config", "agent-deploy-interval", "0")
@@ -3809,7 +3812,7 @@ async def test_push_full_deploy(resource_container, environment, server, client,
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
-    result = await client.release_version(environment, version, False, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(environment, version, push, agent_trigger_method)
     assert result.code == 200
 
     await _wait_until_deployment_finishes(client, environment, version)
@@ -3825,7 +3828,7 @@ async def test_push_full_deploy(resource_container, environment, server, client,
                                       version_info={})
     assert result.code == 200
 
-    result = await client.release_version(environment, version2, False, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(environment, version2, push, agent_trigger_method)
     assert result.code == 200
 
     await _wait_until_deployment_finishes(client, environment, version2)

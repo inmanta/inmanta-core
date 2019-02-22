@@ -1008,8 +1008,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         # Ensure backward compatibility
         if push and agent_trigger_method is const.AgentTriggerMethod.no_push:
-            warnings.warn("The push option in the release_version() API call is deprecated. "
-                          "Use the agent_trigger_method option instead.")
             trigger_agent = True
         else:
             trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
