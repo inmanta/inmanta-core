@@ -29,7 +29,6 @@ import time
 from uuid import UUID
 import uuid
 import shutil
-import warnings
 
 import dateutil
 import pymongo
@@ -957,20 +956,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             push_on_auto_deploy = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
             agent_trigger_method_on_autodeploy = yield env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-
-            # Ensure backward compatibility
-            if push_on_auto_deploy and agent_trigger_method_on_autodeploy is const.AgentTriggerMethod.no_push:
-                warnings.warn("Config option %s is deprecated. Use %s instead." % (data.PUSH_ON_AUTO_DEPLOY,
-                                                                                   data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
-                agent_trigger_method_on_autodeploy = const.AgentTriggerMethod.push_full_deploy
-
-            yield self.release_version(env, version, agent_trigger_method_on_autodeploy)
+            yield self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
         return 200
 
     @protocol.handle(methods.release_version, version_id="id", env="tid")
     @gen.coroutine
-    def release_version(self, env, version_id, agent_trigger_method=const.AgentTriggerMethod.no_push):
+    def release_version(self, env, version_id, push, agent_trigger_method=None):
         model = yield data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
@@ -1006,9 +998,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                           action=const.ResourceAction.deploy, changes={}, messages=[logline],
                                           change=const.Change.nochange, send_events=False)
 
-        trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
-
-        if trigger_agent:
+        if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
             yield self.agentmanager._ensure_agents(env, agents)
@@ -1016,7 +1006,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for agent in agents:
                 client = self.get_agent_client(env.id, agent)
                 if client is not None:
-                    incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                    if not agent_trigger_method:
+                        # Ensure backward compatibility
+                        incremental_deploy = False
+                    else:
+                        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
                     future = client.trigger(env.id, agent, incremental_deploy)
                     self.add_future(future)
                 else:

@@ -239,7 +239,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
     assert result.code == 200
     assert result.result["count"] == 1
 
-    result = await client_multi.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client_multi.release_version(environment, version, False)
     assert result.code == 200
 
     result = await client_multi.get_version(environment, version)
@@ -336,7 +336,7 @@ async def test_resource_update(client, server, environment):
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert(res.code == 200)
 
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     resource_ids = [x["id"] for x in resources]
@@ -520,7 +520,7 @@ async def test_purge_on_delete_requires(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -652,7 +652,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     assert result.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -741,7 +741,7 @@ async def test_purge_on_delete(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -827,7 +827,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -863,7 +863,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
