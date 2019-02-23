@@ -243,74 +243,84 @@ async def test_project_no_project_name(data_module):
 
 @pytest.mark.asyncio
 async def test_project_cascade_delete(data_module):
-    project = data.Project(name="proj")
-    await project.insert()
 
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
+    async def create_full_environment(project_name, environment_name):
+        project = data.Project(name=project_name)
+        await project.insert()
 
-    agent_proc = data.AgentProcess(hostname="testhost",
-                                   environment=env.id,
-                                   first_seen=datetime.datetime.now(),
-                                   last_seen=datetime.datetime.now(),
-                                   sid=uuid.uuid4())
-    await agent_proc.insert()
+        env = data.Environment(name=environment_name, project=project.id, repo_url="", repo_branch="")
+        await env.insert()
 
-    agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
-    await agi1.insert()
-    agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
-    await agi2.insert()
+        agent_proc = data.AgentProcess(hostname="testhost",
+                                       environment=env.id,
+                                       first_seen=datetime.datetime.now(),
+                                       last_seen=datetime.datetime.now(),
+                                       sid=uuid.uuid4())
+        await agent_proc.insert()
 
-    agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False,
-                       primary=agi1.id)
-    await agent.insert()
+        agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+        await agi1.insert()
+        agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+        await agi2.insert()
 
-    version = int(time.time())
-    cm = data.ConfigurationModel(version=version, environment=env.id)
-    await cm.insert()
+        agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False,
+                           primary=agi1.id)
+        await agent.insert()
 
-    resource_ids = []
-    for i in range(5):
-        path = "/etc/file" + str(i)
-        key = "std::File[agent1,path=" + path + "]"
-        res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
-                                 attributes={"path": path})
-        await res1.insert()
-        resource_ids.append(res1.id)
+        version = int(time.time())
+        cm = data.ConfigurationModel(version=version, environment=env.id)
+        await cm.insert()
 
-    code = data.Code(version=version, resource="std::File", environment=env.id)
-    await code.insert()
+        resource_ids = []
+        for i in range(5):
+            path = "/etc/file" + str(i)
+            key = "std::File[agent1,path=" + path + "]"
+            res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                     attributes={"path": path})
+            await res1.insert()
+            resource_ids.append(res1.id)
 
-    unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
-    await unknown_parameter.insert()
+        code = data.Code(version=version, resource="std::File", environment=env.id)
+        await code.insert()
 
-    await env.set(data.AUTO_DEPLOY, True)
+        unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+        await unknown_parameter.insert()
 
-    assert (await data.Project.get_by_id(project.id)) is not None
-    assert (await data.Environment.get_by_id(env.id)) is not None
-    assert (await data.AgentProcess.get_by_id(agent_proc.id)) is not None
-    assert (await data.AgentInstance.get_by_id(agi1.id)) is not None
-    assert (await data.AgentInstance.get_by_id(agi2.id)) is not None
-    assert (await data.Agent.get_by_id(agent.id)) is not None
-    for current_id in resource_ids:
-        assert (await data.Resource.get_by_id(current_id)) is not None
-    assert (await data.Code.get_by_id(code.id)) is not None
-    assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
-    assert (await env.get(data.AUTO_DEPLOY)) is True
+        return project, env, agent_proc, [agi1, agi2], agent, resource_ids, code, unknown_parameter
 
-    await project.delete_cascade()
+    async def assert_project_exists(project, env, agent_proc, agent_instances, agent, resource_ids, code, unknown_parameter,
+                                    exists):
+        def func(x):
+            if exists:
+                return x is not None
+            else:
+                return x is None
+        assert func(await data.Project.get_by_id(project.id))
+        assert func(await data.Environment.get_by_id(env.id))
+        assert func(await data.AgentProcess.get_by_id(agent_proc.id))
+        assert func(await data.AgentInstance.get_by_id(agent_instances[0].id))
+        assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
+        assert func(await data.Agent.get_by_id(agent.id))
+        for current_id in resource_ids:
+            assert func(await data.Resource.get_by_id(current_id))
+        assert func(await data.Code.get_by_id(code.id))
+        assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
 
-    assert (await data.Project.get_by_id(project.id)) is None
-    assert (await data.Environment.get_by_id(env.id)) is None
-    assert (await data.AgentProcess.get_by_id(agent_proc.id)) is None
-    assert (await data.AgentInstance.get_by_id(agi1.id)) is None
-    assert (await data.AgentInstance.get_by_id(agi2.id)) is None
-    assert (await data.Agent.get_by_id(agent.id)) is None
-    for current_id in resource_ids:
-        assert (await data.Resource.get_by_id(current_id)) is None
-    assert (await data.Code.get_by_id(code.id)) is None
-    assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
-    assert (await env.get(data.AUTO_DEPLOY)) is True
+    # Setup two environments
+    full_env_1 = await create_full_environment("proj1", "env1")
+    full_env_2 = await create_full_environment("proj2", "env2")
+
+    # Assert exists
+    await assert_project_exists(*full_env_1, exists=True)
+    await assert_project_exists(*full_env_2, exists=True)
+
+    # Cascade delete project 1
+    project_env1 = full_env_1[0]
+    await project_env1.delete_cascade()
+
+    # Assert outcome
+    await assert_project_exists(*full_env_1, exists=False)
+    await assert_project_exists(*full_env_2, exists=True)
 
 
 @pytest.mark.asyncio
