@@ -3881,7 +3881,7 @@ async def test_agent_run_sync(resource_container, environment, server, client):
                                       version_info={})
     assert result.code == 200
 
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.push_full_deploy)
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     await _wait_until_deployment_finishes(client, environment, version)
