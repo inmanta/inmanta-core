@@ -57,12 +57,12 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     return (args, log_dir)
 
 
-def run_without_tty(args, env={}):
+def run_without_tty(args, env={}, killtime=3, termtime=2):
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
-    t1 = Timer(2, process.kill)
-    t2 = Timer(3, process.terminate)
+    t1 = Timer(killtime, process.kill)
+    t2 = Timer(termtime, process.terminate)
     t1.start()
     t2.start()
 
@@ -184,3 +184,8 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
             pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
+
+
+def test_check_shutdown():
+    out, err = run_without_tty([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")], killtime=2, termtime=1)
+    assert "STOP" in out

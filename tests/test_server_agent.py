@@ -25,6 +25,7 @@ import os
 import shutil
 import subprocess
 import asyncio
+import psutil
 
 
 import pytest
@@ -2500,6 +2501,8 @@ async def test_autostart_mapping(server, client, resource_container, environment
     """
         Test autostart mapping and restart agents when the map is modified
     """
+    current_process = psutil.Process()
+    children_pre = current_process.children(recursive=True)
     resource_container.Provider.reset()
     env = await data.Environment.get_by_id(uuid.UUID(environment))
     await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
@@ -2554,6 +2557,15 @@ async def test_autostart_mapping(server, client, resource_container, environment
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 2:
         result = await client.list_agents(tid=environment)
         await asyncio.sleep(0.1)
+
+    await server.stop()
+
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+
+    newchildren = set(children)-set(children_pre)
+
+    assert len(newchildren) == 0, newchildren
 
 
 @pytest.mark.asyncio(timeout=15)

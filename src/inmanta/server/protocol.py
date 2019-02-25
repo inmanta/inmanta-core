@@ -74,6 +74,7 @@ class Server(endpoints.Endpoint):
         self.add_slice(self.sessions_handler)
 
         self._transport = server.RESTServer(self.id)
+        self.running = False
 
     def add_slice(self, slice: "ServerSlice") -> None:
         """
@@ -107,7 +108,10 @@ class Server(endpoints.Endpoint):
             order in which they are added to the RESTserver via the add_endpoint(endpoint) method.
             This order is hardcoded in the get_server_slices() method in server/bootloader.py
         """
+        if self.running:
+            return
         LOGGER.debug("Starting Server Rest Endpoint")
+        self.running = True
 
         for slice in self.get_slices().values():
             yield slice.prestart(self)
@@ -127,6 +131,9 @@ class Server(endpoints.Endpoint):
             This prevents database connection from being closed too early. This order in which the endpoint
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
+        if not self.running:
+            return
+        self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         yield self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
