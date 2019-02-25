@@ -24,6 +24,7 @@ Changes in this release:
 - Add support to run the compiler on windows
 - Added exception explainer to compiler for 'modified after freeze' (#876)
 - Added logging of resource actions on the server and purging of resource actions in the database (#533)
+- Use urllib client for fetching jwks public keys
 
 DEPRECATIONS:
 - The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 

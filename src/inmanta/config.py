@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 """
 
 import base64
+from urllib import request, error
 from collections import defaultdict
 from configparser import ConfigParser, Interpolation
 import json
@@ -26,11 +27,11 @@ import re
 import sys
 import uuid
 import warnings
+import ssl
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
-from tornado import httpclient
 from inmanta import const
 
 from typing import Optional, Callable, TypeVar, Generic, Dict, List, cast, Union
@@ -504,15 +505,16 @@ class AuthJWTConfig(object):
         else:
             self.validate_cert = True
 
-        http_client = httpclient.HTTPClient()
+        ctx = None
+        if self.validate_cert:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+
         try:
-            response = http_client.fetch(self.jwks_uri, validate_cert=self.validate_cert)
-            if hasattr(response.body, "decode"):
-                body = response.body.decode()
-            else:
-                body = response.body
-            key_data = json.loads(body)
-        except httpclient.HTTPError as e:
+            with request.urlopen(self.jwks_uri, context=ctx) as response:
+                key_data = json.loads(response.read().decode('utf-8'))
+        except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri. Got error: %s" %
@@ -520,7 +522,6 @@ class AuthJWTConfig(object):
         except Exception as e:
             # Other errors are possible, such as IOError.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))
-        http_client.close()
 
         self.keys = {}
         for key in key_data["keys"]:

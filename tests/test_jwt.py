@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
+import json
 import time
 import os
 import pytest
@@ -64,7 +66,7 @@ class PKHandler(web.RequestHandler):
             ]
         }
 
-        time.sleep(1.1)
+        self.write(json.dumps(public_key))
 
 
 @pytest.fixture(scope="function")
@@ -88,6 +90,15 @@ async def test_validate_rs256(jwks, tmp_path):
     config_file = os.path.join(tmp_path, "auth.cfg")
     with open(config_file, "w+") as fd:
         fd.write("""
+[auth_jwt_default]
+algorithm=HS256
+sign=true
+client_types=agent,compiler
+key=eciwliGyqECVmXtIkNpfVrtBLutZiITZKSKYhogeHMM
+expire=0
+issuer=https://localhost:8888/
+audience=https://localhost:8888/
+
 [auth_jwt_keycloak]
 algorithm=RS256
 sign=false
@@ -101,6 +112,5 @@ validate_cert=false
     from inmanta.config import Config, AuthJWTConfig
     Config.load_config(config_file)
 
-    cfg_list = AuthJWTConfig.list()
-
-    assert len(cfg_list) == 1
+    cfg_list = await asyncio.get_running_loop().run_in_executor(None, AuthJWTConfig.list)
+    assert len(cfg_list) == 2
