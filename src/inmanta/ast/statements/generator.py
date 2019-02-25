@@ -216,8 +216,7 @@ class Constructor(GeneratorStatement):
 
         inindex = set()
 
-        has_default = set(self.type.get_defaults().keys()) | \
-            set(self.type.get_entity().get_defaults().keys())
+        has_default = set(self.type.get_default_values().keys())
 
         all_attributes = set(self.attributes.keys()) | \
             has_default
@@ -246,9 +245,7 @@ class Constructor(GeneratorStatement):
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
-        out.extend([req for (k, v) in self.type.get_defaults().items() for req in v.requires()])
-        out.extend([req for (k, v) in self.type.get_entity().get_default_values().items() for req in v.requires()])
-
+        out.extend([req for (k, v) in self.type.get_default_values().items() for req in v.requires()])
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
@@ -287,7 +284,7 @@ class Constructor(GeneratorStatement):
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
 
-        for (k, v) in self.type.get_defaults().items():
+        for (k, v) in self.type.get_default_values().items():
             if k in self._use_default:
                 attributes[k] = v.execute(requires, resolver, queue)
 
