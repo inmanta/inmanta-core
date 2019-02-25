@@ -112,5 +112,5 @@ validate_cert=false
     from inmanta.config import Config, AuthJWTConfig
     Config.load_config(config_file)
 
-    cfg_list = await asyncio.get_running_loop().run_in_executor(None, AuthJWTConfig.list)
+    cfg_list = await asyncio.get_event_loop().run_in_executor(None, AuthJWTConfig.list)
     assert len(cfg_list) == 2
