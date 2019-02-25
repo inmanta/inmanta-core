@@ -371,13 +371,13 @@ class Entity(EntityLike, NamedType):
         """
             The representation of this type
         """
-        return "Entity(%s::%s)" % (self.namespace, self.name)
+        return "Entity(%s)" % (self.get_full_name())
 
     def __str__(self) -> str:
         """
             The pretty string of this type
         """
-        return "%s::%s" % (self.namespace, self.name)
+        return self.get_full_name()
 
     @classmethod
     def cast(cls, value):
@@ -609,7 +609,16 @@ class Default(EntityLike):
         return self.entity.get_entity()
 
     def __repr__(self) -> str:
-        return "Default(%s)" % self.name
+        """
+            The representation of this type
+        """
+        return "Default(%s)" % (self.get_full_name())
+
+    def __str__(self) -> str:
+        """
+            The pretty string of this type
+        """
+        return "%s" % (self.get_full_name())
 
     def get_full_name(self) -> str:
         """
