@@ -30,4 +30,4 @@ tox-venv==0.3.1
 typing==3.6.6
 jinja2==2.10
 pep8-naming==0.8.2
-flake8==3.7.6
+flake8==3.7.7
