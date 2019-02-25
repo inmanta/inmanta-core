@@ -165,7 +165,7 @@ class Server(protocol.ServerSlice):
         if opt.dash_lcm_enable.get():
             lcm = """,
     'lcm': '%s://' + window.location.hostname + ':8889/'
-""" % "https" if opt.server_ssl_key else "http"
+""" % ("https" if opt.server_ssl_key.get() else "http")
 
         content = """
 angular.module('inmantaApi.config', []).constant('inmantaConfig', {
