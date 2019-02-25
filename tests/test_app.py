@@ -57,7 +57,7 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     return (args, log_dir)
 
 
-def run_without_tty(args, env=[]):
+def run_without_tty(args, env={}):
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
@@ -99,6 +99,22 @@ def get_compiled_regexes(regexes, timed):
     return result
 
 
+def is_colorama_package_available():
+    try:
+        import colorama  # noqa: F401
+    except ModuleNotFoundError:
+        return False
+    return True
+
+
+def test_verify_that_colorama_package_is_not_present():
+    """
+        The colorama package turns the colored characters in TTY-based terminal into uncolored characters.
+        As such, this package should not be present.
+    """
+    assert not is_colorama_package_available()
+
+
 @pytest.mark.parametrize("log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines", [
     (3, False, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
     (2, False, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
@@ -115,6 +131,9 @@ def get_compiled_regexes(regexes, timed):
 ])
 @pytest.mark.timeout(20)
 def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    if is_colorama_package_available() and with_tty:
+        pytest.skip("Colorama is present")
+
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, timed=timed)
     if with_tty:
         (stdout, _) = run_with_tty(args)
@@ -138,6 +157,9 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 ])
 @pytest.mark.timeout(60)
 def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
+    if is_colorama_package_available() and with_tty:
+        pytest.skip("Colorama is present")
+
     log_file = "server.log"
     (args, log_dir) = get_command(tmpdir, stdout_log_level=log_level, log_file=log_file, log_level_log_file=log_level)
     if with_tty:
