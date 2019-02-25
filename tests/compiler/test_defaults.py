@@ -183,3 +183,20 @@ def test_default_remove(snippetcompiler):
     )
     with pytest.raises(UnsetException):
         compiler.do_compile()
+
+
+def test_gradual_default(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Server:
+    string a="a"
+    string b
+end
+
+typedef Server2 as Server(b="b")
+
+Server2()
+
+implement Server using std::none
+""")
+    compiler.do_compile()

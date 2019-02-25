@@ -46,15 +46,35 @@ if TYPE_CHECKING:
 
 class EntityLike(NamedType):
 
+    parent_entities: "List[Entity]"
+
     @abstractmethod
     def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+        """ get defaults defined on this entity"""
         pass
 
     def get_default(self, name: str) -> "ExpressionStatement":
-        defaults = self.get_defaults()
+        defaults = self.get_default_values()
         if name not in defaults:
             raise AttributeError(name)
         return defaults[name]
+
+    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
+        """
+            Return the dictionary with default values
+        """
+        values = []  # type: List[Tuple[str,ExpressionStatement]]
+
+        # left most parent takes precedence
+        for parent in reversed(self.parent_entities):
+            values.extend(parent.get_default_values().items())
+
+        # self takes precedence
+        values.extend(self.get_defaults().items())
+        # make dict, remove doubles
+        dvalues = dict(values)
+        # remove erased defaults
+        return {k: v for k, v in dvalues.items() if v is not None}
 
     @abstractmethod
     def get_entity(self) -> "Entity":
@@ -127,25 +147,8 @@ class Entity(EntityLike, NamedType):
         """
         self.__default_value[name] = value
 
-    def get_defaults(self) -> "Dict[str,ExpressionStatement]":
-        return self.get_default_values()
-
-    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
-        """
-            Return the dictionary with default values
-        """
-        values = []  # type: List[Tuple[str,ExpressionStatement]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self.__default_value.items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
+    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+        return self.__default_value
 
     def get_namespace(self) -> Namespace:
         """
@@ -368,13 +371,13 @@ class Entity(EntityLike, NamedType):
         """
             The representation of this type
         """
-        return "Entity(%s::%s)" % (self.namespace, self.name)
+        return "Entity(%s)" % (self.get_full_name())
 
     def __str__(self) -> str:
         """
             The pretty string of this type
         """
-        return "%s::%s" % (self.namespace, self.name)
+        return self.get_full_name()
 
     @classmethod
     def cast(cls, value):
@@ -579,6 +582,7 @@ class Default(EntityLike):
 
     def set_entity(self, entity: EntityLike) -> None:
         self.entity = entity
+        self.parent_entities = [entity]
 
     def add_default(self, name: str, value: "ExpressionStatement") -> None:
         """
@@ -605,7 +609,16 @@ class Default(EntityLike):
         return self.entity.get_entity()
 
     def __repr__(self) -> str:
-        return "Default(%s)" % self.name
+        """
+            The representation of this type
+        """
+        return "Default(%s)" % (self.get_full_name())
+
+    def __str__(self) -> str:
+        """
+            The pretty string of this type
+        """
+        return "%s" % (self.get_full_name())
 
     def get_full_name(self) -> str:
         """
