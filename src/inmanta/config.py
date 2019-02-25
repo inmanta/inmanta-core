@@ -506,7 +506,7 @@ class AuthJWTConfig(object):
             self.validate_cert = True
 
         ctx = None
-        if self.validate_cert:
+        if not self.validate_cert:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
