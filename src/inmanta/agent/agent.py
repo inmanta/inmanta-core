@@ -36,17 +36,19 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ResourceState
-from typing import Tuple, Optional, Generator, Any
+from inmanta.const import ResourceState, ResourceAction
+from typing import Tuple, Optional, Generator, Any, Dict, List
+from inmanta.agent.handler import ResourceHandler
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
 
 NoneGen = Generator[Any, Any, None]
 
+
 class ResourceActionResult(object):
 
-    def __init__(self, success: bool, receive_events: bool, cancel:bool) -> None:
+    def __init__(self, success: bool, receive_events: bool, cancel: bool) -> None:
         self.success = success
         self.receive_events = receive_events
         self.cancel = cancel
@@ -70,17 +72,18 @@ class ResourceAction(object):
         """
             :param gid A unique identifier to identify a deploy. This is local to this agent.
         """
-        self.scheduler = scheduler
-        self.resource = resource
+        self.scheduler: "ResourceScheduler" = scheduler
+        self.resource: Resource = resource
         if resource is not None:
-            self.resource_id = resource.id
-        self.future = Future()
-        self.running = False
-        self.gid = gid
-        self.status = None
-        self.change = None
-        self.changes = None
-        self.undeployable = None
+            self.resource_id: Id = resource.id
+        self.future: Future[ResourceActionResult] = Future()
+        self.running: bool = False
+        self.gid: uuid.UUID = gid
+        self.status: Optional[const.ResourceState] = None
+        self.change: Optional[const.Change] = None
+        # resourceid -> attribute -> {current: , desired:}
+        self.changes: Optional[Dict[str, Dict[str, Dict[str, str]]]] = None
+        self.undeployable: Optional[const.ResourceState] = None
 
     def is_running(self) -> bool:
         return self.running
@@ -94,7 +97,7 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def send_in_progress(self, action_id: uuid.UUID, start: float, status:ResourceState =ResourceState.deploying) -> NoneGen:
+    def send_in_progress(self, action_id: uuid.UUID, start: float, status: ResourceState =ResourceState.deploying) -> NoneGen:
         yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
                                                                  resource_ids=[str(self.resource.id)],
                                                                  action_id=action_id,
@@ -116,7 +119,7 @@ class ResourceAction(object):
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s",
                   deploy_id=self.gid, resource_id=self.resource_id)
-        provider = None
+        provider: ResourceHandler
 
         if not event_only:
             yield self.send_in_progress(ctx.action_id, start)
@@ -172,7 +175,7 @@ class ResourceAction(object):
         return success, send_event
 
     @gen.coroutine
-    def execute(self, dummy, generation, cache):
+    def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
         LOGGER.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.version)
 
@@ -257,7 +260,7 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(success, send_event, False))
             self.running = False
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.resource is None:
             return "DUMMY"
 
@@ -269,18 +272,18 @@ class ResourceAction(object):
 
         return self.resource.id.resource_str() + status
 
-    def long_string(self):
+    def long_string(self) -> str:
         return "%s awaits %s" % (self.resource.id.resource_str(), " ".join([str(aw) for aw in self.dependencies]))
 
 
 class RemoteResourceAction(ResourceAction):
 
-    def __init__(self, scheduler, resource_id, gid):
+    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID):
         super(RemoteResourceAction, self).__init__(scheduler, None, gid)
         self.resource_id = resource_id
 
     @gen.coroutine
-    def execute(self, dummy, generation, cache):
+    def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
         yield dummy.future
         try:
             result = yield self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
@@ -322,7 +325,11 @@ class RemoteResourceAction(ResourceAction):
         except Exception:
             LOGGER.exception("could not get status for remote resource")
 
-    def notify(self, send_events, status, change, changes):
+    def notify(self, 
+               send_events: bool,
+               status: const.ResourceState,
+               change: const.Change,
+               changes: Dict[str, Dict[str, Dict[str, str]]]) -> None:
         if not self.future.done():
             self.status = status
             self.change = change
@@ -332,26 +339,31 @@ class RemoteResourceAction(ResourceAction):
 
 class ResourceScheduler(object):
 
-    def __init__(self, agent, env_id, name, cache, ratelimiter):
-        self.generation = {}
-        self.cad = {}
+    def __init__(self, 
+                 agent: "AgentInstance",
+                 env_id: uuid.UUID,
+                 name: str,
+                 cache: AgentCache,
+                 ratelimiter: locks.Semaphore) -> None:
+        self.generation: Dict[str, ResourceAction] = {}
+        self.cad: Dict[str, RemoteResourceAction] = {}
         self._env_id = env_id
         self.agent = agent
         self.cache = cache
         self.name = name
         self.ratelimiter = ratelimiter
-        self.version = 0
+        self.version: int = 0
 
-    def get_scheduled_resource_actions(self):
+    def get_scheduled_resource_actions(self) -> List[ResourceAction]:
         return list(self.generation.values())
 
-    def finished(self):
+    def finished(self) -> bool:
         for resource_action in self.generation.values():
             if not resource_action.is_done():
                 return False
         return True
 
-    def reload(self, resources, undeployable={}, reason: str="RELOAD"):
+    def reload(self, resources: List[Resource], undeployable: Dict[str, const.ResourceState]={}, reason: str="RELOAD") -> None:
         version = resources[0].id.get_version
 
         self.version = version
@@ -522,7 +534,7 @@ class AgentInstance(object):
         return True
 
     @gen.coroutine
-    def get_provider(self, resource):
+    def get_provider(self, resource: Resource) -> Generator[Any, Any, ResourceHandler]:
         provider = yield self.provider_thread_pool.submit(handler.Commander.get_provider, self._cache, self, resource)
         provider.set_cache(self._cache)
         return provider
