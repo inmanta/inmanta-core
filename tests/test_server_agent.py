@@ -3069,14 +3069,16 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
     resource_container.Provider.set("agent1", "key1", "value1")
 
     version1 = int(time.time())
-    resources_version_1 = [{'key': 'key1',
-                            'value': 'value2',
-                            'id': 'test::Resource[agent1,key=key1],v=%d' % version1,
-                            'send_event': False,
-                            'purged': False,
-                            'requires': []
-                            },
-                           ]
+    resources_version_1 = [
+        {
+            'key': 'key1',
+            'value': 'value2',
+            'id': 'test::Resource[agent1,key=key1],v=%d' % version1,
+            'send_event': False,
+            'purged': False,
+            'requires': []
+        },
+    ]
 
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)

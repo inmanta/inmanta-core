@@ -24,7 +24,7 @@ import logging
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-
+from typing import Callable, Dict
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -86,17 +86,20 @@ class Scheduler(object):
         An event scheduler class
     """
 
-    def __init__(self):
-        self._scheduled = set()
+    def __init__(self) -> None:
+        self._scheduled: Dict[Callable, object] = {}
+        self._stopping: bool = False
 
-    def add_action(self, action, interval, initial_delay=None):
+    def add_action(self, action: Callable, interval: float, initial_delay: float = None) -> None:
         """
             Add a new action
 
-            :param action A function to call periodically
-            :param interval The interval between execution of actions
-            :param initial_delay Delay to the first execution, default to interval
+            :param action: A function to call periodically
+            :param interval: The interval between execution of actions
+            :param initial_delay: Delay to the first execution, defaults to interval
         """
+        if self._stopping:
+            raise  Exception("The scheduler is stopping")
 
         if initial_delay is None:
             initial_delay = interval
@@ -112,14 +115,27 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
 
                 finally:
-                    IOLoop.current().call_later(interval, action_function)
+                    handle = IOLoop.current().call_later(interval, action_function)
+                    self._scheduled[action] = handle
 
-        IOLoop.current().call_later(initial_delay, action_function)
-        self._scheduled.add(action)
+        handle = IOLoop.current().call_later(initial_delay, action_function)
+        self._scheduled[action] = handle
 
-    def remove(self, action):
+    def remove(self, action: Callable) -> None:
         """
             Remove a scheduled action
         """
+        if self._stopping:
+            raise  Exception("The scheduler is stopping")
+
         if action in self._scheduled:
+            IOLoop.current().remove_timeout(self._scheduled[action])
             self._scheduled.remove(action)
+
+    def stop(self) -> None:
+        """
+            Stop the scheduler
+        """
+        self._stopping = True
+        for handle in list(self._scheduled.values()):
+            IOLoop.current().remove_timeout(handle)

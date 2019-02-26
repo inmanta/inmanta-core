@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import ssl
+import uuid
 
 from typing import Optional, Dict, Any, List, Generator, NoReturn
 
@@ -105,7 +106,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
             auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
             if not auth_enabled or auth_token is not None:
-                result = yield self._transport._execute_call(
+                result = yield self._transport. _execute_call(
                     kwargs, http_method, call_config, message, request_headers, auth_token
                 )
                 self.respond(result.body, result.headers, result.status_code)
@@ -192,11 +193,15 @@ class RESTServer(RESTBase):
 
     _http_server: httpserver.HTTPServer
 
-    def __init__(self, id: str) -> None:
+    def __init__(self, session_manager: common.SessionManagerInterface, id: str) -> None:
         super().__init__()
 
         self._id = id
         self.headers: Dict[str, str] = {}
+        self.session_manager = session_manager
+
+    def validate_sid(self, sid: uuid.UUID) -> bool:
+        return self.session_manager.validate_sid(sid)
 
     @gen.coroutine
     def start(self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:

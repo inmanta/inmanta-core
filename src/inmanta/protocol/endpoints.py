@@ -182,6 +182,7 @@ class SessionEndpoint(Endpoint, CallTarget):
 
     @gen.coroutine
     def stop(self) -> NoneGen:
+        self._sched.stop()
         self.running = False
 
     @gen.coroutine
