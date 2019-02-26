@@ -86,6 +86,14 @@ def attach_from_string(p: YaccProduction, token: int = 1) -> None:
     v.namespace = p[token].namespace
 
 
+def make_none(p: YaccProduction, token: int) -> Literal:
+    none = Literal(NoneValue())
+    none.location = Location(file, p.lineno(token))
+    none.namespace = namespace
+    none.lexpos = p.lexpos(token)
+    return none
+
+
 def p_main_collect(p: YaccProduction) -> None:
     """main : top_stmt main"""
     v = p[2]
@@ -299,7 +307,7 @@ def p_attr_list_undef(p: YaccProduction) -> None:
 def p_attr_list_null(p: YaccProduction) -> None:
     "attr : attr_type_multi ID '=' NULL"
     (attr, nullable, _) = p[1]
-    p[0] = DefineAttribute(attr, p[2], Literal(NoneValue()), True, nullable=nullable)
+    p[0] = DefineAttribute(attr, p[2], make_none(p, 3), True, nullable=nullable)
     attach_lnr(p, 3)
 
 
@@ -334,7 +342,7 @@ def p_attr_list_dict_nullable(p: YaccProduction) -> None:
 
 def p_attr_list_dict_null(p: YaccProduction) -> None:
     "attr : DICT '?'  ID '=' NULL"
-    p[0] = DefineAttribute(p[1], p[3], Literal(NoneValue()), nullable=True)
+    p[0] = DefineAttribute(p[1], p[3],  make_none(p, 5), nullable=True)
     attach_lnr(p, 1)
 
 
@@ -674,7 +682,7 @@ def p_constant(p: YaccProduction) -> None:
 def p_constant_none(p: YaccProduction) -> None:
     """ constant : NULL
     """
-    p[0] = Literal(NoneValue())
+    p[0] = make_none(p, 1)
     attach_lnr(p)
 
 

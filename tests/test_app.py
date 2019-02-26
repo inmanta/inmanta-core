@@ -24,6 +24,8 @@ import re
 import conftest
 from threading import Timer
 from inmanta import const
+import signal
+from subprocess import TimeoutExpired
 
 
 def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False):
@@ -57,26 +59,38 @@ def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_fil
     return (args, log_dir)
 
 
-def run_without_tty(args, env={}):
+def do_run(args, env={}):
     baseenv = os.environ.copy()
     baseenv.update(env)
     process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=baseenv)
-    t1 = Timer(2, process.kill)
-    t2 = Timer(3, process.terminate)
+    return process
+
+
+def convert_to_ascii(text):
+    return [line for line in text.decode("ascii").split("\n") if line != ""]
+
+
+def do_kill(process, killtime=3, termtime=2):
+    t1 = Timer(killtime, process.kill)
+    t2 = Timer(termtime, process.terminate)
     t1.start()
     t2.start()
 
     out, err = process.communicate()
 
+    print(process.returncode)
+
     t1.cancel()
     t2.cancel()
-
-    def convert_to_ascii(text):
-        return [line for line in out.decode("ascii").split("\n") if line != ""]
 
     stdout = convert_to_ascii(out)
     stderr = convert_to_ascii(err)
     return (stdout, stderr)
+
+
+def run_without_tty(args, env={}, killtime=3, termtime=2):
+    process = do_run(args, env)
+    return do_kill(process, killtime, termtime)
 
 
 def run_with_tty(args):
@@ -184,3 +198,28 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
     for regex in compiled_regexes_forbidden_lines:
         if any(regex.match(line) for line in log_lines):
             pytest.fail("Forbidden pattern found in log lines: %s" % (regex.pattern,))
+
+
+def test_check_shutdown():
+    process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")])
+    # wait for handler to be in place
+    try:
+        process.communicate(timeout=1)
+    except TimeoutExpired:
+        pass
+    process.send_signal(signal.SIGUSR1)
+    out, err = do_kill(process, killtime=5, termtime=2)
+    print(out, err)
+    assert "----- Thread Dump ----" in out
+    assert "STOP" in out
+    assert "SHUTDOWN COMPLETE" in out
+
+
+def test_check_bad_shutdown():
+    print([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
+    process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
+    out, err = do_kill(process, killtime=5, termtime=2)
+    print(out, err)
+    assert "----- Thread Dump ----" in out
+    assert "STOP" not in out
+    assert "SHUTDOWN COMPLETE" not in out
