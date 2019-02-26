@@ -112,7 +112,9 @@ def setup_signal_handlers(shutdown_function):
 
     def hard_exit():
         context_dump(ioloop)
-        os._exit(3)
+        # Hard exit, not sys.exit
+        # ensure shutdown when the ioloop is stuck
+        os._exit(const.EXIT_HARD)
 
     def handle_signal(signum, frame):
         # force shutown in 15 seconds
