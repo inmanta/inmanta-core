@@ -31,3 +31,4 @@ typing==3.6.6
 jinja2==2.10
 pep8-naming==0.8.2
 flake8==3.7.6
+psutil==5.5.1

@@ -97,7 +97,7 @@ def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=1.0) -
             ),
             timeout)
     except asyncio.TimeoutError:
-        LOGGER.warning("Agent processes did not close in time")
+        LOGGER.warning("Agent processes did not close in time (%s)", procs)
 
 
 class AgentManager(ServerSlice, SessionListener):
