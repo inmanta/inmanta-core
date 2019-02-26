@@ -289,6 +289,7 @@ class Client(Endpoint):
 
     def __init__(self, name: str, timeout: int = 120) -> None:
         super().__init__(name)
+        assert isinstance(timeout, int), "Timeout needs to be an integer value."
         LOGGER.debug("Start transport for client %s", self.name)
         self._transport_instance = client.RESTClient(self, connection_timout=timeout)
 
@@ -324,7 +325,7 @@ class SyncClient(object):
     def __init__(self, name: str, timeout: int = 120) -> None:
         self.name = name
         self.timeout = timeout
-        self._client = Client(self.name)
+        self._client = Client(self.name, self.timeout)
 
     def __getattr__(self, name: str) -> Callable:
         def async_call(*args: List, **kwargs: Dict) -> None:
