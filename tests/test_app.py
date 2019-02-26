@@ -77,9 +77,8 @@ def do_kill(process, killtime=3, termtime=2):
     t2.start()
 
     out, err = process.communicate()
-    
-    print(process.returncode)
 
+    print(process.returncode)
 
     t1.cancel()
     t2.cancel()
