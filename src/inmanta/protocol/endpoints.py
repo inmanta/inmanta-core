@@ -145,7 +145,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         super().__init__(name)
         self._transport = client.RESTClient
         self._client: Optional[SessionClient] = None
-        self._sched = util.Scheduler()
+        self._sched = util.Scheduler("session endpoint")
 
         self._env_id: Optional[uuid.UUID] = None
 

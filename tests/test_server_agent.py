@@ -1185,8 +1185,8 @@ async def test_server_agent_api(resource_container, client, server):
     agent = Agent(environment=env_id, hostname="agent1", agent_map={"agent1": "localhost"}, code_loader=False)
     await agent.start()
 
-    agent = Agent(environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"}, code_loader=False)
-    await agent.start()
+    agent2 = Agent(environment=env_id, hostname="agent2", agent_map={"agent2": "localhost"}, code_loader=False)
+    await agent2.start()
 
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
     assert len(agentmanager.sessions) == 2
@@ -1257,6 +1257,9 @@ async def test_server_agent_api(resource_container, client, server):
     result = await client.list_agents(tid=uuid.uuid4())
     assert result.code == 404
 
+    await agent.stop()
+    await agent2.stop()
+
 
 @pytest.mark.asyncio
 async def test_get_facts(resource_container, client, server):
@@ -1306,6 +1309,7 @@ async def test_get_facts(resource_container, client, server):
 
     result = await client.get_param(env_id, "key1", resource_id_wov)
     assert result.code == 200
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -1370,6 +1374,8 @@ async def test_purged_facts(resource_container, client, server, environment, no_
     # The resource facts should be purged
     result = await client.get_param(environment, "length", resource_id_wov)
     assert result.code == 503
+
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -1592,6 +1598,8 @@ async def test_unkown_parameters(resource_container, client, server):
     result = await client.get_param(env_id, "length", resource_id_wov)
     assert result.code == 200
 
+    await agent.stop()
+
 
 @pytest.mark.asyncio()
 async def test_fail(resource_container, client, server):
@@ -1673,6 +1681,8 @@ async def test_fail(resource_container, client, server):
     assert states['test::Resource[agent1,key=key3],v=%d' % version] == "skipped"
     assert states['test::Resource[agent1,key=key4],v=%d' % version] == "skipped"
     assert states['test::Resource[agent1,key=key5],v=%d' % version] == "skipped"
+
+    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=15)
@@ -1810,6 +1820,8 @@ async def test_wait(resource_container, client, server, no_agent_backoff):
     assert states['test::Resource[agent1,key=key4],v=%d' % version1] == const.ResourceState.deployed.name
     assert states['test::Resource[agent1,key=key5],v=%d' % version1] == const.ResourceState.available.name
 
+    await agent.stop()
+
 
 @pytest.mark.asyncio(timeout=15)
 async def test_multi_instance(resource_container, client, server):
@@ -1925,6 +1937,7 @@ async def test_multi_instance(resource_container, client, server):
     await resource_container.wait_for_done_with_waiters(client, env_id, version1)
 
     logger.info("first version complete")
+    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -2918,14 +2931,15 @@ async def test_deploy_and_events(client, server, environment, resource_container
         assert len(events) == 1
         assert len(events[0]) == expected_events
 
+    await agent.stop()
+
 
 @pytest.mark.asyncio
 async def test_deploy_and_events_failed(client, server, environment, resource_container):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"},
-                  code_loader=False)
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -2967,6 +2981,7 @@ async def test_deploy_and_events_failed(client, server, environment, resource_co
 
     result = await client.get_version(environment, version)
     assert result.result["model"]["done"] == len(resources)
+    await agent.stop()
 
 
 dep_states_reload = [
@@ -3025,6 +3040,7 @@ async def test_reload(client, server, environment, resource_container, dep_state
     assert result.result["model"]["done"] == len(resources)
 
     assert dep_state.index == resource_container.Provider.reloadcount("agent1", "key2")
+    await agent.stop()
 
 
 async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
@@ -3889,3 +3905,4 @@ async def test_agent_run_sync(resource_container, environment, server, client):
     await _wait_until_deployment_finishes(client, environment, version)
 
     assert 'agent2' in (await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP)).result["value"]
+    await agent.stop()

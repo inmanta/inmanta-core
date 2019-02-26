@@ -20,11 +20,12 @@ import functools
 import hashlib
 import itertools
 import logging
+import warnings
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict
+from typing import Callable, Dict, Union, Tuple, Any
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -43,7 +44,7 @@ def memoize(obj):
     return memoizer
 
 
-def get_compiler_version():
+def get_compiler_version() -> str:
     try:
         return pkg_resources.get_distribution("inmanta").version
     except DistributionNotFound:
@@ -58,7 +59,7 @@ def groupby(mylist, f):
     return itertools.groupby(sorted(mylist, key=f), f)
 
 
-def hash_file(content):
+def hash_file(content: str) -> str:
     """
         Create a hash from the given content
     """
@@ -68,7 +69,7 @@ def hash_file(content):
     return sha1sum.hexdigest()
 
 
-def is_call_ok(result):
+def is_call_ok(result: Union[int, Tuple[int, Dict[str, Any]]]) -> bool:
     if isinstance(result, tuple):
         if len(result) == 2:
             code, reply = result
@@ -85,10 +86,9 @@ class Scheduler(object):
     """
         An event scheduler class
     """
-
-    def __init__(self) -> None:
+    def __init__(self, name: str) -> None:
+        self.name = name
         self._scheduled: Dict[Callable, object] = {}
-        self._stopping: bool = False
 
     def add_action(self, action: Callable, interval: float, initial_delay: float = None) -> None:
         """
@@ -98,9 +98,6 @@ class Scheduler(object):
             :param interval: The interval between execution of actions
             :param initial_delay: Delay to the first execution, defaults to interval
         """
-        if self._stopping:
-            raise  Exception("The scheduler is stopping")
-
         if initial_delay is None:
             initial_delay = interval
 
@@ -125,17 +122,22 @@ class Scheduler(object):
         """
             Remove a scheduled action
         """
-        if self._stopping:
-            raise  Exception("The scheduler is stopping")
-
         if action in self._scheduled:
             IOLoop.current().remove_timeout(self._scheduled[action])
-            self._scheduled.remove(action)
+            del self._scheduled[action]
 
     def stop(self) -> None:
         """
             Stop the scheduler
         """
-        self._stopping = True
-        for handle in list(self._scheduled.values()):
-            IOLoop.current().remove_timeout(handle)
+        try:
+            # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
+            while True:
+                action, handle = self._scheduled.popitem()
+                IOLoop.current().remove_timeout(handle)
+        except KeyError:
+            pass
+
+    def __del__(self) -> None:
+        if len(self._scheduled) > 0:
+            warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)

@@ -393,7 +393,7 @@ class ResourceScheduler(object):
 
 class AgentInstance(object):
 
-    def __init__(self, process, name: str, uri: str) -> None:
+    def __init__(self, process: "Agent", name: str, uri: str) -> None:
         self.process = process
         self.name = name
         self._uri = uri

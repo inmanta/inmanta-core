@@ -140,7 +140,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
 
         self._name: str = name
         self._handlers: List[routing.Rule] = []
-        self._sched = Scheduler()  # FIXME: why has each slice its own scheduler?
+        self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
 
     @abc.abstractmethod
     @gen.coroutine
