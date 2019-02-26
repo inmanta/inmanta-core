@@ -26,6 +26,7 @@ from threading import Timer
 from inmanta import const
 import signal
 import time
+from subprocess import TimeoutExpired
 
 
 def get_command(tmp_dir, stdout_log_level=None, log_file=None, log_level_log_file=None, timed=False):
@@ -66,6 +67,10 @@ def do_run(args, env={}):
     return process
 
 
+def convert_to_ascii(text):
+        return [line for line in text.decode("ascii").split("\n") if line != ""]
+
+
 def do_kill(process, killtime=3, termtime=2):
     t1 = Timer(killtime, process.kill)
     t2 = Timer(termtime, process.terminate)
@@ -76,9 +81,6 @@ def do_kill(process, killtime=3, termtime=2):
 
     t1.cancel()
     t2.cancel()
-
-    def convert_to_ascii(text):
-        return [line for line in text.decode("ascii").split("\n") if line != ""]
 
     stdout = convert_to_ascii(out)
     stderr = convert_to_ascii(err)
@@ -200,9 +202,12 @@ def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed
 def test_check_shutdown():
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")])
     # wait for handler to be in place
-    time.sleep(1)
+    try:
+        process.communicate(timeout=1)
+    except TimeoutExpired:
+        pass
     process.send_signal(signal.SIGUSR1)
-    out, err = do_kill(process, killtime=2, termtime=1)
+    out, err = do_kill(process, killtime=5, termtime=1)
     print(out, err)
     assert "----- Thread Dump ----" in out
     assert "STOP" in out
