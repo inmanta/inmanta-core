@@ -62,6 +62,7 @@ class MiniApp:
 
 
 if __name__ == '__main__':
+    print("Start")
     a = MiniApp()
     setup_signal_handlers(a.stop)
     if "bad" in sys.argv:

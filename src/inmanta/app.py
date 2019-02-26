@@ -84,6 +84,7 @@ def dump_threads():
         print("---", th)
         traceback.print_stack(sys._current_frames()[th.ident])
         print()
+    sys.stdout.flush()
 
 
 @gen.coroutine
@@ -93,6 +94,7 @@ def dump_ioloop_running():
     for task in asyncio.all_tasks():
         print(task)
     print()
+    sys.stdout.flush()
 
 
 def context_dump(ioloop):
@@ -112,6 +114,7 @@ def setup_signal_handlers(shutdown_function):
 
     def hard_exit():
         context_dump(ioloop)
+        sys.stdout.flush()
         # Hard exit, not sys.exit
         # ensure shutdown when the ioloop is stuck
         os._exit(const.EXIT_HARD)

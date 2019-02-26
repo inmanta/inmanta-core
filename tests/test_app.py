@@ -25,7 +25,6 @@ import conftest
 from threading import Timer
 from inmanta import const
 import signal
-import time
 from subprocess import TimeoutExpired
 
 
@@ -68,7 +67,7 @@ def do_run(args, env={}):
 
 
 def convert_to_ascii(text):
-        return [line for line in text.decode("ascii").split("\n") if line != ""]
+    return [line for line in text.decode("ascii").split("\n") if line != ""]
 
 
 def do_kill(process, killtime=3, termtime=2):
@@ -78,6 +77,9 @@ def do_kill(process, killtime=3, termtime=2):
     t2.start()
 
     out, err = process.communicate()
+    
+    print(process.returncode)
+
 
     t1.cancel()
     t2.cancel()
@@ -215,8 +217,9 @@ def test_check_shutdown():
 
 
 def test_check_bad_shutdown():
+    print([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
-    out, err = do_kill(process, killtime=20, termtime=5)
+    out, err = do_kill(process, killtime=5, termtime=2)
     print(out, err)
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
