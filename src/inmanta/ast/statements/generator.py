@@ -201,7 +201,6 @@ class Constructor(GeneratorStatement):
 
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
-        self._use_default = set()  # type: Set[str]
 
     def pretty_print(self) -> str:
         return "%s(%s)" % (self.class_type, ",".join(("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items())))
@@ -216,12 +215,8 @@ class Constructor(GeneratorStatement):
 
         inindex = set()
 
-        has_default = set(self.type.get_default_values().keys())
-
-        all_attributes = set(self.attributes.keys()) | \
-            has_default
-
-        self._use_default = set(has_default)
+        all_attributes = dict(self.type.get_default_values())
+        all_attributes.update(self.__attributes)
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
@@ -231,10 +226,7 @@ class Constructor(GeneratorStatement):
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
                 inindex.add(attr)
 
-        for (k, v) in self.__attributes.items():
-            # is explicitly set, don't use default
-            self._use_default.discard(k)
-
+        for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
@@ -245,25 +237,14 @@ class Constructor(GeneratorStatement):
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
-        out.extend([req for (k, v) in self.type.get_default_values().items() for req in v.requires()])
+        out.extend([req for (k, v) in self.get_default_values().items() for req in v.requires()])
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # direct
         direct = [x for x in self._direct_attributes.items()]
 
-        default_actual_type = {name: expr for name, expr in self.type.get_entity().get_default_values().items()
-                               if name in self._use_default}
-        default_wrapper_type = {name: expr for name, expr in self.type.get_default_values().items()
-                                if name in self._use_default}
-
-        default_actual_type.update(default_wrapper_type)
-
-        default_requires = {rk: rv for (k, v) in default_actual_type.items()
-                            for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_namespace()), queue).items()}
-
         direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
-        default_requires.update(direct_requires)
         LOGGER.log(LOG_LEVEL_TRACE,
                    "emitting constructor for %s at %s with %s",
                    self.class_type,
@@ -283,14 +264,6 @@ class Constructor(GeneratorStatement):
 
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-
-        for (k, v) in self.type.get_default_values().items():
-            if k in self._use_default:
-                attributes[k] = v.execute(requires, resolver, queue)
-
-        for (k, v) in type_class.get_default_values().items():
-            if k not in attributes and k in self._use_default:
-                attributes[k] = v.execute(requires, resolver, queue)
 
         # check if the instance already exists in the index (if there is one)
         instances = []
