@@ -174,6 +174,8 @@ class AgentManager(ServerSlice, SessionListener):
 
     @gen.coroutine
     def stop(self) -> NoneGen:
+        yield super().stop()
+
         self.running = False
         yield self.terminate_agents()
 

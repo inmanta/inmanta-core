@@ -27,6 +27,8 @@ import logging
 
 
 import pytest
+
+import utils
 from inmanta import config, data, mongoproc
 import inmanta.compiler as compiler
 import pymongo
@@ -39,6 +41,7 @@ from click import testing
 import inmanta.main
 import re
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
@@ -179,6 +182,22 @@ def inmanta_config():
 
     yield config.Config._get_instance()
     config.Config._reset()
+
+
+@pytest.fixture(scope="function")
+async def agent_multi(server_multi, environment_multi):
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    a = agent.Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
+    a.add_end_point_name("agent1")
+    await a.start()
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
 
 
 @pytest.fixture(scope="function")
