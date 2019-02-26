@@ -18,12 +18,20 @@
 from tornado import gen
 from inmanta.app import setup_signal_handlers
 from tornado.ioloop import IOLoop
+import asyncio
+import threading
+import sys
 
+import inmanta.const
+
+inmanta.const.SHUTDOWN_GRACE_IOLOOP = 1
+inmanta.const.SHUTDOWN_GRACE_HARD = 2
 
 class MiniApp:
 
     def __init__(self):
         self.running = True
+        self.lock = threading.Semaphore(0)
 
     @gen.coroutine
     def stop(self):
@@ -35,14 +43,29 @@ class MiniApp:
     def run(self):
         i = 0
         while self.running:
-            yield gen.sleep(0.1)
+            yield asyncio.sleep(0.1)
             print(i)
             i += 1
+        print("DONE")
+
+    @gen.coroutine
+    def bad_run(self):
+        i = 0
+        while self.running:
+            print(i)
+            i += 1
+            yield asyncio.sleep(0.1)
+            with self.lock:
+                print(i)
         print("DONE")
 
 
 if __name__ == '__main__':
     a = MiniApp()
     setup_signal_handlers(a.stop)
-    IOLoop.current().add_callback(a.run)
+    if "bad" in sys.argv:
+        IOLoop.current().add_callback(a.bad_run)
+    else:
+        IOLoop.current().add_callback(a.run)
     IOLoop.current().start()
+    print("SHUTDOWN COMPLETE")

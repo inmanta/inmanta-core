@@ -51,6 +51,10 @@ from inmanta.export import cfg_env, ModelExporter
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.ast import CompilerException
+import asyncio
+import traceback
+import threading
+from threading import Timer
 
 LOGGER = logging.getLogger()
 
@@ -61,6 +65,7 @@ def start_server(options):
     setup_signal_handlers(ibl.stop)
     IOLoop.current().add_callback(ibl.start)
     IOLoop.current().start()
+    print("Server Shutdown complete")
 
 
 @command("agent", help_msg="Start the inmanta agent")
@@ -70,6 +75,30 @@ def start_agent(options):
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
+    print("Agent Shutdown complete")
+
+
+def dump_threads():
+    print("----- Thread Dump ----")
+    for th in threading.enumerate():
+        print("---", th)
+        traceback.print_stack(sys._current_frames()[th.ident])
+        print()
+
+
+@gen.coroutine
+def dump_ioloop_running():
+    # dump async IO
+    print("----- Async IO tasks ----")
+    for task in asyncio.all_tasks():
+        print(task)
+    print()
+
+
+def context_dump(ioloop):
+    dump_threads()
+    if hasattr(asyncio, "all_tasks"):
+        ioloop.add_callback_from_signal(dump_ioloop_running)
 
 
 def setup_signal_handlers(shutdown_function):
@@ -78,11 +107,25 @@ def setup_signal_handlers(shutdown_function):
 
         :param shutdown_function: The function that contains the shutdown logic.
     """
+    # ensure correct ioloop
+    ioloop = IOLoop.current()
+
+    def hard_exit():
+        context_dump(ioloop)
+        os._exit(3)
+
     def handle_signal(signum, frame):
-        IOLoop.current().add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
+        # force shutown in 15 seconds
+        t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
+        t.start()
+        ioloop.add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
+
+    def handle_signal_dump(signum, frame):
+        context_dump(ioloop)
 
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGUSR1, handle_signal_dump)
 
 
 @gen.coroutine
@@ -90,10 +133,11 @@ def safe_shutdown_wrapper(shutdown_function):
     """
         Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
+        Wait for 3 seconds to force stop
     """
     future = shutdown_function()
     try:
-        timeout = IOLoop.current().time() + 10
+        timeout = IOLoop.current().time() + const.SHUTDOWN_GRACE_IOLOOP
         yield gen.with_timeout(timeout, future)
     except TimeoutError:
         pass
@@ -478,6 +522,7 @@ def app():
     except KeyboardInterrupt as e:
         report(e)
         sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
