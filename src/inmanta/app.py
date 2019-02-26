@@ -120,6 +120,7 @@ def setup_signal_handlers(shutdown_function):
         # force shutdown, even when the ioloop is stuck
         # schedule off the loop
         t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
+        t.daemon = True
         t.start()
         ioloop.add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
 

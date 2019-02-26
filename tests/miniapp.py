@@ -27,6 +27,7 @@ import inmanta.const
 inmanta.const.SHUTDOWN_GRACE_IOLOOP = 1
 inmanta.const.SHUTDOWN_GRACE_HARD = 2
 
+
 class MiniApp:
 
     def __init__(self):
@@ -69,3 +70,4 @@ if __name__ == '__main__':
         IOLoop.current().add_callback(a.run)
     IOLoop.current().start()
     print("SHUTDOWN COMPLETE")
+    sys.exit(0)

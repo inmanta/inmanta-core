@@ -2563,7 +2563,7 @@ async def test_autostart_mapping(server, client, resource_container, environment
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
 
-    newchildren = set(children)-set(children_pre)
+    newchildren = set(children) - set(children_pre)
 
     assert len(newchildren) == 0, newchildren
 
