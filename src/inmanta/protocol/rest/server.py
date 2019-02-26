@@ -106,7 +106,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
             auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
             if not auth_enabled or auth_token is not None:
-                result = yield self._transport. _execute_call(
+                result = yield self._transport._execute_call(
                     kwargs, http_method, call_config, message, request_headers, auth_token
                 )
                 self.respond(result.body, result.headers, result.status_code)
