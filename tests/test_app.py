@@ -216,7 +216,7 @@ def test_check_shutdown():
 
 def test_check_bad_shutdown():
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py"), "bad"])
-    out, err = do_kill(process, killtime=5, termtime=2)
+    out, err = do_kill(process, killtime=20, termtime=5)
     print(out, err)
     assert "----- Thread Dump ----" in out
     assert "STOP" not in out
