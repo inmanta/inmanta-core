@@ -168,7 +168,8 @@ class ResourceAction(object):
         return success, send_event
 
     def skipped_because(self, results):
-        return [resource.resource_id.resource_str() for resource, result in zip(self.dependencies, results) if not result.success]
+        return [resource.resource_id.resource_str()
+                for resource, result in zip(self.dependencies, results) if not result.success]
 
     @gen.coroutine
     def execute(self, dummy, generation, cache):
