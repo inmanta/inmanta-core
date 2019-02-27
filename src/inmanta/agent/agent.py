@@ -295,7 +295,7 @@ class RemoteResourceAction(ResourceAction):
                              result.result)
 
             status = const.ResourceState[result.result["resource"]["status"]]
-            if status == const.ResourceState.available or self.future.done():
+            if status == const.ResourceState.available or status == const.ResourceState.deploying or self.future.done():
                 # wait for event
                 pass
             else:
