@@ -1229,10 +1229,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         if len(messages) > 0:
             resource_action.add_logs(messages)
-            for msg in messages:
-                loglevel = const.LogLevel[msg["level"]].value
-                log_line = data.LogLine.log(loglevel, msg["msg"], *msg["args"])
-                self._write_to_resource_action_log(log_line)
+            if self._resource_action_logger:
+                for msg in messages:
+                    # all other data is stored in the database
+                    self._resource_action_logger.log(level=const.LogLevel[msg["level"]].value, msg=msg["msg"])
 
         if len(changes) > 0:
             resource_action.add_changes(changes)
