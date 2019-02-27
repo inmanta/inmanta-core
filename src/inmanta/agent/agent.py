@@ -410,7 +410,7 @@ class ResourceScheduler(object):
             self.cad[str(cad)] = ra
             self.generation[cad.resource_str()] = ra
 
-        dummy = ResourceAction(self, None, gid)
+        dummy = ResourceAction(self, None, gid, reason)
         for r in self.generation.values():
             self.agent.add_future(r.execute(dummy, self.generation, self.cache))
 
