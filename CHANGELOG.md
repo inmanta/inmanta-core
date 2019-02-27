@@ -2,6 +2,7 @@ v 2018.4 (2018-12-xx)
 Changes in this release:
 - Various bugfixes and performance enhancements (#873, #772, #958, #959)
 - Dependency updates
+- Minimal python version is now python 3.6
 - Removal of snapshot and restore functionality from the server (#789)
 - Removed the non-version api (#526)
 - Replace virtualenv by python standard venv (#783)
