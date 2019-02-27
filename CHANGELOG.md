@@ -1,5 +1,6 @@
 v 2018.4 (2018-12-xx)
 Changes in this release:
+- Modified log format, added replace file name with logger name
 - Various bugfixes and performance enhancements (#873, #772, #958, #959)
 - Dependency updates
 - Removal of snapshot and restore functionality from the server (#789)
@@ -25,6 +26,7 @@ Changes in this release:
 - Added exception explainer to compiler for 'modified after freeze' (#876)
 - Added logging of resource actions on the server and purging of resource actions in the database (#533)
 - Use urllib client for fetching jwks public keys
+- Improved agent logging
 
 DEPRECATIONS:
 - The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 

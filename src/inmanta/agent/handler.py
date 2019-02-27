@@ -123,7 +123,7 @@ class HandlerContext(object):
         Context passed to handler methods for state related "things"
     """
 
-    def __init__(self, resource, dry_run=False, action_id=None):
+    def __init__(self, resource, dry_run=False, action_id=None, logger=None):
         self._resource = resource
         self._dry_run = dry_run
         self._cache = {}
@@ -140,6 +140,10 @@ class HandlerContext(object):
         self._action_id = action_id
         self._status = None
         self._logs = []
+        if logger is None:
+            self.logger = LOGGER
+        else:
+            self.logger = logger
 
     @property
     def action_id(self) -> uuid.UUID:

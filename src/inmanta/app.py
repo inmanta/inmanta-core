@@ -445,7 +445,7 @@ def _convert_to_log_level(level):
 def _get_log_formatter_for_stream_handler(timed):
     log_format = "%(asctime)s " if timed else ""
     if _is_on_tty():
-        log_format += "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s"
+        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
         formatter = colorlog.ColoredFormatter(
             log_format,
             datefmt=None,
@@ -459,7 +459,7 @@ def _get_log_formatter_for_stream_handler(timed):
             }
         )
     else:
-        log_format += "%(levelname)-8s%(message)s"
+        log_format += "%(name)-25s%(levelname)-8s%(message)s"
         formatter = logging.Formatter(fmt=log_format)
     return formatter
 
