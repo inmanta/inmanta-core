@@ -19,8 +19,8 @@ requires = [
 ]
 
 setup(
-    version="2018.4",
-    python_requires='>=3.5', # also update classifiers 
+    version="2019.1",
+    python_requires='>=3.6', # also update classifiers
     # Meta data
     name="inmanta",
     description="Inmanta deployment tool",
@@ -57,5 +57,5 @@ setup(
             "inmanta = inmanta.app:app",
         ]
     },
-    
+
 )
