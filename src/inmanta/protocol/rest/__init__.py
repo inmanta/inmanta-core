@@ -158,7 +158,7 @@ class CallArguments(object):
 
         try:
             if arg_type == datetime:
-                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f")
+                return datetime.fromisoformat(value)
 
             elif issubclass(arg_type, enum.Enum):
                 return arg_type[value]
