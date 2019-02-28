@@ -461,7 +461,7 @@ class ResourceScheduler(object):
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
         if resourceid not in self.cad:
-            self.logger.warning("received CAD notification that was not required, %s", self.name, resourceid)
+            self.logger.warning("received CAD notification that was not required, %s", resourceid)
             return
         self.cad[resourceid].notify(send_events, state, change, changes)
 
