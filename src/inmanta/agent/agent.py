@@ -295,7 +295,7 @@ class RemoteResourceAction(ResourceAction):
                              result.result)
 
             status = const.ResourceState[result.result["resource"]["status"]]
-            if status == const.ResourceState.available or status == const.ResourceState.deploying or self.future.done():
+            if status in const.TRANSIENT_STATES or self.future.done():
                 # wait for event
                 pass
             else:
@@ -337,7 +337,11 @@ class RemoteResourceAction(ResourceAction):
 class ResourceScheduler(object):
     """Class responsible for managing sequencing of actions performed by the agent.
 
-    State of the last run is not removed after the run but remains, to avoid synchronization issues
+    State of the last run is not removed after the run but remains.
+
+    By not removing e.g. the generation,
+    1 - the class is always in a valid state
+    2 - we don't need to figure out exactly when a run is done
     """
 
     def __init__(self, agent, env_id, name, cache, ratelimiter):

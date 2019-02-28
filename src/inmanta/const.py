@@ -34,6 +34,8 @@ class ResourceState(Enum):
 
 
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
+
 UNKNOWN_STRING = "<<undefined>>"
 
 """
