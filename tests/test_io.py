@@ -73,38 +73,11 @@ def test_check_read_binary(io, testdir):
 
 
 @pytest.mark.parametrize("io", io_list, ids=io_names)
-def test_check_run_pipe(io, testdir):
-    filename = os.path.join(testdir, "testfile")
-    result = io.run("echo", ["world", ">>" + filename])
-    print(result)
-    assert result[2] == 0
-    assert ">>" in result[0]
-
-
-@pytest.mark.parametrize("io", io_list, ids=io_names)
-def test_check_run_pipe_(io, testdir):
-    filename = os.path.join(testdir, "testfile")
-    result = io.run("sh", ["-c", "echo", "world", ">>" + filename])
-    print(result)
-    assert ">>" not in result[0]
-    assert result[2] == 0
-
-
-@pytest.mark.parametrize("io", io_list, ids=io_names)
 def test_check_run_pipe_actual(io, testdir):
     filename = os.path.join(testdir, "testfile")
     result = io.run('sh', ['-c', 'export PATH=$PATH:/usr/lib/jvm/jre-1.7.0-openjdk/bin; env >' + filename + ' 2>&1'])
     print(result)
     assert "/usr/lib/jvm/jre-1.7.0-openjdk/bin" not in result[0]
-    assert result[2] == 0
-    assert os.path.exists(filename)
-
-
-@pytest.mark.parametrize("io", io_list, ids=io_names)
-def test_check_run_pipe_actual_2(io, testdir):
-    filename = os.path.join(testdir, "testfile")
-    result = io.run('sh', ['-c', 'env', '>' + filename, '2>&1'])
-    print(result)
     assert result[2] == 0
     assert os.path.exists(filename)
 
