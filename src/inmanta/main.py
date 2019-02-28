@@ -26,7 +26,7 @@ from collections import defaultdict
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import AgentTriggerMethod
+from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
 import click
 import texttable
 from time import sleep
@@ -491,9 +491,6 @@ def version_release(client: Client, environment: str, push: bool, full: bool, ve
     )
 
 
-ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
-
-
 @cmd.group("param")
 @click.pass_context
 def param(ctx: click.Context) -> None:
@@ -506,7 +503,7 @@ def param(ctx: click.Context) -> None:
 def param_list(client: Client, environment: str) -> None:
     result = client.get_dict("list_params", arguments=dict(tid=client.to_environment_id(environment)))
     expire = int(result["expire"])
-    now = datetime.datetime.strptime(result["now"], ISOFMT)
+    now = datetime.datetime.strptime(result["now"], TIME_ISOFMT)
     when = now - datetime.timedelta(0, expire)
 
     data = []
@@ -518,7 +515,7 @@ def param_list(client: Client, environment: str) -> None:
                 p['name'],
                 p['source'],
                 p['updated'],
-                str(float(datetime.datetime.strptime(p["updated"], ISOFMT) < when))
+                str(float(datetime.datetime.strptime(p["updated"], TIME_ISOFMT) < when))
             ]
         )
 
