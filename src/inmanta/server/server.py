@@ -969,6 +969,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         yield model.update_fields(released=True, result=const.VersionState.deploying)
 
+        if model.total == 0:
+            yield model.mark_done()
+            return 200, {"model": model}
+
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = yield model.get_undeployable()
         undep = [rid + ",v=%s" % version_id for rid in undep]
@@ -1274,12 +1278,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             model = yield data.ConfigurationModel.get_version(env.id, model_version)
 
             if model.done == model.total:
-                result = const.VersionState.success
-                for state in model.status.values():
-                    if state["status"] != "deployed":
-                        result = const.VersionState.failed
-
-                yield model.update_fields(deployed=True, result=result)
+                yield model.mark_done()
 
             waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
                                   for res in resources for prov in res.provides])
