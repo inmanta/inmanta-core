@@ -33,6 +33,7 @@ from inmanta.agent.io.local import LocalIO
 io_list = [LocalIO("local:", {}), BashIO("local:", {}), BashIO("local:", {}, run_as="root")]
 io_names = ["local", "bash", "bash_root"]
 
+
 @pytest.yield_fixture
 def testdir():
     testdir = tempfile.mkdtemp()
