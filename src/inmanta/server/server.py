@@ -1231,7 +1231,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             resource_action.add_logs(messages)
             if self._resource_action_logger:
                 for msg in messages:
-                    # all other data is stored in the database
+                    # All other data is stored in the database. The msg was already formatted at the client side.
+                    # The only way to disable formatting is, by not passing any args
                     self._resource_action_logger.log(level=const.LogLevel[msg["level"]].value, msg=msg["msg"])
 
         if len(changes) > 0:

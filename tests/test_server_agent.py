@@ -3922,27 +3922,25 @@ async def test_agent_run_sync(resource_container, environment, server, client):
 
 
 @pytest.mark.asyncio
-async def test_format_token_in_logline(server_multi, agent_multi, client_multi, environment_multi, resource_container):
+async def test_format_token_in_logline(server_multi, agent_multi, client_multi, environment_multi, resource_container, caplog):
     """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character.
     """
     version = 1
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
 
-    resources = [
-        {
-            'key': 'key1',
-            'value': 'Test value %T',
-            'id': 'test::Resource[agent1,key=key1],v=%d' % version,
-            'send_event': False,
-            'purged': False,
-            'requires': [],
-        }
-    ]
+    resource = {
+        'key': 'key1',
+        'value': 'Test value %T',
+        'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+        'send_event': False,
+        'purged': False,
+        'requires': [],
+    }
 
     result = await client_multi.put_version(
         tid=environment_multi,
         version=version,
-        resources=resources,
+        resources=[resource],
         unknowns=[],
         version_info={}
     )
@@ -3954,7 +3952,7 @@ async def test_format_token_in_logline(server_multi, agent_multi, client_multi, 
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == len(resources)
+    assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
     result = await client_multi.get_version(environment_multi, version)
@@ -3962,4 +3960,7 @@ async def test_format_token_in_logline(server_multi, agent_multi, client_multi, 
     await _wait_until_deployment_finishes(client_multi, environment_multi, version)
 
     result = await client_multi.get_version(environment_multi, version)
-    assert result.result["model"]["done"] == len(resources)
+    assert result.result["model"]["done"] == 1
+
+    log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
+    assert log_string in caplog.text
