@@ -216,6 +216,7 @@ def resource_container():
                     ctx.set_created()
 
             elif "value" in changes:
+                ctx.info("Set key '%(key)s' to value '%(value)s'", key=resource.key, value=resource.value)
                 self.touch(resource.id.get_agent_name(), resource.key)
                 self.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
@@ -4098,3 +4099,48 @@ async def test_agent_run_sync(resource_container, environment, server, client):
 
     assert 'agent2' in (await client.get_setting(tid=environment, id=data.AUTOSTART_AGENT_MAP)).result["value"]
     await agent.stop()
+
+
+@pytest.mark.asyncio
+async def test_format_token_in_logline(server_multi, agent_multi, client_multi, environment_multi, resource_container, caplog):
+    """Deploy a resource that logs a line that after formatting on the agent contains an invalid formatting character.
+    """
+    version = 1
+    resource_container.Provider.set("agent1", "key1", "incorrect_value")
+
+    resource = {
+        'key': 'key1',
+        'value': 'Test value %T',
+        'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+        'send_event': False,
+        'purged': False,
+        'requires': [],
+    }
+
+    result = await client_multi.put_version(
+        tid=environment_multi,
+        version=version,
+        resources=[resource],
+        unknowns=[],
+        version_info={}
+    )
+
+    assert result.code == 200
+
+    # do a deploy
+    result = await client_multi.release_version(environment_multi, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = await client_multi.get_version(environment_multi, version)
+    assert result.code == 200
+    await _wait_until_deployment_finishes(client_multi, environment_multi, version)
+
+    result = await client_multi.get_version(environment_multi, version)
+    assert result.result["model"]["done"] == 1
+
+    log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
+    assert log_string in caplog.text
