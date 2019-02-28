@@ -75,8 +75,8 @@ class Server(protocol.ServerSlice):
         self._database_host = database_host
         self._database_port = database_port
 
-        self._resource_action_logger = None
-        self._resource_action_file_handler = None
+        self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
+        self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
 
     @gen.coroutine
     def prestart(self, server):
@@ -84,8 +84,6 @@ class Server(protocol.ServerSlice):
 
     @gen.coroutine
     def start(self):
-        yield self._create_resource_action_logger()
-
         if self._database_host is None:
             self._database_host = opt.db_host.get()
 
@@ -108,32 +106,68 @@ class Server(protocol.ServerSlice):
     @gen.coroutine
     def stop(self):
         yield super().stop()
-        yield self._close_resource_action_logger()
+        self._close_resource_action_loggers()
 
-    @gen.coroutine
-    def _create_resource_action_logger(self):
-        resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
-        self._file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode='a+')
-        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(message)s")
-        self._file_handler.setFormatter(formatter)
-        self._file_handler.setLevel(logging.DEBUG)
-        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
-        self._resource_action_logger.setLevel(logging.DEBUG)
-        self._resource_action_logger.addHandler(self._file_handler)
+    @staticmethod
+    def get_resource_action_log_file(environment: uuid.UUID) -> str:
+        """Get the correct filename for the given environment
+        :param environment: The environment id to get the file for
+        :return: The path to the logfile
+        """
+        return os.path.join(
+            opt.log_dir.get(),
+            opt.server_resource_action_log_prefix.get() + str(environment) + ".log"
+        )
 
-    @gen.coroutine
-    def _close_resource_action_logger(self):
-        if self._resource_action_logger:
-            logger_copy = self._resource_action_logger
-            self._resource_action_logger = None
-            logger_copy.removeHandler(self._file_handler)
-            self._file_handler.flush()
-            self._file_handler.close()
-            self._file_handler = None
+    def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
+        """Get the resource action logger for the given environment. If the logger was not created, create it.
+        :param environment: The environment to get a logger for
+        :return: The logger for the given environment.
+        """
+        if environment in self._resource_action_loggers:
+            return self._resource_action_loggers[environment]
 
-    def _write_to_resource_action_log(self, log_line):
-        if self._resource_action_logger:
-            log_line.write_to_logger(self._resource_action_logger)
+        resource_action_log = self.get_resource_action_log_file(environment)
+
+        file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode='a+')
+        file_handler.setFormatter(logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(message)s"))
+        file_handler.setLevel(logging.DEBUG)
+
+        resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+        resource_action_logger.setLevel(logging.DEBUG)
+        resource_action_logger.addHandler(file_handler)
+
+        self._resource_action_loggers[environment] = resource_action_logger
+        self._resource_action_handlers[environment] = file_handler
+
+        return resource_action_logger
+
+    def _close_resource_action_loggers(self) -> None:
+        """Close all resource action loggers and their associated handlers"""
+        try:
+            while True:
+                env, logger = self._resource_action_loggers.popitem()
+                self._close_resource_action_logger(env, logger)
+        except KeyError:
+            pass
+
+    def _close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
+        """Close the given logger for the given env.
+        :param env: The environment to close the logger for
+        :param logger: The logger to close, if the logger is none it is retrieved
+        """
+        if logger is None:
+            logger = self._resource_action_loggers.pop(env)
+
+        handler = self._resource_action_handlers.pop(env)
+        logger.removeHandler(handler)
+        handler.flush()
+        handler.close()
+
+    def _write_to_resource_action_log(self, env: uuid.UUID, log_line: data.LogLine) -> None:
+        """Write the given logline to the correct resource action logger"""
+        logger = self.get_resource_action_logger(env)
+        log_line.write_to_logger(logger)
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -709,7 +743,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         now = datetime.datetime.now()
 
         log_line = data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-        self._write_to_resource_action_log(log_line)
+        self._write_to_resource_action_log(env.id, log_line)
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now, messages=[log_line])
         yield ra.insert()
@@ -943,7 +977,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             yield self.agentmanager.ensure_agent_registered(env, agent)
 
         log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-        self._write_to_resource_action_log(log_line)
+        self._write_to_resource_action_log(env.id, log_line)
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
                                  action=const.ResourceAction.store, started=started, finished=datetime.datetime.now(),
                                  messages=[log_line])
@@ -1233,11 +1267,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         if len(messages) > 0:
             resource_action.add_logs(messages)
-            if self._resource_action_logger:
-                for msg in messages:
-                    # All other data is stored in the database. The msg was already formatted at the client side.
-                    # The only way to disable formatting is, by not passing any args
-                    self._resource_action_logger.log(level=const.LogLevel[msg["level"]].value, msg=msg["msg"])
+            logger = self.get_resource_action_logger(env.id)
+            for msg in messages:
+                # All other data is stored in the database. The msg was already formatted at the client side.
+                # The only way to disable formatting is, by not passing any args
+                logger.log(level=const.LogLevel[msg["level"]].value, msg=msg["msg"])
 
         if len(changes) > 0:
             resource_action.add_changes(changes)
@@ -1310,7 +1344,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if project is None:
             return 404, {"message": "The project with given id does not exist."}
 
-        yield project.delete_cascade()
+        environments = yield Environment.get_list(project=project.id)
+        for env in environments:
+            yield env.delete_cascade()
+            self._close_resource_action_logger(env)
+
+        yield project.delete()
+
         return 200, {}
 
     @protocol.handle(methods.modify_project, project_id="id")
@@ -1437,6 +1477,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 404, {"message": "The environment with given id does not exist."}
 
         yield env.delete_cascade()
+
+        self._close_resource_action_logger(environment_id)
 
         return 200
 
