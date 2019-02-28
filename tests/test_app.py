@@ -130,18 +130,22 @@ def test_verify_that_colorama_package_is_not_present():
 
 
 @pytest.mark.parametrize("log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines", [
-    (3, False, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
-    (2, False, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
-    (3, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
-                      r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
-    (2, False, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
-     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint']),
-    (3, True, False, [r'INFO[\s]+Starting server endpoint', r'DEBUG[\s]+Starting Server Rest Endpoint'], []),
-    (2, True, False, [r'INFO[\s]+Starting server endpoint'], [r'DEBUG[\s]+Starting Server Rest Endpoint']),
-    (3, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
-                     r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
-    (2, True, True, [r'\x1b\[32mINFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
-     [r'\x1b\[36mDEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'])
+    (3, False, False, [r'[a-z.]*[ ]*INFO[\s]+Starting server endpoint',
+                       r'[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint'], []),
+    (2, False, False, [r'[a-z.]*[ ]*INFO[\s]+Starting server endpoint'],
+                      [r'[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint']),
+    (3, False, True, [r'\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
+                      r'\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
+    (2, False, True, [r'\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
+                     [r'\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint']),
+    (3, True, False, [r'[a-z.]*[ ]*INFO[\s]+Starting server endpoint',
+                      r'[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint'], []),
+    (2, True, False, [r'[a-z.]*[ ]*INFO[\s]+Starting server endpoint'],
+                     [r'[a-z.]*[ ]*DEBUG[\s]+Starting Server Rest Endpoint']),
+    (3, True, True, [r'\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint',
+                     r'\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'], []),
+    (2, True, True, [r'\x1b\[32m[a-z.]*[ ]*INFO[\s]*\x1b\[0m \x1b\[34mStarting server endpoint'],
+                    [r'\x1b\[36m[a-z.]*[ ]*DEBUG[\s]*\x1b\[0m \x1b\[34mStarting Server Rest Endpoint'])
 ])
 @pytest.mark.timeout(20)
 def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_lines, regexes_forbidden_lines):
@@ -160,14 +164,14 @@ def test_no_log_file_set(tmpdir, log_level, timed, with_tty, regexes_required_li
 
 
 @pytest.mark.parametrize("log_level, with_tty, regexes_required_lines, regexes_forbidden_lines", [
-    (3, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
-                r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
-    (2, False, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
-     [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
-    (3, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
-               r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
-    (2, True, [r'INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
-     [r'DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'])
+    (3, False, [r'[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
+                r'[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
+    (2, False, [r'[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
+     [r'[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint']),
+    (3, True, [r'[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint',
+               r'[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'], []),
+    (2, True, [r'[a-z.]*[ ]*INFO[\s]+[a-x\.A-Z]*[\s]Starting server endpoint'],
+     [r'[a-z.]*[ ]*DEBUG[\s]+[a-x\.A-Z]*[\s]Starting Server Rest Endpoint'])
 ])
 @pytest.mark.timeout(60)
 def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regexes_forbidden_lines):
@@ -192,6 +196,8 @@ def test_log_file_set(tmpdir, log_level, with_tty, regexes_required_lines, regex
 def check_logs(log_lines, regexes_required_lines, regexes_forbidden_lines, timed):
     compiled_regexes_requires_lines = get_compiled_regexes(regexes_required_lines, timed)
     compiled_regexes_forbidden_lines = get_compiled_regexes(regexes_forbidden_lines, timed)
+    for line in log_lines:
+        print(line)
     for regex in compiled_regexes_requires_lines:
         if not any(regex.match(line) for line in log_lines):
             pytest.fail("Required pattern was not found in log lines: %s" % (regex.pattern,))

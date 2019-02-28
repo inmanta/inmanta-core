@@ -60,6 +60,57 @@ async def get_agent(server, environment, *endpoints, hostname="nodes1"):
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
     return agent
 
+def log_contains(caplog, loggerpart, level, msg):
+    for logger_name, log_level, message in caplog.record_tuples:
+        if loggerpart in logger_name and level == log_level and msg in message:
+            return
+    assert False
+
+
+async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version, push, agent_trigger_method)
+    assert result.code == 200
+
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == len(resources)
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    return result
+
+
+async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
+    async def is_deployment_finished():
+        result = await client.get_version(environment, version)
+        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
+async def _wait_for_n(client, environment, version, n, timeout=10):
+    async def is_deployment_finished():
+        result = await client.get_version(environment, version)
+        return result.result["model"]["done"] < n
+
+    await retry_limited(is_deployment_finished, timeout)
+
+
+async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
+
+    async def in_progress():
+        result = await client.get_version(environment, version)
+        assert result.code == 200
+        res = [res for res in result.result["resources"] if res["status"] == "deploying"]
+        return len(res) >= n
+    await retry_limited(in_progress, timeout)
+
+
 ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter',
                                                      'wait_for_done_with_waiters',
                                                      'wait_for_condition_with_waiters'])
@@ -2338,6 +2389,68 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     await agent2.stop()
 
 
+@pytest.mark.asyncio
+async def test_send_events_cross_agent_deploying(resource_container, environment, server, client, no_agent_backoff):
+    """
+        Send and receive events over agents
+    """
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    resource_container.Provider.reset()
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
+    agent2.add_end_point_name("agent2")
+    await agent2.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+
+    version = int(time.time())
+
+    res_id_1 = 'test::Resource[agent1,key=key1],v=%d' % version
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': res_id_1,
+                  'send_event': False,
+                  'purged': False,
+                  'requires': ['test::Wait[agent2,key=key2],v=%d' % version],
+                  },
+                 {'key': 'key2',
+                  'value': 'value2',
+                  'id': 'test::Wait[agent2,key=key2],v=%d' % version,
+                  'send_event': True,
+                  'requires': [],
+                  'purged': False,
+                  }
+                 ]
+
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    result = await client.get_version(environment, version)
+    assert result.code == 200
+
+    await _wait_for_n_deploying(client, environment, version, 1)
+
+    # restart deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+
+    await resource_container.wait_for_done_with_waiters(client, environment, version)
+
+    # incorrect CAD handling causes skip, which completes deploy without writing
+    assert resource_container.Provider.get("agent1", "key1") == "value1"
+
+    await agent.stop()
+    await agent2.stop()
+
+
 @pytest.mark.asyncio(timeout=15)
 async def test_send_events_cross_agent_restart(resource_container, environment, server, client, no_agent_backoff):
     """
@@ -3100,34 +3213,14 @@ async def test_reload(client, server, environment, resource_container, dep_state
     await agent.stop()
 
 
-async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
-    assert result.code == 200
-
-    # do a deploy
-    result = await client.release_version(environment, version, push, agent_trigger_method)
-    assert result.code == 200
-
-    assert not result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == len(resources)
-
-    result = await client.get_version(environment, version)
-    assert result.code == 200
-
-    return result
-
-
-async def _wait_until_deployment_finishes(client, environment, version, timeout=10):
-    async def is_deployment_finished():
-        result = await client.get_version(environment, version)
-        return result.result["model"]["total"] - result.result["model"]["done"] <= 0
-
-    await retry_limited(is_deployment_finished, timeout)
-
-
 @pytest.mark.asyncio(timeout=30)
-async def test_repair_postponed_due_to_running_deploy(resource_container, server, client, environment, no_agent_backoff):
+async def test_s_repair_postponed_due_to_running_deploy(resource_container,
+                                                        server,
+                                                        client,
+                                                        environment,
+                                                        no_agent_backoff,
+                                                        caplog):
+    caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3171,12 +3264,23 @@ async def test_repair_postponed_due_to_running_deploy(resource_container, server
 
     await myagent.stop()
 
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "Deferring run 'Repair' for 'Deploy'")
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "Resuming run 'Repair'")
+
 
 debug_timeout = 10
 
 
 @pytest.mark.asyncio(timeout=debug_timeout * 2)
-async def test_repair_interrupted_by_deploy_request(resource_container, server, client, environment, no_agent_backoff):
+async def test_s_repair_interrupted_by_deploy_request(resource_container,
+                                                      server,
+                                                      client,
+                                                      environment,
+                                                      no_agent_backoff,
+                                                      caplog):
+    caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3220,7 +3324,7 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy 1", incremental_deploy=True, is_repair_run=False)
     await resource_container.wait_for_done_with_waiters(client, environment, version1, timeout=debug_timeout)
 
     # counts:  read/write
@@ -3249,7 +3353,9 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
 
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    print("Interrupt")
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy 2", incremental_deploy=True, is_repair_run=False)
+    print("Deploy")
     await resource_container.wait_for_done_with_waiters(client, environment, version2, timeout=debug_timeout)
 
     # counts:  read/write
@@ -3289,9 +3395,17 @@ async def test_repair_interrupted_by_deploy_request(resource_container, server, 
 
     await myagent.stop()
 
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "Interrupting run 'Repair' for 'Deploy 2'")
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "for reason: Restarting run 'Repair', interrupted for 'Deploy 2'")
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "Resuming run 'Restarting run 'Repair', interrupted for 'Deploy 2''")
+
 
 @pytest.mark.asyncio
-async def test_repair_during_repair(resource_container, server, client, environment, no_agent_backoff):
+async def test_s_repair_during_repair(resource_container, server, client, environment, no_agent_backoff, caplog):
+    caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3336,8 +3450,8 @@ async def test_repair_during_repair(resource_container, server, client, environm
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
     # Interrupt repair with a repair
-    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
-    await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+    await myagent_instance.get_latest_version_for_agent(reason="Repair 1", incremental_deploy=False, is_repair_run=True)
+    await myagent_instance.get_latest_version_for_agent(reason="Repair 2", incremental_deploy=False, is_repair_run=True)
 
     def wait_condition():
         return resource_container.Provider.readcount(agent_name, "key1") != 3 \
@@ -3365,9 +3479,13 @@ async def test_repair_during_repair(resource_container, server, client, environm
 
     await myagent.stop()
 
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "Terminating run 'Repair 1' for 'Repair 2'")
+
 
 @pytest.mark.asyncio(timeout=30)
-async def test_deploy_during_deploy(resource_container, server, client, environment, no_agent_backoff):
+async def test_s_deploy_during_deploy(resource_container, server, client, environment, no_agent_backoff, caplog):
+    caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3411,11 +3529,11 @@ async def test_deploy_during_deploy(resource_container, server, client, environm
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy 1", incremental_deploy=True, is_repair_run=False)
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Deploy 2", incremental_deploy=True, is_repair_run=False)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -3435,10 +3553,18 @@ async def test_deploy_during_deploy(resource_container, server, client, environm
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     await myagent.stop()
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO,
+                 "Terminating run 'Deploy 1' for 'Deploy 2'")
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_full_deploy_interrupts_incremental_deploy(resource_container, server, client, environment, no_agent_backoff):
+async def test_s_full_deploy_interrupts_incremental_deploy(resource_container,
+                                                           server,
+                                                           client,
+                                                           environment,
+                                                           no_agent_backoff,
+                                                           caplog):
+    caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3482,11 +3608,11 @@ async def test_full_deploy_interrupts_incremental_deploy(resource_container, ser
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=True, is_repair_run=False)
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=False, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=False, is_repair_run=False)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -3505,10 +3631,17 @@ async def test_full_deploy_interrupts_incremental_deploy(resource_container, ser
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     await myagent.stop()
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Initial Deploy' for 'Second Deploy'")
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_incremental_deploy_interrupts_full_deploy(resource_container, server, client, environment, no_agent_backoff):
+async def test_s_incremental_deploy_interrupts_full_deploy(resource_container,
+                                                           server,
+                                                           client,
+                                                           environment,
+                                                           no_agent_backoff,
+                                                           caplog):
+    caplog.set_level(logging.INFO)
     resource_container.Provider.reset()
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
@@ -3552,11 +3685,11 @@ async def test_incremental_deploy_interrupts_full_deploy(resource_container, ser
 
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=False, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=False, is_repair_run=False)
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
-    await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    await myagent_instance.get_latest_version_for_agent(reason="Second Deploy", incremental_deploy=True, is_repair_run=False)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version2)
 
@@ -3576,6 +3709,7 @@ async def test_incremental_deploy_interrupts_full_deploy(resource_container, ser
     assert resource_container.Provider.get("agent1", "key3") == "value3"
 
     await myagent.stop()
+    log_contains(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Terminating run 'Initial Deploy' for 'Second Deploy'")
 
 
 @pytest.mark.asyncio
