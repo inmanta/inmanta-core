@@ -1622,6 +1622,16 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     @gen.coroutine
+    def mark_done(self):
+        """ mark this deploy as done """
+        result = const.VersionState.success
+        for state in self.status.values():
+            if state["status"] != "deployed":
+                result = const.VersionState.failed
+
+        yield self.update_fields(deployed=True, result=result)
+
+    @gen.coroutine
     def get_increment(self, negative: bool=False):
         """
         Find resources incremented by this version compared to deployment state transitions per resource

@@ -46,6 +46,20 @@ from inmanta.const import ResourceState
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
+
+async def get_agent(server, environment, *endpoints, hostname="nodes1"):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+    agent = Agent(
+        hostname=hostname,
+        environment=environment,
+        agent_map={agent: "localhost" for agent in endpoints},
+        code_loader=False)
+    for agentname in endpoints:
+        agent.add_end_point_name(agentname)
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+    return agent
+
 ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter',
                                                      'wait_for_done_with_waiters',
                                                      'wait_for_condition_with_waiters'])
@@ -633,6 +647,37 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     actions = await data.ResourceAction.get_list()
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
     assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
+
+    await agent.stop()
+
+
+@pytest.mark.asyncio(timeout=150)
+async def test_deploy_empty(server, client, resource_container, environment):
+    """
+       Test deployment of empty model
+    """
+    agent = await get_agent(server, environment, "agent1")
+
+    version = int(time.time())
+
+    resources = []
+
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        resource_state={},
+        unknowns=[],
+        version_info={})
+    assert result.code == 200
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
+    assert result.code == 200
+    assert result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 0
+    assert result.result["model"]["result"] == const.VersionState.success.name
 
     await agent.stop()
 
