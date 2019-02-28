@@ -60,6 +60,7 @@ async def get_agent(server, environment, *endpoints, hostname="nodes1"):
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
     return agent
 
+
 def log_contains(caplog, loggerpart, level, msg):
     for logger_name, log_level, message in caplog.record_tuples:
         if loggerpart in logger_name and level == log_level and msg in message:
