@@ -735,37 +735,6 @@ async def test_deploy_empty(server, client, resource_container, environment):
     await agent.stop()
 
 
-@pytest.mark.asyncio(timeout=150)
-async def test_deploy_empty(server, client, resource_container, environment):
-    """
-       Test deployment of empty model
-    """
-    agent = await get_agent(server, environment, "agent1")
-
-    version = int(time.time())
-
-    resources = []
-
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        resource_state={},
-        unknowns=[],
-        version_info={})
-    assert result.code == 200
-
-    # do a deploy
-    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
-    assert result.code == 200
-    assert result.result["model"]["deployed"]
-    assert result.result["model"]["released"]
-    assert result.result["model"]["total"] == 0
-    assert result.result["model"]["result"] == const.VersionState.success.name
-
-    await agent.stop()
-
-
 @pytest.mark.asyncio(timeout=100)
 async def test_deploy_with_undefined(server_multi, client_multi, resource_container):
     """
