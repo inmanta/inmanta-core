@@ -335,8 +335,13 @@ class RemoteResourceAction(ResourceAction):
 
 
 class ResourceScheduler(object):
+    """Class responsible for managing sequencing of actions performed by the agent.
+
+    State of the last run is not removed after the run but remains, to avoid synchronization issues
+    """
 
     def __init__(self, agent, env_id, name, cache, ratelimiter):
+        # map resource id to resource action
         self.generation = {}
         self.cad = {}
         self._env_id = env_id
@@ -345,8 +350,12 @@ class ResourceScheduler(object):
         self.name = name
         self.ratelimiter = ratelimiter
         self.version = 0
+        # the reason the last run was started
         self.reason = ""
+        # was the last run a repair run?
         self.is_repair = False
+        # if this value is not None, a new repair run will be started after the current run is done
+        # this field is both flag and value, to ensure consistency
         self._resume_reason = None
         self.logger = agent.logger
 
@@ -363,8 +372,15 @@ class ResourceScheduler(object):
         return not self.finished() and not self.is_repair
 
     def reload(self, resources, undeployable={}, reason: str="RELOAD", is_repair=False):
+        """
+        Schedule a new set of resources for execution.
 
+        **This method should only be called under critical_ratelimiter lock!**
+        """
+
+        # First determined if we should start and if the current run should be resumed
         if not self.finished():
+            # we are still running
             if self.is_repair:
                 # now running repair
                 if is_repair:
@@ -385,37 +401,45 @@ class ResourceScheduler(object):
                 else:
                     # increment overrules increment
                     self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
-
+            # cancel old run
             for ra in self.generation.values():
                 ra.cancel()
 
+        # start new run
         self.reason = reason
         self.is_repair = is_repair
-
         version = resources[0].id.get_version
-
         self.version = version
-
         gid = uuid.uuid4()
         self.logger.info("Running %s for reason: %s" % (gid, reason))
+
+        # re-generate generation
         self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources}
 
+        # mark undeployable
         for key, res in self.generation.items():
             vid = str(res.resource.id)
             if vid in undeployable:
                 self.generation[key].undeployable = undeployable[vid]
 
+        # hook up Cross Agent Dependencies
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
             ra = RemoteResourceAction(self, cad, gid, reason)
             self.cad[str(cad)] = ra
             self.generation[cad.resource_str()] = ra
 
+        # Create dummy to give start signal
         dummy = ResourceAction(self, None, gid, reason)
+        # Dispatch all actions
+        # Will block on dependencies and dummy
         for r in self.generation.values():
             self.agent.add_future(r.execute(dummy, self.generation, self.cache))
 
+        # Listen for completion
         self.agent.add_future(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+
+        # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
 
     @gen.coroutine
