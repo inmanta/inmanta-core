@@ -162,7 +162,7 @@ class MultiVersionSetup(object):
                 env, agent, version=None, incremental_deploy=True
             )
 
-            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results), "%s %s %s %s" % (agent, result, sorted([x["resource_id"] for x in payload["resources"]]), sorted(results))
+            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
         return allresources
