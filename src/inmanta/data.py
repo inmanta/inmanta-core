@@ -33,8 +33,7 @@ import hashlib
 from inmanta.const import ResourceState
 from _collections import defaultdict
 from typing import Dict, List, Set
-from inmanta.metrics import Timers
-import cProfile
+
 
 LOGGER = logging.getLogger(__name__)
 

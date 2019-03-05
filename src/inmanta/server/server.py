@@ -37,7 +37,7 @@ from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
-from inmanta.data import Environment, profiler
+from inmanta.data import Environment
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -104,12 +104,6 @@ class Server(protocol.ServerSlice):
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
-
-        def report():
-            for timer in data.timers:
-                print(timer.report())
-                profiler.dump_stats("xstat.prof")
-        self.schedule(report, 10)
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
