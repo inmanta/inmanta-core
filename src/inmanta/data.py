@@ -34,6 +34,7 @@ from inmanta.const import ResourceState
 from _collections import defaultdict
 from typing import Dict, List, Set
 
+
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
@@ -1348,6 +1349,21 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
+    def get_resources_for_version_raw(cls,
+                                      environment,
+                                      version,
+                                      projection):
+        projection = None
+        filter = {"environment": environment, "model": version}
+        cursor = cls._coll.find(filter, projection)
+
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cursor.next_object())
+        return resources
+
+    @classmethod
+    @gen.coroutine
     def get_latest_version(cls, environment, resource_id):
         cursor = cls._coll.find({"environment": environment,
                                  "resource_id": resource_id}).sort("model", pymongo.DESCENDING).limit(1)
@@ -1644,15 +1660,20 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
          """
+        projection_a = {"resource_id": True, "status": True, "attribute_hash": True, "attributes": True}
+        projection = {"resource_id": True, "status": True, "attribute_hash": True}
 
         # get resources for agent
-        resources = yield Resource.get_resources_for_version(self.environment, self.version, include_undefined=False)
+        resources = yield Resource.get_resources_for_version_raw(
+            self.environment,
+            self.version,
+            projection_a)
 
         # to increment
         increment = []
         not_incrememt = []
         # todo in this verions
-        work = list(resources)
+        work = list(r for r in resources)
 
         # get versions
         cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
@@ -1665,39 +1686,40 @@ class ConfigurationModel(BaseDocument):
             # todo in next verion
             next = []
 
-            vresources = yield Resource.get_resources_for_version(self.environment, version, include_attributes=False)
-            id_to_resource = {r.resource_id: r for r in vresources}
+            vresources = yield Resource.get_resources_for_version_raw(self.environment, version, projection)
+            id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:
                 # not present -> increment
-                if res.resource_id not in id_to_resource:
+                if res["resource_id"] not in id_to_resource:
                     increment.append(res)
                     continue
 
-                ores = id_to_resource[res.resource_id]
+                ores = id_to_resource[res["resource_id"]]
 
+                status = ores["status"]
                 # available/skipped/unavailable -> next version
-                if ores.status in [ResourceState.available,
-                                   ResourceState.skipped,
-                                   ResourceState.unavailable]:
+                if status in [ResourceState.available.name,
+                              ResourceState.skipped.name,
+                              ResourceState.unavailable.name]:
                     next.append(res)
 
                 # error -> increment
-                elif ores.status in [ResourceState.failed,
-                                     ResourceState.cancelled,
-                                     ResourceState.deploying,
-                                     ResourceState.processing_events]:
+                elif status in [ResourceState.failed.name,
+                                ResourceState.cancelled.name,
+                                ResourceState.deploying.name,
+                                ResourceState.processing_events.name]:
                     increment.append(res)
 
-                elif ores.status == ResourceState.deployed:
-                    if res.attribute_hash == ores.attribute_hash:
+                elif status == ResourceState.deployed.name:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
                         #  Deployed and same hash -> not increment
                         not_incrememt.append(res)
                     else:
                         # Deployed and different hash -> increment
                         increment.append(res)
                 else:
-                    LOGGER.warning("Resource in unexpected state: %s, %s", ores.status, ores.resource_version_id)
+                    LOGGER.warning("Resource in unexpected state: %s, %s", ores["status"], ores["resource_version_id"])
                     increment.append(res)
 
             work = next
@@ -1707,23 +1729,22 @@ class ConfigurationModel(BaseDocument):
             increment.extend(work)
 
         if negative:
-            return [res.resource_version_id for res in not_incrememt]
+            return [res["resource_version_id"] for res in not_incrememt]
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = set((res.resource_version_id for res in increment))  # type: Set[str]
-        allids = {res.resource_version_id: res for res in resources}  # type: Dict[str,Resource]
+        outset = set((res["resource_version_id"] for res in increment))  # type: Set[str]
         original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
         send_events = []  # type: List[str]
 
         # build lookup tables
         for res in resources:
-            for req in res.attributes["requires"]:
-                original_provides[req].append(res.resource_version_id)
-            if "send_event" in res.attributes and res.attributes["send_event"]:
-                send_events.append(res.resource_version_id)
+            for req in res["attributes"]["requires"]:
+                original_provides[req].append(res["resource_version_id"])
+            if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
+                send_events.append(res["resource_version_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
         work = list(outset)
@@ -1742,15 +1763,7 @@ class ConfigurationModel(BaseDocument):
             work.extend(provides)
             outset.update(provides)
 
-        # close the increment
-        out = []
-        for resvid in outset:
-            res = allids[resvid]
-            requires = [r for r in res.attributes["requires"] if r in outset]
-            res.attributes["requires"] = requires
-            out.append(res)
-
-        return out
+        return outset
 
 
 class Code(BaseDocument):
