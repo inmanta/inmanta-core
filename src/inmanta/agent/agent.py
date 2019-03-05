@@ -185,11 +185,13 @@ class ResourceAction(object):
             start = datetime.datetime.now()
             ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
-            ctx.debug("Start run for resource %(resource)s because %(reason)s",
-                      resource=str(self.resource.id),
-                      deploy_id=self.gid,
-                      agent=self.scheduler.agent.name,
-                      reason=self.reason)
+            ctx.debug(
+                "Start run for resource %(resource)s because %(reason)s",
+                resource=str(self.resource.id),
+                deploy_id=self.gid,
+                agent=self.scheduler.agent.name,
+                reason=self.reason
+            )
 
             self.running = True
             if self.is_done():
@@ -228,19 +230,20 @@ class ResourceAction(object):
                 send_event = False
             elif not result.success:
                 ctx.set_status(const.ResourceState.skipped)
-                ctx.info("Resource %(resource)s skipped due to failed dependency %(failed)s",
-                         resource=str(self.resource.id),
-                         failed=self.skipped_because(results))
+                ctx.info(
+                    "Resource %(resource)s skipped due to failed dependency %(failed)s",
+                    resource=str(self.resource.id),
+                    failed=self.skipped_because(results)
+                )
                 success = False
                 send_event = False
                 yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
             else:
                 success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
-            LOGGER.info("end run %s", self.resource)
-            ctx.debug("end run for resource %(resource)s with id %(deploy_id)s",
-                      resource=str(self.resource.id),
-                      deploy_id=self.gid)
+            ctx.debug(
+                "End run for resource %(resource)s in deploy %(deploy_id)s", resource=str(self.resource.id), deploy_id=self.gid
+            )
 
             end = datetime.datetime.now()
             changes = {str(self.resource.id): ctx.changes}
@@ -461,7 +464,7 @@ class ResourceScheduler(object):
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
         if resourceid not in self.cad:
-            self.logger.warning("received CAD notification that was not required, %s", resourceid)
+            # received CAD notification for which no resource are waiting, so return
             return
         self.cad[resourceid].notify(send_events, state, change, changes)
 

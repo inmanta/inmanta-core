@@ -107,13 +107,13 @@ class CodeLoader(object):
             :param version The version of the deployed modules
             :modules modules A list of module names and the hashes of the code files
         """
-        LOGGER.info("Deploying code (key=%s)" % key)
         # deploy the new code
         name = mod[1]
         source_code = mod[2]
 
         # if the module is new, or update
         if name not in self.__modules or key != self.__modules[name][0]:
+            LOGGER.info("Deploying code (key=%s, module=%s)", key, mod[1])
             # write the new source
             source_file = os.path.join(self.__code_dir, MODULE_DIR, name + ".py")
 
