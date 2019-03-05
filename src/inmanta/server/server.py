@@ -78,6 +78,10 @@ class Server(protocol.ServerSlice):
         self._resource_action_logger = None
         self._resource_action_file_handler = None
 
+        self._increment_cache = {}
+        # lock to ensure only one inflight request
+        self._increment_cache_locks = defaultdict(lambda: locks.Lock())
+
     @gen.coroutine
     def prestart(self, server):
         self.agentmanager = server.get_slice("agentmanager")
@@ -100,11 +104,12 @@ class Server(protocol.ServerSlice):
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
+
         def report():
             for timer in data.timers:
                 print(timer.report())
                 profiler.dump_stats("xstat.prof")
-        self.schedule(report,10)
+        self.schedule(report, 10)
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
@@ -179,6 +184,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """ % (lcm + auth)
         self.add_static_content("/dashboard/config.js", content=content)
         self.add_static_handler("/dashboard", dashboard_path, start=True)
+
+    def clear_env_cache(self, env):
+        LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
+        self._increment_cache[env.id] = None
 
     @gen.coroutine
     def _purge_versions(self):
@@ -731,8 +740,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         version = cm.version
 
-        increment_ids_list = yield cm.get_increment()
-        increment_ids = set(increment_ids_list)
+        increment_ids = self._increment_cache.get(env.id, None)
+        if increment_ids is None:
+            with (yield self._increment_cache_locks[env.id].acquire()):
+                increment_ids = self._increment_cache.get(env.id)
+                if increment_ids is None:
+                    increment_ids_list = yield cm.get_increment()
+                    increment_ids = set(increment_ids_list)
+                    self._increment_cache[env.id] = increment_ids
 
         resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
 
@@ -1283,7 +1298,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 return 500, {"message": "Cannot perform state update without a status."}
             for res in resources:
                 yield res.update_fields(status=status)
+            self.clear_env_cache(env)
         elif action in const.STATE_UPDATE and done:
+            self.clear_env_cache(env)
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)
