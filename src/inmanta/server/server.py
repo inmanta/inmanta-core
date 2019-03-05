@@ -1319,7 +1319,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             logger = self.get_resource_action_logger(env.id)
             for msg in messages:
                 # All other data is stored in the database. The msg was already formatted at the client side.
-                print(msg)
                 self.log_resource_action(
                     env.id,
                     resource_ids,
