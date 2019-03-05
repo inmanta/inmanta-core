@@ -29,6 +29,7 @@ import time
 from uuid import UUID
 import uuid
 import shutil
+import json
 
 import dateutil
 import pymongo
@@ -42,15 +43,38 @@ from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-import json
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
+
+from typing import List
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
 
 DBLIMIT = 100000
+
+
+class ResourceActionLogLine(logging.LogRecord):
+    """ A special log record that is used to report log lines that come from the agent
+    """
+    def __init__(self, logger_name: str, level: str, msg: str, created: datetime.datetime) -> None:
+        super().__init__(
+            name=logger_name,
+            level=level,
+            pathname="(unknown file)",
+            lineno=0,
+            msg=msg,
+            args=[],
+            exc_info=None,
+            func=None,
+            sinfo=None
+        )
+
+        self.created = created.timestamp()
+        self.created = self.created
+        self.msecs = (self.created - int(self.created)) * 1000
+        self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
 class Server(protocol.ServerSlice):
@@ -130,10 +154,11 @@ class Server(protocol.ServerSlice):
         resource_action_log = self.get_resource_action_log_file(environment)
 
         file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode='a+')
-        file_handler.setFormatter(logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(message)s"))
+        # Most logs will come from agents. We need to use their level and timestamp and their formatted message
+        file_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
         file_handler.setLevel(logging.DEBUG)
 
-        resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
+        resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(environment))
         resource_action_logger.setLevel(logging.DEBUG)
         resource_action_logger.addHandler(file_handler)
 
@@ -157,17 +182,29 @@ class Server(protocol.ServerSlice):
         :param logger: The logger to close, if the logger is none it is retrieved
         """
         if logger is None:
-            logger = self._resource_action_loggers.pop(env)
+            if env in self._resource_action_loggers:
+                logger = self._resource_action_loggers.pop(env)
+            else:
+                return
 
         handler = self._resource_action_handlers.pop(env)
         logger.removeHandler(handler)
         handler.flush()
         handler.close()
 
-    def _write_to_resource_action_log(self, env: uuid.UUID, log_line: data.LogLine) -> None:
-        """Write the given logline to the correct resource action logger"""
+    def log_resource_action(
+        self, env: uuid.UUID, resource_ids: List[str], log_level: int, ts: datetime.datetime, message: str
+    ) -> None:
+        """Write the given log to the correct resource action logger"""
         logger = self.get_resource_action_logger(env)
-        log_line.write_to_logger(logger)
+        if len(resource_ids) == 0:
+            message = "no resources: " + message
+        elif len(resource_ids) > 1:
+            message = "multiple resources: " + message
+        else:
+            message = resource_ids[0] + ": " + message
+        log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
+        logger.handle(log_record)
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -743,7 +780,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         now = datetime.datetime.now()
 
         log_line = data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-        self._write_to_resource_action_log(env.id, log_line)
+        self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now, messages=[log_line])
         yield ra.insert()
@@ -976,11 +1013,18 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         for agent in agents:
             yield self.agentmanager.ensure_agent_registered(env, agent)
 
+        now = datetime.datetime.now()
         log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-        self._write_to_resource_action_log(env.id, log_line)
-        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
-                                 action=const.ResourceAction.store, started=started, finished=datetime.datetime.now(),
-                                 messages=[log_line])
+        self.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
+        ra = data.ResourceAction(
+            environment=env.id,
+            resource_version_ids=resource_version_ids,
+            action_id=uuid.uuid4(),
+            action=const.ResourceAction.store,
+            started=started,
+            finished=now,
+            messages=[log_line]
+        )
         yield ra.insert()
         LOGGER.debug("Successfully stored version %d", version)
 
@@ -1029,7 +1073,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         # all resources already deployed
         deployed = yield model.get_increment(negative=True)
-        logline = {"level": "INFO", "msg": "Setting deployed due to known good status", "timestamp": now, "args": []}
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": now.isoformat(),
+            "args": []
+        }
         yield self.resource_action_update(env, deployed, action_id=uuid.uuid4(),
                                           started=now, finished=now, status=const.ResourceState.deployed,
                                           # does this require a different ResourceAction?
@@ -1270,8 +1319,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             logger = self.get_resource_action_logger(env.id)
             for msg in messages:
                 # All other data is stored in the database. The msg was already formatted at the client side.
-                # The only way to disable formatting is, by not passing any args
-                logger.log(level=const.LogLevel[msg["level"]].value, msg=msg["msg"])
+                print(msg)
+                self.log_resource_action(
+                    env.id,
+                    resource_ids,
+                    const.LogLevel[msg["level"]].value,
+                    datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT),
+                    msg["msg"]
+                )
 
         if len(changes) > 0:
             resource_action.add_changes(changes)
