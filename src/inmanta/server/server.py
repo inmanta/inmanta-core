@@ -1316,7 +1316,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         if len(messages) > 0:
             resource_action.add_logs(messages)
-            logger = self.get_resource_action_logger(env.id)
             for msg in messages:
                 # All other data is stored in the database. The msg was already formatted at the client side.
                 self.log_resource_action(
