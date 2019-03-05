@@ -33,6 +33,8 @@ import hashlib
 from inmanta.const import ResourceState
 from _collections import defaultdict
 from typing import Dict, List, Set
+from inmanta.metrics import Timers
+import cProfile
 
 LOGGER = logging.getLogger(__name__)
 
@@ -1348,6 +1350,21 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
+    def get_resources_for_version_raw(cls,
+                                      environment,
+                                      version,
+                                      projection):
+        projection = None
+        filter = {"environment": environment, "model": version}
+        cursor = cls._coll.find(filter, projection)
+
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cursor.next_object())
+        return resources
+
+    @classmethod
+    @gen.coroutine
     def get_latest_version(cls, environment, resource_id):
         cursor = cls._coll.find({"environment": environment,
                                  "resource_id": resource_id}).sort("model", pymongo.DESCENDING).limit(1)
@@ -1456,6 +1473,14 @@ class Resource(BaseDocument):
     def _to_dict(self, mongo_pk=False):
         self.make_hash()
         return BaseDocument._to_dict(self, mongo_pk=mongo_pk)
+
+
+timer_increment_pre = Timers("increment_pre")
+timer_increment_versions = Timers("increment_versions")
+timer_increment_main = Timers("increment_main")
+timer_increment_post = Timers("increment_post")
+timers = [timer_increment_pre, timer_increment_versions, timer_increment_main, timer_increment_post]
+profiler = cProfile.Profile()
 
 
 class ConfigurationModel(BaseDocument):
@@ -1644,113 +1669,144 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
          """
+        projection_a = {"resource_id": True, "status": True, "attribute_hash": True, "attributes": True}
+        projection = {"resource_id": True, "status": True, "attribute_hash": True}
+        profiler.enable()
+        try:
 
-        # get resources for agent
-        resources = yield Resource.get_resources_for_version(self.environment, self.version, include_undefined=False)
+            with timer_increment_pre.enter():
+                # get resources for agent
+                resources = yield Resource.get_resources_for_version_raw(
+                    self.environment,
+                    self.version,
+                    projection_a)
 
-        # to increment
-        increment = []
-        not_incrememt = []
-        # todo in this verions
-        work = list(resources)
+            # to increment
+            increment = []
+            not_incrememt = []
+            # todo in this verions
+            work = list(r for r in resources)
 
-        # get versions
-        cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
-                                           ).sort("version", pymongo.DESCENDING)
-        versions = []
-        while (yield cursor.fetch_next):
-            versions.append(cursor.next_object()["version"])
+            with timer_increment_versions.enter():
+                # get versions
+                cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
+                                                   ).sort("version", pymongo.DESCENDING)
+                versions = []
+                while (yield cursor.fetch_next):
+                    versions.append(cursor.next_object()["version"])
 
-        for version in versions:
-            # todo in next verion
-            next = []
+            with timer_increment_main.enter():
 
-            vresources = yield Resource.get_resources_for_version(self.environment, version, include_attributes=False)
-            id_to_resource = {r.resource_id: r for r in vresources}
+                for version in versions:
+                    # todo in next verion
+                    next = []
 
-            for res in work:
-                # not present -> increment
-                if res.resource_id not in id_to_resource:
-                    increment.append(res)
-                    continue
+                    vresources = yield Resource.get_resources_for_version_raw(self.environment, version, projection)
+                    id_to_resource = {r["resource_id"]: r for r in vresources}
 
-                ores = id_to_resource[res.resource_id]
+                    for res in work:
+                        # not present -> increment
+                        if res["resource_id"] not in id_to_resource:
+                            increment.append(res)
+                            continue
 
-                # available/skipped/unavailable -> next version
-                if ores.status in [ResourceState.available,
-                                   ResourceState.skipped,
-                                   ResourceState.unavailable]:
-                    next.append(res)
+                        ores = id_to_resource[res["resource_id"]]
 
-                # error -> increment
-                elif ores.status in [ResourceState.failed,
-                                     ResourceState.cancelled,
-                                     ResourceState.deploying,
-                                     ResourceState.processing_events]:
-                    increment.append(res)
+                        status = ores["status"]
+                        # available/skipped/unavailable -> next version
+                        if status in [ResourceState.available.name,
+                                      ResourceState.skipped.name,
+                                      ResourceState.unavailable.name]:
+                            next.append(res)
 
-                elif ores.status == ResourceState.deployed:
-                    if res.attribute_hash == ores.attribute_hash:
-                        #  Deployed and same hash -> not increment
-                        not_incrememt.append(res)
-                    else:
-                        # Deployed and different hash -> increment
-                        increment.append(res)
-                else:
-                    LOGGER.warning("Resource in unexpected state: %s, %s", ores.status, ores.resource_version_id)
-                    increment.append(res)
+                        # error -> increment
+                        elif status in [ResourceState.failed.name,
+                                        ResourceState.cancelled.name,
+                                        ResourceState.deploying.name,
+                                        ResourceState.processing_events.name]:
+                            increment.append(res)
 
-            work = next
-            if not work:
-                break
-        if work:
-            increment.extend(work)
+                        elif status == ResourceState.deployed.name:
+                            if res["attribute_hash"] == ores["attribute_hash"]:
+                                #  Deployed and same hash -> not increment
+                                not_incrememt.append(res)
+                            else:
+                                # Deployed and different hash -> increment
+                                increment.append(res)
+                        else:
+                            LOGGER.warning("Resource in unexpected state: %s, %s", ores["status"], ores["resource_version_id"])
+                            increment.append(res)
 
-        if negative:
-            return [res.resource_version_id for res in not_incrememt]
+                    work = next
+                    if not work:
+                        break
+            with timer_increment_post.enter():
+                if work:
+                    increment.extend(work)
 
-        # patch up the graph
-        # 1-include stuff for send-events.
-        # 2-adapt requires/provides to get closured set
+                if negative:
+                    return [res["resource_version_id"] for res in not_incrememt]
 
-        outset = set((res.resource_version_id for res in increment))  # type: Set[str]
-        allids = {res.resource_version_id: res for res in resources}  # type: Dict[str,Resource]
-        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
-        send_events = []  # type: List[str]
+                # patch up the graph
+                # 1-include stuff for send-events.
+                # 2-adapt requires/provides to get closured set
 
-        # build lookup tables
-        for res in resources:
-            for req in res.attributes["requires"]:
-                original_provides[req].append(res.resource_version_id)
-            if "send_event" in res.attributes and res.attributes["send_event"]:
-                send_events.append(res.resource_version_id)
+                outset = set((res["resource_version_id"] for res in increment))  # type: Set[str]
+                allids = {res["resource_version_id"]: res for res in resources}  # type: Dict[str,Resource]
+                original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
+                send_events = []  # type: List[str]
 
-        # recursively include stuff potentially receiving events from nodes in the increment
-        work = list(outset)
-        done = set()
-        while work:
-            current = work.pop()
-            if current not in send_events:
-                # not sending events, so no receivers
-                continue
+                # build lookup tables
+                for res in resources:
+                    for req in res["attributes"]["requires"]:
+                        original_provides[req].append(res["resource_version_id"])
+                    if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
+                        send_events.append(res["resource_version_id"])
 
-            if current in done:
-                continue
-            done.add(current)
+                # recursively include stuff potentially receiving events from nodes in the increment
+                work = list(outset)
+                done = set()
+                while work:
+                    current = work.pop()
+                    if current not in send_events:
+                        # not sending events, so no receivers
+                        continue
 
-            provides = original_provides[current]
-            work.extend(provides)
-            outset.update(provides)
+                    if current in done:
+                        continue
+                    done.add(current)
 
+                    provides = original_provides[current]
+                    work.extend(provides)
+                    outset.update(provides)
+
+                return outset
+        finally:
+            profiler.disable()
+
+    @classmethod
+    def close_increment(self, resources):
+        outset = set((res.resource_version_id for res in resources))  # type: Set[str]
         # close the increment
         out = []
-        for resvid in outset:
-            res = allids[resvid]
+        for res in resources:
             requires = [r for r in res.attributes["requires"] if r in outset]
             res.attributes["requires"] = requires
             out.append(res)
-
         return out
+
+    @classmethod
+    def close_increment_for_agent(self, resources, agent):
+        agentid = "[%s," % agent
+        outset = set((res.resource_version_id for res in resources))  # type: Set[str]
+        # close the increment
+        # keep all CAD's
+        out = []
+        for res in resources:
+            requires = [r for r in res.attributes["requires"] if r in outset or not r.contains(agentid)]
+            res.attributes["requires"] = requires
+            out.append(res)
+        return
 
 
 class Code(BaseDocument):

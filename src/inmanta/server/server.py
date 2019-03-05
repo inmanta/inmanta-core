@@ -37,7 +37,7 @@ from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
-from inmanta.data import Environment
+from inmanta.data import Environment, profiler
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -100,6 +100,11 @@ class Server(protocol.ServerSlice):
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
+        def report():
+            for timer in data.timers:
+                print(timer.report())
+                profiler.dump_stats("xstat.prof")
+        self.schedule(report,10)
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
@@ -726,13 +731,25 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         version = cm.version
 
-        resources = yield cm.get_increment()
+        increment_ids_list = yield cm.get_increment()
+        increment_ids = set(increment_ids_list)
+
+        resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
 
         deploy_model = []
         resource_ids = []
         for rv in resources:
-            if rv.agent != agent:
+            if rv.resource_version_id not in increment_ids:
                 continue
+
+            def in_requires(req):
+                if req in increment_ids:
+                    return True
+                idr = Id.parse_id(req)
+                return idr.get_agent_name() != agent
+
+            rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
+
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
