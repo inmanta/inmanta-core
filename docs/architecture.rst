@@ -85,7 +85,7 @@ an agent is deployed as a separate process.
 Resource deployment
 -------------------
 
-Agent is responsible for:
+The agent is responsible for:
 
  * repair the infrastructure at regular intervals
  * change the infrastructure at regular intervals
@@ -93,7 +93,7 @@ Agent is responsible for:
 
 Repair
 ******
-At regular intervals the agent will verify that the current state of all resources it manages matches the desired state provided by the orchestration server. For a repair the agent verifies all resources, even if the last known current state already matches the desired state. In the current release all deploys are done through a repair and run by default every 600 seconds. This is controlled with :inmanta.config:option:`config.agent-repair-interval`, when this option is set to 0 no repairs are performed.
+At regular intervals the agent verifies that the current state of all resources it manages matches the desired state provided by the orchestration server. For a repair the agent verifies all resources, even if the last known current state already matches the desired state. In the current release all deploys are done through a repair and run by default every 600 seconds. This is controlled with :inmanta.config:option:`config.agent-repair-interval`, when this option is set to 0 no repairs are performed.
 
 Deploy changes
 **************
