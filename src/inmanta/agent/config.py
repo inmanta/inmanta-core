@@ -40,14 +40,14 @@ agent_names = \
            "Names of the agents this instance should deploy configuration for", is_str)
 
 agent_interval = \
-    Option("config", "agent-interval", 600, """[DEPRECATED] The run interval of the agent.	
+    Option("config", "agent-interval", 600, """[DEPRECATED] The run interval of the agent.
 Every run-interval seconds, the agent will check the current state of its resources against to desired state model""", is_time)
 
 agent_splay = \
-    Option("config", "agent-splay", 600, """[DEPRECATED] The splaytime added to the runinterval.	
-Set this to 0 to disable splaytime.	
- At startup the agent will choose a random number between 0 and "agent_splay.	
-It will wait this number of second before performing the first deploy.	
+    Option("config", "agent-splay", 600, """[DEPRECATED] The splaytime added to the runinterval.
+Set this to 0 to disable splaytime.
+ At startup the agent will choose a random number between 0 and "agent_splay.
+It will wait this number of second before performing the first deploy.
 Each subsequent deploy will start agent-interval seconds after the previous one.""", is_time)
 
 agent_antisplay = \
@@ -63,8 +63,8 @@ server_timeout = \
            "Amount of time to wait for a response from the server before we try to reconnect, must be smaller than server.agent-hold", is_time)
 
 agent_deploy_interval = \
-    Option("config", "agent-deploy-interval", 600,
-           "The number of seconds between two deployment runs of the agent.", is_time, predecessor_option=agent_interval)
+    Option("config", "agent-deploy-interval", 0,
+           "The number of seconds between two (incremental) deployment runs of the agent.", is_time, predecessor_option=agent_interval)
 agent_deploy_splay_time = \
     Option("config", "agent-deploy-splay-time", 600,
            """The splaytime added to the agent-deploy-interval. Set this to 0 to disable the splaytime.
@@ -75,8 +75,8 @@ Each subsequent repair deployment will start agent-deploy-interval seconds after
            predecessor_option=agent_splay)
 
 agent_repair_interval = \
-    Option("config", "agent-repair-interval", 86400,
-           "The number of seconds between two repair runs of the agent. " +
+    Option("config", "agent-repair-interval", 600,
+           "The number of seconds between two repair runs (full deploy) of the agent. " +
            "Set this to 0 to disable the scheduled repair runs.", is_time)
 agent_repair_splay_time = \
     Option("config", "agent-repair-splay-time", 600,
