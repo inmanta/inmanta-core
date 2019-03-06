@@ -19,16 +19,17 @@ The Inmanta orchestrator consists of several components:
   agent-less architecture, depending on the requirements.
 
   
-Deployment
-----------
+Usage modes
+-----------
 
-Inmanta can be deployed/used in three variants:
+Inmanta can be used in three modes:
 
-* **embedded**: all components are started with the deploy command, the server is terminated after the deploy is finished. Suitable only for development.
+* **embedded**: all components are started with the `deploy` command, the server is terminated after the deploy is finished. Suitable only for development.
 * **push to server**: the server runs on a external machine. Models are compiled on the developer machine and pushed to the server directly. Suitable only for small setups or for developement/debug purposes.
 * **autonomous server**: the server runs on a external machine. Models are stored in git repos and compiled by the server.
 
-The last two variants support agents on the same machine as the server or deployed on the management targets.
+The last two modes support agents on same machine as the server and automatically started, or deployed as an external
+process.
 
 Embedded
 ********
@@ -71,29 +72,40 @@ With an autonomous server, developers can no longer push models into production 
 models. This ensures that every compile is repeatable and allows collaboration because all changes *have* to be committed.
 
 
-Agentless
-----------------------
+Agent modes
+-----------
 
-The inmanta agent can work both locally and remote. 
-A local agent is deployed on the system it manages. 
-A server side agent runs on the inmanta server and is used for 'agentless' operation. 
-Server side agent are started using :inmanta:entity:`AgentConfig`.
+The Inmanta agent performs all changes in the infrastructure. Either the orchestration server starts an agents or
+an agent is deployed as a separate process.
+
+ * **agentless**: Autostarted agents allow for an agentless mode: no explicit agents need to be started. When the agent needs to make changes on machine/vm it can make the changes over remote over ssh. Autostarted agents are controlled by using :inmanta:entity:`std::AgentConfig`. :inmanta:entity:`ip::Host` and subclasses can automatically configure an agent with the `remote_agent` attribute.
+ * **external agent**: External agent processes need explicit configuration to connect to the orchestration server. The aws and openstack modules use the platform module to generate a user_data bootscript for virtual machines to install an agent and connect to the orchestration server. The `install_agent` boolean controls this option.
 
 
-Deployment Modes
-------------------
+Resource deployment
+-------------------
 
-Inmanta supports two deployment modes: full and incremental.
+Agent is responsible for:
 
-**Full deployments** always deploy all resources, even if the resource have been deployed before. 
-**Incremental deployments** only deploy resources of which the desired state has been modified since the last successful
-deployment.  
+ * repair the infrastructure at regular intervals
+ * change the infrastructure at regular intervals
+ * enforce desired state when the server requests it
 
-Full deployments are used for self-healing. 
-If some resource have unauthorized changes, a full deploy will bring them back in line.
-Incremental deployments are used to bring changes to production quickly.
+Repair
+******
+At regular intervals the agent will verify that the current state of all resources it manages matches the desired state provided by the orchestration server. For a repair the agent verifies all resources, even if the last known current state already matches the desired state. In the current release all deploys are done through a repair and run by default every 600 seconds. This is controlled with :inmanta.config:option:`config.agent-repair-interval`, when this option is set to 0 no repairs are performed.
 
-Both full and incremental deploys can be pushed by the server to the agents. 
-Each agent can also be configured to periodically perform incremental and full deployments. 
-Pushed deployments always take precedence on periodic deployments.  
+Deploy changes
+**************
+For very large infrastructures or infrastructure that is too slow (for example network devices with underpowered control planes or thousands of managed resources) a repair cannot run often. For example, only once a  week. When this is the case, the agent can deploy only known changes (based on the previous deployed state cached by the orchestration server). This interval is controlled by :inmanta.config:option:`config.agent-deploy-interval`. This interval should be a lot shorter than :inmanta.config:option:`config.agent-repair-interval`
+
+When a repair is running and a deploy run is started, the repair is cancelled, the deploy is performed and then the repair is restarted. This repair starts again from scratch. So when repairs take a very long time, they might never finish completely when there is a high rate of change.
+
+Push changes
+************
+For very interactive changes the server pushes changes to the agent. The server can push full and incremental desired state to the agent.
+
+ * **incremental** only deploys resource for which the orchestrator knows there are changes, based on the last known deploy status of the resource.
+ * **full** always deploys all resources even if the last know status of the resource already matches desired state.
+
     
