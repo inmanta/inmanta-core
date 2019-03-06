@@ -24,6 +24,7 @@ import time
 import pytest
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient
 from inmanta import config, protocol
+from inmanta.protocol.rest import CallArguments
 from inmanta.util import hash_file
 from inmanta.server import config as opt
 from tornado import gen, web
@@ -270,3 +271,60 @@ async def test_timeout_error(app):
 
     assert x.code == 599
     assert "message" in x.result
+
+
+@pytest.mark.asyncio
+async def test_method_properties():
+    """
+        Test method properties decorator and helper functions
+    """
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    def test_method(name):
+        """
+            Create a new project
+        """
+
+    props: protocol.common.MethodProperties = test_method.__method_properties__
+    assert "Authorization" in props.get_call_headers()
+    assert props.get_listen_url() == "/api/v1/test"
+    assert props.get_call_url({}) == "/api/v1/test"
+
+
+@pytest.mark.asyncio
+async def test_invalid_client_type():
+    """
+        Test invalid client ype
+    """
+    with pytest.raises(Exception) as e:
+        @protocol.method(method_name="test", operation="PUT", client_types=["invalid"])
+        def test_method(name):
+            """
+                Create a new project
+            """
+        assert "Invalid client type invalid specified for function" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_call_arguments_defaults():
+    """
+        Test processing RPC messages
+    """
+    @protocol.method(method_name="test", operation="PUT", client_types=["api"])
+    def test_method(name: str, value: int = 10):
+        """
+            Create a new project
+        """
+
+    call = CallArguments(test_method.__method_properties__, {"name": "test"}, {})
+    await call.process()
+
+    assert call.call_args["name"] == "test"
+    assert call.call_args["value"] == 10
+
+
+def test_create_client():
+    with pytest.raises(AssertionError):
+        protocol.SyncClient("agent", "120")
+
+    with pytest.raises(AssertionError):
+        protocol.Client("agent", "120")

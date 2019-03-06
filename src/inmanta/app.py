@@ -27,7 +27,7 @@
 
     Entry points
     ------------
-    \@command annotation to register new command
+    @command annotation to register new command
 """
 
 from argparse import ArgumentParser
@@ -36,7 +36,6 @@ import sys
 import time
 import json
 import os
-import pwd
 import socket
 import signal
 
@@ -52,6 +51,10 @@ from inmanta.export import cfg_env, ModelExporter
 import yaml
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.ast import CompilerException
+import asyncio
+import traceback
+import threading
+from threading import Timer
 
 LOGGER = logging.getLogger()
 
@@ -62,6 +65,7 @@ def start_server(options):
     setup_signal_handlers(ibl.stop)
     IOLoop.current().add_callback(ibl.start)
     IOLoop.current().start()
+    print("Server Shutdown complete")
 
 
 @command("agent", help_msg="Start the inmanta agent")
@@ -71,6 +75,32 @@ def start_agent(options):
     setup_signal_handlers(a.stop)
     IOLoop.current().add_callback(a.start)
     IOLoop.current().start()
+    print("Agent Shutdown complete")
+
+
+def dump_threads():
+    print("----- Thread Dump ----")
+    for th in threading.enumerate():
+        print("---", th)
+        traceback.print_stack(sys._current_frames()[th.ident])
+        print()
+    sys.stdout.flush()
+
+
+@gen.coroutine
+def dump_ioloop_running():
+    # dump async IO
+    print("----- Async IO tasks ----")
+    for task in asyncio.all_tasks():
+        print(task)
+    print()
+    sys.stdout.flush()
+
+
+def context_dump(ioloop):
+    dump_threads()
+    if hasattr(asyncio, "all_tasks"):
+        ioloop.add_callback_from_signal(dump_ioloop_running)
 
 
 def setup_signal_handlers(shutdown_function):
@@ -79,11 +109,30 @@ def setup_signal_handlers(shutdown_function):
 
         :param shutdown_function: The function that contains the shutdown logic.
     """
+    # ensure correct ioloop
+    ioloop = IOLoop.current()
+
+    def hard_exit():
+        context_dump(ioloop)
+        sys.stdout.flush()
+        # Hard exit, not sys.exit
+        # ensure shutdown when the ioloop is stuck
+        os._exit(const.EXIT_HARD)
+
     def handle_signal(signum, frame):
-        IOLoop.current().add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
+        # force shutdown, even when the ioloop is stuck
+        # schedule off the loop
+        t = Timer(const.SHUTDOWN_GRACE_HARD, hard_exit)
+        t.daemon = True
+        t.start()
+        ioloop.add_callback_from_signal(safe_shutdown_wrapper, shutdown_function)
+
+    def handle_signal_dump(signum, frame):
+        context_dump(ioloop)
 
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGUSR1, handle_signal_dump)
 
 
 @gen.coroutine
@@ -91,10 +140,11 @@ def safe_shutdown_wrapper(shutdown_function):
     """
         Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
+        Wait for 3 seconds to force stop
     """
     future = shutdown_function()
     try:
-        timeout = IOLoop.current().time() + 10
+        timeout = IOLoop.current().time() + const.SHUTDOWN_GRACE_IOLOOP
         yield gen.with_timeout(timeout, future)
     except TimeoutError:
         pass
@@ -197,7 +247,7 @@ def project(options):
 
 def deploy_parser_config(parser):
     parser.add_argument("-p", dest="project", help="The project name")
-    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated " +
+    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated "
                         "and wildcards are supported")
     parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map",
                         default=""),
@@ -226,13 +276,15 @@ def export_parser_config(parser):
         Configure the compiler of the export function
     """
     parser.add_argument("-g", dest="depgraph", help="Dump the dependency graph", action="store_true")
-    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been " +
-                        "submitted in the supplied file")
+    parser.add_argument("-j", dest="json", help="Do not submit to the server but only store the json that would have been "
+                                                "submitted in the supplied file")
     parser.add_argument("-e", dest="environment", help="The environment to compile this model for")
-    parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version",
+    parser.add_argument("-d", dest="deploy", help="Trigger a deploy for the exported version", action="store_true")
+    parser.add_argument("--full", dest="full_deploy",
+                        help="Make the agents execute a full deploy instead of an incremental deploy. "
+                             "Should be used together with the -d option",
                         action="store_true", default=False)
-    parser.add_argument("-m", dest="model", help="Also export the complete model",
-                        action="store_true", default=False)
+    parser.add_argument("-m", dest="model", help="Also export the complete model", action="store_true", default=False)
     parser.add_argument("--server_address", dest="server", help="The address of the server to submit the model to")
     parser.add_argument("--server_port", dest="port", help="The port of the server to submit the model to")
     parser.add_argument("--token", dest="token", help="The token to auth to the server")
@@ -277,8 +329,8 @@ def export(options):
     else:
         metadata = {"message": "Manual compile on the CLI by user"}
 
-    if "cli-user" not in metadata:
-        metadata["cli-user"] = pwd.getpwuid(os.geteuid()).pw_name
+    if "cli-user" not in metadata and "USERNAME" in os.environ:
+        metadata["cli-user"] = os.environ["USERNAME"]
 
     if "hostname" not in metadata:
         metadata["hostname"] = socket.gethostname()
@@ -320,7 +372,8 @@ def export(options):
         conn = protocol.SyncClient("compiler")
         LOGGER.info("Triggering deploy for version %d" % version)
         tid = cfg_env.get()
-        conn.release_version(tid, version, True)
+        agent_trigger_method = const.AgentTriggerMethod.get_agent_trigger_method(options.full_deploy)
+        conn.release_version(tid, version, True, agent_trigger_method)
 
 
 log_levels = {
@@ -357,6 +410,10 @@ def cmd_parser():
     return parser
 
 
+def _is_on_tty() -> bool:
+    return (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ
+
+
 def _get_default_stream_handler():
     stream_handler = logging.StreamHandler(stream=sys.stdout)
     stream_handler.setLevel(logging.INFO)
@@ -381,14 +438,14 @@ def _get_watched_file_handler(options):
 
 def _convert_to_log_level(level):
     if level >= len(log_levels):
-        level = 3
+        level = len(log_levels) - 1
     return log_levels[level]
 
 
 def _get_log_formatter_for_stream_handler(timed):
     log_format = "%(asctime)s " if timed else ""
-    if (hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()) or const.ENVIRON_FORCE_TTY in os.environ:
-        log_format += "%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(message)s"
+    if _is_on_tty():
+        log_format += "%(log_color)s%(name)-25s%(levelname)-8s%(reset)s %(blue)s%(message)s"
         formatter = colorlog.ColoredFormatter(
             log_format,
             datefmt=None,
@@ -402,7 +459,7 @@ def _get_log_formatter_for_stream_handler(timed):
             }
         )
     else:
-        log_format += "%(levelname)-8s%(message)s"
+        log_format += "%(name)-25s%(levelname)-8s%(message)s"
         formatter = logging.Formatter(fmt=log_format)
     return formatter
 
@@ -435,6 +492,8 @@ def app():
         log_level = _convert_to_log_level(options.verbose)
         stream_handler.setLevel(log_level)
 
+    logging.captureWarnings(True)
+
     # Load the configuration
     Config.load_config(options.config_file)
 
@@ -453,6 +512,12 @@ def app():
         else:
             sys.excepthook(*sys.exc_info())
 
+        if isinstance(e, CompilerException):
+            from inmanta.compiler.help.explainer import ExplainerFactory
+            helpmsg = ExplainerFactory().explain_and_format(e, plain=not _is_on_tty())
+            if helpmsg is not None:
+                print(helpmsg)
+
     try:
         options.func(options)
     except CLIException as e:
@@ -464,6 +529,7 @@ def app():
     except KeyboardInterrupt as e:
         report(e)
         sys.exit(1)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@
 from inmanta.execute.runtime import ResultVariable, ExecutionUnit, Resolver, QueueScheduler
 from inmanta.ast import Locatable, Location, Namespaced, Namespace, Named, Anchor
 from typing import Any, Dict, List, Tuple  # noqa: F401
+from typing import Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -97,7 +98,7 @@ class ExpressionStatement(DynamicStatement):
         """
         raise Exception("Not Implemented" + str(type(self)))
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             execute the expression, give the values provided in the requires dict.
             These values correspond to the values requested via requires_emit
@@ -106,6 +107,25 @@ class ExpressionStatement(DynamicStatement):
 
     def requires_emit_gradual(self, resolver: Resolver, queue: QueueScheduler, resultcollector) -> Dict[object, ResultVariable]:
         return self.requires_emit(resolver, queue)
+
+
+class Resumer(ExpressionStatement):
+
+    def resume(self,
+               requires: Dict[object, object],
+               resolver: Resolver,
+               queue: QueueScheduler,
+               target: ResultVariable) -> None:
+        pass
+
+
+class RawResumer(ExpressionStatement):
+
+    def resume(self,
+               equires: Dict[object, ResultVariable],
+               resolver: Resolver,
+               queue_scheduler: QueueScheduler) -> None:
+        pass
 
 
 class ReferenceStatement(ExpressionStatement):
@@ -178,7 +198,7 @@ class Literal(ExpressionStatement):
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         return {}
 
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return self.value
 
     def execute_direct(self, requires: Dict[object, object]) -> object:
@@ -195,6 +215,7 @@ class DefinitionStatement(Statement):
 
 
 class TypeDefinitionStatement(DefinitionStatement, Named):
+    comment: Optional[str]
 
     def __init__(self, namespace: Namespace, name: str) -> None:
         DefinitionStatement.__init__(self)
@@ -202,6 +223,7 @@ class TypeDefinitionStatement(DefinitionStatement, Named):
         self.namespace = namespace
         self.fullName = namespace.get_full_name() + "::" + str(name)
         self.type = None  # type: NamedType
+        self.comment = None
 
     def register_types(self) -> Tuple[str, "NamedType"]:
         self.namespace.define_type(self.name, self.type)

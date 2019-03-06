@@ -194,7 +194,7 @@ t1.a=3
 """,
         """Could not set attribute `a` on instance `__config__::Test1 (instantiated at {dir}/main.cf:10)` (reported in t1.a = 3 ({dir}/main.cf:11))
 caused by:
-  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))""",  # nopep8
+  Invalid value '3', expected String (reported in t1.a = 3 ({dir}/main.cf:11))""",  # noqa: E501
     )
 
 
@@ -215,7 +215,7 @@ Test(value="a")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:11)` (reported in Construct(Test) ({dir}/main.cf:11))
 caused by:
-  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # nopep8
+  Could not resolve the value a in this static context (reported in a ({dir}/main.cf:3:41))""",  # noqa: E501
     )
 
 
@@ -234,5 +234,5 @@ Test(value="ab")
 """,
         """Could not set attribute `value` on instance `__config__::Test (instantiated at {dir}/main.cf:10)` (reported in Construct(Test) ({dir}/main.cf:10))
 caused by:
-  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # nopep8
+  Invalid value 'ab', constraint does not match (reported in __config__::abc ({dir}/main.cf:2:9))""",  # noqa: E501
     )

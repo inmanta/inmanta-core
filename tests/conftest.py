@@ -23,20 +23,23 @@ import string
 import shutil
 from tempfile import mktemp
 import socket
+import logging
 
 
 import pytest
-from inmanta import config
-from inmanta import data_pg as data
+
+import utils
+from inmanta import data_pg as data, config, mongoproc
 import inmanta.compiler as compiler
 from inmanta.module import Project
 from inmanta import resources, export
-from inmanta.agent import handler
+from inmanta.agent import handler, agent
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
 import re
 from inmanta.server.bootloader import InmantaBootloader
+from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
 from tornado import process
@@ -46,6 +49,9 @@ import asyncpg
 from inmanta.postgresproc import PostgresProc
 import sys
 import pkg_resources
+from typing import Optional, Dict
+from inmanta import protocol
+
 
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
@@ -101,6 +107,7 @@ def reset_all_objects():
     resources.resource.reset()
     export.Exporter.reset()
     process.Subprocess.uninitialize()
+    asyncio.set_child_watcher(None)
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
@@ -132,6 +139,14 @@ def restore_cwd():
     cwd = os.getcwd()
     yield
     os.chdir(cwd)
+
+
+@pytest.fixture(scope="function")
+def no_agent_backoff():
+    backoff = agent.GET_RESOURCE_BACKOFF
+    agent.GET_RESOURCE_BACKOFF = 0
+    yield
+    agent.GET_RESOURCE_BACKOFF = backoff
 
 
 def get_free_tcp_port():
@@ -169,6 +184,22 @@ def inmanta_config():
 def database_name():
     ten_random_digits = ''.join(random.choice(string.digits) for _ in range(10))
     yield "inmanta" + ten_random_digits
+
+
+@pytest.fixture(scope="function")
+async def agent_multi(server_multi, environment_multi):
+    agentmanager = server_multi.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    a = agent.Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
+    a.add_end_point_name("agent1")
+    await a.start()
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
 
 
 @pytest.fixture(scope="function")
@@ -216,7 +247,6 @@ async def server_multi(inmanta_config, postgres_db, database_name, database_sche
 
     if auth:
         config.Config.set("server", "auth", "true")
-        from inmanta import protocol
 
     for x, ct in [("server", None),
                   ("server_rest_transport", None),
@@ -267,29 +297,27 @@ async def server_multi(inmanta_config, postgres_db, database_name, database_sche
 
 @pytest.fixture(scope="function")
 def client(server):
-    from inmanta import protocol
-
     client = protocol.Client("client")
-
     yield client
 
 
 @pytest.fixture(scope="function")
 def client_multi(server_multi):
-    from inmanta import protocol
-
     client = protocol.Client("client")
-
     yield client
 
 
 @pytest.fixture(scope="function")
 def sync_client_multi(server_multi):
-    from inmanta import protocol
-
     client = protocol.SyncClient("client")
-
     yield client
+
+
+@pytest.fixture(scope="function", autouse=True)
+def capture_warnings():
+    logging.captureWarnings(True)
+    yield
+    logging.captureWarnings(False)
 
 
 @pytest.fixture(scope="function")
@@ -510,6 +538,7 @@ def snippetcompiler(snippetcompiler_global):
 
 class CLI(object):
     async def run(self, *args):
+        # set column width very wide so lines are not wrapped
         os.environ["COLUMNS"] = "1000"
         runner = testing.CliRunner()
         cmd_args = ["--host", "localhost", "--port", config.Config.get("cmdline_rest_transport", "port")]
@@ -522,7 +551,10 @@ class CLI(object):
                 catch_exceptions=False
             )
 
-        return await asyncio.get_event_loop().run_in_executor(None, invoke)
+        result = await asyncio.get_event_loop().run_in_executor(None, invoke)
+        # reset to default again
+        del os.environ["COLUMNS"]
+        return result
 
 
 @pytest.fixture

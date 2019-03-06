@@ -19,6 +19,7 @@
 from inmanta.ast import Namespace, TypeNotFoundException, RuntimeException, Locatable, Named, DuplicateException, Location
 from inmanta.execute.util import AnyType, NoneValue
 import numbers
+from typing import Optional
 
 
 class BasicResolver(object):
@@ -92,7 +93,7 @@ class Type(Locatable):
     """
 
     @classmethod
-    def validate(cls, value):
+    def validate(cls, value: object) -> None:
         """
             Validate the given value to check if it satisfies the constraints
             associated with this type
@@ -454,13 +455,14 @@ class Dict(Type, dict):
         return None
 
 
-class ConstraintType(Type):
+class ConstraintType(NamedType):
     """
         A type that is based on Number or String but defines additional constraint on this type.
         These constraints only apply on the value of the type.
 
         The constraint on this type is defined by a regular expression.
     """
+    comment: Optional[str]
 
     def __init__(self, namespace, name):
         Type.__init__(self)
@@ -514,6 +516,12 @@ class ConstraintType(Type):
 
     def __str__(self):
         return self.type_string()
+
+    def get_full_name(self) -> str:
+        return self.namespace.get_full_name() + "::" + self.name
+
+    def get_namespace(self) -> "Namespace":
+        return self.namespace
 
 
 def create_function(expression):

@@ -25,8 +25,8 @@ from inmanta.ast import RuntimeException
 
 class UnsetException(RuntimeException):
     """
-        This exception is thrown when an attribute is read that was not yet
-        available.
+        This exception is thrown when an attribute is accessed that was not yet
+        available (i.e. it has not been frozen yet).
     """
 
     def __init__(self, msg, instance=None, attribute=None):

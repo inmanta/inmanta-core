@@ -29,8 +29,8 @@ async def test_agent_get_status(server, environment):
     myagent.add_end_point_name("agent1")
     await myagent.start()
 
-    await retry_limited(lambda: len(server.get_endpoint(SLICE_SESSION_MANAGER)._sessions) == 1, 0.5)
-    clients = server.get_endpoint(SLICE_SESSION_MANAGER)._sessions.values()
+    await retry_limited(lambda: len(server.get_slice(SLICE_SESSION_MANAGER)._sessions) == 1, 0.5)
+    clients = server.get_slice(SLICE_SESSION_MANAGER)._sessions.values()
     assert len(clients) == 1
     clients = [x for x in clients]
     client = clients[0].get_client()

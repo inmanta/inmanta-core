@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 """
 
 import base64
+from urllib import request, error
 from collections import defaultdict
 from configparser import ConfigParser, Interpolation
 import json
@@ -25,39 +26,40 @@ import os
 import re
 import sys
 import uuid
+import warnings
+import ssl
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
-from tornado import httpclient
+from inmanta import const
 
-from inmanta import methods
-
+from typing import Optional, Callable, TypeVar, Generic, Dict, List, cast, Union
 
 LOGGER = logging.getLogger(__name__)
 
 
-def _normalize_name(name: str):
+def _normalize_name(name: str) -> str:
     return name.replace("_", "-")
 
 
 class LenientConfigParser(ConfigParser):
 
-    def optionxform(self, name):
+    def optionxform(self, name: str) -> str:
         name = _normalize_name(name)
         return super(LenientConfigParser, self).optionxform(name)
 
 
 class Config(object):
-    __instance = None
-    __config_definition = defaultdict(lambda: {})
+    __instance: Optional["Config"] = None
+    __config_definition: Dict[str, Dict[str, "Option"]] = defaultdict(lambda: {})
 
     @classmethod
-    def get_config_options(cls):
+    def get_config_options(cls) -> Dict[str, Dict[str, str]]:
         return cls.__config_definition
 
     @classmethod
-    def load_config(cls, config_file=None):
+    def load_config(cls, config_file: str = None) -> None:
         """
         Load the configuration file
         """
@@ -72,19 +74,19 @@ class Config(object):
         cls.__instance = config
 
     @classmethod
-    def _get_instance(cls):
+    def _get_instance(cls) -> "Config":
         if cls.__instance is None:
             raise Exception("Load the configuration first")
 
         return cls.__instance
 
     @classmethod
-    def _reset(cls):
+    def _reset(cls) -> None:
         cls.__instance = None
 
     # noinspection PyNoneFunctionAssignment
     @classmethod
-    def get(cls, section=None, name=None, default_value=None):
+    def get(cls, section: Optional[str] = None, name: Optional[str] = None, default_value: Optional[str] = None) -> str:
         """
             Get the entire compiler or get a value directly
         """
@@ -101,7 +103,7 @@ class Config(object):
         return opt.validate(val)
 
     @classmethod
-    def getboolean(cls, section, name, default_value=None):
+    def getboolean(cls, section: str, name: str, default_value: str = None) -> bool:
         """
             Return a boolean from the configuration
         """
@@ -109,7 +111,7 @@ class Config(object):
         return cls._get_instance().getboolean(section, name, fallback=default_value)
 
     @classmethod
-    def set(cls, section, name, value):
+    def set(cls, section: str, name: str, value: str) -> None:
         """
             Override a value
         """
@@ -120,11 +122,11 @@ class Config(object):
         cls._get_instance().set(section, name, value)
 
     @classmethod
-    def register_option(cls, option):
+    def register_option(cls, option: "Option") -> None:
         cls.__config_definition[option.section][option.name] = option
 
     @classmethod
-    def validate_option_request(cls, section, name, default_value):
+    def validate_option_request(cls, section: str, name: str, default_value: str) -> Optional["Option"]:
         if section not in cls.__config_definition:
             LOGGER.warning("Config section %s not defined" % (section))
             # raise Exception("Config section %s not defined" % (section))
@@ -141,29 +143,29 @@ class Config(object):
         return opt
 
 
-def is_int(value):
+def is_int(value: str) -> int:
     """int"""
     return int(value)
 
 
-def is_time(value):
+def is_time(value: str) -> int:
     """time"""
     return int(value)
 
 
-def is_bool(value):
+def is_bool(value: str) -> bool:
     """bool"""
     if type(value) == bool:
-        return value
+        return cast(bool, value)
     return Config._get_instance()._convert_to_boolean(value)
 
 
-def is_list(value):
+def is_list(value: str) -> List[str]:
     """list"""
     return [x.strip() for x in value.split(",")]
 
 
-def is_map(map_in):
+def is_map(map_in: str) -> Dict[str, str]:
     """map"""
     map_out = {}
     if map_in is not None:
@@ -180,26 +182,28 @@ def is_map(map_in):
     return map_out
 
 
-def is_str(value):
+def is_str(value: str) -> str:
     """str"""
     return str(value)
 
 
-def is_str_opt(value):
+def is_str_opt(value: str) -> Optional[str]:
     """optional str"""
     if value is None:
         return None
     return str(value)
 
 
-def is_uuid_opt(value):
+def is_uuid_opt(value: str) -> uuid.UUID:
     """optional uuid"""
     if value is None:
         return None
     return uuid.UUID(value)
 
 
-class Option(object):
+T = TypeVar("T")
+
+class Option(Generic[T]):
     """
     Defines an option and exposes it for use
 
@@ -216,34 +220,51 @@ class Option(object):
     :param documentation: the documentation for this option
     :param validator: a function responsible for turning the string representation of the option into the correct type.
         Its docstring is used as representation for the type of the option.
+    :param predecessor_option: The Option that was deprecated in favour of this option.
     """
 
-    def __init__(self, section, name, default, documentation, validator=is_str):
+    def __init__(
+        self,
+        section: str,
+        name: str,
+        default: Union[str, bool, int, None, Callable],
+        documentation: str,
+        validator: Callable[[str], T] = is_str,
+        predecessor_option: "Option" = None
+    ) -> None:
         self.section = section
         self.name = _normalize_name(name)
         self.validator = validator
         self.documentation = documentation
         self.default = default
+        self.predecessor_option = predecessor_option
         Config.register_option(self)
 
-    def get(self):
+    def get(self) -> T:
         cfg = Config._get_instance()
+        if self.predecessor_option:
+            has_deprecated_option = cfg.has_option(self.predecessor_option.section, self.predecessor_option.name)
+            has_new_option = cfg.has_option(self.section, self.name)
+            if has_deprecated_option and not has_new_option:
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (self.predecessor_option.name, self.name),
+                              category=DeprecationWarning)
+                return self.predecessor_option.get()
         out = cfg.get(self.section, self.name, fallback=self.get_default_value())
         return self.validate(out)
 
-    def get_type(self):
+    def get_type(self) -> Optional[str]:
         if callable(self.validator):
             return self.validator.__doc__
         return None
 
-    def get_default_desc(self):
+    def get_default_desc(self) -> str:
         defa = self.default
         if callable(defa):
             return "$%s" % defa.__doc__
         else:
             return defa
 
-    def validate(self, value):
+    def validate(self, value: str) -> T:
         return self.validator(value)
 
     def get_default_value(self):
@@ -253,7 +274,7 @@ class Option(object):
         else:
             return defa
 
-    def set(self, value):
+    def set(self, value: str) -> None:
         """ Only for tests"""
         cfg = Config._get_instance()
         cfg.set(self.section, self.name, value)
@@ -296,7 +317,7 @@ class TransportConfig(object):
     """
         A class to register the config options for Client classes
     """
-    def __init__(self, name, port=8888):
+    def __init__(self, name: str, port: int=8888) -> None:
         self.prefix = "%s_rest_transport" % name
         self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
         self.port = Option(self.prefix, "port", port, "Server port", is_int)
@@ -323,11 +344,13 @@ class AuthJWTConfig(object):
     """
         Auth JWT configuration manager
     """
-    sections = {}
-    issuers = {}
+    sections: Dict[str, "AuthJWTConfig"] = {}
+    issuers: Dict[str, "AuthJWTConfig"] = {}
+
+    validate_cert: bool
 
     @classmethod
-    def list(cls):
+    def list(cls) -> List[str]:
         """
             Return a list of all defined auth jwt configurations. This method will load new sections if they were added
             since the last invocation.
@@ -358,10 +381,10 @@ class AuthJWTConfig(object):
         if len(cls.sections.keys()) > 0 and not sign:
             raise ValueError("One auth_jwt section should have sign set to true")
 
-        return cls.sections.keys()
+        return list(cls.sections.keys())
 
     @classmethod
-    def get(cls, name):
+    def get(cls, name: str) -> Optional["AuthJWTConfig"]:
         """
             Get the config with the given name
         """
@@ -371,7 +394,7 @@ class AuthJWTConfig(object):
         return None
 
     @classmethod
-    def get_sign_config(cls):
+    def get_sign_config(cls) -> Optional["AuthJWTConfig"]:
         """
             Get the configuration with sign is true
         """
@@ -381,7 +404,7 @@ class AuthJWTConfig(object):
                 return cfg
 
     @classmethod
-    def get_issuer(cls, issuer):
+    def get_issuer(cls, issuer: str) -> Optional["AuthJWTConfig"]:
         """
             Get the config for the given issuer. Only when no auth config has been loaded yet, the configuration will be loaded
             again. For loading additional configuration, call list() first. This method is in the auth path for each API
@@ -393,7 +416,7 @@ class AuthJWTConfig(object):
             return cls.issuers[issuer]
         return None
 
-    def __init__(self, name, section, config):
+    def __init__(self, name: str, section: str, config: Config):
         self.name = name
         self.section = section
         self._config = config
@@ -410,7 +433,7 @@ class AuthJWTConfig(object):
         else:
             raise ValueError("Algorithm %s in %s is not support " % (self.algo, self.section))
 
-    def validate_generic(self):
+    def validate_generic(self) -> None:
         """
             Validate  and parse the generic options that are valid for all algorithms
         """
@@ -424,7 +447,7 @@ class AuthJWTConfig(object):
 
         self.client_types = is_list(self._config["client_types"])
         for ct in self.client_types:
-            if ct not in methods.VALID_CLIENT_TYPES:
+            if ct not in const.VALID_CLIENT_TYPES:
                 raise ValueError("invalid client_type %s in %s" % (ct, self.section))
 
         if "expire" in self._config:
@@ -442,7 +465,7 @@ class AuthJWTConfig(object):
         else:
             self.audience = self.issuer
 
-    def validate_hs265(self):
+    def validate_hs265(self) -> None:
         """
             Validate and parse HS256 algorithm configuration
         """
@@ -453,8 +476,8 @@ class AuthJWTConfig(object):
         if len(self.key) < 32:
             raise ValueError("HS256 requires a key of 32 bytes (256 bits) or longer in " + self.section)
 
-    def _load_public_key(self, e, n):
-        def to_int(x):
+    def _load_public_key(self, e: str, n: str) -> str:
+        def to_int(x: str) -> int:
             bs = base64.urlsafe_b64decode(x + "==")
             return int.from_bytes(bs, byteorder="big")
 
@@ -468,7 +491,7 @@ class AuthJWTConfig(object):
         )
         return pem
 
-    def validate_rs265(self):
+    def validate_rs265(self) -> None:
         """
             Validate and parse RS256 algorithm configuration
         """
@@ -482,15 +505,16 @@ class AuthJWTConfig(object):
         else:
             self.validate_cert = True
 
-        http_client = httpclient.HTTPClient()
+        ctx = None
+        if not self.validate_cert:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+
         try:
-            response = http_client.fetch(self.jwks_uri, validate_cert=self.validate_cert)
-            if hasattr(response.body, "decode"):
-                body = response.body.decode()
-            else:
-                body = response.body
-            key_data = json.loads(body)
-        except httpclient.HTTPError as e:
+            with request.urlopen(self.jwks_uri, context=ctx) as response:
+                key_data = json.loads(response.read().decode('utf-8'))
+        except error.URLError as e:
             # HTTPError is raised for non-200 responses; the response
             # can be found in e.response.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri. Got error: %s" %
@@ -498,7 +522,6 @@ class AuthJWTConfig(object):
         except Exception as e:
             # Other errors are possible, such as IOError.
             raise ValueError("Unable to load key data for %s using the provided jwks_uri." % (self.section))
-        http_client.close()
 
         self.keys = {}
         for key in key_data["keys"]:

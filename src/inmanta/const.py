@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -25,14 +25,17 @@ class ResourceState(Enum):
     dry = 3
     deployed = 4
     failed = 5
-    queued = 6  # Unused
+    deploying = 6
     available = 7
     cancelled = 8  # When a new version is pushed, in progress deploys are cancelled
     undefined = 9  # The state of this resource is unknown at this moment in the orchestration process
     skipped_for_undefined = 10  # This resource depends on an undefined resource
+    processing_events = 11
 
 
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
+
 UNKNOWN_STRING = "<<undefined>>"
 
 """
@@ -48,6 +51,8 @@ States set by agent
 3. deployed
 4. unavailable
 5. cancelled
+6. deploying
+7. processing_events
 
 Each deploy sets the agent state again, all agent states can transition to all agent states
 
@@ -55,15 +60,20 @@ States that are in the action log, but not actual states
 1. dry
 
 
-                                           +-----> skipped     -<--------+
-                                           |                             |
-                                           +-----> failed      -<--------+
-                                           |                             |
-    +---------------->  available  +-------------> unavailable -<--------+
-    |                                      |                             |
-    |                                      +-----> deployed    -<--------+
-    |                                      |                             |
-+---+---------+                            +-----> cancelled   -<--------+
+
+                                           +-----> deploying        -<--------+
+                                           |                                  |
+                                           +-----> processing_events-<--------+
+                                           |                                  |
+                                           +-----> skipped          -<--------+
+                                           |                                  |
+                                           +-----> failed           -<--------+
+                                           |                                  |
+    +---------------->  available  +-------------> unavailable      -<--------+
+    |                                      |                                  |
+    |                                      +-----> deployed         -<--------+
+    |                                      |                                  |
++---+---------+                            +-----> cancelled        -<--------+
 | compiler    +------> undefined
 +---+---------+
     |
@@ -93,10 +103,23 @@ class ResourceAction(Enum):
     pull = 3
     deploy = 4
     dryrun = 5
+    getfact = 6
     other = 8
 
 
 STATE_UPDATE = [ResourceAction.deploy]
+
+
+class AgentTriggerMethod(Enum):
+    push_incremental_deploy = 1
+    push_full_deploy = 2
+
+    @classmethod
+    def get_agent_trigger_method(cls, is_full_deploy):
+        if is_full_deploy:
+            return cls.push_full_deploy
+        else:
+            return cls.push_incremental_deploy
 
 
 class LogLevel(Enum):
@@ -119,9 +142,27 @@ class Compilestate(Enum):
 
 EXPORT_META_DATA = "export_metadata"
 META_DATA_COMPILE_STATE = "inmanta:compile:state"
-
+INMANTA_MT_HEADER = "X-Inmanta-tid"
+VALID_CLIENT_TYPES = ["api", "agent", "compiler", "public"]
 
 # For testing
 
 # assume we are running in a tty
 ENVIRON_FORCE_TTY = "FORCE_TTY"
+
+
+LOG_LEVEL_TRACE = 3
+
+NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
+
+
+# Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
+SHUTDOWN_GRACE_IOLOOP = 10
+# Time we give the server/agent to shutdown gracefully, before we execute sys.exit(3)
+SHUTDOWN_GRACE_HARD = 15
+# Hard shutdown exit code
+EXIT_HARD = 3
+
+
+TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
+TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"

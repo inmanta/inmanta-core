@@ -84,6 +84,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
 
     async def assert_agent(name: str, state: str, sid: UUID):
         agent = await data.Agent.get(env.id, name)
@@ -167,6 +168,7 @@ async def test_api(init_dataclasses_and_load_schema):
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
 
     # one session
     ts1 = MockSession(uuid4(), env.id, ["agent1", "agent2"], "ts1")
@@ -226,7 +228,7 @@ async def test_api(init_dataclasses_and_load_schema):
     assert_equal_ish(shouldbe, all_agents)
 
     async def dummy_status():
-        return Result(False, 200, "X")
+        return Result(200, "X")
 
     ts1.get_client().get_status.side_effect = dummy_status
     report = await am.get_agent_process_report(agentid)
@@ -271,6 +273,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     server.add_future.side_effect = futures
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
 
     async def assert_agent(name: str, state: str, sid: UUID):
         agent = await data.Agent.get(env.id, name)
@@ -328,6 +331,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     # failover
     am = AgentManager(server, False)
     am.add_future = futures
+    am.running = True
     await am.clean_db()
 
     # one session

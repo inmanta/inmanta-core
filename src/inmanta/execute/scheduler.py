@@ -20,6 +20,7 @@ import logging
 import time
 
 from inmanta.ast.statements import DefinitionStatement, TypeDefinitionStatement
+from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.proxy import UnsetException
 from inmanta import plugins
 from inmanta.ast.type import TYPES, Type
@@ -30,6 +31,7 @@ from inmanta.ast.entity import Entity
 from inmanta.ast import RuntimeException, MultiException, CycleExcpetion
 from inmanta.execute.tracking import ModuleTracker
 import itertools
+from typing import Dict, List, Set
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -80,15 +82,19 @@ class Scheduler(object):
         for i in self.verify_done():
             i.dump()
 
-    def sort_entities(self, entity_map):
-        out = []
-        loopstack = set()
+    def sort_entities(self, entity_map: Dict[str, DefineEntity]) -> List[DefineEntity]:
+        out: List[DefineEntity] = []
+        loopstack: Set[str] = set()
         while len(entity_map) > 0:
             workon = next(iter(entity_map.keys()))
             self.do_sort_entities(entity_map, workon, out, loopstack)
         return out
 
-    def do_sort_entities(self, entity_map, name, acc, loopstack):
+    def do_sort_entities(self,
+                         entity_map: Dict[str, DefineEntity],
+                         name: str,
+                         acc: List[DefineEntity],
+                         loopstack: Set[str]) -> None:
         nexte = entity_map[name]
         try:
             del entity_map[name]
@@ -264,21 +270,23 @@ class Scheduler(object):
                     next.unqueue()
                 else:
                     # freeze it and go to next iteration, new statements will be on the basequeue
+                    LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
                     next.freeze()
                     progress = True
 
             # no waiters in waitqueue,...
             # see if any zerowaiters have become gotten waiters
             if not progress:
-                waitqueue = [w for w in zerowaiters if w.get_progress_potential() is not 0]
+                waitqueue = [w for w in zerowaiters if w.get_progress_potential() != 0]
                 queue.waitqueue = waitqueue
-                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() is 0]
+                zerowaiters = [w for w in zerowaiters if w.get_progress_potential() == 0]
                 while len(waitqueue) > 0 and not progress:
                     LOGGER.debug("Moved zerowaiters to waiters")
                     next = waitqueue.pop(0)
                     if next.get_waiting_providers() > 0:
                         next.unqueue()
                     else:
+                        LOGGER.log(LOG_LEVEL_TRACE, "Freezing %s", next)
                         next.freeze()
                         progress = True
 

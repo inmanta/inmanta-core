@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.config import Option, is_int, is_bool, is_time, is_list, is_str_opt
+from inmanta.config import Option, is_int, is_bool, is_time, is_str_opt
 from inmanta.config import state_dir, log_dir
 import logging
 
@@ -112,6 +112,13 @@ server_delete_currupt_files = Option("server", "delete_currupt_files", True,
                                      "The server logs an error when it detects a file got corrupted. When set to true, the "
                                      "server will also delete the file, so on subsequent compiles the missing file will be "
                                      "recreated.", is_bool)
+
+server_purge_resource_action_logs_interval = Option("server", "purge-resource-action-logs-interval", 3600,
+                                                    "The number of seconds between resource-action log purging", is_time)
+
+server_resource_action_log = Option("server", "resource_action_log", "resource-actions.log",
+                                    "File in log-dir, containing the resource-action logs", is_str_opt)
+
 
 #############################
 # Dashboard

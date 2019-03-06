@@ -1,0 +1,52 @@
+The compiler could not figure out how to execute this model.
+
+{% if optional -%}
+During compilation, the compiler has to decide when it expects an optional relation to remain undefined. In this compiler run, it guessed that the relation '{{relation | underline}}' on the instance {{ "\033[4m" }}{{instance}}{{ "\033[0m" }} would never get a value assigned, but the value {{value | underline }} was assigned at {{location | underline}}
+
+This can mean one of two things:
+
+1. The model is incorrect. Most often, this is due to something of the form:
+
+    {{ None | bold }}implementation mydefault for MyEntity:
+        self.relation = "default"
+    end
+
+    implement MyEntity using mydefault when not (relation is defined){{ None | noformat }}
+
+  This is always wrong, because the relation can not at the same time be undefined and have the value "default".
+
+2. The model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following:
+
+1. Ensure the model is correct by checking that the problematic assignment at {{location | underline}} is not conditional on the value it assigns.
+2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3. {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation{%if reverse_example%}: {{reverse_example | underline}}{%endif%}.
+4. Simplify the model by relying less on `is defined` but use a boolean instead.
+{%else-%}
+During compilation, the compiler has to decide when it expects a relation to have all its elements.
+In this compiler run, it guessed that the relation '{{relation | underline}}' on the instance {{instance | underline}} would be complete with the values [{{values |join(',') | underline }}], but the value {{value | underline}} was added at {{location | underline}}
+
+This can mean one of two things:
+
+1. The model is incorrect. Most often, this is due to something of the form:
+
+    {{ None | bold }}implementation mydefault for MyEntity:
+      self.relation += "default"
+    end
+
+    implement MyEntity using mydefault when std::count(relation) == 0{{ None | noformat }}
+
+
+   This is always wrong, because the relation can not at the same time have length 0 and contain the value "default"
+
+2. The model is too complicated for the compiler to resolve.
+
+The procedure to solve this is the following
+
+1. Ensure the model is correct by checking that the problematic assignment at {{location | underline }} is not conditional on the value it assigns.
+2. Report a bug to the inmanta issue tracker at https://github.com/inmanta/inmanta/issues or directly contact inmanta. This is a priority issue to us, so you will be helped rapidly and by reporting the problem, we can fix it properly.
+3. {%if reverse %}[applies]{%else%}[does not apply here]{%endif%} If the exception is on the reverse relation, try to give a hint by explicitly using the problematic relation: {{reverse_example | underline}}
+4. Simplify the model by reducing the number of implements calls that pass a list into a plugin function in their when clause.
+
+{% endif%}

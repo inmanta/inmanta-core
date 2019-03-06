@@ -20,6 +20,7 @@ from inmanta.ast import CompilerException, Range
 
 
 class ParserException(CompilerException):
+    """Exception occurring during the parsing of the code"""
 
     def __init__(self, location: Range, value, msg=None):
         if msg is None:

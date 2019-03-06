@@ -20,7 +20,7 @@
 
 from . import ReferenceStatement
 from inmanta.ast.type import List, Dict
-from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement
+from inmanta.ast.statements import AssignStatement, ExpressionStatement, Statement, Resumer
 from inmanta.execute.runtime import ExecutionUnit, ResultVariable, HangUnit, Instance, Resolver, QueueScheduler
 from inmanta.execute.util import Unknown
 from inmanta.ast import RuntimeException, AttributeException, DuplicateException, TypingException, LocatableString,\
@@ -48,7 +48,7 @@ class CreateList(ReferenceStatement):
         self.items = items
 
     def execute(self,
-                requires: typing.Dict[object, ResultVariable],
+                requires: typing.Dict[object, object],
                 resolver: Resolver,
                 queue: QueueScheduler) -> object:
         """
@@ -86,7 +86,7 @@ class CreateDict(ReferenceStatement):
                 raise DuplicateException(v, seen[x], "duplicate key in dict %s" % x)
             seen[x] = v
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         """
             Create this list
         """
@@ -102,7 +102,7 @@ class CreateDict(ReferenceStatement):
         return "Dict()"
 
 
-class SetAttribute(AssignStatement):
+class SetAttribute(AssignStatement, Resumer):
     """
         Set an attribute of a given instance to a given value
     """
@@ -116,10 +116,10 @@ class SetAttribute(AssignStatement):
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         reqs = self.instance.requires_emit(resolver, queue)
-        HangUnit(queue, resolver, reqs, None, self)
+        HangUnit(queue, resolver, reqs, ResultVariable(), self)
 
     def resume(self,
-               requires: typing.Dict[object, ResultVariable],
+               requires: typing.Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:
@@ -185,6 +185,7 @@ class Assign(AssignStatement):
 
     def emit(self, resolver: Resolver, queue: QueueScheduler) -> None:
         target = resolver.lookup(self.name)
+        assert isinstance(target, ResultVariable)
         reqs = self.value.requires_emit(resolver, queue)
         ExecutionUnit(queue, resolver, target, reqs, self.value)
 
@@ -206,7 +207,7 @@ class MapLookup(ReferenceStatement):
         self.key = key
         self.location = themap.get_location().merge(key.location)
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         mapv = self.themap.execute(requires, resolver, queue)
         if not isinstance(mapv, dict):
             raise TypingException(self, "dict lookup is only possible on dicts, %s is not an object" % mapv)
@@ -224,7 +225,7 @@ class MapLookup(ReferenceStatement):
         return "%s[%s]" % (repr(self.themap), repr(self.key))
 
 
-class IndexLookup(ReferenceStatement):
+class IndexLookup(ReferenceStatement, Resumer):
     """
         Lookup a value in a dictionary
     """
@@ -250,13 +251,13 @@ class IndexLookup(ReferenceStatement):
         return {self: temp}
 
     def resume(self,
-               requires: typing.Dict[object, ResultVariable],
+               requires: typing.Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:
         self.type.lookup_index([(k, v.execute(requires, resolver, queue)) for (k, v) in self.query], self, target)
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         return requires[self]
 
     def __repr__(self) -> str:
@@ -280,7 +281,7 @@ vm.files[path="/etc/motd"]
         ReferenceStatement.__init__(self, [v for (_, v) in query] + [rootobject])
         self.rootobject = rootobject
         self.relation = str(relation)
-        self.querypart = [(str(n), e) for n, e in query]
+        self.querypart: typing.List[typing.Tuple[str, ExpressionStatement]] = [(str(n), e) for n, e in query]
 
     def normalize(self) -> None:
         ReferenceStatement.normalize(self)
@@ -288,7 +289,7 @@ vm.files[path="/etc/motd"]
         self.type = None
 
     def resume(self,
-               requires: typing.Dict[object, ResultVariable],
+               requires: typing.Dict[object, object],
                resolver: Resolver,
                queue: QueueScheduler,
                target: ResultVariable) -> None:
@@ -303,11 +304,17 @@ vm.files[path="/etc/motd"]
         if not isinstance(relation, RelationAttribute):
             raise TypingException(self, "short index lookup is only possible on relations, %s is an attribute" % relation)
 
+        if relation.end is None:
+            raise TypingException(
+                self,
+                "short index lookup is only possible on bi-drectional relations, %s is unidirectional" % relation)
+
         self.type = relation.get_type()
 
-        self.type.lookup_index([(relation.end.name, root_object)] +
-                               [(k, v.execute(requires, resolver, queue))
-                                for (k, v) in self.querypart], self, target)
+        args: typing.List[typing.Tuple[str, object]] = [(relation.end.name, root_object)]
+        args = args + [(k, v.execute(requires, resolver, queue)) for (k, v) in self.querypart]
+
+        self.type.lookup_index(args, self, target)
 
     def __repr__(self) -> str:
         """
@@ -326,7 +333,7 @@ class StringFormat(ReferenceStatement):
         self._format_string = format_string
         self._variables = variables
 
-    def execute(self, requires: typing.Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: typing.Dict[object, object], resolver: Resolver, queue: QueueScheduler) -> object:
         result_string = self._format_string
         for _var, str_id in self._variables:
             value = _var.execute(requires, resolver, queue)

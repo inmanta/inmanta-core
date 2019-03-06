@@ -18,17 +18,19 @@
 
 # pylint: disable-msg=W0613,R0201
 
-from . import GeneratorStatement
+import logging
+
+from inmanta.ast.statements import GeneratorStatement
+from inmanta.const import LOG_LEVEL_TRACE
 from inmanta.execute.util import Unknown
 from inmanta.execute.runtime import ExecutionContext, Resolver, QueueScheduler, ResultVariable, ResultCollector
 from inmanta.ast import RuntimeException, TypingException, NotFoundException, Location, Namespace, DuplicateException,\
     LocatableString, TypeReferenceAnchor, AttributeReferenceAnchor
 from inmanta.execute.tracking import ImplementsTracker
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Set  # noqa: F401
 from inmanta.ast.statements import ExpressionStatement
 from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements.assign import SetAttributeHelper
-from inmanta.ast.attribute import RelationAttribute
 
 try:
     from typing import TYPE_CHECKING
@@ -37,7 +39,8 @@ except ImportError:
 
 if TYPE_CHECKING:
     from inmanta.ast.entity import Default, Entity, Implement, EntityLike  # noqa: F401
-    from typing import Set  # noqa: F401
+
+LOGGER = logging.getLogger(__name__)
 
 
 class SubConstructor(GeneratorStatement):
@@ -64,10 +67,11 @@ class SubConstructor(GeneratorStatement):
             e.set_statement(self.implements)
             raise e
 
-    def execute(self, requires: Dict[object, ResultVariable], instance: Resolver, queue: QueueScheduler) -> object:
+    def execute(self, requires: Dict[object, object], instance: Resolver, queue: QueueScheduler) -> object:
         """
             Evaluate this statement
         """
+        LOGGER.log(LOG_LEVEL_TRACE, "executing subconstructor for %s implement %s", self.type, self.implements.location)
         expr = self.implements.constraint
         if not expr.execute(requires, instance, queue):
             return None
@@ -198,6 +202,9 @@ class Constructor(GeneratorStatement):
         self._direct_attributes = {}  # type: Dict[str,ExpressionStatement]
         self._indirect_attributes = {}  # type: Dict[str,ExpressionStatement]
 
+    def pretty_print(self) -> str:
+        return "%s(%s)" % (self.class_type, ",".join(("%s=%s" % (k, v.pretty_print()) for k, v in self.attributes.items())))
+
     def normalize(self) -> None:
         mytype = self.namespace.get_type(self.class_type)
 
@@ -208,11 +215,8 @@ class Constructor(GeneratorStatement):
 
         inindex = set()
 
-        has_default = set(self.type.get_defaults().keys()) | \
-            set(self.type.get_entity().get_defaults().keys())
-
-        all_attributes = set(self.attributes.keys()) | \
-            has_default
+        all_attributes = dict(self.type.get_default_values())
+        all_attributes.update(self.__attributes)
 
         # now check that all variables that have indexes on them, are already
         # defined and add the instance to the index
@@ -222,52 +226,44 @@ class Constructor(GeneratorStatement):
                     raise TypingException(self, "%s is part of an index and should be set in the constructor." % attr)
                 inindex.add(attr)
 
-        for (k, v) in self.__attributes.items():
+        for (k, v) in all_attributes.items():
             attribute = self.type.get_entity().get_attribute(k)
             if attribute is None:
                 raise TypingException(self, "no attribute %s on type %s" % (k, self.type.get_full_name()))
-            if (isinstance(attribute, RelationAttribute) or k not in has_default) and k not in inindex:
+            if k not in inindex:
                 self._indirect_attributes[k] = v
             else:
                 self._direct_attributes[k] = v
 
     def requires(self) -> List[str]:
         out = [req for (k, v) in self.__attributes.items() for req in v.requires()]
-        out.extend([req for (k, v) in self.type.get_defaults().items() for req in v.requires()])
-        out.extend([req for (k, v) in self.type.get_entity().get_default_values().items() for req in v.requires()])
-
+        out.extend([req for (k, v) in self.get_default_values().items() for req in v.requires()])
         return out
 
     def requires_emit(self, resolver: Resolver, queue: QueueScheduler) -> Dict[object, ResultVariable]:
         # direct
-        preout = [x for x in self._direct_attributes.items()]
-        preout.extend([x for x in self.type.get_entity().get_default_values().items()])
+        direct = [x for x in self._direct_attributes.items()]
 
-        out2 = {rk: rv for (k, v) in self.type.get_defaults().items()
-                for (rk, rv) in v.requires_emit(resolver.for_namespace(v.get_namespace()), queue).items()}
+        direct_requires = {rk: rv for (k, v) in direct for (rk, rv) in v.requires_emit(resolver, queue).items()}
+        LOGGER.log(LOG_LEVEL_TRACE,
+                   "emitting constructor for %s at %s with %s",
+                   self.class_type,
+                   self.location,
+                   direct_requires)
 
-        out = {rk: rv for (k, v) in preout for (rk, rv) in v.requires_emit(resolver, queue).items()}
-        out.update(out2)
+        return direct_requires
 
-        return out
-
-    def execute(self, requires: Dict[object, ResultVariable], resolver: Resolver, queue: QueueScheduler):
+    def execute(self, requires: Dict[object, object], resolver: Resolver, queue: QueueScheduler):
         """
             Evaluate this statement.
         """
+        LOGGER.log(LOG_LEVEL_TRACE, "executing constructor for %s at %s", self.class_type, self.location)
+
         # the type to construct
         type_class = self.type.get_entity()
 
         # the attributes
         attributes = {k: v.execute(requires, resolver, queue) for (k, v) in self._direct_attributes.items()}
-
-        for (k, v) in self.type.get_defaults().items():
-            if(k not in attributes):
-                attributes[k] = v.execute(requires, resolver, queue)
-
-        for (k, v) in type_class.get_default_values().items():
-            if(k not in attributes):
-                attributes[k] = v.execute(requires, resolver, queue)
 
         # check if the instance already exists in the index (if there is one)
         instances = []

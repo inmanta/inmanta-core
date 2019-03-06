@@ -38,7 +38,7 @@ def test_bad_module():
 
 
 class TestModuleName(unittest.TestCase):
-    def __init__(self, methodName='runTest'):  # noqa: H803
+    def __init__(self, methodName='runTest'):  # noqa: N803
         unittest.TestCase.__init__(self, methodName)
 
         self.stream = None

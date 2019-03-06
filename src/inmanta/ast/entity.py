@@ -41,17 +41,40 @@ if TYPE_CHECKING:
     from inmanta.ast.statements import Statement, ExpressionStatement  # noqa: F401
     from inmanta.ast.statements.define import DefineImport  # noqa: F401
     from inmanta.ast.attribute import Attribute  # noqa: F401
+    from inmanta.ast import Namespaced
 
 
-class EntityLike(Type):
+class EntityLike(NamedType):
+
+    parent_entities: "List[Entity]"
 
     @abstractmethod
     def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+        """ get defaults defined on this entity"""
         pass
 
-    @abstractmethod
     def get_default(self, name: str) -> "ExpressionStatement":
-        pass
+        defaults = self.get_default_values()
+        if name not in defaults:
+            raise AttributeError(name)
+        return defaults[name]
+
+    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
+        """
+            Return the dictionary with default values
+        """
+        values = []  # type: List[Tuple[str,ExpressionStatement]]
+
+        # left most parent takes precedence
+        for parent in reversed(self.parent_entities):
+            values.extend(parent.get_default_values().items())
+
+        # self takes precedence
+        values.extend(self.get_defaults().items())
+        # make dict, remove doubles
+        dvalues = dict(values)
+        # remove erased defaults
+        return {k: v for k, v in dvalues.items() if v is not None}
 
     @abstractmethod
     def get_entity(self) -> "Entity":
@@ -68,6 +91,7 @@ class Entity(EntityLike, NamedType):
         :param name: The name of this entity. This name can not be changed
             after this object has been created
     """
+    comment: Optional[str]
 
     def __init__(self, name: str, namespace: Namespace) -> None:
         NamedType.__init__(self)
@@ -123,25 +147,8 @@ class Entity(EntityLike, NamedType):
         """
         self.__default_value[name] = value
 
-    def get_defaults(self) -> "Dict[str,ExpressionStatement]":
-        return self.get_default_values()
-
-    def get_default_values(self) -> "Dict[str,ExpressionStatement]":
-        """
-            Return the dictionary with default values
-        """
-        values = []  # type: List[Tuple[str,ExpressionStatement]]
-
-        # left most parent takes precedence
-        for parent in reversed(self.parent_entities):
-            values.extend(parent.get_default_values().items())
-
-        # self takes precedence
-        values.extend(self.__default_value.items())
-        # make dict, remove doubles
-        dvalues = dict(values)
-        # remove erased defaults
-        return {k: v for k, v in dvalues.items() if v is not None}
+    def get_defaults(self) -> "Dict[str, ExpressionStatement]":
+        return self.__default_value
 
     def get_namespace(self) -> Namespace:
         """
@@ -185,7 +192,7 @@ class Entity(EntityLike, NamedType):
         """
         self._attributes = attributes
 
-    attributes = property(get_attributes, set_attributes, None, None)
+    attributes: "Dict[str,Attribute]" = property(get_attributes, set_attributes, None, None)
 
     def is_parent(self, entity: "Entity") -> bool:
         """
@@ -364,13 +371,13 @@ class Entity(EntityLike, NamedType):
         """
             The representation of this type
         """
-        return "Entity(%s::%s)" % (self.namespace, self.name)
+        return "Entity(%s)" % (self.get_full_name())
 
     def __str__(self) -> str:
         """
             The pretty string of this type
         """
-        return "%s::%s" % (self.namespace, self.name)
+        return self.get_full_name()
 
     @classmethod
     def cast(cls, value):
@@ -489,7 +496,7 @@ class Entity(EntityLike, NamedType):
         return self.location
 
 
-class Implementation(Named):
+class Implementation(NamedType):
     """
         A module functions as a grouping of objects. This can be used to create
         high level roles that do not have any arguments, or they can be used
@@ -541,6 +548,7 @@ class Implement(Locatable):
     """
         Define an implementation of an entity in functions of implementations
     """
+    comment: Optional[str]
 
     def __init__(self) -> None:
         Locatable.__init__(self)
@@ -561,18 +569,20 @@ class Default(EntityLike):
         This class models default values for a constructor.
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, namespace: Namespace, name: str) -> None:
         Type.__init__(self)
         self.name = name
+        self._namespace = namespace
         self.entity = None  # type: Entity
         self._defaults = {}  # type: Dict[str,ExpressionStatement]
-        self.comment = None  # type: str
+        self.comment = None  # type: Optional[str]
 
     def get_defaults(self) -> "Dict[str, ExpressionStatement]":
         return self._defaults
 
-    def set_entity(self, entity: Entity) -> None:
+    def set_entity(self, entity: EntityLike) -> None:
         self.entity = entity
+        self.parent_entities = [entity]
 
     def add_default(self, name: str, value: "ExpressionStatement") -> None:
         """
@@ -599,4 +609,22 @@ class Default(EntityLike):
         return self.entity.get_entity()
 
     def __repr__(self) -> str:
-        return "Default(%s)" % self.name
+        """
+            The representation of this type
+        """
+        return "Default(%s)" % (self.get_full_name())
+
+    def __str__(self) -> str:
+        """
+            The pretty string of this type
+        """
+        return "%s" % (self.get_full_name())
+
+    def get_full_name(self) -> str:
+        """
+            Get the full name of the entity
+        """
+        return self._namespace.get_full_name() + "::" + self.__name
+
+    def get_namespace(self) -> "Namespace":
+        return self._namespace

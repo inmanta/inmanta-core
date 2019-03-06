@@ -72,6 +72,88 @@ def test_project_no_project_name(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
+async def test_project_cascade_delete(data_module):
+
+    async def create_full_environment(project_name, environment_name):
+        project = data.Project(name=project_name)
+        await project.insert()
+
+        env = data.Environment(name=environment_name, project=project.id, repo_url="", repo_branch="")
+        await env.insert()
+
+        agent_proc = data.AgentProcess(hostname="testhost",
+                                       environment=env.id,
+                                       first_seen=datetime.datetime.now(),
+                                       last_seen=datetime.datetime.now(),
+                                       sid=uuid.uuid4())
+        await agent_proc.insert()
+
+        agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+        await agi1.insert()
+        agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+        await agi2.insert()
+
+        agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False,
+                           primary=agi1.id)
+        await agent.insert()
+
+        version = int(time.time())
+        cm = data.ConfigurationModel(version=version, environment=env.id)
+        await cm.insert()
+
+        resource_ids = []
+        for i in range(5):
+            path = "/etc/file" + str(i)
+            key = "std::File[agent1,path=" + path + "]"
+            res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                     attributes={"path": path})
+            await res1.insert()
+            resource_ids.append(res1.id)
+
+        code = data.Code(version=version, resource="std::File", environment=env.id)
+        await code.insert()
+
+        unknown_parameter = data.UnknownParameter(name="test", environment=env.id, version=version, source="")
+        await unknown_parameter.insert()
+
+        return project, env, agent_proc, [agi1, agi2], agent, resource_ids, code, unknown_parameter
+
+    async def assert_project_exists(project, env, agent_proc, agent_instances, agent, resource_ids, code, unknown_parameter,
+                                    exists):
+        def func(x):
+            if exists:
+                return x is not None
+            else:
+                return x is None
+        assert func(await data.Project.get_by_id(project.id))
+        assert func(await data.Environment.get_by_id(env.id))
+        assert func(await data.AgentProcess.get_by_id(agent_proc.id))
+        assert func(await data.AgentInstance.get_by_id(agent_instances[0].id))
+        assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
+        assert func(await data.Agent.get_by_id(agent.id))
+        for current_id in resource_ids:
+            assert func(await data.Resource.get_by_id(current_id))
+        assert func(await data.Code.get_by_id(code.id))
+        assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
+
+    # Setup two environments
+    full_env_1 = await create_full_environment("proj1", "env1")
+    full_env_2 = await create_full_environment("proj2", "env2")
+
+    # Assert exists
+    await assert_project_exists(*full_env_1, exists=True)
+    await assert_project_exists(*full_env_2, exists=True)
+
+    # Cascade delete project 1
+    project_env1 = full_env_1[0]
+    await project_env1.delete_cascade()
+
+    # Assert outcome
+    await assert_project_exists(*full_env_1, exists=False)
+    await assert_project_exists(*full_env_2, exists=True)
+
+
+@pytest.mark.asyncio
 async def test_environment(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
@@ -195,6 +277,32 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
         await env.get("get_non_existing_parameter")
     with pytest.raises(AttributeError):
         await env.set(data.AUTO_DEPLOY, 5)
+
+
+@pytest.mark.asyncio
+async def test_environment_deprecated_setting(data_module, caplog):
+    project = data.Project(name="proj")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    for (deprecated_option, new_option) in [(data.AUTOSTART_AGENT_INTERVAL, data.AUTOSTART_AGENT_DEPLOY_INTERVAL),
+                                            (data.AUTOSTART_SPLAY, data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)]:
+        await env.set(deprecated_option, 22)
+        caplog.clear()
+        assert (await env.get(new_option)) == 22
+        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) in caplog.text
+
+        await env.set(new_option, 23)
+        caplog.clear()
+        assert (await env.get(new_option)) == 23
+        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
+
+        await env.unset(deprecated_option)
+        caplog.clear()
+        assert (await env.get(new_option)) == 23
+        assert "Config option %s is deprecated. Use %s instead." % (deprecated_option, new_option) not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -796,14 +904,34 @@ async def test_get_resources_for_version(init_dataclasses_and_load_schema):
         await res.insert()
         resource_ids_version_two.append(res.resource_version_id)
 
+    async def make_with_status(i, status):
+        res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent3,path=/tmp/file%d],v=3" % i,
+                                status=status,
+                                attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+        await res.insert()
+        return res.resource_version_id
+
+    d = await make_with_status(1, const.ResourceState.deployed)
+    s = await make_with_status(2, const.ResourceState.skipped)
+    su = await make_with_status(3, const.ResourceState.skipped_for_undefined)
+    u = await make_with_status(4, const.ResourceState.undefined)
+
     resources = await data.Resource.get_resources_for_version(env.id, 1)
     assert len(resources) == 10
     assert sorted(resource_ids_version_one) == sorted([x.resource_version_id for x in resources])
     resources = await data.Resource.get_resources_for_version(env.id, 2)
     assert len(resources) == 10
     assert sorted(resource_ids_version_two) == sorted([x.resource_version_id for x in resources])
-    resources = await data.Resource.get_resources_for_version(env.id, 3)
+    resources = await data.Resource.get_resources_for_version(env.id, 4)
     assert resources == []
+
+    resources = await data.Resource.get_resources_for_version(env.id, 3)
+    assert len(resources) == 4
+    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, u, su])
+
+    resources = await data.Resource.get_resources_for_version(env.id, 3, include_undefined=False)
+    assert len(resources) == 2
+    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s])
 
 
 @pytest.mark.asyncio
@@ -870,6 +998,37 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
     assert len(res2.provides) == 0
     assert res1.provides[0] == res2.resource_version_id
     assert res2.provides == []
+
+
+@pytest.mark.asyncio
+async def test_resource_hash(data_module):
+    env_id = uuid.uuid4()
+    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=2",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
+    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=3",
+                             status=const.ResourceState.deployed,
+                             attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
+    await res1.insert()
+    await res2.insert()
+    await res3.insert()
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
+
+    readres = await data.Resource.get_resources(env_id,
+                                                [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
+    res1, res2, res3 = readres
+
+    assert res1.attribute_hash is not None
+    assert res1.attribute_hash == res2.attribute_hash
+    assert res3.attribute_hash is not None
+    assert res1.attribute_hash != res3.attribute_hash
 
 
 @pytest.mark.asyncio
@@ -1494,3 +1653,35 @@ async def test_schema_update_failure(dummy_db_schema_dir, write_db_update_file, 
 
     assert (await data.SchemaVersion.get_current_version()) == 2
     assert sorted(["id", "val", "new"]) == sorted(await get_columns_in_db_table("tab"))
+
+
+@pytest.mark.asyncio
+# TODO: Remove data_module
+async def test_purgelog_test(data_module):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    # ResourceAction 1
+    timestamp_ra1 = datetime.datetime.now() - datetime.timedelta(days=8)
+    log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
+    ra1 = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+                              action=const.ResourceAction.store, started=timestamp_ra1, finished=datetime.datetime.now(),
+                              messages=[log_line_ra1])
+    await ra1.insert()
+
+    # ResourceAction 2
+    timestamp_ra2 = datetime.datetime.now() - datetime.timedelta(days=6)
+    log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
+    ra2 = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+                              action=const.ResourceAction.store, started=timestamp_ra2, finished=datetime.datetime.now(),
+                              messages=[log_line_ra2])
+    await ra2.insert()
+
+    assert len(await data.ResourceAction.get_list()) == 2
+    await data.ResourceAction.purge_logs()
+    assert len(await data.ResourceAction.get_list()) == 1
+    remaining_resource_action = (await data.ResourceAction.get_list())[0]
+    assert remaining_resource_action.id == ra2.id

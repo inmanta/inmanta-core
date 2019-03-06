@@ -20,7 +20,7 @@ from inmanta.ast import Locatable, RuntimeException, TypingException
 from inmanta.ast.type import TypedList, NullableType
 from inmanta.execute.runtime import ResultVariable, ListVariable, OptionVariable, AttributeVariable, QueueScheduler
 from inmanta.execute.util import Unknown
-from typing import List
+from typing import List, Tuple, Optional
 
 try:
     from typing import TYPE_CHECKING
@@ -40,16 +40,17 @@ class Attribute(Locatable):
         @param entity: The entity this attribute belongs to
     """
 
-    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable=False) -> None:
+    def __init__(self, entity: "Entity", value_type: "Type", name: str, multi: bool=False, nullable: bool=False) -> None:
         Locatable.__init__(self)
-        self.__name = name
+        self.__name: str = name
         entity.add_attribute(self)
         self.__entity = entity
         self.__type = value_type
         self.__multi = multi
         self.__nullallble = nullable
         self.low = 0 if nullable else 1
-        self.comment = None  # type: str
+        self.comment = None  # type: Optional[str]
+        self.end: Optional[RelationAttribute] = None
 
     def get_type(self) -> "Type":
         """
@@ -57,7 +58,7 @@ class Attribute(Locatable):
         """
         return self.__type
 
-    type = property(get_type)
+    type: "Type" = property(get_type)
 
     def get_name(self) -> str:
         """
@@ -98,6 +99,8 @@ class Attribute(Locatable):
         else:
             mytype = (self.__type)
 
+        out: ResultVariable["Instance"]
+
         if(self.__nullallble):
             # be a 0-1 relation
             self.end = None
@@ -111,10 +114,10 @@ class Attribute(Locatable):
         out.set_type(mytype)
         return out
 
-    def is_optional(self):
+    def is_optional(self) -> bool:
         return self.__nullallble
 
-    def is_multi(self):
+    def is_multi(self) -> bool:
         return self.__multi
 
     def final(self, excns: List[Exception]) -> None:
@@ -125,15 +128,17 @@ class RelationAttribute(Attribute):
     """
         An attribute that is a relation
     """
-
     def __init__(self, entity: "Entity", value_type: "Type", name: str) -> None:
         Attribute.__init__(self, entity, value_type, name)
-        self.end = None  # type: RelationAttribute
+        self.end: Optional[RelationAttribute] = None
         self.low = 1
         self.high = 1
         self.depends = False
         self.source_annotations = []
         self.target_annotations = []
+
+    def __str__(self) -> str:
+        return "%s.%s" % (self.get_entity().get_full_name(), self.name)
 
     def __repr__(self) -> str:
         return "[%d:%s] %s" % (self.low, self.high if self.high is not None else "", self.name)
@@ -155,10 +160,10 @@ class RelationAttribute(Attribute):
         out.set_type(self.get_type())
         return out
 
-    def is_optional(self):
+    def is_optional(self) -> bool:
         return self.low == 0
 
-    def is_multi(self):
+    def is_multi(self) -> bool:
         return self.high != 1
 
     def final(self, excns: List[Exception]) -> None:
