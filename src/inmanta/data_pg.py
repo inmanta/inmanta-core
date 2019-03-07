@@ -16,9 +16,10 @@
     Contact: code@inmanta.com
 """
 
+from typing import Set, Dict, List
 from configparser import RawConfigParser
 from inmanta.const import ResourceState
-from _collections import defaultdict
+from collections import defaultdict
 import copy
 import datetime
 import enum
@@ -1550,15 +1551,20 @@ class Resource(BaseDocument):
 
     @classmethod
     async def get_resources_for_version_raw(cls,
-                                      environment,
-                                      version,
-                                      projection):
-        # TODO: check projection parameter
-        resource_records = await cls.get_list(environment=environment, model=version, no_obj=True)
-        # TODO: Move to get_list
+                                            environment,
+                                            version,
+                                            projection):
+        if not projection:
+            projection = "*"
+        else:
+            projection = ','.join(projection)
+        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
+        query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
+        resource_records = await cls._fetch_query(query, *values)
         resources = [dict(record) for record in resource_records]
         for res in resources:
-            res["attributes"] = json.loads(res["attributes"])
+            if "attributes" in res:
+                res["attributes"] = json.loads(res["attributes"])
         return resources
 
     @classmethod
@@ -1680,11 +1686,11 @@ class Resource(BaseDocument):
 
     async def update(self, **kwargs):
         self.make_hash()
-        await super(Resource, self).update()
+        await super(Resource, self).update(**kwargs)
 
     async def update_fields(self, **kwargs):
         self.make_hash()
-        await super(Resource, self).update_fields()
+        await super(Resource, self).update_fields(**kwargs)
 
     def to_dict(self):
         self.make_hash()
@@ -1860,9 +1866,19 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
          """
-        # TODO: check projections
-        projection_a = {"resource_id": True, "status": True, "attribute_hash": True, "attributes": True}
-        projection = {"resource_id": True, "status": True, "attribute_hash": True}
+        projection_a = [
+            "resource_version_id",
+            "resource_id",
+            "status",
+            "attribute_hash",
+            "attributes"
+        ]
+        projection = [
+            "resource_version_id",
+            "resource_id",
+            "status",
+            "attribute_hash"
+        ]
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw(
@@ -1883,6 +1899,7 @@ class ConfigurationModel(BaseDocument):
                                               environment=self.environment,
                                               released=True)
         versions = [record["version"] for record in version_records]
+
         for version in versions:
             # todo in next verion
             next = []

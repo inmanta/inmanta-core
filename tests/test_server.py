@@ -1069,7 +1069,8 @@ async def test_resource_action_log(server_multi, client_multi, environment_multi
                   'reload': False,
                   'requires': [],
                   'version': version}]
-    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
     resource_action_log = server.Server.get_resource_action_log_file(environment_multi)

@@ -53,7 +53,6 @@ from typing import Optional, Dict
 from inmanta import protocol
 
 
-
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
 
