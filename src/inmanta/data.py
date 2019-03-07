@@ -1658,26 +1658,27 @@ class ConfigurationModel(BaseDocument):
         error -> increment
         Deployed and same hash -> not increment
         deployed and different hash -> increment
-         """
+        """
         projection_a = {
             "resource_version_id": True,
             "resource_id": True,
             "status": True,
             "attribute_hash": True,
             "attributes": True
-            }
+        }
         projection = {
             "resource_version_id": True,
             "resource_id": True,
             "status": True,
             "attribute_hash": True
-            }
+        }
 
         # get resources for agent
         resources = yield Resource.get_resources_for_version_raw(
             self.environment,
             self.version,
-            projection_a)
+            projection_a
+        )
 
         # to increment
         increment = []
@@ -1686,8 +1687,9 @@ class ConfigurationModel(BaseDocument):
         work = list(r for r in resources)
 
         # get versions
-        cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
-                                           ).sort("version", pymongo.DESCENDING)
+        cursor = self.__class__._coll.find(
+            {"environment": self.environment, "released": True}
+        ).sort("version", pymongo.DESCENDING)
         versions = []
         while (yield cursor.fetch_next):
             versions.append(cursor.next_object()["version"])
