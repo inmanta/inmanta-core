@@ -3689,6 +3689,12 @@ async def test_s_incremental_deploy_interrupts_full_deploy(resource_container,
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=False, is_repair_run=False)
+
+    # Make sure that resource key1 is fully deployed triggering the interrupt
+    timeout_time = time.time() + 10
+    while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
+        await asyncio.sleep(0.1)
+
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
