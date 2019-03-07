@@ -353,8 +353,8 @@ configuration module.
 
     index DrupalStack(hostname)
 
-    ip::Host webhost [1] -- [0:1] DrupalStack drupal_stack_webhost
-    ip::Host mysqlhost [1] -- [0:1] DrupalStack drupal_stack_mysqlhost
+    DrupalStack.webhost [1] -- ip::Host
+    DrupalStack.mysqlhost [1] -- ip::Host
 
     implementation drupalStackImplementation for DrupalStack:
         # add a mysql and apache http server
