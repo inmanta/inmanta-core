@@ -17,6 +17,8 @@
 """
 
 from configparser import RawConfigParser
+from inmanta.const import ResourceState
+from _collections import defaultdict
 import copy
 import datetime
 import enum
@@ -25,9 +27,10 @@ import json
 import re
 import logging
 import os
+import warnings
+import hashlib
 
 from inmanta import const
-from inmanta.resources import Id
 import asyncpg
 
 LOGGER = logging.getLogger(__name__)
@@ -157,8 +160,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
             if value is None and fields[name].required:
                 raise TypeError("%s field is required" % name)
 
-            if not fields[name].reference and value is not None and not (value.__class__ is fields[name].field_type or
-                                                                         isinstance(value, fields[name].field_type)):
+            if not fields[name].reference and value is not None and not (value.__class__ is fields[name].field_type
+                                                                         or isinstance(value, fields[name].field_type)):
                 # pgasync does not convert a jsonb field to a dict
                 if from_postgres and isinstance(value, str) and fields[name].field_type is dict:
                     value = json.loads(value)
@@ -570,16 +573,32 @@ def translate_to_postgres_type(type):
     return TYPE_MAP[type]
 
 
+def convert_agent_trigger_method(value):
+    if isinstance(value, const.AgentTriggerMethod):
+        return value
+    value = str(value)
+    valid_values = [x.name for x in const.AgentTriggerMethod]
+    if value not in valid_values:
+        raise ValueError("%s is not a valid agent trigger method. Valid value: %s" % (value, ','.join(valid_values)))
+    return value
+
+
 TYPE_MAP = {"int": "integer", "bool": "boolean", "dict": "jsonb", "str": "varchar"}
 
 AUTO_DEPLOY = "auto_deploy"
 PUSH_ON_AUTO_DEPLOY = "push_on_auto_deploy"
+AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY = "agent_trigger_method_on_auto_deploy"
 AUTOSTART_SPLAY = "autostart_splay"
+AUTOSTART_AGENT_DEPLOY_INTERVAL = "autostart_agent_deploy_interval"
+AUTOSTART_AGENT_DEPLOY_SPLAY_TIME = "autostart_agent_deploy_splay_time"
+AUTOSTART_AGENT_REPAIR_INTERVAL = "autostart_agent_repair_interval"
+AUTOSTART_AGENT_REPAIR_SPLAY_TIME = "autostart_agent_repair_splay_time"
 AUTOSTART_ON_START = "autostart_on_start"
 AUTOSTART_AGENT_MAP = "autostart_agent_map"
 AUTOSTART_AGENT_INTERVAL = "autostart_agent_interval"
 AGENT_AUTH = "agent_auth"
 SERVER_COMPILE = "server_compile"
+RESOURCE_ACTION_LOGS_RETENTION = "resource_action_logs_retention"
 
 
 class Setting(object):
@@ -636,21 +655,44 @@ class Environment(BaseDocument):
                              doc="When this boolean is set to true, the orchestrator will automatically release a new version "
                                  "that was compiled by the orchestrator itself.", validator=convert_boolean),
         PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
-                                     doc="Push a new version when it has been autodeployed.", validator=convert_boolean),
+                                     doc="Push a new version when it has been autodeployed.",
+                                     validator=convert_boolean),
+        AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, typ="str",
+                                                     default=const.AgentTriggerMethod.push_full_deploy.name,
+                                                     validator=convert_agent_trigger_method,
+                                                     doc="The agent trigger method to use when "
+                                                         + PUSH_ON_AUTO_DEPLOY + " is enabled"),
         AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
-                                 doc="Splay time for autostarted agents.", validator=convert_int),
+                                 doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
+        AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,
+                                                 doc="The deployment interval of the autostarted agents.",
+                                                 validator=convert_int),
+        AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, typ="int", default=600,
+                                                   doc="The splay time on the deployment interval of the autostarted agents.",
+                                                   validator=convert_int),
+        AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(name=AUTOSTART_AGENT_REPAIR_INTERVAL, typ="int", default=86400,
+                                                 doc="The repair interval of the autostarted agents.",
+                                                 validator=convert_int),
+        AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME, typ="int", default=600,
+                                                   doc="The splay time on the repair interval of the autostarted agents.",
+                                                   validator=convert_int),
         AUTOSTART_ON_START: Setting(name=AUTOSTART_ON_START, default=True, typ="bool", validator=convert_boolean,
                                     doc="Automatically start agents when the server starts instead of only just in time."),
         AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={"internal": "local:"}, typ="dict",
                                      validator=convert_agent_map,
                                      doc="A dict with key the name of agents that should be automatically started. The value "
                                      "is either an empty string or an agent map string.", agent_restart=True),
-        AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int",
-                                          validator=convert_int,
-                                          doc="Agent interval for autostarted agents in seconds", agent_restart=True),
+        AUTOSTART_AGENT_INTERVAL: Setting(name=AUTOSTART_AGENT_INTERVAL, default=600, typ="int", validator=convert_int,
+                                          doc="[DEPRECATED] Agent interval for autostarted agents in seconds",
+                                          agent_restart=True),
         SERVER_COMPILE: Setting(name=SERVER_COMPILE, default=True, typ="bool",
                                 validator=convert_boolean, doc="Allow the server to compile the configuration model."),
+        RESOURCE_ACTION_LOGS_RETENTION: Setting(name=RESOURCE_ACTION_LOGS_RETENTION, default=7, typ="int",
+                                                validator=convert_int, doc="The number of days to retain resource-action logs"),
     }
+
+    _renamed_settings_map = {AUTOSTART_AGENT_DEPLOY_INTERVAL: AUTOSTART_AGENT_INTERVAL,
+                             AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: AUTOSTART_SPLAY}  # name new_option -> name deprecated_option
 
     async def get(self, key):
         """
@@ -660,6 +702,13 @@ class Environment(BaseDocument):
         """
         if key not in self._settings:
             raise KeyError()
+
+        if key in self._renamed_settings_map:
+            name_deprecated_setting = self._renamed_settings_map[key]
+            if name_deprecated_setting in self.settings and key not in self.settings:
+                warnings.warn("Config option %s is deprecated. Use %s instead." % (name_deprecated_setting, key),
+                              category=DeprecationWarning)
+                return self.settings[name_deprecated_setting]
 
         if key in self.settings:
             return self.settings[key]
@@ -1043,6 +1092,16 @@ class LogLine(DataDocument):
     def msg(self):
         return self._data["msg"]
 
+    @property
+    def args(self):
+        return self._data["args"]
+
+    def get_log_level_as_int(self):
+        return self._data["level"].value
+
+    def write_to_logger(self, logger):
+        logger.log(self.get_log_level_as_int(), self.msg, *self.args)
+
     @classmethod
     def log(cls, level, msg, timestamp=None, **kwargs):
         if timestamp is None:
@@ -1285,6 +1344,16 @@ class ResourceAction(BaseDocument):
         set_statement = ','.join(parts_set_statement)
         return (set_statement, values)
 
+    @classmethod
+    async def purge_logs(cls):
+        environments = await Environment.get_list()
+        for env in environments:
+            time_to_retain_logs = await env.get(RESOURCE_ACTION_LOGS_RETENTION)
+            keep_logs_until = datetime.datetime.now() - datetime.timedelta(days=time_to_retain_logs)
+            query = "DELETE FROM " + cls.table_name() + " WHERE started < $1"
+            value = cls._get_value(keep_logs_until)
+            await cls._execute_query(query, value)
+
 
 class Resource(BaseDocument):
     """
@@ -1295,6 +1364,8 @@ class Resource(BaseDocument):
         :param resource The resource for which this defines the state
         :param model The configuration model (versioned) this resource state is associated with
         :param attributes The state of this version of the resource
+        :param attribute_hash: hash of the attributes, excluding requires, provides and version,
+                               used to determine if a resource describes the same state across versions
     """
     environment = Field(field_type=uuid.UUID, required=True)
     model = Field(field_type=int, required=True)
@@ -1313,12 +1384,35 @@ class Resource(BaseDocument):
 
     # State related
     attributes = Field(field_type=dict)
+    attribute_hash = Field(field_type=str)
     status = Field(field_type=const.ResourceState, default=const.ResourceState.available)
 
     # internal field to handle cross agent dependencies
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
     provides = Field(field_type=list, default=[])  # List of resource versions
+
+    def make_hash(self):
+        character = "|".join(sorted([str(k) + "||" + str(v)
+                                     for k, v in self.attributes.items() if k not in ["requires", "provides", "version"]]))
+        m = hashlib.md5()
+        m.update(self.resource_id.encode())
+        m.update(character.encode())
+        self.attribute_hash = m.hexdigest()
+
+    @classmethod
+    async def get_resources_for_attribute_hash(cls, environment, hashes):
+        """
+            Get all resources listed in resource_version_ids
+        """
+        hashes_as_str = "(" + ','.join(["$" + str(i) for i in range(2, len(hashes) + 2)]) + ")"
+        query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1 AND attribute_hash IN " + hashes_as_str
+        values = [cls._get_value(environment)] + [cls._get_value(h) for h in hashes]
+        result = await cls._fetch_query(query, *values)
+        resources = []
+        for res in result:
+            resources.append(cls(from_postgres=True, **res))
+        return resources
 
     @classmethod
     async def get_resources(cls, environment, resource_version_ids):
@@ -1421,16 +1515,25 @@ class Resource(BaseDocument):
         return result
 
     @classmethod
-    async def get_resources_for_version(cls, environment, version, agent=None, include_attributes=True, no_obj=False):
+    async def get_resources_for_version(cls,
+                                        environment,
+                                        version,
+                                        agent=None,
+                                        include_attributes=True,
+                                        no_obj=False,
+                                        include_undefined=True):
         projection = "*"
         if not include_attributes:
-            projection = ','.join(["environment", "model", "resource_id", "resource_version_id",
+            projection = ','.join(["id", "environment", "model", "resource_id", "resource_version_id",
                                    "resource_type", "agent", "id_attribute_name", "id_attribute_value",
                                    "last_deploy", "status", "provides"])
-        if agent is not None:
+        if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
+        if not include_undefined:
+            filter_statement += " AND status NOT IN ($" + str(len(values) + 1) + ",$" + str(len(values) + 2) + ")"
+            values += [cls._get_value(const.ResourceState.undefined), cls._get_value(const.ResourceState.skipped_for_undefined)]
         query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
         resources = []
         async with cls._connection_pool.acquire() as con:
@@ -1443,6 +1546,15 @@ class Resource(BaseDocument):
                         resources.append(record)
                     else:
                         resources.append(cls(from_postgres=True, **record))
+        return resources
+
+    @classmethod
+    async def get_resources_for_version_raw(cls,
+                                      environment,
+                                      version,
+                                      projection):
+        # TODO: check projection parameter
+        resources = await cls.get_list(environment=environment, model=version)
         return resources
 
     @classmethod
@@ -1473,6 +1585,7 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
+        from inmanta.resources import Id
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
@@ -1555,7 +1668,20 @@ class Resource(BaseDocument):
 
         return should_purge
 
+    async def insert(self, connection=None):
+        self.make_hash()
+        await super(Resource, self).insert(connection=connection)
+
+    async def update(self, **kwargs):
+        self.make_hash()
+        await super(Resource, self).update()
+
+    async def update_fields(self, **kwargs):
+        self.make_hash()
+        await super(Resource, self).update_fields()
+
     def to_dict(self):
+        self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]
         return dct
@@ -1706,6 +1832,133 @@ class ConfigurationModel(BaseDocument):
 
             await self.update_fields(skipped_for_undeployable=self.skipped_for_undeployable)
         return self.skipped_for_undeployable
+
+    async def mark_done(self):
+        """ mark this deploy as done """
+        result = const.VersionState.success
+        for state in self.status.values():
+            if state["status"] != "deployed":
+                result = const.VersionState.failed
+
+        await self.update_fields(deployed=True, result=result)
+
+    async def get_increment(self, negative: bool=False):
+        """
+        Find resources incremented by this version compared to deployment state transitions per resource
+
+        :param negative: find resources not in the increment
+
+        available/skipped/unavailable -> next version
+        not present -> increment
+        error -> increment
+        Deployed and same hash -> not increment
+        deployed and different hash -> increment
+         """
+        # TODO: check projections
+        projection_a = {"resource_id": True, "status": True, "attribute_hash": True, "attributes": True}
+        projection = {"resource_id": True, "status": True, "attribute_hash": True}
+
+        # get resources for agent
+        resources = await Resource.get_resources_for_version_raw(
+            self.environment,
+            self.version,
+            projection_a)
+
+        # to increment
+        increment = []
+        not_incrememt = []
+        # todo in this verions
+        work = list(r for r in resources)
+
+        # get versions
+        version_records = await self.get_list(order_by_column="version",
+                                              order="DESC",
+                                              no_obj=True,
+                                              environment=self.environment,
+                                              released=True)
+        versions = [record["version"] for record in version_records]
+        for version in versions:
+            # todo in next verion
+            next = []
+
+            vresources = await Resource.get_resources_for_version_raw(self.environment, version, projection)
+            id_to_resource = {r["resource_id"]: r for r in vresources}
+
+            for res in work:
+                # not present -> increment
+                if res["resource_id"] not in id_to_resource:
+                    increment.append(res)
+                    continue
+
+                ores = id_to_resource[res["resource_id"]]
+
+                status = ores["status"]
+                # available/skipped/unavailable -> next version
+                if status in [ResourceState.available.name,
+                              ResourceState.skipped.name,
+                              ResourceState.unavailable.name]:
+                    next.append(res)
+
+                # error -> increment
+                elif status in [ResourceState.failed.name,
+                                ResourceState.cancelled.name,
+                                ResourceState.deploying.name,
+                                ResourceState.processing_events.name]:
+                    increment.append(res)
+
+                elif status == ResourceState.deployed.name:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
+                        #  Deployed and same hash -> not increment
+                        not_incrememt.append(res)
+                    else:
+                        # Deployed and different hash -> increment
+                        increment.append(res)
+                else:
+                    LOGGER.warning("Resource in unexpected state: %s, %s", ores["status"], ores["resource_version_id"])
+                    increment.append(res)
+
+            work = next
+            if not work:
+                break
+        if work:
+            increment.extend(work)
+
+        if negative:
+            return [res["resource_version_id"] for res in not_incrememt]
+
+        # patch up the graph
+        # 1-include stuff for send-events.
+        # 2-adapt requires/provides to get closured set
+
+        outset = set((res["resource_version_id"] for res in increment))  # type: Set[str]
+        original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
+        send_events = []  # type: List[str]
+
+        # build lookup tables
+        for res in resources:
+            for req in res["attributes"]["requires"]:
+                original_provides[req].append(res["resource_version_id"])
+            if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
+                send_events.append(res["resource_version_id"])
+
+        # recursively include stuff potentially receiving events from nodes in the increment
+        work = list(outset)
+        done = set()
+        while work:
+            current = work.pop()
+            if current not in send_events:
+                # not sending events, so no receivers
+                continue
+
+            if current in done:
+                continue
+            done.add(current)
+
+            provides = original_provides[current]
+            work.extend(provides)
+            outset.update(provides)
+
+        return outset
 
 
 class Code(BaseDocument):

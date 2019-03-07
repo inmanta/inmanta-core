@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS public.resource (
     id_attribute_value varchar NOT NULL,
     last_deploy timestamp,
     attributes JSONB,
+    attribute_hash varchar,
     status resourcestate DEFAULT 'available',
     provides varchar[] DEFAULT array[]::varchar[],
     FOREIGN KEY (environment, model) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE

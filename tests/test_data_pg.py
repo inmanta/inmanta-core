@@ -72,7 +72,7 @@ def test_project_no_project_name(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_project_cascade_delete(data_module):
+async def test_project_cascade_delete(init_dataclasses_and_load_schema):
 
     async def create_full_environment(project_name, environment_name):
         project = data.Project(name=project_name)
@@ -280,7 +280,7 @@ async def test_environment_set_setting_parameter(init_dataclasses_and_load_schem
 
 
 @pytest.mark.asyncio
-async def test_environment_deprecated_setting(data_module, caplog):
+async def test_environment_deprecated_setting(init_dataclasses_and_load_schema, caplog):
     project = data.Project(name="proj")
     await project.insert()
 
@@ -904,6 +904,12 @@ async def test_get_resources_for_version(init_dataclasses_and_load_schema):
         await res.insert()
         resource_ids_version_two.append(res.resource_version_id)
 
+    for version in range(3, 5):
+        cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                     version_info={},
+                                     released=True, deployed=True)
+        await cm.insert()
+
     async def make_with_status(i, status):
         res = data.Resource.new(environment=env.id, resource_version_id="std::File[agent3,path=/tmp/file%d],v=3" % i,
                                 status=status,
@@ -1001,15 +1007,26 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_resource_hash(data_module):
-    env_id = uuid.uuid4()
-    res1 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
+async def test_resource_hash(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    for version in range(1, 4):
+        cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                      version_info={},
+                                      released=True, deployed=True)
+        await cm1.insert()
+
+    res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
                              status=const.ResourceState.deployed,
                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res2 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=2",
+    res2 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=2",
                              status=const.ResourceState.deployed,
                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": False})
-    res3 = data.Resource.new(environment=env_id, resource_version_id="std::File[agent1,path=/etc/file1],v=3",
+    res3 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=3",
                              status=const.ResourceState.deployed,
                              attributes={"path": "/etc/motd", "purge_on_delete": True, "purged": True})
     await res1.insert()
@@ -1021,7 +1038,7 @@ async def test_resource_hash(data_module):
     assert res3.attribute_hash is not None
     assert res1.attribute_hash != res3.attribute_hash
 
-    readres = await data.Resource.get_resources(env_id,
+    readres = await data.Resource.get_resources(env.id,
                                                 [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
     res1, res2, res3 = readres
 
@@ -1656,8 +1673,7 @@ async def test_schema_update_failure(dummy_db_schema_dir, write_db_update_file, 
 
 
 @pytest.mark.asyncio
-# TODO: Remove data_module
-async def test_purgelog_test(data_module):
+async def test_purgelog_test(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 

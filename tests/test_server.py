@@ -1057,8 +1057,7 @@ async def test_db_schema_update(server, write_db_update_file, postgresql_client,
 
 
 @pytest.mark.asyncio(timeout=30)
-# TODO: Remove motor
-async def test_resource_action_log(motor, server_multi, client_multi, environment):
+async def test_resource_action_log(server_multi, client_multi, environment):
     version = 1
     resources = [{'group': 'root',
                   'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',

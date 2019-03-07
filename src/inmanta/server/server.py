@@ -38,7 +38,7 @@ from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data_pg as data, config
-from inmanta.data import Environment
+from inmanta.data_pg import Environment
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
