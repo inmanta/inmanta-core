@@ -1353,7 +1353,6 @@ class Resource(BaseDocument):
                                       environment,
                                       version,
                                       projection):
-        projection = None
         filter = {"environment": environment, "model": version}
         cursor = cls._coll.find(filter, projection)
 
@@ -1660,8 +1659,15 @@ class ConfigurationModel(BaseDocument):
         Deployed and same hash -> not increment
         deployed and different hash -> increment
          """
-        projection_a = {"resource_id": True, "status": True, "attribute_hash": True, "attributes": True}
-        projection = {"resource_id": True, "status": True, "attribute_hash": True}
+        projection_a = {"resource_version_id": True,
+                        "resource_id": True,
+                        "status": True,
+                        "attribute_hash": True,
+                        "attributes": True}
+        projection = {"resource_version_id": True,
+                      "resource_id": True,
+                      "status": True,
+                      "attribute_hash": True}
 
         # get resources for agent
         resources = yield Resource.get_resources_for_version_raw(
