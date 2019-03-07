@@ -1554,7 +1554,11 @@ class Resource(BaseDocument):
                                       version,
                                       projection):
         # TODO: check projection parameter
-        resources = await cls.get_list(environment=environment, model=version)
+        resource_records = await cls.get_list(environment=environment, model=version, no_obj=True)
+        # TODO: Move to get_list
+        resources = [dict(record) for record in resource_records]
+        for res in resources:
+            res["attributes"] = json.loads(res["attributes"])
         return resources
 
     @classmethod
@@ -1631,12 +1635,14 @@ class Resource(BaseDocument):
         values.append(cls._get_value({"purge_on_delete": True}))
         resources = await cls._fetch_query(query, *values)
         resources = [r["resource_id"] for r in resources]
+
         LOGGER.debug("  Resource with purge_on_delete true: %s", resources)
 
         # all resources on current model
         LOGGER.debug("  All resource in current version (%s): %s", current_version, current_resources)
 
         # determined deleted resources
+
         deleted = set(resources) - current_resources
         LOGGER.debug("  These resources are no longer present in current model: %s", deleted)
 

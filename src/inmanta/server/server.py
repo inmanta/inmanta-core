@@ -973,6 +973,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if not failed:
             # search for deleted resources
             resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
+
             previous_requires = {}
             for res in resources_to_purge:
                 LOGGER.warning("Purging %s, purged resource based on %s" % (res.resource_id, res.resource_version_id))

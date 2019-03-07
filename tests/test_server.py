@@ -1057,7 +1057,7 @@ async def test_db_schema_update(server, write_db_update_file, postgresql_client,
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_resource_action_log(server_multi, client_multi, environment):
+async def test_resource_action_log(server_multi, client_multi, environment_multi):
     version = 1
     resources = [{'group': 'root',
                   'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
@@ -1069,10 +1069,10 @@ async def test_resource_action_log(server_multi, client_multi, environment):
                   'reload': False,
                   'requires': [],
                   'version': version}]
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    resource_action_log = server.Server.get_resource_action_log_file(environment)
+    resource_action_log = server.Server.get_resource_action_log_file(environment_multi)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
 

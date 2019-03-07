@@ -24,9 +24,9 @@ DROP TYPE IF EXISTS resourceaction_type;
 DROP TYPE IF EXISTS change;
 
 CREATE TYPE versionstate AS ENUM('success', 'failed', 'deploying', 'pending');
-CREATE TYPE resourcestate AS ENUM('unavailable', 'skipped', 'dry', 'deployed', 'failed', 'queued', 'available',
-                                  'cancelled', 'undefined', 'skipped_for_undefined');
-CREATE TYPE resourceaction_type AS ENUM('store', 'push', 'pull', 'deploy', 'dryrun', 'snapshot', 'restore', 'other');
+CREATE TYPE resourcestate AS ENUM('unavailable', 'skipped', 'dry', 'deployed', 'failed', 'deploying', 'available',
+                                  'cancelled', 'undefined', 'skipped_for_undefined', 'processing_events');
+CREATE TYPE resourceaction_type AS ENUM('store', 'push', 'pull', 'deploy', 'dryrun', 'getfact', 'other');
 CREATE type change AS ENUM('nochange', 'created', 'purged', 'updated');
 
 
