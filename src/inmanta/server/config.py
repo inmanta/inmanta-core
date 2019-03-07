@@ -116,8 +116,13 @@ server_delete_currupt_files = Option("server", "delete_currupt_files", True,
 server_purge_resource_action_logs_interval = Option("server", "purge-resource-action-logs-interval", 3600,
                                                     "The number of seconds between resource-action log purging", is_time)
 
-server_resource_action_log = Option("server", "resource_action_log", "resource-actions.log",
-                                    "File in log-dir, containing the resource-action logs", is_str_opt)
+server_resource_action_log_prefix = Option(
+    "server",
+    "resource_action_log_prefix",
+    "resource-actions-",
+    "File prefix in log-dir, containing the resource-action logs. The after the prefix the environment uuid and .log is added",
+    is_str_opt
+)
 
 
 #############################

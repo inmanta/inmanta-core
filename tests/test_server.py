@@ -24,8 +24,9 @@ import os
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data_pg as data, protocol, config, const
-from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
+from inmanta import data_pg as data, config, const
+from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
+
 from datetime import datetime
 from uuid import UUID
 from inmanta.util import hash_file
@@ -1072,7 +1073,7 @@ async def test_resource_action_log(motor, server_multi, client_multi, environmen
     res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
+    resource_action_log = server.Server.get_resource_action_log_file(environment)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
 
