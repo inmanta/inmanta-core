@@ -21,9 +21,10 @@ import datetime
 import uuid
 import time
 import logging
-import os
 import inspect
 import types
+import pkgutil
+
 
 from inmanta import data_pg as data, const
 from inmanta.const import LogLevel
@@ -1660,9 +1661,9 @@ async def test_dbschema_update_db_schema_failure(postgresql_client, init_datacla
 
 @pytest.mark.asyncio
 async def test_dbschema_get_dct_with_update_functions():
-    path_to_package_with_update_files = data.DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__._path[0]
-    files_in_dir = os.listdir(path_to_package_with_update_files)
-    all_versions = [int(filename[1:-3]) for filename in files_in_dir]
+    module_names = [modname for _, modname, ispkg in pkgutil.iter_modules(data.DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__)
+                    if not ispkg]
+    all_versions = [int(mod_name[1:]) for mod_name in module_names]
 
     db_schema = data.DBSchema()
     update_function_map = await db_schema._get_dct_with_update_functions()
