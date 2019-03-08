@@ -1855,7 +1855,7 @@ class ConfigurationModel(BaseDocument):
 
         await self.update_fields(deployed=True, result=result)
 
-    async def get_increment(self, negative: bool=False):
+    async def get_increment(self):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -1947,8 +1947,7 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        if negative:
-            return [res["resource_version_id"] for res in not_incrememt]
+        negative = [res["resource_version_id"] for res in not_incrememt]
 
         # patch up the graph
         # 1-include stuff for send-events.
@@ -1982,7 +1981,7 @@ class ConfigurationModel(BaseDocument):
             work.extend(provides)
             outset.update(provides)
 
-        return outset
+        return set(outset), negative
 
 
 class Code(BaseDocument):
