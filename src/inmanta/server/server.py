@@ -809,7 +809,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         increment = self._increment_cache.get(env.id, None)
         if increment is None:
             with (yield self._increment_cache_locks[env.id].acquire()):
-                increment = self._increment_cache.get(env.id)
+                increment = self._increment_cache.get(env.id, None)
                 if increment is None:
                     increment = yield cm.get_increment()
                     self._increment_cache[env.id] = increment
