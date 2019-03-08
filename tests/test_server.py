@@ -1043,20 +1043,6 @@ async def test_legacy_code(server_multi, client_multi, environment_multi, agent_
 
 
 @pytest.mark.asyncio(timeout=30)
-@pytest.mark.parametrize("create_and_update", [True, False])
-async def test_db_schema_update(server, write_db_update_file, postgresql_client, create_and_update):
-    await server.stop()
-    if create_and_update:
-        await postgresql_client.execute("DROP SCHEMA public CASCADE")
-        await postgresql_client.execute("CREATE SCHEMA public")
-    schema_dir = opt.db_schema_dir.get()
-    write_db_update_file(schema_dir, 2, "CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);")
-    await server.start()
-
-    await postgresql_client.execute("SELECT * FROM public.tab")
-
-
-@pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server_multi, client_multi, environment_multi):
     version = 1
     resources = [{'group': 'root',

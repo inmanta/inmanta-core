@@ -1,3 +1,5 @@
+async def update(connection):
+    schema = """
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 DROP TABLE IF EXISTS project CASCADE;
@@ -106,7 +108,6 @@ CREATE TABLE IF NOT EXISTS public.resourceaction (
 );
 
 CREATE UNIQUE INDEX resourceaction_env_resourceversionid_index ON resourceaction (environment, action_id);
--- TODO: CHECK INDEX
 CREATE INDEX resourceaction_env_resourceversionid__started_index ON resourceaction (environment, action_id, started DESC);
 
 -- Table: public.resourceversionid
@@ -256,6 +257,6 @@ CREATE TABLE IF NOT EXISTS public.schemaversion(
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
     current_version integer NOT NULL
 );
-
--- Add the version of this schema to the database
-INSERT INTO public.schemaversion(current_version) VALUES(1);
+"""
+    async with connection.transaction():
+        await connection.execute(schema)

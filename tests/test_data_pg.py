@@ -22,10 +22,12 @@ import uuid
 import time
 import logging
 import os
+import inspect
+import types
 
 from inmanta import data_pg as data, const
 from inmanta.const import LogLevel
-from inmanta import config
+from asyncpg import PostgresSyntaxError
 
 
 @pytest.mark.asyncio
@@ -1603,73 +1605,81 @@ async def test_match_tables_in_db_against_table_definitions_in_orm(postgres_db, 
         assert item in table_names_in_database
 
 
-@pytest.fixture(scope="function")
-async def dummy_db_schema_dir(tmpdir, postgres_db, database_name, postgresql_client):
-    await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None, create_db_schema=False)
-    schema_dir = str(tmpdir.mkdir("schema_dir"))
-    config.Config.set("database", "schema_dir", schema_dir)
-    full_schema_file = os.path.join(schema_dir, data.DBSchema.FILE_NAME_FULL_SCHEMA_FILE)
-    with open(full_schema_file, 'w+') as f:
-        f.write("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";\n"
-                "CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);\n"
-                "CREATE TABLE public.schemaversion(id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), current_version integer);\n"
-                "INSERT INTO public.schemaversion(current_version) VALUES(1);")
-    schema_version_table_exists = await postgresql_client.fetch("SELECT EXISTS(SELECT table_name "
-                                                                "FROM information_schema.tables "
-                                                                "WHERE table_schema='public' AND "
-                                                                "table_name='" + data.SchemaVersion.table_name() + "')")
-    assert not schema_version_table_exists[0]["exists"]
-    yield schema_dir
-
-
 @pytest.mark.asyncio
-async def test_update_schema_when_schema_already_exists(dummy_db_schema_dir, write_db_update_file, postgresql_client,
-                                                        get_columns_in_db_table):
-    db_schema = data.DBSchema()
-    await db_schema.ensure_db_schema(postgresql_client)
-    assert (await data.SchemaVersion.get_current_version()) == 1
+async def test_dbschema_update_db_schema(postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table):
+    async def update_function1(connection):
+        await connection.execute("CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);")
 
-    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")
+    async def update_function2(connection):
+        await connection.execute("ALTER TABLE public.tab DROP COLUMN val;")
 
-    # Execute schema update
-    await db_schema.ensure_db_schema(postgresql_client)
-
-    assert (await data.SchemaVersion.get_current_version()) == 2
-    assert sorted(["id", "val", "new"]) == sorted(await get_columns_in_db_table("tab"))
-
-
-@pytest.mark.asyncio
-async def test_create_and_update_schema_in_one_shot(dummy_db_schema_dir, write_db_update_file, postgresql_client,
-                                                    get_columns_in_db_table):
-    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;\n"
-                                                 "CREATE TABLE public.newtab(id INTEGER PRIMARY KEY);")
-    write_db_update_file(dummy_db_schema_dir, 3, "ALTER TABLE public.tab DROP COLUMN new;")
+    current_db_version = await data.SchemaVersion.get_current_version()
+    version_update1 = current_db_version + 1
+    version_update2 = current_db_version + 2
+    update_function_map = {version_update1: update_function1, version_update2: update_function2}
 
     db_schema = data.DBSchema()
-    await db_schema.ensure_db_schema(postgresql_client)
-    assert (await data.SchemaVersion.get_current_version()) == 3
+    await db_schema._update_db_schema(update_function_map, postgresql_client)
 
-    assert sorted(["id", "val"]) == sorted(await get_columns_in_db_table("tab"))
-    assert sorted(["id"]) == sorted(await get_columns_in_db_table("newtab"))
+    assert (await data.SchemaVersion.get_current_version()) == version_update2
+    assert sorted(["id"]) == sorted(await get_columns_in_db_table("tab"))
 
 
 @pytest.mark.asyncio
-async def test_schema_update_failure(dummy_db_schema_dir, write_db_update_file, postgresql_client, get_columns_in_db_table):
-    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUM new varchar;")  # Syntax error!
+async def test_dbschema_update_db_schema_failure(postgresql_client, init_dataclasses_and_load_schema, get_columns_in_db_table):
+    async def update_function(connection):
+        # Syntax error should trigger database rollback
+        await connection.execute("CREATE TABE public.tab(id integer primary key, val varchar NOT NULL);")
+
+    current_db_version = await data.SchemaVersion.get_current_version()
+    new_db_version = current_db_version + 1
+    update_function_map = {new_db_version: update_function}
 
     db_schema = data.DBSchema()
     try:
-        await db_schema.ensure_db_schema(postgresql_client)  # This should fail and trigger database rollback
-    except Exception:
+        await db_schema._update_db_schema(update_function_map, postgresql_client)
+    except PostgresSyntaxError:
         pass
 
-    assert (await data.SchemaVersion.get_current_version()) == 1
+    # Assert rollback
+    assert (await data.SchemaVersion.get_current_version()) == current_db_version
+    assert (await postgresql_client.fetchval("SELECT table_name FROM information_schema.tables "
+                                             "WHERE table_schema='public' AND table_name='tab'")) is None
 
-    write_db_update_file(dummy_db_schema_dir, 2, "ALTER TABLE public.tab ADD COLUMN new varchar;")  # Fix syntax error
-    await db_schema.ensure_db_schema(postgresql_client)
+    async def update_function(connection):
+        # Fix syntax issue
+        await connection.execute("CREATE TABLE public.tab(id integer primary key, val varchar NOT NULL);")
 
-    assert (await data.SchemaVersion.get_current_version()) == 2
-    assert sorted(["id", "val", "new"]) == sorted(await get_columns_in_db_table("tab"))
+    update_function_map[new_db_version] = update_function
+    await db_schema._update_db_schema(update_function_map, postgresql_client)
+
+    # Assert update
+    assert (await data.SchemaVersion.get_current_version()) == new_db_version
+    assert sorted(["id", "val"]) == sorted(await get_columns_in_db_table("tab"))
+
+
+@pytest.mark.asyncio
+async def test_dbschema_get_dct_with_update_functions():
+    path_to_package_with_update_files = data.DBSchema.PACKAGE_WITH_UPDATE_FILES.__path__._path[0]
+    files_in_dir = os.listdir(path_to_package_with_update_files)
+    all_versions = [int(filename[1:-3]) for filename in files_in_dir]
+
+    db_schema = data.DBSchema()
+    update_function_map = await db_schema._get_dct_with_update_functions()
+    assert sorted(all_versions) == sorted(update_function_map.keys())
+    for version, update_function in update_function_map.items():
+        assert version >= 0
+        assert isinstance(update_function, types.FunctionType)
+        assert update_function.__name__ == "update"
+        assert inspect.getfullargspec(update_function)[0] == ["connection"]
+
+    # Test behavior of "versions_higher_than" parameter
+    lowest_version = min(update_function_map.keys())
+    one_version_higher_than_lowest_version = lowest_version + 1
+
+    restricted_function_map = await db_schema._get_dct_with_update_functions(one_version_higher_than_lowest_version)
+    assert len(restricted_function_map) == len(update_function_map) - 1
+    assert lowest_version not in restricted_function_map
 
 
 @pytest.mark.asyncio

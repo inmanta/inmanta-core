@@ -65,7 +65,7 @@ async def test_fork(server):
 
 
 @pytest.mark.timeout(30)
-def test_embedded_inmanta_server(tmpdir, database_schema_dir):
+def test_embedded_inmanta_server(tmpdir):
     project_dir = tmpdir.mkdir("project")
     os.chdir(project_dir)
     main_cf_file = project_dir.join("main.cf")
@@ -79,5 +79,5 @@ def test_embedded_inmanta_server(tmpdir, database_schema_dir):
     with open(main_cf_file, 'w') as f:
         f.write("")
     depl = deploy.Deploy()
-    assert depl.setup(database_schema_dir)
+    assert depl.setup()
     depl.stop()
