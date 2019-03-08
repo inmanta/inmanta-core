@@ -58,6 +58,7 @@ DBLIMIT = 100000
 class ResourceActionLogLine(logging.LogRecord):
     """ A special log record that is used to report log lines that come from the agent
     """
+
     def __init__(self, logger_name: str, level: str, msg: str, created: datetime.datetime) -> None:
         super().__init__(
             name=logger_name,
@@ -806,14 +807,36 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         version = cm.version
 
-        increment_ids = self._increment_cache.get(env.id, None)
-        if increment_ids is None:
+        increment = self._increment_cache.get(env.id, None)
+        if increment is None:
             with (yield self._increment_cache_locks[env.id].acquire()):
-                increment_ids = self._increment_cache.get(env.id)
-                if increment_ids is None:
-                    increment_ids_list = yield cm.get_increment()
-                    increment_ids = set(increment_ids_list)
-                    self._increment_cache[env.id] = increment_ids
+                increment = self._increment_cache.get(env.id, None)
+                if increment is None:
+                    increment = yield cm.get_increment()
+                    self._increment_cache[env.id] = increment
+
+        increment_ids, neg_increment = increment
+
+        # set already done to deployed
+        now = datetime.datetime.now()
+
+        def on_agent(res):
+            idr = Id.parse_id(res)
+            return idr.get_agent_name() == agent
+
+        neg_increment = [res_id for res_id in neg_increment if on_agent(res_id)]
+
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": now.isoformat(),
+            "args": []
+        }
+        self.add_future(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
+                                                    started=now, finished=now, status=const.ResourceState.deployed,
+                                                    # does this require a different ResourceAction?
+                                                    action=const.ResourceAction.deploy, changes={}, messages=[logline],
+                                                    change=const.Change.nochange, send_events=False, keep_increment_cache=True))
 
         resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
 
@@ -834,7 +857,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
-        now = datetime.datetime.now()
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now,
                                  messages=[data.LogLine.log(logging.INFO,
@@ -1099,20 +1121,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
                                           change=const.Change.nochange, send_events=False)
 
-        # all resources already deployed
-        deployed = yield model.get_increment(negative=True)
-        logline = {
-            "level": "INFO",
-            "msg": "Setting deployed due to known good status",
-            "timestamp": now.isoformat(),
-            "args": []
-        }
-        yield self.resource_action_update(env, deployed, action_id=uuid.uuid4(),
-                                          started=now, finished=now, status=const.ResourceState.deployed,
-                                          # does this require a different ResourceAction?
-                                          action=const.ResourceAction.deploy, changes={}, messages=[logline],
-                                          change=const.Change.nochange, send_events=False)
-
         if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
@@ -1317,7 +1325,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.resource_action_update, env="tid")
     @gen.coroutine
     def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
-                               change, send_events):
+                               change, send_events, keep_increment_cache=False):
         resources = yield data.Resource.get_resources(env.id, resource_ids)
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
@@ -1381,9 +1389,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 return 500, {"message": "Cannot perform state update without a status."}
             for res in resources:
                 yield res.update_fields(status=status)
-            self.clear_env_cache(env)
+            if not keep_increment_cache:
+                self.clear_env_cache(env)
         elif action in const.STATE_UPDATE and done:
-            self.clear_env_cache(env)
+            if not keep_increment_cache:
+                self.clear_env_cache(env)
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)

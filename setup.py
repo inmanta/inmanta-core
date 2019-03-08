@@ -18,7 +18,7 @@ requires = [
 ]
 
 setup(
-    version="2019.1",
+    version="2019.2",
     python_requires='>=3.6', # also update classifiers
     # Meta data
     name="inmanta",
@@ -34,7 +34,6 @@ setup(
         "Operating System :: POSIX :: Linux",
         "Topic :: System :: Systems Administration",
         "Topic :: Utilities",
-        "Topic :: Orchestration",
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7"
