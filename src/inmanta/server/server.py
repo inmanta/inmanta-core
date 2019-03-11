@@ -464,11 +464,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.list_params, env="tid")
     @gen.coroutine
     def list_param(self, env, query):
-        m_query = {"environment": env.id}
-        for k, v in query.items():
-            m_query["metadata." + k] = v
-
-        params = yield data.Parameter.get_list(**m_query)
+        params = yield data.Parameter.list_parameters(env.id, **query)
         return 200, {"parameters": params, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
 
     @protocol.handle(methods.put_form, form_id="id", env="tid")

@@ -816,8 +816,19 @@ class Parameter(BaseDocument):
     @classmethod
     async def get_updated_before(cls, updated_before):
         query = "SELECT * FROM " + cls.table_name() + " WHERE updated < $1"
-
         values = [cls._get_value(updated_before)]
+        result = await cls.select_query(query, values)
+        return result
+
+    @classmethod
+    async def list_parameters(cls, env_id, **metadata_constraints):
+        query = "SELECT * FROM " + cls.table_name() + " WHERE environment=$1"
+        values = [cls._get_value(env_id)]
+        for key, value in metadata_constraints.items():
+            query_param_index = len(values) + 1
+            query += " AND metadata @> $" + str(query_param_index) + "::jsonb"
+            dict_value = {key: value}
+            values.append(cls._get_value(dict_value))
         result = await cls.select_query(query, values)
         return result
 

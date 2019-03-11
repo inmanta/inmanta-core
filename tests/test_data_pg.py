@@ -1456,6 +1456,34 @@ async def test_parameter(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
+async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    metadata_param1 = {"test1": "testval1", "test2": "testval2"}
+    parameter1 = data.Parameter(name="param", value="val", environment=env.id, source="test", metadata=metadata_param1)
+    await parameter1.insert()
+
+    metadata_param2 = {"test3": "testval3"}
+    parameter2 = data.Parameter(name="param", value="val", environment=env.id, source="test", metadata=metadata_param2)
+    await parameter2.insert()
+
+    results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1"})
+    assert len(results) == 1
+    assert results[0].id == parameter1.id
+
+    results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1", "test2": "testval2"})
+    assert len(results) == 1
+    assert results[0].id == parameter1.id
+
+    results = await data.Parameter.list_parameters(env.id, **{})
+    assert len(results) == 2
+
+
+@pytest.mark.asyncio
 async def test_dryrun(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

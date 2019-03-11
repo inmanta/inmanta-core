@@ -1073,3 +1073,25 @@ async def test_invalid_sid(server_multi, client_multi, environment_multi):
     res = await client_multi.get_code(tid=environment_multi, id=1, resource="std::File")
     assert res.code == 400
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_get_param(server, client, environment):
+    metadata = {"key1": "val1", "key2": "val2"}
+    await client.set_param(environment, "param", "source", "val", "", metadata, False)
+    await client.set_param(environment, "param2", "source2", "val2", "", {"a": "b"}, False)
+
+    res = await client.list_params(tid=environment, query={"key1": "val1"})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 1
+    metadata_received = parameters[0]["metadata"]
+    assert len(metadata_received) == 2
+    for k, v in metadata.items():
+        assert k in metadata_received
+        assert metadata_received[k] == v
+
+    res = await client.list_params(tid=environment, query={})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 2
