@@ -2,29 +2,6 @@ async def update(connection):
     schema = """
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-DROP TABLE IF EXISTS project CASCADE;
-DROP TABLE IF EXISTS environment CASCADE;
-DROP TABLE IF EXISTS configurationmodel CASCADE;
-DROP TABLE IF EXISTS resource CASCADE;
-DROP TABLE IF EXISTS resourceaction CASCADE;
-DROP TABLE IF EXISTS resourceversionid CASCADE;
-DROP TABLE IF EXISTS code CASCADE;
-DROP TABLE IF EXISTS unknownparameter CASCADE;
-DROP TABLE IF EXISTS agentprocess CASCADE;
-DROP TABLE IF EXISTS agentinstance CASCADE;
-DROP TABLE IF EXISTS agent CASCADE;
-DROP TABLE IF EXISTS parameter CASCADE;
-DROP TABLE IF EXISTS form CASCADE;
-DROP TABLE IF EXISTS formrecord CASCADE;
-DROP TABLE IF EXISTS compile CASCADE;
-DROP TABLE IF EXISTS report CASCADE;
-DROP TABLE IF EXISTS dryrun CASCADE;
-DROP TABLE IF EXISTS schemaversion;
-DROP TYPE IF EXISTS versionstate;
-DROP TYPE IF EXISTS resourcestate;
-DROP TYPE IF EXISTS resourceaction_type;
-DROP TYPE IF EXISTS change;
-
 CREATE TYPE versionstate AS ENUM('success', 'failed', 'deploying', 'pending');
 CREATE TYPE resourcestate AS ENUM('unavailable', 'skipped', 'dry', 'deployed', 'failed', 'deploying', 'available',
                                   'cancelled', 'undefined', 'skipped_for_undefined', 'processing_events');
@@ -255,7 +232,7 @@ CREATE INDEX dryrun_env_model ON dryrun (environment, model DESC);
 -- Table: public.schemaversion
 CREATE TABLE IF NOT EXISTS public.schemaversion(
     id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-    current_version integer NOT NULL
+    current_version integer NOT NULL UNIQUE
 );
 """
     async with connection.transaction():
