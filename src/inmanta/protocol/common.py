@@ -378,7 +378,7 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
         return str(o)
 
     if isinstance(o, datetime.datetime):
-        return o.isoformat()
+        return o.isoformat(timespec='microseconds')
 
     if hasattr(o, "to_dict"):
         return o.to_dict()
