@@ -468,7 +468,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             m_query["metadata." + k] = v
 
         params = yield data.Parameter.get_list(**m_query)
-        return 200, {"parameters": params, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
+        return 200, {"parameters": params,
+                     "expire": self._fact_expire,
+                     "now": datetime.datetime.now().isoformat(timespec='microseconds')
+                     }
 
     @protocol.handle(methods.put_form, form_id="id", env="tid")
     @gen.coroutine
@@ -828,7 +831,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         logline = {
             "level": "INFO",
             "msg": "Setting deployed due to known good status",
-            "timestamp": now.isoformat(),
+            "timestamp": now.isoformat(timespec='microseconds'),
             "args": []
         }
         self.add_future(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
