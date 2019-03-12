@@ -436,7 +436,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             ags = yield data.Agent.get_list()
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat()}
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec='microseconds')}
 
     @protocol.handle(methods.get_state, env="tid")
     @gen.coroutine
