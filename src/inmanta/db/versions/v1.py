@@ -1,7 +1,5 @@
 async def update(connection):
     schema = """
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 CREATE TYPE versionstate AS ENUM('success', 'failed', 'deploying', 'pending');
 CREATE TYPE resourcestate AS ENUM('unavailable', 'skipped', 'dry', 'deployed', 'failed', 'deploying', 'available',
                                   'cancelled', 'undefined', 'skipped_for_undefined', 'processing_events');
@@ -231,7 +229,7 @@ CREATE INDEX dryrun_env_model ON dryrun (environment, model DESC);
 
 -- Table: public.schemaversion
 CREATE TABLE IF NOT EXISTS public.schemaversion(
-    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id uuid PRIMARY KEY,
     current_version integer NOT NULL UNIQUE
 );
 """
