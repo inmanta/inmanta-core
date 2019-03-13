@@ -458,8 +458,8 @@ class ResourceScheduler(object):
                 return
             if self._resume_reason is not None:
                 self.logger.info("Resuming run '%s'", self._resume_reason)
-                ioloop.IOLoop.current().add_callback(self.agent.get_latest_version_for_agent, reason=self._resume_reason,
-                                                     incremental_deploy=False, is_repair_run=True)
+                self.agent.add_future(self.agent.get_latest_version_for_agent(reason=self._resume_reason,
+                                                                              incremental_deploy=False, is_repair_run=True))
                 self._resume_reason = None
 
     def notify_ready(self, resourceid, send_events, state, change, changes):

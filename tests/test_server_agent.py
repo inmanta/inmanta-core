@@ -43,6 +43,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER, config as server_config
 from typing import List, Tuple, Optional, Dict
 from inmanta.const import ResourceState
+from asyncio.tasks import ensure_future
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -4144,3 +4145,64 @@ async def test_format_token_in_logline(server_multi, agent_multi, client_multi, 
 
     log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
     assert log_string in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_1016_agent_deadlock(server, agent, client, environment, resource_container, no_agent_backoff):
+    resource_container.Provider.set("agent1", "key1", "incorrect_value")
+
+    async def make_version(version, value="v"):
+        resource = {
+            'key': 'key1',
+            'value': 'Test value %s'%value,
+            'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+            'send_event': False,
+            'purged': False,
+            'requires': [],
+        }
+
+        result = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[resource],
+            unknowns=[],
+            version_info={}
+        )
+
+        assert result.code == 200
+
+    ai = agent._instances["agent1"]
+
+    version = 1
+    await make_version(version)
+
+    # do a deploy
+    result = await client.release_version(environment, version, False)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    ensure_future(
+        ai.get_latest_version_for_agent(
+            reason="periodic test deploy",
+            incremental_deploy=True,
+            is_repair_run=False
+        )
+    )
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    version = 2
+    await make_version(version)
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_incremental_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    await _wait_until_deployment_finishes(client, environment, version)
