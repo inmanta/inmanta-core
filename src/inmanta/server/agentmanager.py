@@ -692,7 +692,7 @@ ssl=True
         if env.id in self._agent_procs:
             subproc = self._agent_procs[env.id]
             subproc.proc.terminate()
-            yield subproc.wait_for_exit()
+            yield wait_for_proc_bounded([subproc])
             del self._agent_procs[env.id]
 
         LOGGER.debug("Expiring all sessions for %s", env.id)
