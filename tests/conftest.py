@@ -135,6 +135,14 @@ def no_agent_backoff():
     agent.GET_RESOURCE_BACKOFF = backoff
 
 
+@pytest.fixture()
+def free_socket():
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.bind(('', 0))
+    yield tcp
+    tcp.close()
+
+
 def get_free_tcp_port():
     """
         Semi safe method for getting a random port. This may contain a race condition.
