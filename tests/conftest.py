@@ -51,6 +51,8 @@ import sys
 import pkg_resources
 from typing import Optional, Dict
 from inmanta import protocol
+import pyformance
+from pyformance.registry import MetricsRegistry
 
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
@@ -89,11 +91,16 @@ def deactive_venv():
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
+def reset_metrics():
+    pyformance.set_global_registry(MetricsRegistry())
+
+
 def reset_all_objects():
     resources.resource.reset()
     export.Exporter.reset()
     process.Subprocess.uninitialize()
     asyncio.set_child_watcher(None)
+    reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
@@ -199,6 +206,8 @@ async def agent_multi(server_multi, environment_multi):
 async def server(inmanta_config, postgres_db, database_name):
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
+
+    reset_metrics()
 
     state_dir = tempfile.mkdtemp()
 
