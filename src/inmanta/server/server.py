@@ -1079,6 +1079,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         yield ra.insert()
         LOGGER.debug("Successfully stored version %d", version)
 
+        self.clear_env_cache(env)
+
         auto_deploy = yield env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
