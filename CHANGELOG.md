@@ -1,3 +1,8 @@
+v 2019.2
+Changes in this release:
+- added metering using pyformance
+- added influxdb reporter for protocol endpoint metrics 
+
 v 2019.1 (2019-03-06)
 Changes in this release:
 - Various bugfixes and performance enhancements (#873, #772, #958, #959, #955)
