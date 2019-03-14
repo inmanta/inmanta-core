@@ -43,7 +43,6 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER, config as server_config
 from typing import List, Tuple, Optional, Dict
 from inmanta.const import ResourceState
-from asyncio.tasks import ensure_future
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
@@ -66,6 +65,13 @@ def log_contains(caplog, loggerpart, level, msg):
     for logger_name, log_level, message in caplog.record_tuples:
         if loggerpart in logger_name and level == log_level and msg in message:
             return
+    assert False
+
+
+def log_index(caplog, loggerpart, level, msg, after=0):
+    for i, (logger_name, log_level, message) in enumerate(caplog.record_tuples[after:]):
+        if loggerpart in logger_name and level == log_level and msg in message:
+            return i + after
     assert False
 
 
@@ -4148,13 +4154,18 @@ async def test_format_token_in_logline(server_multi, agent_multi, client_multi, 
 
 
 @pytest.mark.asyncio
-async def test_1016_agent_deadlock(server, agent, client, environment, resource_container, no_agent_backoff):
+async def test_1016_cache_invalidation(server, agent, client, environment, resource_container, no_agent_backoff, caplog):
+    """
+        tricky case where the increment cache was not invalidated when a new version was deployed,
+        causing subsequent deploys to receive a wrong increment
+    """
     resource_container.Provider.set("agent1", "key1", "incorrect_value")
+    caplog.set_level(logging.DEBUG)
 
     async def make_version(version, value="v"):
         resource = {
             'key': 'key1',
-            'value': 'Test value %s'%value,
+            'value': 'Test value %s' % value,
             'id': 'test::Resource[agent1,key=key1],v=%d' % version,
             'send_event': False,
             'purged': False,
@@ -4186,20 +4197,16 @@ async def test_1016_agent_deadlock(server, agent, client, environment, resource_
 
     await _wait_until_deployment_finishes(client, environment, version)
 
-    ensure_future(
-        ai.get_latest_version_for_agent(
-            reason="periodic test deploy",
-            incremental_deploy=True,
-            is_repair_run=False
-        )
+    await ai.get_latest_version_for_agent(
+        reason="test deploy",
+        incremental_deploy=True,
+        is_repair_run=False
     )
 
-    await _wait_until_deployment_finishes(client, environment, version)
-
-    await asyncio.sleep(5)
+    await asyncio.gather(*(e.future for e in ai._nq.generation.values()))
 
     version = 2
-    await make_version(version, "a")
+    await make_version(version, "b")
 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_incremental_deploy)
@@ -4210,3 +4217,10 @@ async def test_1016_agent_deadlock(server, agent, client, environment, resource_
     assert result.result["model"]["result"] == "deploying"
 
     await _wait_until_deployment_finishes(client, environment, version)
+
+    # first 1 full fetch
+    idx1 = log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 1 resources because call to trigger_update")
+    # then empty increment
+    idx2 = log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 0 resources because test deploy", idx1)
+    # then non-empty increment deploy
+    log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 1 resources because call to trigger_update", idx2)

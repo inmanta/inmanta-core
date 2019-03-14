@@ -680,6 +680,8 @@ class AgentInstance(object):
                 except TypeError:
                     self.logger.exception("Failed to receive update for %s", reason)
 
+                self.logger.debug("Pulled %d resources because %s", len(resources), reason)
+
                 if len(resources) > 0:
                     self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
 
