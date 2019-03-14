@@ -1442,7 +1442,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         environments = yield Environment.get_list(project=project.id)
         for env in environments:
-            yield env.delete_cascade()
+            yield [self.agentmanager.stop_agents(env), env.delete_cascade()]
             self._close_resource_action_logger(env)
 
         yield project.delete()
@@ -1572,7 +1572,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if env is None:
             return 404, {"message": "The environment with given id does not exist."}
 
-        yield env.delete_cascade()
+        yield [self.agentmanager.stop_agents(env), env.delete_cascade()]
 
         self._close_resource_action_logger(environment_id)
 
