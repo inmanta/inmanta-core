@@ -40,7 +40,6 @@ import socket
 import signal
 
 import colorlog
-from pyformance.reporters import ConsoleReporter
 
 from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
@@ -52,7 +51,6 @@ from inmanta import protocol, module, moduletool, const
 from inmanta.export import cfg_env, ModelExporter
 import yaml
 
-from inmanta.reporter import InfluxReporter
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.ast import CompilerException
 import asyncio

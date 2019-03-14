@@ -90,7 +90,7 @@ class RESTHandler(tornado.web.RequestHandler):
         if call_config is None:
             raise exceptions.NotFound("This method does not exist")
 
-        with timer("rpc."+call_config.method_name).time():
+        with timer("rpc." + call_config.method_name).time():
             self.set_header("Access-Control-Allow-Origin", "*")
             try:
                 message = self._transport._decode(self.request.body)

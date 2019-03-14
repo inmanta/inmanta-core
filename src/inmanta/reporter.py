@@ -9,7 +9,7 @@ from pyformance import global_registry
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from urllib.parse import quote
 
-LOG = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
 
 DEFAULT_INFLUX_SERVER = "127.0.0.1"
 DEFAULT_INFLUX_PORT = 8086
@@ -20,7 +20,6 @@ DEFAULT_INFLUX_PROTOCOL = "http"
 
 
 class AsyncReporter(object):
-
     def __init__(self, registry=None, reporting_interval=30, clock=None):
         self.registry = registry or global_registry()
         self.reporting_interval = reporting_interval
@@ -44,8 +43,8 @@ class AsyncReporter(object):
         while not self._stopped:
             try:
                 await self.report_now(self.registry)
-            except:
-                pass
+            except Exception:
+                LOGGER.warning("Could not send metrics report", exc_info=True)
             next_loop_time += self.reporting_interval
             wait = max(0, next_loop_time - time.time())
             await asyncio.sleep(wait)
@@ -74,7 +73,7 @@ class InfluxReporter(AsyncReporter):
         protocol=DEFAULT_INFLUX_PROTOCOL,
         autocreate_database=False,
         clock=None,
-        tags={}
+        tags={},
     ):
         super(InfluxReporter, self).__init__(registry, reporting_interval, clock)
         self.prefix = prefix
@@ -89,9 +88,9 @@ class InfluxReporter(AsyncReporter):
         self.tags = {}
         self.key = "metrics"
         if self.tags:
-            tagstring = ",".join("%s=%s" % (key,value) for key,value in self.tags)
-            self.key = "%s%,s"%(self.key, tagstring)
-        self.key = "%s,key="%self.key
+            tagstring = ",".join("%s=%s" % (key, value) for key, value in self.tags)
+            self.key = "%s%,s" % (self.key, tagstring)
+        self.key = "%s,key=" % self.key
 
     async def _create_database(self, http_client):
         url = "%s://%s:%s/query" % (self.protocol, self.server, self.port)
@@ -106,7 +105,7 @@ class InfluxReporter(AsyncReporter):
             # Only set if we actually were able to get a successful response
             self._did_create_database = True
         except HTTPError as err:
-            LOG.warning(
+            LOGGER.warning(
                 "Cannot create database %s to %s: %s",
                 self.database,
                 self.server,
@@ -122,7 +121,7 @@ class InfluxReporter(AsyncReporter):
         metrics = (registry or self.registry).dump_metrics()
         post_data = []
         for key, metric_values in metrics.items():
-            table= self.key+key
+            table = self.key + key
             values = ",".join(
                 [
                     "%s=%s" % (k, v if type(v) is not str else '"{}"'.format(v))
@@ -141,8 +140,8 @@ class InfluxReporter(AsyncReporter):
         try:
             response = await http_client.fetch(request)
             response.rethrow()
-        except HTTPError as err:
-            LOG.warning("Cannot write to %s", self.server, exc_info=1)
+        except HTTPError:
+            LOGGER.warning("Cannot write to %s", self.server, exc_info=1)
 
 
 def _encode_username(username, password):
