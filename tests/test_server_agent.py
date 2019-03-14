@@ -69,6 +69,9 @@ def log_contains(caplog, loggerpart, level, msg):
 
 
 def log_index(caplog, loggerpart, level, msg, after=0):
+    """Find a log in line in the captured log, return the index of the first occurrence
+
+       :param after: only consider records after the given index"""
     for i, (logger_name, log_level, message) in enumerate(caplog.record_tuples[after:]):
         if loggerpart in logger_name and level == log_level and msg in message:
             return i + after
