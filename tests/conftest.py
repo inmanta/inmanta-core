@@ -42,7 +42,7 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
-from tornado import process
+from tornado import process, netutil
 import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import asyncpg
@@ -137,10 +137,9 @@ def no_agent_backoff():
 
 @pytest.fixture()
 def free_socket():
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
-    yield tcp
-    tcp.close()
+    sock = netutil.bind_sockets(0, "127.0.0.1", family=socket.AF_INET)[0]
+    yield sock
+    sock.close()
 
 
 def get_free_tcp_port():

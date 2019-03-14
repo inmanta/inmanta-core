@@ -142,7 +142,7 @@ class InfluxReporter(AsyncReporter):
             response = await http_client.fetch(request)
             response.rethrow()
         except HTTPError as err:
-            LOG.warning("Cannot write to %s: %s", self.server, err.reason)
+            LOG.warning("Cannot write to %s", self.server, exc_info=1)
 
 
 def _encode_username(username, password):
