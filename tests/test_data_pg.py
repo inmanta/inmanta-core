@@ -1740,3 +1740,17 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     assert len(await data.ResourceAction.get_list()) == 1
     remaining_resource_action = (await data.ResourceAction.get_list())[0]
     assert remaining_resource_action.id == ra2.id
+
+
+@pytest.mark.asyncio
+async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):
+    project1 = data.Project(name="proj1")
+    project2 = data.Project(name="proj2")
+    projects = [project1, project2]
+    await data.Project.insert_many(projects)
+
+    result = await data.Project.get_list()
+    project_names_in_result = [res.name for res in result]
+
+    assert len(project_names_in_result) == 2
+    assert sorted(["proj1", "proj2"]) == sorted(project_names_in_result)

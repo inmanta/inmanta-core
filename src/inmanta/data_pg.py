@@ -308,16 +308,22 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Insert multiple objects at once
         """
+        if not documents:
+            return
+
+        columns = list(cls._fields.copy().keys())
+        records = []
+        for doc in documents:
+            current_record = []
+            for col in columns:
+                current_record.append(cls._get_value(doc.__getattribute__(col)))
+            current_record = tuple(current_record)
+            records.append(current_record)
+
         async with cls._connection_pool.acquire() as con:
-            tr = con.transaction()
-            await tr.start()
-            try:
-                for doc in documents:
-                    await doc.insert()
-            except Exception as e:
-                await tr.rollback()
-                raise e
-            await tr.commit()
+            await con.copy_records_to_table(table_name=cls.table_name(),
+                                            columns=columns,
+                                            records=records)
 
     def add_default_values_when_undefined(self, **kwargs):
         result = dict(kwargs)
@@ -1695,6 +1701,12 @@ class Resource(BaseDocument):
     async def insert(self, connection=None):
         self.make_hash()
         await super(Resource, self).insert(connection=connection)
+
+    @classmethod
+    async def insert_many(cls, documents):
+        for doc in documents:
+            doc.make_hash()
+        await super(Resource, cls).insert_many(documents)
 
     async def update(self, **kwargs):
         self.make_hash()
