@@ -50,10 +50,13 @@ influxdb_username = Option("influxdb", "username", None, "The username to access
 influxdb_password = Option("influxdb", "password", None, "The password that belong to the influxdb user")
 
 influxdb_interval = Option("influxdb", "interval", 30, "Interval with which to report to influxdb", is_int)
-influxdb_tags = Option("influxdb",
-                           "tags",
-                           "",
-                           "a dict of tags to attach to all influxdb records in the form tag=value,tag=value", is_map)
+influxdb_tags = Option(
+    "influxdb",
+    "tags",
+    "",
+    "a dict of tags to attach to all influxdb records in the form tag=value,tag=value",
+    is_map
+)
 
 #############################
 # server
