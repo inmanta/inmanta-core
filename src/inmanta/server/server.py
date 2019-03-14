@@ -151,7 +151,8 @@ class Server(protocol.ServerSlice):
                 password=opt.influxdb_password,
                 reporting_interval=opt.influxdb_interval.get(),
                 autocreate_database=True,
-                tags=opt.influxdb_tags)
+                tags=opt.influxdb_tags
+            )
             rep.start()
 
     @staticmethod
