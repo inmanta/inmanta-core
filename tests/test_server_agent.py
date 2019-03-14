@@ -4177,12 +4177,14 @@ async def test_1016_agent_deadlock(server, agent, client, environment, resource_
     await make_version(version)
 
     # do a deploy
-    result = await client.release_version(environment, version, False)
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_incremental_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
+
+    await _wait_until_deployment_finishes(client, environment, version)
 
     ensure_future(
         ai.get_latest_version_for_agent(
@@ -4194,8 +4196,10 @@ async def test_1016_agent_deadlock(server, agent, client, environment, resource_
 
     await _wait_until_deployment_finishes(client, environment, version)
 
+    await asyncio.sleep(5)
+
     version = 2
-    await make_version(version)
+    await make_version(version, "a")
 
     # do a deploy
     result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_incremental_deploy)
