@@ -141,7 +141,7 @@ class Server(protocol.ServerSlice):
         self._close_resource_action_loggers()
         yield data.disconnect()
 
-    def start_metric_reporters(self):
+    def start_metric_reporters(self) -> None:
         if opt.influxdb_host.get():
             rep = InfluxReporter(
                 server=opt.influxdb_host.get(),
