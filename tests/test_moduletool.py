@@ -602,7 +602,7 @@ def test_project_freeze(modules_dir, modules_repo, capsys):
     out, err = capsys.readouterr()
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-    assert len(err) == 0
+    assert len(err) == 0, err
     assert out == """name: modA
 license: Apache 2.0
 version: 0.0.1
