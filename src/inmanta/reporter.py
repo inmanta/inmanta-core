@@ -10,7 +10,7 @@ from pyformance import global_registry, MetricsRegistry
 from tornado.httpclient import AsyncHTTPClient, HTTPRequest, HTTPError
 from urllib.parse import quote
 
-from typing import Callable, Optional, Dict
+from typing import Optional, Dict
 
 LOGGER = logging.getLogger(__name__)
 
