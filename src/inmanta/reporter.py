@@ -85,11 +85,11 @@ class InfluxReporter(AsyncReporter):
         self.server = server
         self.autocreate_database = autocreate_database
         self._did_create_database = False
-        self.tags = {}
+        self.tags = tags
         self.key = "metrics"
         if self.tags:
-            tagstring = ",".join("%s=%s" % (key, value) for key, value in self.tags)
-            self.key = "%s%,s" % (self.key, tagstring)
+            tagstring = ",".join("%s=%s" % (key, value) for key, value in self.tags.items())
+            self.key = "%s,%s" % (self.key, tagstring)
         self.key = "%s,key=" % self.key
 
     async def _create_database(self, http_client):

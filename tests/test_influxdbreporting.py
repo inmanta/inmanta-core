@@ -36,6 +36,7 @@ class WriteMockHandler(tornado.web.RequestHandler):
             for line in self.request.body.decode().split("\n"):
                 print(line)
                 assert influxlineprotocol.match(line)
+                self.parent.lines.append(line)
         except Exception as e:
             # carry over  failures
             self.parent.failure = e
@@ -47,6 +48,7 @@ class InfluxdbMock(object):
         self.querycount = 0
         self.writecount = 0
         self.failure = None
+        self.lines = []
 
         self.app = tornado.web.Application(
             [
@@ -83,3 +85,6 @@ async def test_influxdb(influxdb):
 
     if influxdb.failure:
         raise influxdb.failure
+
+    for line in influxdb.lines:
+        assert "mark=X" in line
