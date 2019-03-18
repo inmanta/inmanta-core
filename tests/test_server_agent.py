@@ -68,6 +68,16 @@ def log_contains(caplog, loggerpart, level, msg):
     assert False
 
 
+def log_index(caplog, loggerpart, level, msg, after=0):
+    """Find a log in line in the captured log, return the index of the first occurrence
+
+       :param after: only consider records after the given index"""
+    for i, (logger_name, log_level, message) in enumerate(caplog.record_tuples[after:]):
+        if loggerpart in logger_name and level == log_level and msg in message:
+            return i + after
+    assert False
+
+
 async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
     result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
@@ -2748,6 +2758,8 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
     resource_container.Provider.reset()
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
     env = await data.Environment.get_by_id(uuid.UUID(environment_multi))
     await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
@@ -2786,10 +2798,14 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+    # One autostarted agent should running as a subprocess
+    assert len(children) + 1 == len(current_process.children(recursive=True))
 
     # clear environment
     await client.clear_environment(environment_multi)
 
+    # Autostarted agent should be terminated after clearing the environment
+    assert len(children) == len(current_process.children(recursive=True))
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
     items = await data.Resource.get_list()
@@ -2836,6 +2852,100 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
 
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+
+    # One autostarted agent should running as a subprocess
+    assert len(children) + 1 == len(current_process.children(recursive=True))
+
+
+async def setup_environment_with_agent(client, project_name):
+    """
+        1) Create a project with name project_name and create an environment.
+        2) Deploy a model which requires one autostarted agent.
+        3) Wait until the autostarted agent is up.
+    """
+    create_project_result = await client.create_project(project_name)
+    assert create_project_result.code == 200
+    project_id = create_project_result.result["project"]["id"]
+
+    create_environment_result = await client.create_environment(project_id=project_id, name="dev")
+    assert create_environment_result.code == 200
+    env_id = create_environment_result.result["environment"]["id"]
+    env = await data.Environment.get_by_id(uuid.UUID(env_id))
+
+    await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
+    await env.set(data.AUTO_DEPLOY, True)
+    await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
+    await env.set(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, 0)
+    await env.set(data.AUTOSTART_ON_START, True)
+
+    version = int(time.time())
+
+    resources = [{'key': 'key1',
+                  'value': 'value1',
+                  'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                  'send_event': False,
+                  'purged': False,
+                  'requires': [],
+                  }
+                 ]
+
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
+    assert result.code == 200
+
+    # check deploy
+    result = await client.get_version(env_id, version)
+    assert result.code == 200
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    result = await client.list_agents(tid=env_id)
+    assert result.code == 200
+
+    while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
+        result = await client.list_agents(tid=env_id)
+        await asyncio.sleep(0.1)
+
+    assert len(result.result["agents"]) == 1
+    assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
+
+    return project_id, env_id
+
+
+@pytest.mark.asyncio(timeout=15)
+async def test_stop_autostarted_agents_on_environment_removal(server, client, resource_container):
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+    resource_container.Provider.reset()
+    (project_id, env_id) = await setup_environment_with_agent(client, "proj")
+
+    # One autostarted agent should running as a subprocess
+    assert len(children) + 1 == len(current_process.children(recursive=True))
+
+    result = await client.delete_environment(id=env_id)
+    assert result.code == 200
+
+    # The autostarted agent should be terminated when its environment is deleted.
+    assert len(children) == len(current_process.children(recursive=True))
+
+
+@pytest.mark.asyncio(timeout=15)
+async def test_stop_autostarted_agents_on_project_removal(server, client, resource_container):
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+    resource_container.Provider.reset()
+    (project1_id, env1_id) = await setup_environment_with_agent(client, "proj1")
+    await setup_environment_with_agent(client, "proj2")
+
+    # Two autostarted agents should be running (one in proj1 and one in proj2).
+    assert len(children) + 2 == len(current_process.children(recursive=True))
+
+    result = await client.delete_project(id=project1_id)
+    assert result.code == 200
+
+    # The autostarted agent of proj1 should be terminated when its project is deleted
+    # The autostarted agent of proj2 keep running
+    assert len(children) + 1 == len(current_process.children(recursive=True))
 
 
 @pytest.mark.asyncio
@@ -4163,3 +4273,76 @@ async def test_format_token_in_logline(server_multi, agent_multi, client_multi, 
 
     log_string = "Set key '%(key)s' to value '%(value)s'" % dict(key=resource["key"], value=resource["value"])
     assert log_string in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_1016_cache_invalidation(server, agent, client, environment, resource_container, no_agent_backoff, caplog):
+    """
+        tricky case where the increment cache was not invalidated when a new version was deployed,
+        causing subsequent deploys to receive a wrong increment
+    """
+    resource_container.Provider.set("agent1", "key1", "incorrect_value")
+    caplog.set_level(logging.DEBUG)
+
+    async def make_version(version, value="v"):
+        resource = {
+            'key': 'key1',
+            'value': 'Test value %s' % value,
+            'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+            'send_event': False,
+            'purged': False,
+            'requires': [],
+        }
+
+        result = await client.put_version(
+            tid=environment,
+            version=version,
+            resources=[resource],
+            unknowns=[],
+            version_info={}
+        )
+
+        assert result.code == 200
+
+    ai = agent._instances["agent1"]
+
+    version = 1
+    await make_version(version)
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_incremental_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    await ai.get_latest_version_for_agent(
+        reason="test deploy",
+        incremental_deploy=True,
+        is_repair_run=False
+    )
+
+    await asyncio.gather(*(e.future for e in ai._nq.generation.values()))
+
+    version = 2
+    await make_version(version, "b")
+
+    # do a deploy
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_incremental_deploy)
+    assert result.code == 200
+    assert not result.result["model"]["deployed"]
+    assert result.result["model"]["released"]
+    assert result.result["model"]["total"] == 1
+    assert result.result["model"]["result"] == "deploying"
+
+    await _wait_until_deployment_finishes(client, environment, version)
+
+    # first 1 full fetch
+    idx1 = log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 1 resources because call to trigger_update")
+    # then empty increment
+    idx2 = log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 0 resources because test deploy", idx1)
+    # then non-empty increment deploy
+    log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 1 resources because call to trigger_update", idx2)

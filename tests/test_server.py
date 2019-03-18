@@ -88,7 +88,6 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-
     agentmanager = server.get_slice("server").agentmanager
     sessionendpoint = server.get_slice("session")
 

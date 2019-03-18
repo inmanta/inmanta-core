@@ -690,10 +690,10 @@ ssl=True
         """
         LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
         if env.id in self._agent_procs:
-            self._agent_procs[env.id].proc.terminate()
+            subproc = self._agent_procs[env.id]
+            subproc.proc.terminate()
+            yield wait_for_proc_bounded([subproc])
             del self._agent_procs[env.id]
-
-        wait_for_proc_bounded(self._agent_procs.values())
 
         LOGGER.debug("Expiring all sessions for %s", env.id)
         sessions: List[protocol.Session]
