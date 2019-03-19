@@ -19,7 +19,6 @@ import os
 import glob
 import imp
 import hashlib
-import json
 import logging
 import inspect
 import types
@@ -221,7 +220,7 @@ class CodeLoader(object):
         """
         # if the module is new, or update
         if module_name not in self.__modules or key != self.__modules[module_name][0]:
-            LOGGER.info("Deploying code (key=%s, module=%s)", key, mod[1])
+            LOGGER.info("Deploying code (key=%s, module=%s)", key, module_name)
             # write the new source
             source_file = os.path.join(self.__code_dir, MODULE_DIR, module_name + ".py")
 
