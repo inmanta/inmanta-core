@@ -922,6 +922,12 @@ class AgentProcess(BaseDocument):
         else:
             return objects[0]
 
+    def to_dict(self):
+        result = super(AgentProcess, self).to_dict()
+        # Ensure backward compatibility API
+        result["id"] = result["sid"]
+        return result
+
 
 class AgentInstance(BaseDocument):
     """

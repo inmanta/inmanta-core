@@ -99,7 +99,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
         elif state == "up":
             assert agent.primary is not None
             agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_by_id(agent_instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
             assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 
@@ -287,7 +287,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
         elif state == "up":
             assert agent.primary is not None
             agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_by_id(agent_instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
             assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 
