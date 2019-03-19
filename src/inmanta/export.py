@@ -20,15 +20,17 @@ import logging
 import os
 import time
 import base64
-from typing import Dict, List
+import uuid
+import argparse
+from typing import Dict, List, Callable, Any, Union, Optional, Tuple, Set
 
-from inmanta import protocol, const
+from inmanta import protocol, const, loader
 from inmanta.agent.handler import Commander
 from inmanta.execute.util import Unknown, NoneValue
 from inmanta.resources import resource, Resource, to_id, IgnoreResourceException
 from inmanta.config import Option, is_uuid_opt, is_list, is_str
 from inmanta.execute.proxy import DynamicProxy, UnknownException
-from inmanta.ast import RuntimeException, CompilerException, Locatable, OptionalValueException
+from inmanta.ast import CompilerException, Locatable, OptionalValueException, type, Namespace
 from inmanta.execute.runtime import Instance, ResultVariable
 from inmanta.util import hash_file
 import itertools
@@ -47,42 +49,47 @@ cfg_export = Option("config", "export", "", "The list of exporters to use", is_l
 cfg_unknown_handler = Option("unknown_handler", "default", "prune-agent", "default method to handle unknown values ", is_str)
 
 
+ModelDict = Dict[str, List[type.Type]]
+ResourceDict = Dict[str, Resource]
+ProxiedType = Dict[str, List[Union[str, tuple, int, float, bool, "DynamicProxy"]]]
+
+
 class DependencyCycleException(Exception):
 
-    def __init__(self, start):
+    def __init__(self, start: Resource) -> None:
         super().__init__()
         self.start = start
         self.cycle = [start]
         self.running = True
 
-    def add_to_cycle(self, node):
+    def add_to_cycle(self, node: Resource) -> None:
         if node == self.start:
             self.running = False
         elif self.running:
             self.cycle.append(node)
 
-    def __str__(self, *args, **kwargs):
+    def __str__(self) -> str:
         return "Cycle in dependencies: %s" % self.cycle
 
 
-def upload_code(conn, tid, version, resource_to_sourcemap):
-    allfiles = {myhash: source_code for sourcemap in resource_to_sourcemap.values()
-                for myhash, (file_name, module, source_code, req) in sourcemap.items()}
-
-    res = conn.stat_files(list(allfiles.keys()))
+def upload_code(conn: protocol.Client, tid: uuid.UUID, version: int, code_manager: loader.CodeManager) -> None:
+    res = conn.stat_files(list(code_manager.get_file_hashes()))
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
     for file in res.result["files"]:
-        res = conn.upload_file(id=file, content=base64.b64encode(allfiles[file].encode()).decode("ascii"))
+        content = code_manager.get_file_content(file)
+        res = conn.upload_file(id=file, content=base64.b64encode(content.encode()).decode("ascii"))
         if res is None or res.code != 200:
             raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
-    compactmap = {resource: {myhash: (file_name, module, req) for
-                             myhash, (file_name, module, source_code, req)in sourcemap.items()}
-                  for resource, sourcemap in resource_to_sourcemap.items()}
+    source_map = {
+        resource_name: {
+            source.hash: (source.path, source.module_name, source.requires) for source in sources
+        } for resource_name, sources in code_manager.get_types()
+    }
 
-    res = conn.upload_code_batched(tid=tid, id=version, resources=compactmap)
+    res = conn.upload_code_batched(tid=tid, id=version, resources=source_map)
     if res is None or res.code != 200:
         raise Exception("Unable to upload handler plugin code to the server (msg: %s)" % res.result)
 
@@ -91,35 +98,32 @@ class Exporter(object):
     """
         This class handles exporting the compiled configuration model
     """
-    __export_functions = {}
-    __id_conversion = {}
-    __dep_manager = []
+    # instance vars
+    types: Optional[Dict[str, Entity]]
+    scopes: Optional[Namespace]
+
+    # class vars
+    __export_functions: Dict[str, Tuple[List[str], Callable[["Exporter", ProxiedType], None]]] = {}
+    __dep_manager: List[Callable[[ModelDict, ResourceDict], None]] = []
 
     @classmethod
-    def add(cls, name, types, function):
+    def add(cls, name: str, types: List[str], function: Callable[["Exporter", ProxiedType], None]) -> None:
         """
             Add a new export function
         """
         cls.__export_functions[name] = (types, function)
 
     @classmethod
-    def reset(cls):
-        """
-            Reset the state
-        """
-        cls.__id_conversion = {}
-
-    @classmethod
-    def add_dependency_manager(cls, function):
+    def add_dependency_manager(cls, function: Callable[[ModelDict, ResourceDict], None]) -> None:
         """
             Register a new dependency manager
         """
         cls.__dep_manager.append(function)
 
-    def __init__(self, options=None):
+    def __init__(self, options: argparse.Namespace=None) -> None:
         self.options = options
 
-        self._resources = {}
+        self._resources: ResourceDict = {}
         self._resource_to_host = {}
         self._resource_state = {}
         self._unknown_objects = set()
@@ -128,9 +132,8 @@ class Exporter(object):
 
         self._file_store = {}
 
-    def _get_instance_proxies_of_types(self, types):
-        """
-            Returns a dict of instances for the given types
+    def _get_instance_proxies_of_types(self, types: List[str]) -> Dict[str, ProxiedType]:
+        """ Returns a dict of instances for the given types
         """
         proxies = {}
         for t in types:
@@ -141,7 +144,7 @@ class Exporter(object):
 
         return proxies
 
-    def _load_resources(self, types):
+    def _load_resources(self, types: Dict[str, Entity]) -> None:
         """
             Load all registered resources
         """
@@ -174,7 +177,7 @@ class Exporter(object):
 
         Resource.convert_requires(resource_mapping, ignored_set)
 
-    def _run_export_plugins(self):
+    def _run_export_plugins(self) -> None:
         """
             Run any additional export plug-ins
         """
@@ -189,14 +192,14 @@ class Exporter(object):
             if name not in self.__class__.__export_functions:
                 raise Exception("Export function %s does not exist." % name)
 
-            types, function = self.__class__.__export_functions[name]
+            types, function = Exporter.__export_functions[name]
 
             if len(types) > 0:
                 function(self, types=self._get_instance_proxies_of_types(types))
             else:
                 function(self)
 
-    def _call_dep_manager(self, types):
+    def _call_dep_manager(self, types: ModelDict) -> None:
         """
             Call all dep managers and let them add dependencies
         """
@@ -208,13 +211,13 @@ class Exporter(object):
 
         # TODO: check for cycles
 
-    def _validate_graph(self):
+    def _validate_graph(self) -> None:
         """
             Validate the graph and if requested by the user, dump it
         """
-        done = set()
+        done: Set[Resource] = set()
 
-        def find_cycle(current, working):
+        def find_cycle(current: Resource, working: Set[Resource]) -> None:
             if current in done:
                 return
             if current in working:
@@ -247,7 +250,15 @@ class Exporter(object):
             with open("dependencies.dot", "wb+") as fd:
                 fd.write(dot.encode())
 
-    def run(self, types, scopes, metadata={}, no_commit=False, include_status=False, model_export=False):
+    def run(
+        self,
+        types: Optional[Dict[str, type.Type]],
+        scopes: Optional[Namespace],
+        metadata: Dict[str, str]={},
+        no_commit: bool=False,
+        include_status: bool=False,
+        model_export: bool=False
+    ) -> None:
         """
         Run the export functions
         """
@@ -297,28 +308,7 @@ class Exporter(object):
             return self._version, self._resources, self._resource_state, model
         return self._version, self._resources
 
-    def get_variable(self, name):
-        """
-        Searches a variables and returns its value.
-        """
-        parts = name.split("::")
-        variable_name = parts[-1]
-        namespace = parts[0:-1]
-
-        try:
-            variable = self._scope.get_variable(variable_name, namespace).value
-        except RuntimeException:
-            return None
-
-        return variable
-
-    def get_scope(self, scope_name):
-        """
-        Return the scope with the given name
-        """
-        return self._scope.get_scope(["__config__"])
-
-    def add_resource(self, resource):
+    def add_resource(self, resource: Resource) -> None:
         """
             Add a new resource to the list of exported resources. When
             commit_resources is called, the entire list of resources is send
@@ -350,10 +340,8 @@ class Exporter(object):
         self._resources[resource.id] = resource
         self._resource_to_host[resource.id] = resource.id.agent_name
 
-    def resources_to_list(self) -> List[Dict[str, str]]:
-        """
-        Convert the resource list to a json representation
-        @return: A json string
+    def resources_to_list(self) -> List[Dict[str, Any]]:
+        """ Convert the resource list to a json representation
         """
         resources = []
 
@@ -362,34 +350,28 @@ class Exporter(object):
 
         return resources
 
-    def deploy_code(self, conn, tid, version=None):
-        """
-            Deploy code to the server
+    def deploy_code(self, conn: protocol.Client, tid: uuid, version: int=None) -> None:
+        """ Deploy code to the server
         """
         if version is None:
             version = int(time.time())
 
-        def merge_dict(a, b):
-            """Very specific impl to this particular data structure."""
-            for k, v in b.items():
-                if k not in a:
-                    a[k] = v
-                elif isinstance(v, dict):
-                    merge_dict(a[k], v)
-                else:
-                    if a[k] != v:
-                        raise Exception("Hash collision!", k, a[k], v)
-
+        code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
-        sources = resource.sources()
-        merge_dict(sources, Commander.sources())
+
+        for type_name, resource_definition in resource.get_resources():
+            code_manager.register_code(type_name, resource_definition)
+
+        for type_name, handler_definition in Commander.get_provides():
+            code_manager.register_code(type_name, handler_definition)
 
         LOGGER.info("Uploading source files")
 
-        upload_code(conn, tid, version, sources)
+        upload_code(conn, tid, version, code_manager)
 
-    def commit_resources(self, version: int, resources: List[Dict[str, str]],
-                         metadata: Dict[str, str], model: Dict) -> None:
+    def commit_resources(
+        self, version: int, resources: List[Dict[str, str]], metadata: Dict[str, str], model: Dict
+    ) -> None:
         """
             Commit the entire list of resource to the configurations server.
         """
@@ -441,17 +423,7 @@ class Exporter(object):
             LOGGER.error("Failed to commit resource updates (%s)", res.result["message"])
             raise Exception("Failed to commit resource updates (%s)" % res.result["message"])
 
-    def get_unknown_resources(self, hostname):
-        """
-            This method returns the resources that have unknown values for a
-            given host
-        """
-        if hostname in self._unknown_per_host:
-            return self._unknown_per_host[hostname]
-
-        return set()
-
-    def upload_file(self, content=None):
+    def upload_file(self, content: Union[str, bytes] = None) -> str:
         """
             Upload a file to the configuration server. This operation is not
             executed in the transaction.
@@ -470,8 +442,16 @@ class dependency_manager(object):  # noqa: N801
     Register a function that manages dependencies in the configuration model that will be deployed.
     """
 
-    def __init__(self, function):
+    def __init__(self, function: Callable[[ModelDict, ResourceDict], None]) -> None:
         Exporter.add_dependency_manager(function)
+
+
+class code_manager(object):  # noqa: N801
+    """ Register a function that will be invoked after all resource and handler code is collected. A code manager can add
+    or modify code before it is uploaded to the server.
+    """
+    def __init__(self, function: Callable[[], None]) -> None:
+        pass
 
 
 class export(object):  # noqa: N801
@@ -479,11 +459,11 @@ class export(object):  # noqa: N801
         A decorator that registers an export function
     """
 
-    def __init__(self, name, *args):
+    def __init__(self, name: str, *args: str) -> None:
         self.name = name
         self.types = args
 
-    def __call__(self, function):
+    def __call__(self, function: Callable[["Exporter", ProxiedType], None]) -> Callable[["Exporter", ProxiedType], None]:
         """
             The wrapping
         """
@@ -491,13 +471,8 @@ class export(object):  # noqa: N801
         return function
 
 
-@export("none")
-def export_none(options, scope, config):
-    pass
-
-
 @export("dump", "std::File", "std::Service", "std::Package")
-def export_dumpfiles(options, types):
+def export_dumpfiles(exporter: Exporter, types: ProxiedType) -> None:
     prefix = "dump"
 
     if not os.path.exists(prefix):
@@ -522,12 +497,12 @@ def export_dumpfiles(options, types):
             fd.write("%s -> %s\n" % (pkg.host.name, pkg.name))
 
 
-def location(obj: Locatable):
+def location(obj: Locatable) -> model.Location:
     loc = obj.get_location()
     return model.Location(loc.file, loc.lnr)
 
 
-def relation_name(type: Entity, rel: RelationAttribute):
+def relation_name(type: Entity, rel: RelationAttribute) -> str:
     if rel is None:
         return ""
     return type.get_full_name() + "." + rel.name
@@ -535,11 +510,11 @@ def relation_name(type: Entity, rel: RelationAttribute):
 
 class ModelExporter(object):
 
-    def __init__(self, types):
+    def __init__(self, types: ModelDict):
         self.root_type = types["std::Entity"]
         self.types = types
 
-    def export_types(self):
+    def export_types(self) -> Dict[str, Any]:
         """
             Run after export_model!!
         """
@@ -579,7 +554,7 @@ class ModelExporter(object):
                                 location(mytype))
         return {k: convert_type(v).to_dict() for k, v in self.types.items() if isinstance(v, Entity)}
 
-    def export_model(self):
+    def export_model(self) -> Dict[str, Any]:
         entities = self.root_type.get_all_instances()
 
         entities_per_type = {t: [e for e in g] for t, g in groupby(entities, lambda x: x.type.get_full_name())}
@@ -647,7 +622,7 @@ class ModelExporter(object):
 
         return maps
 
-    def export_all(self):
+    def export_all(self) -> Dict[str, Any]:
         return {
             "instances": self.export_model(),
             "types": self.export_types()

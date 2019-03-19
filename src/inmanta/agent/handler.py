@@ -16,7 +16,6 @@
     Contact: code@inmanta.com
 """
 
-import hashlib
 import inspect
 import logging
 import base64
@@ -27,10 +26,10 @@ import typing
 
 
 from tornado import concurrent
+from typing import Tuple
 
 from inmanta.agent.io import get_io
 from inmanta import protocol, resources, const, data_pg as data
-from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
 import uuid
 
@@ -847,32 +846,12 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def sources(cls):
+    def get_provides(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
+        """ Return an iterator over resource type, handler definition
         """
-            Get all source files that define resources
-        """
-        resource_to_sources = {}
-        for resource, providers in cls.__command_functions.items():
-            sources = {}
-            resource_to_sources[resource] = sources
-            for provider in providers.values():
-                file_name = inspect.getsourcefile(provider)
-
-                source_code = ""
-                with open(file_name, "r") as fd:
-                    source_code = fd.read()
-
-                sha1sum = hashlib.new("sha1")
-                sha1sum.update(source_code.encode("utf-8"))
-
-                hv = sha1sum.hexdigest()
-
-                if hv not in sources:
-                    module_name = provider.__module__.split(".")[1]
-                    req = Project.get().modules[module_name].get_python_requirements_as_list()
-                    sources[hv] = (file_name, provider.__module__, source_code, req)
-
-        return resource_to_sources
+        for resource_type, handler_map in cls.__command_functions.items():
+            for handle_name, handler_class in handler_map.items():
+                yield (resource_type, handler_class)
 
     @classmethod
     def get_provider_class(cls, resource_type, name):

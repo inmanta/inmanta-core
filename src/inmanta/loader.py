@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,21 +15,138 @@
 
     Contact: code@inmanta.com
 """
-
 import os
 import glob
 import imp
 import hashlib
 import json
 import logging
+import inspect
+import types
 
 import pkg_resources
 
+from typing import Dict, Set, Iterable, List, Tuple, Optional
+
+from inmanta import const
+from inmanta.module import Project
+
 VERSION_FILE = "version"
 MODULE_DIR = "modules"
-PERSIST_FILE = "modules.json"
 
 LOGGER = logging.getLogger(__name__)
+
+
+class SourceInfo(object):
+    """ This class is used to store information related to source code information
+    """
+
+    def __init__(self, path: str, module_name: str) -> None:
+        """
+            :param path: The path of the source code file
+            :param path: The name of the inmanta module
+        """
+        self.path = path
+        self._hash: Optional[str] = None
+        self._content: Optional[str] = None
+        self._requires: Optional[List[str]] = None
+        self.module_name = module_name
+
+    @property
+    def hash(self) -> str:
+        """ Get the sha1 hash of the file
+        """
+        if self._hash is None:
+            sha1sum = hashlib.new("sha1")
+            sha1sum.update(self.content.encode("utf-8"))
+            self._hash = sha1sum.hexdigest()
+
+        return self._hash
+
+    @property
+    def content(self) -> str:
+        """ Get the content of the file
+        """
+        if self._content is None:
+            with open(self.path, "r") as fd:
+                self._content = fd.read()
+        return self._content
+
+    def _get_module_name(self) -> str:
+        """Get the name of the inmanta module, derived from the python module name
+        """
+        module_parts = self.module_name.split(".")
+        if module_parts[0] != const.PLUGINS_PACKAGE:
+            raise Exception(
+                "All instances from which the source is loaded, should be defined in the inmanta plugins package. "
+                "%s does not match"
+                % self.module_name
+            )
+
+        return module_parts[1]
+
+    @property
+    def requires(self) -> List[str]:
+        """ List of python requirements associated with this source file
+        """
+        if self._requires is None:
+            self._requires = Project.get().modules[self._get_module_name()].get_python_requirements_as_list()
+        return self._requires
+
+
+class CodeManager(object):
+    """ This class is responsible for loading and packaging source code for types (resources, handlers, ...) that need to be
+    available in a remote process (e.g. agent).
+    """
+
+    def __init__(self) -> None:
+        self.__type_file: Dict[str, Set[str]] = {}
+        self.__file_info: Dict[str, SourceInfo] = {}
+
+    def register_code(self, type_name: str, instance: object) -> None:
+        """ Register the given type_object under the type_name and register the source associated with this type object.
+
+        :param type_name: The inmanta type name for which the source of type_object will be registered. For example std::File
+        :param instance: An instance for which the code needs to be registered.
+        """
+        file_name = self.get_object_source(instance)
+        if file_name is None:
+            raise Exception("Unable to locate source code of instance %s for entity %s" % (inspect, type_name))
+
+        if type_name not in self.__type_file:
+            self.__type_file[type_name] = set()
+
+        if file_name in self.__type_file[type_name]:
+            return
+
+        self.__type_file[type_name].add(file_name)
+
+        if file_name not in self.__file_info:
+            self.__file_info[file_name] = SourceInfo(file_name, instance.__module__)
+
+    def get_object_source(self, instance: object) -> str:
+        """ Get the path of the source file in which type_object is defined
+        """
+        return inspect.getsourcefile(instance)
+
+    def get_file_hashes(self) -> Iterable[str]:
+        """ Return the hashes of all source files
+        """
+        return (info.hash for info in self.__file_info.values())
+
+    def get_file_content(self, hash: str) -> str:
+        """ Get the file content for the given hash
+        """
+        for info in self.__file_info.values():
+            if info.hash == hash:
+                return info.content
+
+        raise KeyError("No file found with this hash")
+
+    def get_types(self) -> Iterable[Tuple[str, List[SourceInfo]]]:
+        """ Get a list of all registered types
+        """
+        return ((type_name, [self.__file_info[path] for path in files]) for type_name, files in self.__type_file.items())
 
 
 class CodeLoader(object):
@@ -39,15 +156,15 @@ class CodeLoader(object):
         :param code_dir The directory where the code is stored
     """
 
-    def __init__(self, code_dir):
+    def __init__(self, code_dir: str) -> None:
         self.__code_dir = code_dir
-        self.__modules = {}
-        self.__current_version = 0
+        self.__modules: Dict[str, Tuple[str, types.ModuleType]] = {}
+        self.__current_version: int = 0
 
         self.__check_dir()
         self.load_modules()
 
-    def load_modules(self):
+    def load_modules(self) -> None:
         """
             Load all existing modules
         """
@@ -62,11 +179,10 @@ class CodeLoader(object):
 
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
             if mod_dir in py:
-                mod_name = py[len(mod_dir) + 1:-3]
+                mod_name = py[len(mod_dir) + 1: -3]
             else:
                 mod_name = py[:-3]
 
-            source_code = ""
             with open(py, "r") as fd:
                 source_code = fd.read().encode("utf-8")
 
@@ -77,7 +193,7 @@ class CodeLoader(object):
 
             self._load_module(mod_name, py, hv)
 
-    def __check_dir(self):
+    def __check_dir(self) -> None:
         """
             Check if the code directory
         """
@@ -89,7 +205,7 @@ class CodeLoader(object):
         if not os.path.exists(os.path.join(self.__code_dir, MODULE_DIR)):
             os.makedirs(os.path.join(self.__code_dir, MODULE_DIR), exist_ok=True)
 
-    def _load_module(self, mod_name, python_file, hv):
+    def _load_module(self, mod_name: str, python_file: str, hv: str) -> None:
         """
             Load or reload a module
         """
@@ -100,39 +216,21 @@ class CodeLoader(object):
         except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
-    def deploy_version(self, key, mod, persist=False):
+    def deploy_version(self, key: str, module_name: str, module_source: str) -> None:
+        """ Deploy a new version of the modules
         """
-            Deploy a new version of the modules
-
-            :param version The version of the deployed modules
-            :modules modules A list of module names and the hashes of the code files
-        """
-        # deploy the new code
-        name = mod[1]
-        source_code = mod[2]
-
+        assert False
         # if the module is new, or update
-        if name not in self.__modules or key != self.__modules[name][0]:
+        if module_name not in self.__modules or key != self.__modules[module_name][0]:
             LOGGER.info("Deploying code (key=%s, module=%s)", key, mod[1])
             # write the new source
-            source_file = os.path.join(self.__code_dir, MODULE_DIR, name + ".py")
+            source_file = os.path.join(self.__code_dir, MODULE_DIR, module_name + ".py")
 
             fd = open(source_file, "w+")
-            fd.write(source_code)
+            fd.write(module_source)
             fd.close()
 
             # (re)load the new source
-            self._load_module(name, source_file, key)
-
-        if persist:
-            with open(os.path.join(self.__code_dir, PERSIST_FILE), "w+") as fd:
-                json.dump(mod, fd)
+            self._load_module(module_name, source_file, key)
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
-
-    def get_module_payload(self):
-        """
-            Get the lastest module code payload in json formatted string
-        """
-        with open(os.path.join(self.__code_dir, PERSIST_FILE), "w+") as fd:
-            return fd.read()

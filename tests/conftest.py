@@ -32,7 +32,7 @@ import utils
 from inmanta import data_pg as data, config
 import inmanta.compiler as compiler
 from inmanta.module import Project
-from inmanta import resources, export
+from inmanta import resources
 import inmanta.agent
 from inmanta.agent import handler
 from inmanta.agent.agent import Agent
@@ -93,7 +93,6 @@ def deactive_venv():
 
 def reset_all_objects():
     resources.resource.reset()
-    export.Exporter.reset()
     process.Subprocess.uninitialize()
     asyncio.set_child_watcher(None)
     # No dynamic loading of commands at the moment, so no need to reset/reload
