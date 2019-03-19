@@ -24,8 +24,8 @@ import os
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data, protocol, const, config
-from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER
+from inmanta import data, const, config
+from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
 from datetime import datetime
 from uuid import UUID
 from inmanta.util import hash_file
@@ -86,7 +86,6 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-
     agentmanager = server.get_slice("server").agentmanager
     sessionendpoint = server.get_slice("session")
 
@@ -239,7 +238,7 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
     assert result.code == 200
     assert result.result["count"] == 1
 
-    result = await client_multi.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client_multi.release_version(environment, version, False)
     assert result.code == 200
 
     result = await client_multi.get_version(environment, version)
@@ -336,7 +335,7 @@ async def test_resource_update(client, server, environment):
     res = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert(res.code == 200)
 
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     resource_ids = [x["id"] for x in resources]
@@ -520,7 +519,7 @@ async def test_purge_on_delete_requires(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -652,7 +651,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     assert result.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -741,7 +740,7 @@ async def test_purge_on_delete(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -827,7 +826,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -863,7 +862,7 @@ async def test_purge_on_delete_ignore(client, server, environment):
     assert res.code == 200
 
     # Release the model and set all resources as deployed
-    result = await client.release_version(environment, version, const.AgentTriggerMethod.no_push)
+    result = await client.release_version(environment, version, False)
     assert result.code == 200
 
     now = datetime.now()
@@ -926,7 +925,7 @@ def make_source(collector, filename, module, source, req):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_code_upload(motor, server_multi, client_multi, environment):
+async def test_code_upload(motor, server_multi, client_multi, agent_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -943,24 +942,24 @@ async def test_code_upload(motor, server_multi, client_multi, environment):
                   'requires': [],
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(
+        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+    )
     assert res.code == 200
 
     sources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
     sources = make_source(sources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
 
-    res = await client_multi.upload_code(tid=environment, id=version, resource="std::File", sources=sources)
+    res = await client_multi.upload_code(tid=environment_multi, id=version, resource="std::File", sources=sources)
     assert res.code == 200
 
-    agent = protocol.Client("agent")
-
-    res = await agent.get_code(tid=environment, id=version, resource="std::File")
+    res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_batched_code_upload(motor, server_multi, client_multi, sync_client_multi, environment):
+async def test_batched_code_upload(motor, server_multi, client_multi, sync_client_multi, environment_multi, agent_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -977,7 +976,9 @@ async def test_batched_code_upload(motor, server_multi, client_multi, sync_clien
                   'requires': [],
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(
+        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+    )
     assert res.code == 200
 
     asources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
@@ -993,18 +994,18 @@ async def test_batched_code_upload(motor, server_multi, client_multi, sync_clien
                "std:xxx": csources
                }
 
-    await asyncio.get_event_loop().run_in_executor(None, lambda: upload_code(sync_client_multi, environment, version, sources))
-
-    agent = protocol.Client("agent")
+    await asyncio.get_event_loop().run_in_executor(
+        None, lambda: upload_code(sync_client_multi, environment_multi, version, sources)
+    )
 
     for name, sourcemap in sources.items():
-        res = await agent.get_code(tid=environment, id=version, resource=name)
+        res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
         assert res.result["sources"] == sourcemap
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_legacy_code(motor, server_multi, client_multi, environment):
+async def test_legacy_code(motor, server_multi, client_multi, environment_multi, agent_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -1021,17 +1022,17 @@ async def test_legacy_code(motor, server_multi, client_multi, environment):
                   'requires': [],
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(
+        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
+    )
     assert res.code == 200
 
     sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
 
-    code = data.Code(environment=UUID(environment), version=version, resource="std::File", sources=sources)
+    code = data.Code(environment=UUID(environment_multi), version=version, resource="std::File", sources=sources)
     await code.insert()
 
-    agent = protocol.Client("agent")
-
-    res = await agent.get_code(tid=environment, id=version, resource="std::File")
+    res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource="std::File")
     assert res.code == 200
     assert res.result["sources"] == sources
 
@@ -1052,6 +1053,17 @@ async def test_resource_action_log(motor, server_multi, client_multi, environmen
     res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert res.code == 200
 
-    resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
+    resource_action_log = server.Server.get_resource_action_log_file(environment)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_invalid_sid(server_multi, client_multi, environment_multi):
+    """
+        Test the server to manage the updates on a model during agent deploy
+    """
+    # request get_code with a compiler client that does not have a sid
+    res = await client_multi.get_code(tid=environment_multi, id=1, resource="std::File")
+    assert res.code == 400
+    assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"

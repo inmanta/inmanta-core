@@ -51,9 +51,9 @@ def method(
     arg_options: Dict[str, common.ArgOption] = {},
     timeout: Optional[int] = None,
     server_agent: bool = False,
-    api: bool = True,
+    api: bool = None,
     agent_server: bool = False,
-    validate_sid: bool = False,
+    validate_sid: bool = None,
     client_types: List[str] = ["public"],
     api_version: int = 1,
 ) -> Callable[..., Callable]:

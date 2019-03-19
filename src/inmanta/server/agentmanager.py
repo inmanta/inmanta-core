@@ -97,7 +97,7 @@ def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=1.0) -
             ),
             timeout)
     except asyncio.TimeoutError:
-        LOGGER.warning("Agent processes did not close in time")
+        LOGGER.warning("Agent processes did not close in time (%s)", procs)
 
 
 class AgentManager(ServerSlice, SessionListener):
@@ -174,6 +174,8 @@ class AgentManager(ServerSlice, SessionListener):
 
     @gen.coroutine
     def stop(self) -> NoneGen:
+        yield super().stop()
+
         self.running = False
         yield self.terminate_agents()
 
@@ -434,7 +436,7 @@ class AgentManager(ServerSlice, SessionListener):
         else:
             ags = yield data.Agent.get_list()
 
-        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat()}
+        return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec='microseconds')}
 
     @protocol.handle(methods.get_state, env="tid")
     @gen.coroutine
@@ -688,10 +690,10 @@ ssl=True
         """
         LOGGER.debug("Stopping all autostarted agents for env %s", env.id)
         if env.id in self._agent_procs:
-            self._agent_procs[env.id].proc.terminate()
+            subproc = self._agent_procs[env.id]
+            subproc.proc.terminate()
+            yield wait_for_proc_bounded([subproc])
             del self._agent_procs[env.id]
-
-        wait_for_proc_bounded(self._agent_procs.values())
 
         LOGGER.debug("Expiring all sessions for %s", env.id)
         sessions: List[protocol.Session]

@@ -34,6 +34,8 @@ class ResourceState(Enum):
 
 
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
+
 UNKNOWN_STRING = "<<undefined>>"
 
 """
@@ -109,15 +111,12 @@ STATE_UPDATE = [ResourceAction.deploy]
 
 
 class AgentTriggerMethod(Enum):
-    no_push = 1
-    push_incremental_deploy = 2
-    push_full_deploy = 3
+    push_incremental_deploy = 1
+    push_full_deploy = 2
 
     @classmethod
-    def get_agent_trigger_method(cls, push, is_full_deploy):
-        if not push:
-            return cls.no_push
-        elif is_full_deploy:
+    def get_agent_trigger_method(cls, is_full_deploy):
+        if is_full_deploy:
             return cls.push_full_deploy
         else:
             return cls.push_incremental_deploy
@@ -155,3 +154,15 @@ ENVIRON_FORCE_TTY = "FORCE_TTY"
 LOG_LEVEL_TRACE = 3
 
 NAME_RESOURCE_ACTION_LOGGER = "resource_action_logger"
+
+
+# Time we give the server/agent to shutdown gracefully, before we force stop the ioloop
+SHUTDOWN_GRACE_IOLOOP = 10
+# Time we give the server/agent to shutdown gracefully, before we execute sys.exit(3)
+SHUTDOWN_GRACE_HARD = 15
+# Hard shutdown exit code
+EXIT_HARD = 3
+
+
+TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
+TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"

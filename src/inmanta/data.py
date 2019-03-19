@@ -34,6 +34,7 @@ from inmanta.const import ResourceState
 from _collections import defaultdict
 from typing import Dict, List, Set
 
+
 LOGGER = logging.getLogger(__name__)
 
 DBLIMIT = 100000
@@ -459,7 +460,9 @@ class Project(BaseDocument):
 
     @gen.coroutine
     def delete_cascade(self):
-        yield Environment.delete_all(project=self.id)
+        environments = yield Environment.get_list(project=self.id)
+        for env in environments:
+            yield env.delete_cascade()
         yield self.delete()
 
 
@@ -499,6 +502,8 @@ def convert_agent_map(value):
 
 
 def convert_agent_trigger_method(value):
+    if isinstance(value, const.AgentTriggerMethod):
+        return value
     value = str(value)
     valid_values = [x.name for x in const.AgentTriggerMethod]
     if value not in valid_values:
@@ -576,26 +581,27 @@ class Environment(BaseDocument):
                              doc="When this boolean is set to true, the orchestrator will automatically release a new version "
                                  "that was compiled by the orchestrator itself.", validator=convert_boolean),
         PUSH_ON_AUTO_DEPLOY: Setting(name=PUSH_ON_AUTO_DEPLOY, typ="bool", default=False,
-                                     doc="[DEPRECATED] Push a new version when it has been autodeployed.",
+                                     doc="Push a new version when it has been autodeployed.",
                                      validator=convert_boolean),
         AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY: Setting(name=AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY, typ="str",
-                                                     default=const.AgentTriggerMethod.no_push.name,
+                                                     default=const.AgentTriggerMethod.push_full_deploy.name,
                                                      validator=convert_agent_trigger_method,
-                                                     doc="The agent trigger method to use when " + AUTO_DEPLOY + " is enabled"),
+                                                     doc="The agent trigger method to use when "
+                                                         + PUSH_ON_AUTO_DEPLOY + " is enabled"),
         AUTOSTART_SPLAY: Setting(name=AUTOSTART_SPLAY, typ="int", default=10,
                                  doc="[DEPRECATED] Splay time for autostarted agents.", validator=convert_int),
         AUTOSTART_AGENT_DEPLOY_INTERVAL: Setting(name=AUTOSTART_AGENT_DEPLOY_INTERVAL, typ="int", default=600,
                                                  doc="The deployment interval of the autostarted agents.",
-                                                 validator=convert_int),
+                                                 validator=convert_int, agent_restart=True),
         AUTOSTART_AGENT_DEPLOY_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_DEPLOY_SPLAY_TIME, typ="int", default=600,
                                                    doc="The splay time on the deployment interval of the autostarted agents.",
-                                                   validator=convert_int),
+                                                   validator=convert_int, agent_restart=True),
         AUTOSTART_AGENT_REPAIR_INTERVAL: Setting(name=AUTOSTART_AGENT_REPAIR_INTERVAL, typ="int", default=86400,
                                                  doc="The repair interval of the autostarted agents.",
-                                                 validator=convert_int),
+                                                 validator=convert_int, agent_restart=True),
         AUTOSTART_AGENT_REPAIR_SPLAY_TIME: Setting(name=AUTOSTART_AGENT_REPAIR_SPLAY_TIME, typ="int", default=600,
                                                    doc="The splay time on the repair interval of the autostarted agents.",
-                                                   validator=convert_int),
+                                                   validator=convert_int, agent_restart=True),
         AUTOSTART_ON_START: Setting(name=AUTOSTART_ON_START, default=True, typ="bool", validator=convert_boolean,
                                     doc="Automatically start agents when the server starts instead of only just in time."),
         AUTOSTART_AGENT_MAP: Setting(name=AUTOSTART_AGENT_MAP, default={"internal": "local:"}, typ="dict",
@@ -1343,6 +1349,20 @@ class Resource(BaseDocument):
 
     @classmethod
     @gen.coroutine
+    def get_resources_for_version_raw(cls,
+                                      environment,
+                                      version,
+                                      projection):
+        filter = {"environment": environment, "model": version}
+        cursor = cls._coll.find(filter, projection)
+
+        resources = []
+        while (yield cursor.fetch_next):
+            resources.append(cursor.next_object())
+        return resources
+
+    @classmethod
+    @gen.coroutine
     def get_latest_version(cls, environment, resource_id):
         cursor = cls._coll.find({"environment": environment,
                                  "resource_id": resource_id}).sort("model", pymongo.DESCENDING).limit(1)
@@ -1617,7 +1637,17 @@ class ConfigurationModel(BaseDocument):
         return self.skipped_for_undeployable
 
     @gen.coroutine
-    def get_increment(self, negative: bool=False):
+    def mark_done(self):
+        """ mark this deploy as done """
+        result = const.VersionState.success
+        for state in self.status.values():
+            if state["status"] != "deployed":
+                result = const.VersionState.failed
+
+        yield self.update_fields(deployed=True, result=result)
+
+    @gen.coroutine
+    def get_increment(self):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -1628,20 +1658,38 @@ class ConfigurationModel(BaseDocument):
         error -> increment
         Deployed and same hash -> not increment
         deployed and different hash -> increment
-         """
+        """
+        projection_a = {
+            "resource_version_id": True,
+            "resource_id": True,
+            "status": True,
+            "attribute_hash": True,
+            "attributes": True
+        }
+        projection = {
+            "resource_version_id": True,
+            "resource_id": True,
+            "status": True,
+            "attribute_hash": True
+        }
 
         # get resources for agent
-        resources = yield Resource.get_resources_for_version(self.environment, self.version, include_undefined=False)
+        resources = yield Resource.get_resources_for_version_raw(
+            self.environment,
+            self.version,
+            projection_a
+        )
 
         # to increment
         increment = []
         not_incrememt = []
         # todo in this verions
-        work = list(resources)
+        work = list(r for r in resources)
 
         # get versions
-        cursor = self.__class__._coll.find({"environment": self.environment, "released": True}
-                                           ).sort("version", pymongo.DESCENDING)
+        cursor = self.__class__._coll.find(
+            {"environment": self.environment, "released": True}
+        ).sort("version", pymongo.DESCENDING)
         versions = []
         while (yield cursor.fetch_next):
             versions.append(cursor.next_object()["version"])
@@ -1650,39 +1698,40 @@ class ConfigurationModel(BaseDocument):
             # todo in next verion
             next = []
 
-            vresources = yield Resource.get_resources_for_version(self.environment, version, include_attributes=False)
-            id_to_resource = {r.resource_id: r for r in vresources}
+            vresources = yield Resource.get_resources_for_version_raw(self.environment, version, projection)
+            id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:
                 # not present -> increment
-                if res.resource_id not in id_to_resource:
+                if res["resource_id"] not in id_to_resource:
                     increment.append(res)
                     continue
 
-                ores = id_to_resource[res.resource_id]
+                ores = id_to_resource[res["resource_id"]]
 
+                status = ores["status"]
                 # available/skipped/unavailable -> next version
-                if ores.status in [ResourceState.available,
-                                   ResourceState.skipped,
-                                   ResourceState.unavailable]:
+                if status in [ResourceState.available.name,
+                              ResourceState.skipped.name,
+                              ResourceState.unavailable.name]:
                     next.append(res)
 
                 # error -> increment
-                elif ores.status in [ResourceState.failed,
-                                     ResourceState.cancelled,
-                                     ResourceState.deploying,
-                                     ResourceState.processing_events]:
+                elif status in [ResourceState.failed.name,
+                                ResourceState.cancelled.name,
+                                ResourceState.deploying.name,
+                                ResourceState.processing_events.name]:
                     increment.append(res)
 
-                elif ores.status == ResourceState.deployed:
-                    if res.attribute_hash == ores.attribute_hash:
+                elif status == ResourceState.deployed.name:
+                    if res["attribute_hash"] == ores["attribute_hash"]:
                         #  Deployed and same hash -> not increment
                         not_incrememt.append(res)
                     else:
                         # Deployed and different hash -> increment
                         increment.append(res)
                 else:
-                    LOGGER.warning("Resource in unexpected state: %s, %s", ores.status, ores.resource_version_id)
+                    LOGGER.warning("Resource in unexpected state: %s, %s", ores["status"], ores["resource_version_id"])
                     increment.append(res)
 
             work = next
@@ -1691,24 +1740,22 @@ class ConfigurationModel(BaseDocument):
         if work:
             increment.extend(work)
 
-        if negative:
-            return [res.resource_version_id for res in not_incrememt]
+        negative = [res["resource_version_id"] for res in not_incrememt]
 
         # patch up the graph
         # 1-include stuff for send-events.
         # 2-adapt requires/provides to get closured set
 
-        outset = set((res.resource_version_id for res in increment))  # type: Set[str]
-        allids = {res.resource_version_id: res for res in resources}  # type: Dict[str,Resource]
+        outset = set((res["resource_version_id"] for res in increment))  # type: Set[str]
         original_provides = defaultdict(lambda: [])  # type: Dict[str,List[str]]
         send_events = []  # type: List[str]
 
         # build lookup tables
         for res in resources:
-            for req in res.attributes["requires"]:
-                original_provides[req].append(res.resource_version_id)
-            if "send_event" in res.attributes and res.attributes["send_event"]:
-                send_events.append(res.resource_version_id)
+            for req in res["attributes"]["requires"]:
+                original_provides[req].append(res["resource_version_id"])
+            if "send_event" in res["attributes"] and res["attributes"]["send_event"]:
+                send_events.append(res["resource_version_id"])
 
         # recursively include stuff potentially receiving events from nodes in the increment
         work = list(outset)
@@ -1727,15 +1774,7 @@ class ConfigurationModel(BaseDocument):
             work.extend(provides)
             outset.update(provides)
 
-        # close the increment
-        out = []
-        for resvid in outset:
-            res = allids[resvid]
-            requires = [r for r in res.attributes["requires"] if r in outset]
-            res.attributes["requires"] = requires
-            out.append(res)
-
-        return out
+        return set(outset), negative
 
 
 class Code(BaseDocument):

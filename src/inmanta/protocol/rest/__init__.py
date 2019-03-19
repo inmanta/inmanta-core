@@ -158,7 +158,7 @@ class CallArguments(object):
 
         try:
             if arg_type == datetime:
-                return datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f")
+                return datetime.strptime(value, const.TIME_ISOFMT)
 
             elif issubclass(arg_type, enum.Enum):
                 return arg_type[value]
@@ -170,7 +170,12 @@ class CallArguments(object):
                 return arg_type(value)
 
         except (ValueError, TypeError):
-            error_msg = "Invalid type for argument %s. Expected %s but received %s" % (arg, arg_type, value.__class__)
+            error_msg = "Invalid type for argument %s. Expected %s but received %s, %s" % (
+                arg,
+                arg_type,
+                value.__class__,
+                value,
+            )
             LOGGER.exception(error_msg)
             raise exceptions.BadRequest(error_msg)
 

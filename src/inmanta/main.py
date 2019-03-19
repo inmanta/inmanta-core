@@ -26,7 +26,7 @@ from collections import defaultdict
 
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
-from inmanta.const import AgentTriggerMethod
+from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
 import click
 import texttable
 from time import sleep
@@ -479,8 +479,9 @@ def version_list(client: Client, environment: str) -> None:
 def version_release(client: Client, environment: str, push: bool, full: bool, version: str) -> None:
     env_id = client.to_environment_id(environment)
     if push:
-        trigger_method = AgentTriggerMethod.get_agent_trigger_method(push, full)
-        x = client.get_dict("release_version", "model", dict(tid=env_id, id=version, agent_trigger_method=trigger_method))
+        trigger_method = AgentTriggerMethod.get_agent_trigger_method(full)
+        x = client.get_dict("release_version", "model", dict(tid=env_id, id=version, push=True,
+                                                             agent_trigger_method=trigger_method))
     else:
         x = client.get_dict("release_version", "model", dict(tid=env_id, id=version))
 
@@ -488,9 +489,6 @@ def version_release(client: Client, environment: str, push: bool, full: bool, ve
         ['Created at', 'Version', 'Released', 'Deployed', '# Resources', '# Done', 'State'],
         [[x['date'], x['version'], x['released'], x['deployed'], x['total'], x['done'], x['result']]]
     )
-
-
-ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 
 
 @cmd.group("param")
@@ -505,7 +503,7 @@ def param(ctx: click.Context) -> None:
 def param_list(client: Client, environment: str) -> None:
     result = client.get_dict("list_params", arguments=dict(tid=client.to_environment_id(environment)))
     expire = int(result["expire"])
-    now = datetime.datetime.strptime(result["now"], ISOFMT)
+    now = datetime.datetime.strptime(result["now"], TIME_ISOFMT)
     when = now - datetime.timedelta(0, expire)
 
     data = []
@@ -517,7 +515,7 @@ def param_list(client: Client, environment: str) -> None:
                 p['name'],
                 p['source'],
                 p['updated'],
-                str(float(datetime.datetime.strptime(p["updated"], ISOFMT) < when))
+                str(float(datetime.datetime.strptime(p["updated"], TIME_ISOFMT) < when))
             ]
         )
 

@@ -134,7 +134,7 @@ class MultiVersionSetup(object):
                 )
                 assert res == 200
 
-                result, _ = await serverdirect.release_version(env, version, const.AgentTriggerMethod.no_push)
+                result, _ = await serverdirect.release_version(env, version, False)
                 assert result == 200
         for rid, state in self.states.items():
             # Start the deploy
@@ -162,9 +162,7 @@ class MultiVersionSetup(object):
                 env, agent, version=None, incremental_deploy=True
             )
 
-            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(
-                results
-            )
+            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
         return allresources
@@ -226,7 +224,7 @@ async def test_deploy(server, environment, caplog):
         )
         assert res == 200
 
-        result, _ = await serverdirect.release_version(env, version, const.AgentTriggerMethod.no_push)
+        result, _ = await serverdirect.release_version(env, version, False)
         assert result == 200
 
         resource_ids = [x["id"] for x in resources]

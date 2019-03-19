@@ -320,3 +320,11 @@ async def test_call_arguments_defaults():
 
     assert call.call_args["name"] == "test"
     assert call.call_args["value"] == 10
+
+
+def test_create_client():
+    with pytest.raises(AssertionError):
+        protocol.SyncClient("agent", "120")
+
+    with pytest.raises(AssertionError):
+        protocol.Client("agent", "120")

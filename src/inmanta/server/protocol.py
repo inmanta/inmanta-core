@@ -73,7 +73,8 @@ class Server(endpoints.Endpoint):
         self.sessions_handler = SessionManager()
         self.add_slice(self.sessions_handler)
 
-        self._transport = server.RESTServer(self.id)
+        self._transport = server.RESTServer(self.sessions_handler, self.id)
+        self.running = False
 
     def add_slice(self, slice: "ServerSlice") -> None:
         """
@@ -86,9 +87,6 @@ class Server(endpoints.Endpoint):
 
     def get_slice(self, name: str) -> "ServerSlice":
         return self._slices[name]
-
-    def validate_sid(self, sid: uuid.UUID) -> bool:
-        return self.sessions_handler.validate_sid(sid)
 
     def get_id(self) -> str:
         """
@@ -107,7 +105,10 @@ class Server(endpoints.Endpoint):
             order in which they are added to the RESTserver via the add_endpoint(endpoint) method.
             This order is hardcoded in the get_server_slices() method in server/bootloader.py
         """
+        if self.running:
+            return
         LOGGER.debug("Starting Server Rest Endpoint")
+        self.running = True
 
         for slice in self.get_slices().values():
             yield slice.prestart(self)
@@ -127,6 +128,9 @@ class Server(endpoints.Endpoint):
             This prevents database connection from being closed too early. This order in which the endpoint
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
+        if not self.running:
+            return
+        self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         yield self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
@@ -143,7 +147,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
 
         self._name: str = name
         self._handlers: List[routing.Rule] = []
-        self._sched = Scheduler()  # FIXME: why has each slice its own scheduler?
+        self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
 
     @abc.abstractmethod
     @gen.coroutine
@@ -157,10 +161,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
             Start the server slice.
         """
 
-    @abc.abstractmethod
     @gen.coroutine
     def stop(self) -> Generator[Any, Any, None]:
-        pass
+        self._sched.stop()
 
     name = property(lambda self: self._name)
 
@@ -383,6 +386,7 @@ class SessionManager(ServerSlice):
         """
             Stop the end-point and all of its transports
         """
+        yield super().stop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)

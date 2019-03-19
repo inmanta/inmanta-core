@@ -378,7 +378,7 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
         return str(o)
 
     if isinstance(o, datetime.datetime):
-        return o.isoformat()
+        return o.isoformat(timespec='microseconds')
 
     if hasattr(o, "to_dict"):
         return o.to_dict()
@@ -526,3 +526,16 @@ class Result(object):
             Set a callback function that is to be called when the result is ready.
         """
         self._callback = fnc
+
+
+class SessionManagerInterface(object):
+    """
+        An interface for a sessionmanager
+    """
+    def validate_sid(self, sid: uuid.UUID) -> bool:
+        """
+        Check if the given sid is a valid session
+        :param sid: The session id
+        :return: True if the session is valid
+        """
+        raise NotImplementedError()

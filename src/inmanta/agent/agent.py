@@ -24,6 +24,7 @@ import random
 import uuid
 import time
 import asyncio
+from logging import Logger
 
 from tornado import gen, locks, ioloop
 from inmanta import env, const
@@ -68,13 +69,13 @@ class ResourceAction(object):
     resource_id: Id
     future: asyncio.Future[ResourceActionResult]
 
-    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID) -> None:
+    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason:str) -> None:
         """
             :param gid A unique identifier to identify a deploy. This is local to this agent.
         """
         self.scheduler: "ResourceScheduler" = scheduler
         self.resource: Resource = resource
-        if resource is not None:
+        if self.resource is not None:
             self.resource_id: Id = resource.id
         self.future: Future[ResourceActionResult] = Future()
         self.running: bool = False
@@ -84,6 +85,8 @@ class ResourceAction(object):
         # resourceid -> attribute -> {current: , desired:}
         self.changes: Optional[Dict[str, Dict[str, Dict[str, str]]]] = None
         self.undeployable: Optional[const.ResourceState] = None
+        self.reason:str = reason
+        self.logger:Logger = self.scheduler.logger
 
     def is_running(self) -> bool:
         return self.running
@@ -174,9 +177,13 @@ class ResourceAction(object):
 
         return success, send_event
 
+    def skipped_because(self, results):
+        return [resource.resource_id.resource_str()
+                for resource, result in zip(self.dependencies, results) if not result.success]
+
     @gen.coroutine
     def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
-        LOGGER.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
+        self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.version)
 
         self.dependencies = [generation[x.resource_str()] for x in self.resource.requires]
@@ -186,12 +193,15 @@ class ResourceAction(object):
 
         with (yield self.scheduler.ratelimiter.acquire()):
             start = datetime.datetime.now()
-            ctx = handler.HandlerContext(self.resource)
+            ctx = handler.HandlerContext(self.resource, logger=self.logger)
 
-            LOGGER.info("start run %s %s", self.gid, self.resource.id)
-            ctx.debug("start run for resource %(resource)s with id %(deploy_id)s",
-                      resource=str(self.resource.id),
-                      deploy_id=self.gid)
+            ctx.debug(
+                "Start run for resource %(resource)s because %(reason)s",
+                resource=str(self.resource.id),
+                deploy_id=self.gid,
+                agent=self.scheduler.agent.name,
+                reason=self.reason
+            )
 
             self.running = True
             if self.is_done():
@@ -230,16 +240,20 @@ class ResourceAction(object):
                 send_event = False
             elif not result.success:
                 ctx.set_status(const.ResourceState.skipped)
+                ctx.info(
+                    "Resource %(resource)s skipped due to failed dependency %(failed)s",
+                    resource=str(self.resource.id),
+                    failed=self.skipped_because(results)
+                )
                 success = False
                 send_event = False
                 yield self._execute(ctx=ctx, events=received_events, cache=cache, event_only=True, start=start)
             else:
                 success, send_event = yield self._execute(ctx=ctx, events=received_events, cache=cache, start=start)
 
-            LOGGER.info("end run %s", self.resource)
-            ctx.debug("end run for resource %(resource)s with id %(deploy_id)s",
-                      resource=str(self.resource.id),
-                      deploy_id=self.gid)
+            ctx.debug(
+                "End run for resource %(resource)s in deploy %(deploy_id)s", resource=str(self.resource.id), deploy_id=self.gid
+            )
 
             end = datetime.datetime.now()
             changes = {str(self.resource.id): ctx.changes}
@@ -278,8 +292,8 @@ class ResourceAction(object):
 
 class RemoteResourceAction(ResourceAction):
 
-    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID):
-        super(RemoteResourceAction, self).__init__(scheduler, None, gid)
+    def __init__(self, scheduler: "ResourceScheduler", resource_id: Id, gid: uuid.UUID, reason: str):
+        super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
         self.resource_id = resource_id
 
     @gen.coroutine
@@ -294,7 +308,7 @@ class RemoteResourceAction(ResourceAction):
                              result.result)
 
             status = const.ResourceState[result.result["resource"]["status"]]
-            if status == const.ResourceState.available or self.future.done():
+            if status in const.TRANSIENT_STATES or self.future.done():
                 # wait for event
                 pass
             else:
@@ -325,7 +339,7 @@ class RemoteResourceAction(ResourceAction):
         except Exception:
             LOGGER.exception("could not get status for remote resource")
 
-    def notify(self, 
+    def notify(self,
                send_events: bool,
                status: const.ResourceState,
                change: const.Change,
@@ -338,8 +352,16 @@ class RemoteResourceAction(ResourceAction):
 
 
 class ResourceScheduler(object):
+    """Class responsible for managing sequencing of actions performed by the agent.
 
-    def __init__(self, 
+    State of the last run is not removed after the run but remains.
+
+    By not removing e.g. the generation,
+    1 - the class is always in a valid state
+    2 - we don't need to figure out exactly when a run is done
+    """
+
+    def __init__(self,
                  agent: "AgentInstance",
                  env_id: uuid.UUID,
                  name: str,
@@ -353,6 +375,14 @@ class ResourceScheduler(object):
         self.name = name
         self.ratelimiter = ratelimiter
         self.version: int = 0
+        # the reason the last run was started
+        self.reason = ""
+        # was the last run a repair run?
+        self.is_repair = False
+        # if this value is not None, a new repair run will be started after the current run is done
+        # this field is both flag and value, to ensure consistency
+        self._resume_reason = None
+        self.logger = agent.logger
 
     def get_scheduled_resource_actions(self) -> List[ResourceAction]:
         return list(self.generation.values())
@@ -363,37 +393,96 @@ class ResourceScheduler(object):
                 return False
         return True
 
-    def reload(self, resources: List[Resource], undeployable: Dict[str, const.ResourceState]={}, reason: str="RELOAD") -> None:
+    def is_normal_deploy_running(self):
+        return not self.finished() and not self.is_repair
+
+    def reload(self, resources, undeployable={}, reason: str="RELOAD", is_repair=False):
+        """
+        Schedule a new set of resources for execution.
+
+        **This method should only be called under critical_ratelimiter lock!**
+        """
+
+        # First determined if we should start and if the current run should be resumed
+        if not self.finished():
+            # we are still running
+            if self.is_repair:
+                # now running repair
+                if is_repair:
+                    # repair restarts repair
+                    self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
+                else:
+                    # increment interrupts repair
+                    self.logger.info("Interrupting run '%s' for '%s'", self.reason, reason)
+                    self._resume_reason = "Restarting run '%s', interrupted for '%s'" % (self.reason,
+                                                                                         reason)
+            else:
+                # now running increment
+                if is_repair:
+                    # repair is delayed
+                    self.logger.info("Deferring run '%s' for '%s'", reason, self.reason)
+                    self._resume_reason = reason
+                    return
+                else:
+                    # increment overrules increment
+                    self.logger.info("Terminating run '%s' for '%s'", self.reason, reason)
+            # cancel old run
+            for ra in self.generation.values():
+                ra.cancel()
+
+        # start new run
+        self.reason = reason
+        self.is_repair = is_repair
         version = resources[0].id.get_version
-
         self.version = version
-
-        for ra in self.generation.values():
-            ra.cancel()
-
         gid = uuid.uuid4()
-        LOGGER.debug("Running %s for reason: %s" % (gid, reason))
-        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid) for r in resources}
+        self.logger.info("Running %s for reason: %s" % (gid, reason))
 
+        # re-generate generation
+        self.generation = {r.id.resource_str(): ResourceAction(self, r, gid, reason) for r in resources}
+
+        # mark undeployable
         for key, res in self.generation.items():
             vid = str(res.resource.id)
             if vid in undeployable:
                 self.generation[key].undeployable = undeployable[vid]
 
+        # hook up Cross Agent Dependencies
         cross_agent_dependencies = [q for r in resources for q in r.requires if q.get_agent_name() != self.name]
         for cad in cross_agent_dependencies:
-            ra = RemoteResourceAction(self, cad, gid)
+            ra = RemoteResourceAction(self, cad, gid, reason)
             self.cad[str(cad)] = ra
             self.generation[cad.resource_str()] = ra
 
-        dummy = ResourceAction(self, None, gid)
+        # Create dummy to give start signal
+        dummy = ResourceAction(self, None, gid, reason)
+        # Dispatch all actions
+        # Will block on dependencies and dummy
         for r in self.generation.values():
             self.agent.add_future(r.execute(dummy, self.generation, self.cache))
+
+        # Listen for completion
+        self.agent.add_future(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+
+        # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
+
+    @gen.coroutine
+    def mark_deployment_as_finished(self, resource_actions, reason, gid):
+        futures = [resource_action.future for resource_action in resource_actions]
+        yield futures  # Wait until deployment finishes
+        with (yield self.agent.critical_ratelimiter.acquire()):
+            if not self.finished():
+                return
+            if self._resume_reason is not None:
+                self.logger.info("Resuming run '%s'", self._resume_reason)
+                self.agent.add_future(self.agent.get_latest_version_for_agent(reason=self._resume_reason,
+                                                                              incremental_deploy=False, is_repair_run=True))
+                self._resume_reason = None
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
         if resourceid not in self.cad:
-            LOGGER.warning("Agent %s received CAD notification that was not required, %s", self.name, resourceid)
+            # received CAD notification for which no resource are waiting, so return
             return
         self.cad[resourceid].notify(send_events, state, change, changes)
 
@@ -411,10 +500,12 @@ class ResourceScheduler(object):
 
 class AgentInstance(object):
 
-    def __init__(self, process, name: str, uri: str) -> None:
+    def __init__(self, process: "Agent", name: str, uri: str) -> None:
         self.process = process
         self.name = name
         self._uri = uri
+
+        self.logger = LOGGER.getChild(self.name)
 
         # the lock for changing the current ongoing deployment
         self.critical_ratelimiter = locks.Semaphore(1)
@@ -451,9 +542,6 @@ class AgentInstance(object):
         self._getting_resources = False
         self._get_resource_timeout = 0
 
-        self._is_repair_running = False
-        self._start_repair_when_deployment_finishes = False
-
     @gen.coroutine
     def stop(self):
         self.provider_thread_pool.shutdown(wait=False)
@@ -480,7 +568,7 @@ class AgentInstance(object):
         if self.is_enabled():
             return 200, "already running"
 
-        LOGGER.info("Agent assuming primary role for %s" % self.name)
+        self.logger.info("Agent assuming primary role")
 
         self._enable_time_triggers()
         self._enabled = True
@@ -490,7 +578,7 @@ class AgentInstance(object):
         if not self.is_enabled():
             return 200, "already paused"
 
-        LOGGER.info("Agent lost primary role for %s" % self.name)
+        self.logger.info("Agent lost primary role")
 
         self._disable_time_triggers()
         self._enabled = False
@@ -500,15 +588,34 @@ class AgentInstance(object):
 
         @gen.coroutine
         def deploy_action():
-            yield self.get_latest_version_for_agent(reason="Auto deploy", incremental_deploy=True, is_repair_run=False)
+            now = datetime.datetime.now()
+            yield self.get_latest_version_for_agent(
+                reason="Periodic deploy started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                incremental_deploy=True,
+                is_repair_run=False)
 
         @gen.coroutine
         def repair_action():
-            yield self.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
+            now = datetime.datetime.now()
+            yield self.get_latest_version_for_agent(
+                reason="Repair run started at %s" % (now.strftime(const.TIME_LOGFMT)),
+                incremental_deploy=False,
+                is_repair_run=True)
 
+        now = datetime.datetime.now()
         if self._deploy_interval > 0:
+            self.logger.info("Scheduling periodic deploy with interval %d and splay %d (first run at %s)",
+                             self._deploy_interval,
+                             self._deploy_splay_value,
+                             (now + datetime.timedelta(seconds=self._deploy_splay_value)).strftime(const.TIME_LOGFMT)
+                             )
             self._enable_time_trigger(deploy_action, self._deploy_interval, self._deploy_splay_value)
         if self._repair_interval > 0:
+            self.logger.info("Scheduling repair with interval %d and splay %d (first run at %s)",
+                             self._repair_interval,
+                             self._repair_splay_value,
+                             (now + datetime.timedelta(seconds=self._repair_splay_value)).strftime(const.TIME_LOGFMT)
+                             )
             self._enable_time_trigger(repair_action, self._repair_interval, self._repair_splay_value)
 
     def _enable_time_trigger(self, action, interval, splay):
@@ -525,11 +632,11 @@ class AgentInstance(object):
 
     def _can_get_resources(self):
         if self._getting_resources:
-            LOGGER.info("%s Attempting to get resource while get is in progress", self.name)
+            self.logger.info("Attempting to get resource while get is in progress")
             return False
         if time.time() < self._get_resource_timeout:
-            LOGGER.info("%s Attempting to get resources during backoff %g seconds left, last download took %d seconds",
-                        self.name, self._get_resource_timeout - time.time(), self._get_resource_duration)
+            self.logger.info("Attempting to get resources during backoff %g seconds left, last download took %d seconds",
+                             self._get_resource_timeout - time.time(), self._get_resource_duration)
             return False
         return True
 
@@ -543,14 +650,18 @@ class AgentInstance(object):
     def get_latest_version_for_agent(self, reason="Unknown", incremental_deploy=False, is_repair_run=False):
         """
             Get the latest version for the given agent (this is also how we are notified)
+
+            :param reason: the reason this deploy was started
         """
         if not self._can_get_resources():
+            self.logger.warning("%s aborted by rate limiter", reason)
             return
         with (yield self.critical_ratelimiter.acquire()):
             if not self._can_get_resources():
+                self.logger.warning("%s aborted by rate limiter", reason)
                 return
 
-            LOGGER.debug("Getting latest resources for %s" % self.name)
+            self.logger.debug("Getting latest resources for %s", reason)
             self._getting_resources = True
             start = time.time()
             try:
@@ -562,9 +673,11 @@ class AgentInstance(object):
             self._get_resource_duration = end - start
             self._get_resource_timeout = GET_RESOURCE_BACKOFF * self._get_resource_duration + end
             if result.code == 404:
-                LOGGER.info("No released configuration model version available for agent %s", self.name)
+                self.logger.info("No released configuration model version available for %s", reason)
             elif result.code != 200:
-                LOGGER.warning("Got an error while pulling resources for agent %s. %s", self.name, result.result)
+                self.logger.warning("Got an error while pulling resources for %s. %s",
+                                    reason,
+                                    result.result)
 
             else:
                 restypes = set([res["resource_type"] for res in result.result["resources"]])
@@ -581,38 +694,14 @@ class AgentInstance(object):
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
                         resources.append(resource)
-                        LOGGER.debug("Received update for %s", resource.id)
+                        self.logger.debug("Received update for %s", resource.id)
                 except TypeError:
-                    LOGGER.exception("Failed to receive update")
+                    self.logger.exception("Failed to receive update for %s", reason)
+
+                self.logger.debug("Pulled %d resources because %s", len(resources), reason)
 
                 if len(resources) > 0:
-                    is_normal_deploy_running = not self._nq.finished() and not self._is_repair_running
-                    normal_deploy_interrupts_repair_run = not is_repair_run and self._is_repair_running
-                    repair_run_scheduled_during_normal_deploy = is_repair_run and is_normal_deploy_running
-
-                    # A normal deploy will interrupt a repair run --> Restart repair after normal deploy
-                    # A repair run cannot interrupt a normal deploy --> Postpone repair until the normal deploy finishes
-                    if normal_deploy_interrupts_repair_run or repair_run_scheduled_during_normal_deploy:
-                        self._start_repair_when_deployment_finishes = True
-
-                    # Never interrupt a normal deploy with a repair deploy
-                    if not repair_run_scheduled_during_normal_deploy:
-                        self._nq.reload(resources, undeployable, reason=reason)
-                        self._is_repair_running = is_repair_run
-                        scheduled_resource_actions = self._nq.get_scheduled_resource_actions()
-                        ioloop.IOLoop.current().add_callback(self.mark_deployment_as_finished, scheduled_resource_actions)
-
-    @gen.coroutine
-    def mark_deployment_as_finished(self, resource_actions):
-        futures = [resource_action.future for resource_action in resource_actions]
-        yield futures  # Wait until deployment finishes
-        with (yield self.critical_ratelimiter.acquire()):
-            if self._nq.finished():
-                self._is_repair_running = False
-                if self._start_repair_when_deployment_finishes:
-                    self._start_repair_when_deployment_finishes = False
-                    ioloop.IOLoop.current().add_callback(self.get_latest_version_for_agent, reason="Repair",
-                                                         incremental_deploy=False, is_repair_run=True)
+                    self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
 
     @gen.coroutine
     def dryrun(self, dry_run_id, version):
@@ -625,11 +714,11 @@ class AgentInstance(object):
             with (yield self.ratelimiter.acquire()):
                 result = yield self.get_client().get_resources_for_agent(tid=self._env_id, agent=self.name, version=version)
                 if result.code == 404:
-                    LOGGER.warning("Version %s does not exist, can not run dryrun", version)
+                    self.logger.warning("Version %s does not exist, can not run dryrun", version)
                     return
 
                 elif result.code != 200:
-                    LOGGER.warning("Got an error while pulling resources for agent %s and version %s", self.name, version)
+                    self.logger.warning("Got an error while pulling resources and version %s", version)
                     return
 
                 resources = result.result["resources"]
@@ -655,7 +744,7 @@ class AgentInstance(object):
                         data = res["attributes"]
                         data["id"] = res["id"]
                         resource = Resource.deserialize(data)
-                        LOGGER.debug("Running dryrun for %s", resource.id)
+                        self.logger.debug("Running dryrun for %s", resource.id)
 
                         try:
                             provider = yield self.get_provider(resource)
@@ -736,12 +825,12 @@ class AgentInstance(object):
                                                                    messages=ctx.logs)
 
                 except Exception:
-                    LOGGER.exception("Unable to retrieve fact")
+                    self.logger.exception("Unable to retrieve fact")
                 finally:
                     self._cache.close_version(version)
 
             except Exception:
-                LOGGER.exception("Unable to find a handler for %s", resource["id"])
+                self.logger.exception("Unable to find a handler for %s", resource["id"])
                 return 500
             finally:
                 if provider is not None:
@@ -799,12 +888,22 @@ class Agent(SessionEndpoint):
 
                     self.add_end_point_name(name)
 
+        # cache reference to THIS ioloop for handlers to push requests on it
+        # defer to start, just to be sure
+        self._io_loop = None
+
     @gen.coroutine
     def stop(self):
         yield super(Agent, self).stop()
         self.thread_pool.shutdown(wait=False)
         for instance in self._instances.values():
             yield instance.stop()
+
+    @gen.coroutine
+    def start(self):
+        # cache reference to THIS ioloop for handlers to push requests on it
+        self._io_loop = ioloop.IOLoop.current()
+        yield super(Agent, self).start()
 
     def add_end_point_name(self, name):
         SessionEndpoint.add_end_point_name(self, name)

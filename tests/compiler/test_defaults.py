@@ -183,3 +183,44 @@ def test_default_remove(snippetcompiler):
     )
     with pytest.raises(UnsetException):
         compiler.do_compile()
+
+
+def test_gradual_default(snippetcompiler):
+    snippetcompiler.setup_for_snippet(
+        """
+entity Server:
+    string a="a"
+    string b
+end
+
+typedef Server2 as Server(b="b")
+
+Server2()
+
+implement Server using std::none
+""")
+    compiler.do_compile()
+
+
+def test_default_on_relation(snippetcompiler):
+    snippetcompiler.setup_for_snippet("""
+entity Server:
+    string a="a"
+    string b
+end
+
+entity Option:
+end
+
+Server.options [0:] -- Option
+
+all = Option()
+
+typedef Server2 as Server(b="b", options=all)
+
+Server2()
+
+implement Server using std::none
+implement Option using std::none
+""")
+    compiler.do_compile()

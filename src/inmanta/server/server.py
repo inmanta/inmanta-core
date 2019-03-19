@@ -29,7 +29,7 @@ import time
 from uuid import UUID
 import uuid
 import shutil
-import warnings
+import json
 
 import dateutil
 import pymongo
@@ -43,15 +43,39 @@ from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-import json
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
+
+from typing import List
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
 
 DBLIMIT = 100000
+
+
+class ResourceActionLogLine(logging.LogRecord):
+    """ A special log record that is used to report log lines that come from the agent
+    """
+
+    def __init__(self, logger_name: str, level: str, msg: str, created: datetime.datetime) -> None:
+        super().__init__(
+            name=logger_name,
+            level=level,
+            pathname="(unknown file)",
+            lineno=0,
+            msg=msg,
+            args=[],
+            exc_info=None,
+            func=None,
+            sinfo=None
+        )
+
+        self.created = created.timestamp()
+        self.created = self.created
+        self.msecs = (self.created - int(self.created)) * 1000
+        self.relativeCreated = (self.created - logging._startTime) * 1000
 
 
 class Server(protocol.ServerSlice):
@@ -76,8 +100,12 @@ class Server(protocol.ServerSlice):
         self._database_host = database_host
         self._database_port = database_port
 
-        self._resource_action_logger = None
-        self._resource_action_file_handler = None
+        self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
+        self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
+
+        self._increment_cache = {}
+        # lock to ensure only one inflight request
+        self._increment_cache_locks = defaultdict(lambda: locks.Lock())
 
     @gen.coroutine
     def prestart(self, server):
@@ -85,8 +113,6 @@ class Server(protocol.ServerSlice):
 
     @gen.coroutine
     def start(self):
-        yield self._create_resource_action_logger()
-
         if self._database_host is None:
             self._database_host = opt.db_host.get()
 
@@ -109,32 +135,81 @@ class Server(protocol.ServerSlice):
     @gen.coroutine
     def stop(self):
         yield super().stop()
-        yield self._close_resource_action_logger()
+        self._close_resource_action_loggers()
 
-    @gen.coroutine
-    def _create_resource_action_logger(self):
-        resource_action_log = os.path.join(opt.log_dir.get(), opt.server_resource_action_log.get())
-        self._file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode='a+')
-        formatter = logging.Formatter(fmt="%(asctime)s %(levelname)-8s %(message)s")
-        self._file_handler.setFormatter(formatter)
-        self._file_handler.setLevel(logging.DEBUG)
-        self._resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER)
-        self._resource_action_logger.setLevel(logging.DEBUG)
-        self._resource_action_logger.addHandler(self._file_handler)
+    @staticmethod
+    def get_resource_action_log_file(environment: uuid.UUID) -> str:
+        """Get the correct filename for the given environment
+        :param environment: The environment id to get the file for
+        :return: The path to the logfile
+        """
+        return os.path.join(
+            opt.log_dir.get(),
+            opt.server_resource_action_log_prefix.get() + str(environment) + ".log"
+        )
 
-    @gen.coroutine
-    def _close_resource_action_logger(self):
-        if self._resource_action_logger:
-            logger_copy = self._resource_action_logger
-            self._resource_action_logger = None
-            logger_copy.removeHandler(self._file_handler)
-            self._file_handler.flush()
-            self._file_handler.close()
-            self._file_handler = None
+    def get_resource_action_logger(self, environment: uuid.UUID) -> logging.Logger:
+        """Get the resource action logger for the given environment. If the logger was not created, create it.
+        :param environment: The environment to get a logger for
+        :return: The logger for the given environment.
+        """
+        if environment in self._resource_action_loggers:
+            return self._resource_action_loggers[environment]
 
-    def _write_to_resource_action_log(self, log_line):
-        if self._resource_action_logger:
-            log_line.write_to_logger(self._resource_action_logger)
+        resource_action_log = self.get_resource_action_log_file(environment)
+
+        file_handler = logging.handlers.WatchedFileHandler(filename=resource_action_log, mode='a+')
+        # Most logs will come from agents. We need to use their level and timestamp and their formatted message
+        file_handler.setFormatter(logging.Formatter(fmt="%(message)s"))
+        file_handler.setLevel(logging.DEBUG)
+
+        resource_action_logger = logging.getLogger(const.NAME_RESOURCE_ACTION_LOGGER).getChild(str(environment))
+        resource_action_logger.setLevel(logging.DEBUG)
+        resource_action_logger.addHandler(file_handler)
+
+        self._resource_action_loggers[environment] = resource_action_logger
+        self._resource_action_handlers[environment] = file_handler
+
+        return resource_action_logger
+
+    def _close_resource_action_loggers(self) -> None:
+        """Close all resource action loggers and their associated handlers"""
+        try:
+            while True:
+                env, logger = self._resource_action_loggers.popitem()
+                self._close_resource_action_logger(env, logger)
+        except KeyError:
+            pass
+
+    def _close_resource_action_logger(self, env: uuid.UUID, logger: logging.Logger = None) -> None:
+        """Close the given logger for the given env.
+        :param env: The environment to close the logger for
+        :param logger: The logger to close, if the logger is none it is retrieved
+        """
+        if logger is None:
+            if env in self._resource_action_loggers:
+                logger = self._resource_action_loggers.pop(env)
+            else:
+                return
+
+        handler = self._resource_action_handlers.pop(env)
+        logger.removeHandler(handler)
+        handler.flush()
+        handler.close()
+
+    def log_resource_action(
+        self, env: uuid.UUID, resource_ids: List[str], log_level: int, ts: datetime.datetime, message: str
+    ) -> None:
+        """Write the given log to the correct resource action logger"""
+        logger = self.get_resource_action_logger(env)
+        if len(resource_ids) == 0:
+            message = "no resources: " + message
+        elif len(resource_ids) > 1:
+            message = "multiple resources: " + message
+        else:
+            message = resource_ids[0] + ": " + message
+        log_record = ResourceActionLogLine(logger.name, log_level, message, ts)
+        logger.handle(log_record)
 
     def get_agent_client(self, tid: UUID, endpoint):
         return self.agentmanager.get_agent_client(tid, endpoint)
@@ -166,7 +241,7 @@ class Server(protocol.ServerSlice):
         if opt.dash_lcm_enable.get():
             lcm = """,
     'lcm': '%s://' + window.location.hostname + ':8889/'
-""" % "https" if opt.server_ssl_key else "http"
+""" % ("https" if opt.server_ssl_key.get() else "http")
 
         content = """
 angular.module('inmantaApi.config', []).constant('inmantaConfig', {
@@ -175,6 +250,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         """ % (lcm + auth)
         self.add_static_content("/dashboard/config.js", content=content)
         self.add_static_handler("/dashboard", dashboard_path, start=True)
+
+    def clear_env_cache(self, env):
+        LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
+        self._increment_cache[env.id] = None
 
     @gen.coroutine
     def _purge_versions(self):
@@ -389,7 +468,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             m_query["metadata." + k] = v
 
         params = yield data.Parameter.get_list(**m_query)
-        return 200, {"parameters": params, "expire": self._fact_expire, "now": datetime.datetime.now().isoformat()}
+        return 200, {"parameters": params,
+                     "expire": self._fact_expire,
+                     "now": datetime.datetime.now().isoformat(timespec='microseconds')
+                     }
 
     @protocol.handle(methods.put_form, form_id="id", env="tid")
     @gen.coroutine
@@ -710,7 +792,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         now = datetime.datetime.now()
 
         log_line = data.LogLine.log(logging.INFO, "Resource version pulled by client for agent %(agent)s state", agent=agent)
-        self._write_to_resource_action_log(log_line)
+        self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now, messages=[log_line])
         yield ra.insert()
@@ -727,17 +809,56 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         version = cm.version
 
-        resources = yield cm.get_increment()
+        increment = self._increment_cache.get(env.id, None)
+        if increment is None:
+            with (yield self._increment_cache_locks[env.id].acquire()):
+                increment = self._increment_cache.get(env.id, None)
+                if increment is None:
+                    increment = yield cm.get_increment()
+                    self._increment_cache[env.id] = increment
+
+        increment_ids, neg_increment = increment
+
+        # set already done to deployed
+        now = datetime.datetime.now()
+
+        def on_agent(res):
+            idr = Id.parse_id(res)
+            return idr.get_agent_name() == agent
+
+        neg_increment = [res_id for res_id in neg_increment if on_agent(res_id)]
+
+        logline = {
+            "level": "INFO",
+            "msg": "Setting deployed due to known good status",
+            "timestamp": now.isoformat(timespec='microseconds'),
+            "args": []
+        }
+        self.add_future(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
+                                                    started=now, finished=now, status=const.ResourceState.deployed,
+                                                    # does this require a different ResourceAction?
+                                                    action=const.ResourceAction.deploy, changes={}, messages=[logline],
+                                                    change=const.Change.nochange, send_events=False, keep_increment_cache=True))
+
+        resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
 
         deploy_model = []
         resource_ids = []
         for rv in resources:
-            if rv.agent != agent:
+            if rv.resource_version_id not in increment_ids:
                 continue
+
+            def in_requires(req):
+                if req in increment_ids:
+                    return True
+                idr = Id.parse_id(req)
+                return idr.get_agent_name() != agent
+
+            rv.attributes["requires"] = [r for r in rv.attributes["requires"] if in_requires(r)]
+
             deploy_model.append(rv.to_dict())
             resource_ids.append(rv.resource_version_id)
 
-        now = datetime.datetime.now()
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now,
                                  messages=[data.LogLine.log(logging.INFO,
@@ -943,13 +1064,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         for agent in agents:
             yield self.agentmanager.ensure_agent_registered(env, agent)
 
+        now = datetime.datetime.now()
         log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
-        self._write_to_resource_action_log(log_line)
-        ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_version_ids, action_id=uuid.uuid4(),
-                                 action=const.ResourceAction.store, started=started, finished=datetime.datetime.now(),
-                                 messages=[log_line])
+        self.log_resource_action(env.id, resource_version_ids, logging.INFO, now, log_line.msg)
+        ra = data.ResourceAction(
+            environment=env.id,
+            resource_version_ids=resource_version_ids,
+            action_id=uuid.uuid4(),
+            action=const.ResourceAction.store,
+            started=started,
+            finished=now,
+            messages=[log_line]
+        )
         yield ra.insert()
         LOGGER.debug("Successfully stored version %d", version)
+
+        self.clear_env_cache(env)
 
         auto_deploy = yield env.get(data.AUTO_DEPLOY)
         if auto_deploy:
@@ -957,25 +1087,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             push_on_auto_deploy = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
             agent_trigger_method_on_autodeploy = yield env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-
-            # Ensure backward compatibility
-            if push_on_auto_deploy and agent_trigger_method_on_autodeploy is const.AgentTriggerMethod.no_push:
-                warnings.warn("Config option %s is deprecated. Use %s instead." % (data.PUSH_ON_AUTO_DEPLOY,
-                                                                                   data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY))
-                agent_trigger_method_on_autodeploy = const.AgentTriggerMethod.push_full_deploy
-
-            yield self.release_version(env, version, agent_trigger_method_on_autodeploy)
+            yield self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
         return 200
 
     @protocol.handle(methods.release_version, version_id="id", env="tid")
     @gen.coroutine
-    def release_version(self, env, version_id, agent_trigger_method=const.AgentTriggerMethod.no_push):
+    def release_version(self, env, version_id, push, agent_trigger_method=None):
         model = yield data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
         yield model.update_fields(released=True, result=const.VersionState.deploying)
+
+        if model.total == 0:
+            yield model.mark_done()
+            return 200, {"model": model}
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
         undep = yield model.get_undeployable()
@@ -997,18 +1124,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
                                           change=const.Change.nochange, send_events=False)
 
-        # all resources already deployed
-        deployed = yield model.get_increment(negative=True)
-        logline = {"level": "INFO", "msg": "Setting deployed due to known good status", "timestamp": now, "args": []}
-        yield self.resource_action_update(env, deployed, action_id=uuid.uuid4(),
-                                          started=now, finished=now, status=const.ResourceState.deployed,
-                                          # does this require a different ResourceAction?
-                                          action=const.ResourceAction.deploy, changes={}, messages=[logline],
-                                          change=const.Change.nochange, send_events=False)
-
-        trigger_agent = agent_trigger_method is not None and agent_trigger_method is not const.AgentTriggerMethod.no_push
-
-        if trigger_agent:
+        if push:
             # fetch all resource in this cm and create a list of distinct agents
             agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
             yield self.agentmanager._ensure_agents(env, agents)
@@ -1016,7 +1132,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for agent in agents:
                 client = self.get_agent_client(env.id, agent)
                 if client is not None:
-                    incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                    if not agent_trigger_method:
+                        # Ensure backward compatibility
+                        incremental_deploy = False
+                    else:
+                        incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
                     future = client.trigger(env.id, agent, incremental_deploy)
                     self.add_future(future)
                 else:
@@ -1208,7 +1328,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.resource_action_update, env="tid")
     @gen.coroutine
     def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
-                               change, send_events):
+                               change, send_events, keep_increment_cache=False):
         resources = yield data.Resource.get_resources(env.id, resource_ids)
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
@@ -1236,9 +1356,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if len(messages) > 0:
             resource_action.add_logs(messages)
             for msg in messages:
-                loglevel = const.LogLevel[msg["level"]].value
-                log_line = data.LogLine.log(loglevel, msg["msg"], *msg["args"])
-                self._write_to_resource_action_log(log_line)
+                # All other data is stored in the database. The msg was already formatted at the client side.
+                self.log_resource_action(
+                    env.id,
+                    resource_ids,
+                    const.LogLevel[msg["level"]].value,
+                    datetime.datetime.strptime(msg["timestamp"], const.TIME_ISOFMT),
+                    msg["msg"]
+                )
 
         if len(changes) > 0:
             resource_action.add_changes(changes)
@@ -1267,7 +1392,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 return 500, {"message": "Cannot perform state update without a status."}
             for res in resources:
                 yield res.update_fields(status=status)
+            if not keep_increment_cache:
+                self.clear_env_cache(env)
         elif action in const.STATE_UPDATE and done:
+            if not keep_increment_cache:
+                self.clear_env_cache(env)
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)
@@ -1280,12 +1409,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             model = yield data.ConfigurationModel.get_version(env.id, model_version)
 
             if model.done == model.total:
-                result = const.VersionState.success
-                for state in model.status.values():
-                    if state["status"] != "deployed":
-                        result = const.VersionState.failed
-
-                yield model.update_fields(deployed=True, result=result)
+                yield model.mark_done()
 
             waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
                                   for res in resources for prov in res.provides])
@@ -1316,7 +1440,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if project is None:
             return 404, {"message": "The project with given id does not exist."}
 
-        yield project.delete_cascade()
+        environments = yield Environment.get_list(project=project.id)
+        for env in environments:
+            yield [self.agentmanager.stop_agents(env), env.delete_cascade()]
+            self._close_resource_action_logger(env)
+
+        yield project.delete()
+
         return 200, {}
 
     @protocol.handle(methods.modify_project, project_id="id")
@@ -1442,7 +1572,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if env is None:
             return 404, {"message": "The environment with given id does not exist."}
 
-        yield env.delete_cascade()
+        yield [self.agentmanager.stop_agents(env), env.delete_cascade()]
+
+        self._close_resource_action_logger(environment_id)
 
         return 200
 

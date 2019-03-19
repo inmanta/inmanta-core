@@ -20,11 +20,12 @@ import functools
 import hashlib
 import itertools
 import logging
+import warnings
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-
+from typing import Callable, Dict, Union, Tuple, Any
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -43,7 +44,7 @@ def memoize(obj):
     return memoizer
 
 
-def get_compiler_version():
+def get_compiler_version() -> str:
     try:
         return pkg_resources.get_distribution("inmanta").version
     except DistributionNotFound:
@@ -58,7 +59,7 @@ def groupby(mylist, f):
     return itertools.groupby(sorted(mylist, key=f), f)
 
 
-def hash_file(content):
+def hash_file(content: str) -> str:
     """
         Create a hash from the given content
     """
@@ -68,7 +69,7 @@ def hash_file(content):
     return sha1sum.hexdigest()
 
 
-def is_call_ok(result):
+def is_call_ok(result: Union[int, Tuple[int, Dict[str, Any]]]) -> bool:
     if isinstance(result, tuple):
         if len(result) == 2:
             code, reply = result
@@ -85,19 +86,18 @@ class Scheduler(object):
     """
         An event scheduler class
     """
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._scheduled: Dict[Callable, object] = {}
 
-    def __init__(self):
-        self._scheduled = set()
-
-    def add_action(self, action, interval, initial_delay=None):
+    def add_action(self, action: Callable, interval: float, initial_delay: float = None) -> None:
         """
             Add a new action
 
-            :param action A function to call periodically
-            :param interval The interval between execution of actions
-            :param initial_delay Delay to the first execution, default to interval
+            :param action: A function to call periodically
+            :param interval: The interval between execution of actions
+            :param initial_delay: Delay to the first execution, defaults to interval
         """
-
         if initial_delay is None:
             initial_delay = interval
 
@@ -112,14 +112,32 @@ class Scheduler(object):
                     LOGGER.exception("Uncaught exception while executing scheduled action")
 
                 finally:
-                    IOLoop.current().call_later(interval, action_function)
+                    handle = IOLoop.current().call_later(interval, action_function)
+                    self._scheduled[action] = handle
 
-        IOLoop.current().call_later(initial_delay, action_function)
-        self._scheduled.add(action)
+        handle = IOLoop.current().call_later(initial_delay, action_function)
+        self._scheduled[action] = handle
 
-    def remove(self, action):
+    def remove(self, action: Callable) -> None:
         """
             Remove a scheduled action
         """
         if action in self._scheduled:
-            self._scheduled.remove(action)
+            IOLoop.current().remove_timeout(self._scheduled[action])
+            del self._scheduled[action]
+
+    def stop(self) -> None:
+        """
+            Stop the scheduler
+        """
+        try:
+            # remove can still run during stop. That is why we loop until we get a keyerror == the dict is empty
+            while True:
+                action, handle = self._scheduled.popitem()
+                IOLoop.current().remove_timeout(handle)
+        except KeyError:
+            pass
+
+    def __del__(self) -> None:
+        if len(self._scheduled) > 0:
+            warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)
