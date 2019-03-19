@@ -153,14 +153,14 @@ CREATE UNIQUE INDEX agent_env_name_index ON agent (environment, name);
 
 -- Table: public.parameter
 CREATE TABLE IF NOT EXISTS public.parameter (
+    id uuid PRIMARY KEY,
     name varchar NOT NULL,
     value varchar NOT NULL DEFAULT '',
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     resource_id varchar DEFAULT '', 
     source varchar NOT NULL,
     updated timestamp,
-    metadata JSONB,
-    PRIMARY KEY(environment, name)
+    metadata JSONB
 );
 
 -- Table: public.form
