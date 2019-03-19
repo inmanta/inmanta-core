@@ -348,7 +348,7 @@ class Project(ModuleLike):
             raise Exception("Project directory does not contain a project file")
 
         with open(project_file, "r") as fd:
-            self._meta = yaml.load(fd)
+            self._meta = yaml.safe_load(fd)
 
         if "modulepath" not in self._meta:
             raise Exception("modulepath is required in the project(.yml) file")
@@ -857,7 +857,7 @@ class Module(ModuleLike):
                                     comp_version: "Version") -> "Optional[Version]":
         def get_cv_for(best: "Version") -> "Optional[Version]":
             cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
-            cfg = yaml.load(cfg)
+            cfg = yaml.safe_load(cfg)
             if "compiler_version" not in cfg:
                 return None
             v = cfg["compiler_version"]
@@ -916,7 +916,7 @@ class Module(ModuleLike):
             Load the module definition file
         """
         with open(self.get_config_file_name(), "r") as fd:
-            mod_def = yaml.load(fd)
+            mod_def = yaml.safe_load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
                 raise InvalidModuleFileException("The module file of %s does not have the required fields: %s" %

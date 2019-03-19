@@ -180,7 +180,7 @@ class ProjectTool(ModuleLikeTool):
         set_yaml_order_perserving()
 
         with open(project.get_config_file_name(), "r") as fd:
-            newconfig = yaml.load(fd)
+            newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
@@ -605,7 +605,7 @@ requires:
         set_yaml_order_perserving()
 
         with open(module.get_config_file_name(), "r") as fd:
-            newconfig = yaml.load(fd)
+            newconfig = yaml.safe_load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
