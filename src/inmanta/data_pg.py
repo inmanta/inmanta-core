@@ -828,6 +828,7 @@ class Parameter(BaseDocument):
 
         :todo Add history
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True, part_of_primary_key=True)
     value = Field(field_type=str, default="", required=True)
     environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)

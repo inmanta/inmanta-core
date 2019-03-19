@@ -493,7 +493,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             yield form_doc.update()
 
-        return 200, {"form": {"id": form_doc.id}}
+        return 200, {"form": {"id": form_doc.form_type}}
 
     @protocol.handle(methods.get_form, form_id="id", env="tid")
     @gen.coroutine
@@ -509,7 +509,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def list_forms(self, env):
         forms = yield data.Form.get_list(environment=env.id)
-        return 200, {"forms": [{"form_id": x.id, "form_type": x.form_type} for x in forms]}
+        return 200, {"forms": [{"form_id": x.form_type, "form_type": x.form_type} for x in forms]}
 
     @protocol.handle(methods.list_records, env="tid")
     @gen.coroutine
