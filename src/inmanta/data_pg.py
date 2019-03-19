@@ -45,11 +45,12 @@ DBLIMIT = 100000
 
 class Field(object):
 
-    def __init__(self, field_type, required=False, unique=False, reference=False, **kwargs):
+    def __init__(self, field_type, required=False, unique=False, reference=False, part_of_primary_key=False, **kwargs):
 
         self._field_type = field_type
         self._required = required
         self._reference = reference
+        self._part_of_primary_key = part_of_primary_key
 
         if "default" in kwargs:
             self._default = True
@@ -89,6 +90,11 @@ class Field(object):
         return self._reference
 
     reference = property(is_reference)
+
+    def is_part_of_primary_key(self):
+        return self._part_of_primary_key
+
+    part_of_primary_key = property(is_part_of_primary_key)
 
 
 class DataDocument(object):
@@ -132,8 +138,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
         bundle query methods and generate validate and query methods for optimized DB access. This is not a full ODM.
     """
 
-    id = Field(field_type=uuid.UUID, required=True)
-
     _connection_pool = None
 
     @classmethod
@@ -149,12 +153,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def _create_dict(cls, from_postgres, kwargs):
         result = {}
-        if not from_postgres:
+        fields = cls._fields.copy()
+        if "id" in fields and not from_postgres:
             if "id" in kwargs:
                 raise AttributeError("The id attribute is generated per collection by the document class.")
             kwargs["id"] = cls._new_id()
 
-        fields = cls._fields.copy()
         for name, value in kwargs.items():
             if name not in fields:
                 raise AttributeError("%s field is not defined for this document %s" % (name, cls.table_name()))
@@ -194,6 +198,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
             raise AttributeError("%s fields are required." % ", ".join(fields.keys()))
 
         return result
+
+    @classmethod
+    def _get_names_of_primary_key_fields(cls):
+        fields = cls._fields.copy()
+        return [name for name, value in fields.items() if value.is_part_of_primary_key()]
+
+    def _get_filter_on_primary_key_fields(self, offset=1):
+        names_primary_key_fields = self._get_names_of_primary_key_fields()
+        query = {field_name: self.__getattribute__(field_name) for field_name in names_primary_key_fields}
+        return self._get_composed_filter(offset=offset, **query)
 
     @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
@@ -343,7 +357,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
             setattr(self, name, value)
         (column_names, values) = self._get_column_names_and_values()
         values_as_parameterize_sql_string = ','.join([column_names[i - 1] + "=$" + str(i) for i in range(1, len(values) + 1)])
-        (filter_statement, values_for_filter) = self._get_composed_filter(id=self.id, offset=len(column_names) + 1)
+        (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(column_names) + 1)
         values = values + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + values_as_parameterize_sql_string + " WHERE " + filter_statement
         await self._execute_query(query, *values)
@@ -371,7 +385,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         for name, value in kwargs.items():
             setattr(self, name, value)
         (set_statement, values_set_statement) = self._get_set_statement(**kwargs)
-        (filter_statement, values_for_filter) = self._get_composed_filter(id=self.id, offset=len(kwargs) + 1)
+        (filter_statement, values_for_filter) = self._get_filter_on_primary_key_fields(offset=len(kwargs) + 1)
         values = values_set_statement + values_for_filter
         query = "UPDATE " + self.table_name() + " SET " + set_statement + " WHERE " + filter_statement
         await self._execute_query(query, *values)
@@ -484,7 +498,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         """
             Delete this document
         """
-        (filter_as_string, values) = self._get_composed_filter(id=self.id)
+        (filter_as_string, values) = self._get_filter_on_primary_key_fields()
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
         await self._execute_query(query, *values)
 
@@ -537,6 +551,7 @@ class Project(BaseDocument):
 
         :param name The name of the configuration project.
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True, unique=True)
 
 
@@ -652,6 +667,7 @@ class Environment(BaseDocument):
         :param repo_url The repository branch that contains the configuration model code for this environment
         :param settings Key/value settings for this environment
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True)
     project = Field(field_type=uuid.UUID, required=True)
     repo_url = Field(field_type=str, default="")
@@ -789,6 +805,7 @@ class Environment(BaseDocument):
             await Parameter.delete_all(environment=self.id)
             await Form.delete_all(environment=self.id)
             await FormRecord.delete_all(environment=self.id)
+            await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
         else:
             # Cascade is done by PostgreSQL
@@ -811,9 +828,9 @@ class Parameter(BaseDocument):
 
         :todo Add history
     """
-    name = Field(field_type=str, required=True)
+    name = Field(field_type=str, required=True, part_of_primary_key=True)
     value = Field(field_type=str, default="", required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     source = Field(field_type=str, required=True)
     resource_id = Field(field_type=str, default="")
     updated = Field(field_type=datetime.datetime)
@@ -850,6 +867,7 @@ class UnknownParameter(BaseDocument):
         :param environment
         :param version The version id of the configuration model on which this parameter was reported
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     name = Field(field_type=str, required=True)
     environment = Field(field_type=uuid.UUID, required=True)
     source = Field(field_type=str, required=True)
@@ -872,7 +890,7 @@ class AgentProcess(BaseDocument):
     first_seen = Field(field_type=datetime.datetime, default=None)
     last_seen = Field(field_type=datetime.datetime, default=None)
     expired = Field(field_type=datetime.datetime, default=None)
-    sid = Field(field_type=uuid.UUID, required=True)
+    sid = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
     @classmethod
     async def get_live(cls, environment=None):
@@ -913,6 +931,7 @@ class AgentInstance(BaseDocument):
         :param last_seen When did the server receive data from the node for the last time.
     """
     # TODO: add env to speed up cleanup
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     process = Field(field_type=uuid.UUID, required=True)
     name = Field(field_type=str, required=True)
     expired = Field(field_type=datetime.datetime)
@@ -939,8 +958,8 @@ class Agent(BaseDocument):
         :param paused is this agent paused (if so, skip it)
         :param primary what is the current active instance (if none, state is down)
     """
-    environment = Field(field_type=uuid.UUID, required=True)
-    name = Field(field_type=str, required=True)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    name = Field(field_type=str, required=True, part_of_primary_key=True)
     last_failover = Field(field_type=datetime.datetime)
     paused = Field(field_type=bool, default=False)
     id_primary = Field(field_type=uuid.UUID)  # AgentInstance
@@ -1007,6 +1026,7 @@ class Report(BaseDocument):
         :param errstream what was reported on system err
         :param outstream what was reported on system out
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     started = Field(field_type=datetime.datetime, required=True)
     completed = Field(field_type=datetime.datetime, required=True)
     command = Field(field_type=str, required=True)
@@ -1026,6 +1046,7 @@ class Compile(BaseDocument):
         :param completed Time to compile was completed
         :param reports Per stage reports
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     environment = Field(field_type=uuid.UUID, required=True)
     started = Field(field_type=datetime.datetime)
     completed = Field(field_type=datetime.datetime)
@@ -1076,8 +1097,8 @@ class Form(BaseDocument):
     """
         A form in the dashboard defined by the configuration model
     """
-    environment = Field(field_type=uuid.UUID, required=True)
-    form_type = Field(field_type=str, required=True)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    form_type = Field(field_type=str, required=True, part_of_primary_key=True)
     options = Field(field_type=dict)
     fields = Field(field_type=dict)
     defaults = Field(field_type=dict)
@@ -1099,8 +1120,8 @@ class FormRecord(BaseDocument):
     """
         A form record
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     form = Field(field_type=uuid.UUID, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
     fields = Field(field_type=dict)
     changed = Field(field_type=datetime.datetime)
 
@@ -1132,9 +1153,9 @@ class LogLine(DataDocument):
 
 class ResourceVersionId(BaseDocument):
 
-    resource_version_id = Field(field_type=str, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
-    action_id = Field(field_type=uuid.UUID, required=True)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
+    action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
 
 
 class ResourceAction(BaseDocument):
@@ -1155,9 +1176,8 @@ class ResourceAction(BaseDocument):
         :param change The change result of an action
     """
     resource_version_ids = Field(field_type=list, required=True, reference=True, default=[])
-    environment = Field(field_type=uuid.UUID, required=True)
 
-    action_id = Field(field_type=uuid.UUID, required=True)
+    action_id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     action = Field(field_type=const.ResourceAction, required=True)
 
     started = Field(field_type=datetime.datetime, required=True)
@@ -1170,6 +1190,11 @@ class ResourceAction(BaseDocument):
     send_event = Field(field_type=bool)
 
     def __init__(self, from_postgres=False, **kwargs):
+        if not from_postgres:
+            if "environment" not in kwargs:
+                raise Exception("Environment is required attribute")
+            self._environment = kwargs["environment"]
+            del kwargs["environment"]
         super().__init__(from_postgres, **kwargs)
         self._updates = {}
 
@@ -1178,7 +1203,8 @@ class ResourceAction(BaseDocument):
             async with con.transaction():
                 await super(ResourceAction, self).insert(connection=con)
                 for resource_version_id in self.resource_version_ids:
-                    new_obj = ResourceVersionId(resource_version_id=resource_version_id, environment=self.environment,
+                    new_obj = ResourceVersionId(environment=self._environment,
+                                                resource_version_id=resource_version_id,
                                                 action_id=self.action_id)
                     await new_obj.insert(connection=con)
 
@@ -1206,7 +1232,7 @@ class ResourceAction(BaseDocument):
         return "SELECT " + \
                ','.join(['r.' + x for x in cls._fields.keys() if x != "resource_version_ids"]) + ", i.resource_version_id" + \
                " FROM " + ra_table_name + " r LEFT OUTER JOIN " + rvid_table_name + " i" + \
-               " ON (r.environment = i.environment AND r.action_id= i.action_id)"
+               " ON (r.action_id = i.action_id)"
 
     @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
@@ -1224,12 +1250,12 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    async def get_log(cls, environment, resource_version_id, action=None, limit=0):
+    async def get_log(cls, resource_version_id, action=None, limit=0):
         query = cls._get_select_star_statement()
-        query += " WHERE r.environment=$1 AND i.resource_version_id=$2"
-        values = [cls._get_value(environment), cls._get_value(resource_version_id)]
+        query += " WHERE i.resource_version_id=$1"
+        values = [cls._get_value(resource_version_id)]
         if action is not None:
-            query += " AND action=$3"
+            query += " AND action=$2"
             values.append(cls._get_value(action))
         query += " ORDER BY started DESC"
         if limit is not None and limit > 0:
@@ -1244,10 +1270,10 @@ class ResourceAction(BaseDocument):
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
-                    record_id = record["id"]
+                    action_id = record["action_id"]
                     resource_version_id = record["resource_version_id"]
-                    if record_id in result:
-                        resource_action = result[record_id]
+                    if action_id in result:
+                        resource_action = result[action_id]
                         if resource_version_id:
                             resource_action.resource_version_ids.append(resource_version_id)
                     else:
@@ -1255,7 +1281,7 @@ class ResourceAction(BaseDocument):
                         del resource_action_dct["resource_version_id"]
                         resource_action_dct["resource_version_ids"] = [resource_version_id] if resource_version_id else []
                         resource_action = cls(**resource_action_dct, from_postgres=True)
-                        result[record_id] = resource_action
+                        result[action_id] = resource_action
         return list(result.values())
 
     @classmethod
@@ -1267,8 +1293,8 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    async def get(cls, environment, action_id):
-        resource = await cls.get_one(environment=environment, action_id=action_id)
+    async def get(cls, action_id):
+        resource = await cls.get_one(action_id=action_id)
         return resource
 
     def set_field(self, name, value):
@@ -1338,7 +1364,7 @@ class ResourceAction(BaseDocument):
             return
 
         (set_statement, values_set_statement) = self._get_set_statement_for_updates()
-        (filter_statement, values_of_filter) = self._get_composed_filter(id=self.id, offset=len(values_set_statement) + 1)
+        (filter_statement, values_of_filter) = self._get_filter_on_primary_key_fields(offset=len(values_set_statement) + 1)
         values = values_set_statement + values_of_filter
         query = "UPDATE " + self.table_name() + \
                 " SET " + set_statement + \
@@ -1373,6 +1399,15 @@ class ResourceAction(BaseDocument):
             value = cls._get_value(keep_logs_until)
             await cls._execute_query(query, value)
 
+    @classmethod
+    async def delete_all(cls, environment):
+        ra_table_name = cls.table_name()
+        rvid_table_name = ResourceVersionId.table_name()
+        subquery = "SELECT r.action_id FROM %s r LEFT OUTER JOIN %s i ON (r.action_id = i.action_id) WHERE i.environment=$1" \
+                % (ra_table_name, rvid_table_name)
+        query = "DELETE FROM %s WHERE action_id=ANY(%s)" % (ra_table_name, subquery)
+        await cls._execute_query(query, cls._get_value(environment))
+
 
 class Resource(BaseDocument):
     """
@@ -1386,17 +1421,15 @@ class Resource(BaseDocument):
         :param attribute_hash: hash of the attributes, excluding requires, provides and version,
                                used to determine if a resource describes the same state across versions
     """
-    environment = Field(field_type=uuid.UUID, required=True)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     model = Field(field_type=int, required=True)
 
     # ID related
     resource_id = Field(field_type=str, required=True)
-    resource_version_id = Field(field_type=str, required=True)
+    resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
 
     resource_type = Field(field_type=str, required=True)
     agent = Field(field_type=str, required=True)
-    id_attribute_name = Field(field_type=str, required=True)
-    id_attribute_value = Field(field_type=str, required=True)
 
     # Field based on content from the resource actions
     last_deploy = Field(field_type=datetime.datetime)
@@ -1452,9 +1485,9 @@ class Resource(BaseDocument):
         ra_table_name = ResourceAction.table_name()
         rvid_table_name = ResourceVersionId.table_name()
         sub_query = "SELECT r.action_id FROM " + ra_table_name + " r INNER JOIN " + rvid_table_name + " i" + \
-                    " ON (r.environment = i.environment AND r.action_id= i.action_id)" + \
-                    " WHERE r.environment=$1 AND i.resource_version_id=$2"
-        query = "DELETE FROM " + ra_table_name + " WHERE environment=$1 AND action_id=ANY(" + sub_query + ")"
+                    " ON (r.action_id=i.action_id)" + \
+                    " WHERE i.environment=$1 AND i.resource_version_id=$2"
+        query = "DELETE FROM " + ra_table_name + " WHERE action_id=ANY(" + sub_query + ")"
         await self._execute_query(query, self.environment, self.resource_version_id)
         await self.delete()
 
@@ -1525,8 +1558,6 @@ class Resource(BaseDocument):
                     result.append({"resource_id": resource_id,
                                    "resource_type": latest["resource_type"],
                                    "agent": latest["agent"],
-                                   "id_attribute_name": latest["id_attribute_name"],
-                                   "id_attribute_value": latest["id_attribute_value"],
                                    "latest_version": latest["model"],
                                    "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
                                    "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
@@ -1544,8 +1575,7 @@ class Resource(BaseDocument):
         projection = "*"
         if not include_attributes:
             projection = ','.join(["id", "environment", "model", "resource_id", "resource_version_id",
-                                   "resource_type", "agent", "id_attribute_name", "id_attribute_value",
-                                   "last_deploy", "status", "provides"])
+                                   "resource_type", "agent", "last_deploy", "status", "provides"])
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
@@ -1617,8 +1647,7 @@ class Resource(BaseDocument):
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
-                    resource_version_id=resource_version_id, resource_type=vid.entity_type, agent=vid.agent_name,
-                    id_attribute_name=vid.attribute, id_attribute_value=vid.attribute_value)
+                    resource_version_id=resource_version_id, resource_type=vid.entity_type, agent=vid.agent_name)
         attr.update(kwargs)
 
         return cls(**attr)
@@ -1737,8 +1766,8 @@ class ConfigurationModel(BaseDocument):
         :param version_info: Version metadata
         :param total: The total number of resources
     """
-    version = Field(field_type=int, required=True)
-    environment = Field(field_type=uuid.UUID, required=True)
+    version = Field(field_type=int, required=True, part_of_primary_key=True)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     date = Field(field_type=datetime.datetime)
 
     released = Field(field_type=bool, default=False)
@@ -1812,11 +1841,13 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     @classmethod
-    async def set_ready(cls, environment, version, resource_uuid, resource_id, status):
+    async def set_ready(cls, environment, version, resource_id, status):
         """
             Mark a resource as deployed in the configuration model status
         """
-        entry_uuid = uuid.uuid5(resource_uuid, resource_id)
+        resource_version_id = "%s,v=%s" % (resource_id, version)
+        entry_uuid = uuid.uuid5(environment, resource_version_id)
+        # entry_uuid = uuid.uuid5(resource_uuid, resource_id)
         value_entry = {"status": cls._get_value(status), "id": resource_id}
 
         (filter_statement, values) = cls._get_composed_filter(version=version, environment=environment, offset=3)
@@ -2020,10 +2051,9 @@ class Code(BaseDocument):
         :param source_refs file hashes refering to files in the file store
             {code_hash:(file_name, provider.__module__, [req])}
     """
-    environment = Field(field_type=uuid.UUID, required=True)
-    resource = Field(field_type=str, required=True)
-    version = Field(field_type=int, required=True)
-    sources = Field(field_type=dict)
+    environment = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
+    resource = Field(field_type=str, required=True, part_of_primary_key=True)
+    version = Field(field_type=int, required=True, part_of_primary_key=True)
     source_refs = Field(field_type=dict)
 
     @classmethod
@@ -2052,6 +2082,7 @@ class DryRun(BaseDocument):
         :param resource_todo The number of resources left to do
         :param resources Changes for each of the resources in the version
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     environment = Field(field_type=uuid.UUID, required=True)
     model = Field(field_type=int, required=True)
     date = Field(field_type=datetime.datetime)
@@ -2093,6 +2124,7 @@ class SchemaVersion(BaseDocument):
 
        :param current_version The current version of the database schema.
     """
+    id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
     current_version = Field(field_type=int, required=True, unique=True)
 
     @classmethod

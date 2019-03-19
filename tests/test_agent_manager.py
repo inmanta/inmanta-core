@@ -186,33 +186,33 @@ async def test_api(init_dataclasses_and_load_schema):
     code, all_agents = await am.list_agent_processes(None, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
                                'environment': env3.id}]}
 
     assert_equal_ish(shouldbe, all_agents, ['hostname', 'name'])
-    agentid = all_agents['processes'][0]['id']
+    agentid = all_agents['processes'][0]['sid']
 
     code, all_agents = await am.list_agent_processes(env.id, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],

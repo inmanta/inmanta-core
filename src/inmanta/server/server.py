@@ -746,8 +746,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if log_action is not None:
                 action_name = log_action.name
 
-            actions = yield data.ResourceAction.get_log(environment=env.id, resource_version_id=resource_id,
-                                                        action=action_name, limit=log_limit)
+            actions = yield data.ResourceAction.get_log(resource_version_id=resource_id, action=action_name, limit=log_limit)
 
         return 200, {"resource": resv, "logs": actions}
 
@@ -904,8 +903,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         d["resources"] = []
         for res_dict in resources:
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(env.id, res_dict["resource_version_id"],
-                                                                        log_filter, limit)
+                res_dict["actions"] = yield data.ResourceAction.get_log(res_dict["resource_version_id"], log_filter, limit)
 
             d["resources"].append(res_dict)
 
@@ -1173,9 +1171,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             undeployable = yield data.Resource.get_resources(environment=env.id,
                                                              resource_version_ids=undeployableids)
             for res in undeployable:
+                parsed_id = Id.parse_id(res.resource_version_id)
                 payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
-                                                        "attribute": res.id_attribute_name,
-                                                        "attribute_value": res.id_attribute_value,
+                                                        "attribute": parsed_id.attribute,
+                                                        "attribute_value": parsed_id.attribute_value,
                                                         "version": res.model}, "id": res.resource_version_id}
                 yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
@@ -1183,9 +1182,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             skipundeployableids = [rid + ",v=%s" % version_id for rid in skipundeployableids]
             skipundeployable = yield data.Resource.get_resources(environment=env.id, resource_version_ids=skipundeployableids)
             for res in skipundeployable:
+                parsed_id = Id.parse_id(res.resource_version_id)
                 payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
-                                                        "attribute": res.id_attribute_name,
-                                                        "attribute_value": res.id_attribute_value,
+                                                        "attribute": parsed_id.attribute,
+                                                        "attribute_value": parsed_id.attribute_value,
                                                         "version": res.model}, "id": res.resource_version_id}
                 yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
@@ -1249,7 +1249,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
 
-        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact, sources={})
+        code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact)
         yield code.insert()
 
         return 200
@@ -1309,11 +1309,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
-        if code.sources is not None:
-            sources = dict(code.sources)
-        else:
-            sources = {}
-
+        sources = {}
         if code.source_refs is not None:
             for code_hash, (file_name, module, req) in code.source_refs.items():
                 ret, c = self.get_file_internal(code_hash)
@@ -1338,7 +1334,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     LOGGER.error("Attempting to set undeployable resource to deployable state")
                     raise AssertionError("Attempting to set undeployable resource to deployable state")
 
-        resource_action = yield data.ResourceAction.get(environment=env.id, action_id=action_id)
+        resource_action = yield data.ResourceAction.get(action_id=action_id)
         if resource_action is None:
             if started is None:
                 return 500, {"message": "A resource action can only be created with a start datetime."}
@@ -1398,7 +1394,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)
-                yield data.ConfigurationModel.set_ready(env.id, res.model, res.id, res.resource_id, status)
+                yield data.ConfigurationModel.set_ready(env.id, res.model, res.resource_id, status)
                 model_version = res.model
 
                 if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:

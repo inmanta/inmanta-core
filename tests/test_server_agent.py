@@ -1318,18 +1318,19 @@ async def test_server_agent_api(resource_container, client, server):
         agents.remove(proc["endpoints"][0]["name"])
 
     assert_equal_ish({'processes': [{'expired': None, 'environment': env_id,
-                                     'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
+                                     'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}],
                                      'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN},
                                     {'expired': None, 'environment': env_id,
                                      'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}],
-                                     'id': UNKWN, 'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}
+                                     'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}
                                     ]},
                      result.result, ['name', 'first_seen'])
 
-    agentid = result.result["processes"][0]["id"]
+    print(result.__dict__)
+    agent_sid = result.result["processes"][0]["sid"]
     endpointid = [x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == "agent1"][0]
 
-    result = await client.get_agent_process(id=agentid)
+    result = await client.get_agent_process(id=agent_sid)
     assert result.code == 200
 
     result = await client.get_agent_process(id=uuid.uuid4())

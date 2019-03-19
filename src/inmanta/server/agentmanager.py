@@ -222,7 +222,7 @@ class AgentManager(ServerSlice, SessionListener):
 
             for nh in session.endpoint_names:
                 LOGGER.debug("New session for agent %s on %s", nh, nodename)
-                yield data.AgentInstance(tid=tid, process=proc.id, name=nh).insert()
+                yield data.AgentInstance(tid=tid, process=proc.sid, name=nh).insert()
                 # yield session.get_client().set_state(agent=nodename, enabled=False)
 
             if env is not None:
@@ -250,7 +250,7 @@ class AgentManager(ServerSlice, SessionListener):
             else:
                 yield aps.update_fields(expired=now)
 
-                instances = yield data.AgentInstance.get_list(process=aps.id)
+                instances = yield data.AgentInstance.get_list(process=aps.sid)
                 for ai in instances:
                     yield ai.update_fields(expired=now)
 
@@ -316,7 +316,7 @@ class AgentManager(ServerSlice, SessionListener):
         instances = yield data.AgentInstance.active_for(tid, agent.name)
 
         for instance in instances:
-            agent_proc = yield data.AgentProcess.get_by_id(instance.process)
+            agent_proc = yield data.AgentProcess.get_one(sid=instance.process)
             sid = agent_proc.sid
 
             if sid not in self.sessions:
@@ -384,10 +384,10 @@ class AgentManager(ServerSlice, SessionListener):
                 errhandle.close()
 
     # External APIS
-    @protocol.handle(methods.get_agent_process, agent_id="id")
+    @protocol.handle(methods.get_agent_process, agent_sid="id")
     @gen.coroutine
-    def get_agent_process(self, agent_id: str) -> Apireturn:
-        return (yield self.get_agent_process_report(agent_id))
+    def get_agent_process(self, agent_sid: str) -> Apireturn:
+        return (yield self.get_agent_process_report(agent_sid))
 
     @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
     @gen.coroutine
@@ -417,7 +417,7 @@ class AgentManager(ServerSlice, SessionListener):
         processes = []
         for p in aps:
             agent_dict = p.to_dict()
-            ais = yield data.AgentInstance.get_list(process=p.id)
+            ais = yield data.AgentInstance.get_list(process=p.sid)
             oais = []
             for ai in ais:
                 a = ai.to_dict()
@@ -452,8 +452,8 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"enabled": False}
 
     @gen.coroutine
-    def get_agent_process_report(self, apid: uuid.UUID) -> Apireturn:
-        ap = yield data.AgentProcess.get_by_id(apid)
+    def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
+        ap = yield data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
         sid = ap.sid

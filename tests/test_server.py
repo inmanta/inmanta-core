@@ -1009,39 +1009,6 @@ async def test_batched_code_upload(server_multi, client_multi, sync_client_multi
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_legacy_code(server_multi, client_multi, environment_multi, agent_multi):
-    """
-        Test the server to manage the updates on a model during agent deploy
-    """
-    version = 2
-
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
-
-    res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
-    )
-    assert res.code == 200
-
-    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
-
-    code = data.Code(environment=UUID(environment_multi), version=version, resource="std::File", sources=sources)
-    await code.insert()
-
-    res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource="std::File")
-    assert res.code == 200
-    assert res.result["sources"] == sources
-
-
-@pytest.mark.asyncio(timeout=30)
 async def test_resource_action_log(server_multi, client_multi, environment_multi):
     version = 1
     resources = [{'group': 'root',

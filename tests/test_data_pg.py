@@ -91,9 +91,9 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
                                        sid=uuid.uuid4())
         await agent_proc.insert()
 
-        agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+        agi1 = data.AgentInstance(process=agent_proc.sid, name="agi1", tid=env.id)
         await agi1.insert()
-        agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+        agi2 = data.AgentInstance(process=agent_proc.sid, name="agi2", tid=env.id)
         await agi2.insert()
 
         agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False,
@@ -111,7 +111,7 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
             res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
                                      attributes={"path": path})
             await res1.insert()
-            resource_ids.append(res1.id)
+            resource_ids.append((res1.environment, res1.resource_version_id))
 
         code = data.Code(version=version, resource="std::File", environment=env.id)
         await code.insert()
@@ -130,13 +130,13 @@ async def test_project_cascade_delete(init_dataclasses_and_load_schema):
                 return x is None
         assert func(await data.Project.get_by_id(project.id))
         assert func(await data.Environment.get_by_id(env.id))
-        assert func(await data.AgentProcess.get_by_id(agent_proc.id))
+        assert func(await data.AgentProcess.get_one(sid=agent_proc.sid))
         assert func(await data.AgentInstance.get_by_id(agent_instances[0].id))
         assert func(await data.AgentInstance.get_by_id(agent_instances[1].id))
-        assert func(await data.Agent.get_by_id(agent.id))
-        for current_id in resource_ids:
-            assert func(await data.Resource.get_by_id(current_id))
-        assert func(await data.Code.get_by_id(code.id))
+        assert func(await data.Agent.get_one(environment=agent.environment, name=agent.name))
+        for (environment, resource_version_id) in resource_ids:
+            assert func(await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id))
+        assert func(await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version))
         assert func(await data.UnknownParameter.get_by_id(unknown_parameter.id))
 
     # Setup two environments
@@ -204,9 +204,9 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
                                    sid=uuid.uuid4())
     await agent_proc.insert()
 
-    agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+    agi1 = data.AgentInstance(process=agent_proc.sid, name="agi1", tid=env.id)
     await agi1.insert()
-    agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+    agi2 = data.AgentInstance(process=agent_proc.sid, name="agi2", tid=env.id)
     await agi2.insert()
 
     agent = data.Agent(environment=env.id, name="agi1", last_failover=datetime.datetime.now(), paused=False, primary=agi1.id)
@@ -223,7 +223,7 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
         res1 = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
                                  attributes={"path": path})
         await res1.insert()
-        resource_ids.append(res1.id)
+        resource_ids.append((res1.environment, res1.resource_version_id))
 
     code = data.Code(version=version, resource="std::File", environment=env.id)
     await code.insert()
@@ -235,13 +235,13 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
-    assert (await data.AgentProcess.get_by_id(agent_proc.id)) is not None
+    assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is not None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is not None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is not None
-    assert (await data.Agent.get_by_id(agent.id)) is not None
-    for current_id in resource_ids:
-        assert (await data.Resource.get_by_id(current_id)) is not None
-    assert (await data.Code.get_by_id(code.id)) is not None
+    assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is not None
+    for environment, resource_version_id in resource_ids:
+        assert (await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id)) is not None
+    assert (await data.Code.get_one(environment=code.environment, resource=code.resource, version=code.version)) is not None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is not None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
@@ -249,13 +249,13 @@ async def test_environment_cascade_content_only(init_dataclasses_and_load_schema
 
     assert (await data.Project.get_by_id(project.id)) is not None
     assert (await data.Environment.get_by_id(env.id)) is not None
-    assert (await data.AgentProcess.get_by_id(agent_proc.id)) is None
+    assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
-    assert (await data.Agent.get_by_id(agent.id)) is None
-    for current_id in resource_ids:
-        assert (await data.Resource.get_by_id(current_id)) is None
-    assert (await data.Code.get_by_id(code.id)) is None
+    assert (await data.Agent.get_one(environment=agent.environment, name=agent.name)) is None
+    for environment, resource_version_id in resource_ids:
+        assert (await data.Resource.get_one(environment=environment, resource_version_id=resource_version_id)) is None
+    assert (await data.Code.get_one(environment=code.environment, version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
     assert (await env.get(data.AUTO_DEPLOY)) is True
 
@@ -324,25 +324,25 @@ async def test_agent_process(init_dataclasses_and_load_schema):
                                    sid=sid)
     await agent_proc.insert()
 
-    agi1 = data.AgentInstance(process=agent_proc.id, name="agi1", tid=env.id)
+    agi1 = data.AgentInstance(process=agent_proc.sid, name="agi1", tid=env.id)
     await agi1.insert()
-    agi2 = data.AgentInstance(process=agent_proc.id, name="agi2", tid=env.id)
+    agi2 = data.AgentInstance(process=agent_proc.sid, name="agi2", tid=env.id)
     await agi2.insert()
 
     agent_procs = await data.AgentProcess.get_by_env(env=env.id)
     assert len(agent_procs) == 1
-    assert agent_procs[0].id == agent_proc.id
+    assert agent_procs[0].sid == agent_proc.sid
 
-    assert (await data.AgentProcess.get_by_sid(sid)).id == agent_proc.id
+    assert (await data.AgentProcess.get_by_sid(sid)).sid == agent_proc.sid
     assert (await data.AgentProcess.get_by_sid(uuid.UUID(int=1))) is None
 
     live_procs = await data.AgentProcess.get_live()
     assert len(live_procs) == 1
-    assert live_procs[0].id == agent_proc.id
+    assert live_procs[0].sid == agent_proc.sid
 
     live_by_env_procs = await data.AgentProcess.get_live_by_env(env=env.id)
     assert len(live_by_env_procs) == 1
-    assert live_by_env_procs[0].id == agent_proc.id
+    assert live_by_env_procs[0].sid == agent_proc.sid
 
     await agent_proc.update_fields(expired=datetime.datetime.now())
 
@@ -354,7 +354,7 @@ async def test_agent_process(init_dataclasses_and_load_schema):
 
     await agent_proc.delete_cascade()
 
-    assert (await data.AgentProcess.get_by_id(agent_proc.id)) is None
+    assert (await data.AgentProcess.get_one(sid=agent_proc.sid)) is None
     assert (await data.AgentInstance.get_by_id(agi1.id)) is None
     assert (await data.AgentInstance.get_by_id(agi2.id)) is None
 
@@ -376,10 +376,10 @@ async def test_agent_instance(init_dataclasses_and_load_schema):
     await agent_proc.insert()
 
     agi1_name = "agi1"
-    agi1 = data.AgentInstance(process=agent_proc.id, name=agi1_name, tid=env.id)
+    agi1 = data.AgentInstance(process=agent_proc.sid, name=agi1_name, tid=env.id)
     await agi1.insert()
     agi2_name = "agi2"
-    agi2 = data.AgentInstance(process=agent_proc.id, name=agi2_name, tid=env.id)
+    agi2 = data.AgentInstance(process=agent_proc.sid, name=agi2_name, tid=env.id)
     await agi2.insert()
 
     active_instances = await data.AgentInstance.active()
@@ -425,7 +425,7 @@ async def test_agent(init_dataclasses_and_load_schema):
     await agent_proc.insert()
 
     agi1_name = "agi1"
-    agi1 = data.AgentInstance(process=agent_proc.id, name=agi1_name, tid=env.id)
+    agi1 = data.AgentInstance(process=agent_proc.sid, name=agi1_name, tid=env.id)
     await agi1.insert()
 
     agent1 = data.Agent(environment=env.id, name="agi1_agent1", last_failover=datetime.datetime.now(), paused=False,
@@ -439,12 +439,13 @@ async def test_agent(init_dataclasses_and_load_schema):
     agents = await data.Agent.get_list()
     assert len(agents) == 3
     for agent in agents:
-        assert agent.id in [agent1.id, agent2.id, agent3.id]
+        assert (agent.name, agent.environment) in [(a.name, a.environment) for a in [agent1, agent2, agent3]]
 
     for agent in [agent1, agent2, agent3]:
         retrieved_agent = await agent.get(agent.environment, agent.name)
         assert retrieved_agent is not None
-        assert retrieved_agent.id == agent.id
+        assert retrieved_agent.environment == agent.environment
+        assert retrieved_agent.name == agent.name
 
     assert agent1.get_status() == "up"
     assert agent2.get_status() == "down"
@@ -463,8 +464,8 @@ async def test_agent(init_dataclasses_and_load_schema):
     assert agent3.get_status() == "down"
 
     primary_instance = await data.AgentInstance.get_by_id(agent1.primary)
-    primary_process = await data.AgentProcess.get_by_id(primary_instance.process)
-    assert primary_process.id == agent_proc.id
+    primary_process = await data.AgentProcess.get_one(sid=primary_instance.process)
+    assert primary_process.sid == agent_proc.sid
 
 
 @pytest.mark.asyncio
@@ -573,10 +574,9 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
 
     assert cm.done == 0
 
-    await data.ConfigurationModel.set_ready(env.id, version, resource.id, resource.resource_id,
-                                            const.ResourceState.deployed)
+    await data.ConfigurationModel.set_ready(env.id, version, resource.resource_id, const.ResourceState.deployed)
 
-    cm = await data.ConfigurationModel.get_by_id(cm.id)
+    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert cm.done == 1
 
 
@@ -607,9 +607,12 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
 
     await cm.delete_cascade()
 
-    assert (await data.ConfigurationModel.get_by_id(cm.id)) is None
-    assert (await data.Resource.get_by_id(resource.id)) is None
-    assert (await data.Code.get_by_id(code.id)) is None
+    assert (await data.ConfigurationModel.get_list()) == []
+    assert (await data.Resource.get_one(environment=resource.environment,
+                                        resource_version_id=resource.resource_version_id)) is None
+    assert (await data.Code.get_one(environment=code.environment,
+                                    resource=code.resource,
+                                    version=code.version)) is None
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
@@ -1141,7 +1144,7 @@ async def test_resource_get_requires(init_dataclasses_and_load_schema):
     assert (await data.Resource.get_requires(env.id, 1, res2.resource_version_id)) == []
     resources = await data.Resource.get_requires(env.id, 1, res1.resource_version_id)
     assert len(resources) == 1
-    assert resources[0].id == res2.id
+    assert (resources[0].environment, resources[0].resource_version_id) == (res2.environment, res2.resource_version_id)
 
 
 @pytest.mark.asyncio
@@ -1192,10 +1195,11 @@ async def test_resource_get_with_state(init_dataclasses_and_load_schema):
 
     resources = await data.Resource.get_with_state(env.id, 1)
     assert len(resources) == 2
-    assert sorted([res11.id, res13.id]) == sorted([x.id for x in resources])
+    assert sorted([(r.environment, r.resource_version_id) for r in [res11, res13]]) == \
+        sorted([(r.environment, r.resource_version_id) for r in resources])
     resources = await data.Resource.get_with_state(env.id, 2)
     assert len(resources) == 1
-    assert res21.id == resources[0].id
+    assert (res21.environment, res21.resource_version_id) == (resources[0].environment, resources[0].resource_version_id)
     resources = await data.Resource.get_with_state(env.id, 3)
     assert len(resources) == 0
 
@@ -1222,25 +1226,31 @@ async def test_resources_delete_cascade(init_dataclasses_and_load_schema):
                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
                              attributes={"path": "/etc/file1"})
     await res2.insert()
+    action_id_resource_action_1 = uuid.uuid4()
     resource_action1 = data.ResourceAction(environment=env.id, resource_version_ids=[res1.resource_version_id],
-                                           action_id=uuid.uuid4(), action=const.ResourceAction.deploy,
+                                           action_id=action_id_resource_action_1, action=const.ResourceAction.deploy,
                                            started=datetime.datetime.now())
     await resource_action1.insert()
+
+    action_id_resource_action_2 = uuid.uuid4()
     resource_action2 = data.ResourceAction(environment=env.id, resource_version_ids=[res2.resource_version_id],
-                                           action_id=uuid.uuid4(), action=const.ResourceAction.deploy,
+                                           action_id=action_id_resource_action_2, action=const.ResourceAction.deploy,
                                            started=datetime.datetime.now())
     await resource_action2.insert()
 
     await res1.delete_cascade()
 
-    assert (await data.Resource.get_by_id(res1.id)) is None
-    assert (await data.ResourceAction.get_by_id(resource_action1.id)) is None
-    resource = await data.Resource.get_by_id(res2.id)
+    assert (await data.Resource.get_one(environment=res1.environment, resource_version_id=res1.resource_version_id)) is None
+    assert (await data.ResourceAction.get_one(action_id=resource_action1.action_id)) is None
+    resource = await data.Resource.get_one(environment=res2.environment, resource_version_id=res2.resource_version_id)
     assert resource is not None
-    assert resource.id == res2.id
-    resource_action = await data.ResourceAction.get_by_id(resource_action2.id)
+    assert (resource.environment, resource.resource_version_id) == (res2.environment, res2.resource_version_id)
+    resource_action = await data.ResourceAction.get_one(action_id=resource_action2.action_id)
     assert resource_action is not None
-    assert resource_action.id == resource_action2.id
+    assert resource_action.action_id == resource_action2.action_id
+    resource_version_ids = await data.ResourceVersionId.get_list(environment=env.id)
+    assert len(resource_version_ids) == 1
+    assert resource_version_ids[0].action_id == action_id_resource_action_2
 
 
 @pytest.mark.asyncio
@@ -1273,14 +1283,13 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     resource_action.set_field("status", const.ResourceState.failed)
     await resource_action.save()
 
-    ra_via_get_by_id = await data.ResourceAction.get_by_id(resource_action.id)
-    ra_list = await data.ResourceAction.get_list(id=resource_action.id)
+    ra_via_get_by_id = await data.ResourceAction.get_one(action_id=resource_action.action_id)
+    ra_list = await data.ResourceAction.get_list(action_id=resource_action.action_id)
     assert len(ra_list) == 1
     ra_via_get_list = ra_list[0]
-    ra_via_get = await data.ResourceAction.get(environment=env.id, action_id=resource_action.action_id)
+    ra_via_get = await data.ResourceAction.get(action_id=resource_action.action_id)
     for ra in [ra_via_get_by_id, ra_via_get_list, ra_via_get]:
         assert ra.action_id == action_id
-        assert ra.environment == env.id
         assert ra.action == const.ResourceAction.deploy
         assert ra.started == now
         assert ra.finished is None
@@ -1314,22 +1323,25 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
         resource_action = data.ResourceAction(environment=env.id,
                                               resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
                                               action_id=action_id,
-                                              action=const.ResourceAction.deploy, started=datetime.datetime.now())
+                                              action=const.ResourceAction.deploy,
+                                              started=datetime.datetime.now())
         await resource_action.insert()
         resource_action.add_logs([data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=i)])
         await resource_action.save()
 
     action_id = uuid.uuid4()
 
-    resource_action = data.ResourceAction(environment=env.id, resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
+    resource_action = data.ResourceAction(environment=env.id,
+                                          resource_version_ids=["std::File[agent1,path=/etc/motd],v=%1"],
                                           action_id=action_id,
-                                          action=const.ResourceAction.dryrun, started=datetime.datetime.now())
+                                          action=const.ResourceAction.dryrun,
+                                          started=datetime.datetime.now())
     await resource_action.insert()
     times = datetime.datetime.now()
     resource_action.add_logs([data.LogLine.log(logging.WARNING, "warning version %(version)d", version=100, timestamp=times)])
     await resource_action.save()
 
-    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent1,path=/etc/motd],v=%1")
+    resource_actions = await data.ResourceAction.get_log("std::File[agent1,path=/etc/motd],v=%1")
     assert len(resource_actions) == 11
     for i in range(len(resource_actions)):
         action = resource_actions[i]
@@ -1337,14 +1349,14 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             assert action.action == const.ResourceAction.dryrun
         else:
             assert action.action == const.ResourceAction.deploy
-    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent1,path=/etc/motd],v=%1",
+    resource_actions = await data.ResourceAction.get_log("std::File[agent1,path=/etc/motd],v=%1",
                                                          const.ResourceAction.dryrun.name)
     assert len(resource_actions) == 1
     action = resource_actions[0]
     assert action.action == const.ResourceAction.dryrun
     assert action.messages[0]["level"] == LogLevel.WARNING.name
     assert action.messages[0]["timestamp"] == times
-    resource_actions = await data.ResourceAction.get_log(env.id, "std::File[agent1,path=/etc/motd],v=%1",
+    resource_actions = await data.ResourceAction.get_log("std::File[agent1,path=/etc/motd],v=%1",
                                                          const.ResourceAction.deploy.name, limit=2)
     assert len(resource_actions) == 2
     for action in resource_actions:
@@ -1361,10 +1373,9 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     await env.insert()
 
     now = datetime.datetime.now()
-    ra = data.ResourceAction(environment=env.id, resource_version_ids=["test"], action_id=uuid.uuid4(),
-                             action=const.ResourceAction.store, started=now, finished=now,
-                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d",
-                                                        version=2)])
+    ra = data.ResourceAction(environment=env.id, resource_version_ids=["test"], action_id=uuid.uuid4(), action=const.ResourceAction.store,
+                             started=now, finished=now,
+                             messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)])
     await ra.insert()
 
 
@@ -1381,23 +1392,26 @@ async def test_code(init_dataclasses_and_load_schema):
                                  total=1, version_info={})
     await cm.insert()
 
-    code1 = data.Code(environment=env.id, resource="std::File", version=version, sources={"test": "test"},
-                      source_refs={"ref": "ref"})
+    code1 = data.Code(environment=env.id, resource="std::File", version=version, source_refs={"ref": "ref"})
     await code1.insert()
 
-    code2 = data.Code(environment=env.id, resource="std::Directory", version=version, sources={}, source_refs={})
+    code2 = data.Code(environment=env.id, resource="std::Directory", version=version, source_refs={})
     await code2.insert()
 
-    code3 = data.Code(environment=env.id, resource="std::Directory", version=(version + 1), sources={}, source_refs={})
+    version2 = version + 1
+    cm2 = data.ConfigurationModel(environment=env.id, version=version2, date=datetime.datetime.now(),
+                                  total=1, version_info={})
+    await cm2.insert()
+
+    code3 = data.Code(environment=env.id, resource="std::Directory", version=version2, source_refs={})
     await code3.insert()
 
     def assert_match_code(code1, code2):
         assert code1 is not None
         assert code2 is not None
-        assert code1.id == code1.id
+        assert code1.environment == code1.environment
         assert code1.resource == code2.resource
-        shared_keys_sources = [k for k in code1.sources if k in code2.sources and code1.sources[k] == code2.sources[k]]
-        assert len(shared_keys_sources) == len(code1.sources.keys())
+        assert code1.version == code2.version
         shared_keys_source_refs = [k for k in code1.source_refs
                                    if k in code2.source_refs and code1.source_refs[k] == code2.source_refs[k]]
         assert len(shared_keys_source_refs) == len(code1.source_refs.keys())
@@ -1412,13 +1426,14 @@ async def test_code(init_dataclasses_and_load_schema):
     assert code_test is None
 
     code_list = await data.Code.get_versions(env.id, version)
-    ids_code_lost = [c.id for c in code_list]
+    ids_code_lost = [(c.environment, c.resource, c.version) for c in code_list]
     assert len(code_list) == 2
-    assert code1.id in ids_code_lost
-    assert code2.id in ids_code_lost
+    assert (code1.environment, code1.resource, code1.version) in ids_code_lost
+    assert (code2.environment, code2.resource, code2.version) in ids_code_lost
     code_list = await data.Code.get_versions(env.id, version + 1)
     assert len(code_list) == 1
-    assert code_list[0].id == code3.id
+    code = code_list[0]
+    assert (code.environment, code.resource, code.version) == (code3.environment, code3.resource, code3.version)
     code_list = await data.Code.get_versions(env.id, version + 2)
     assert len(code_list) == 0
 
@@ -1447,12 +1462,12 @@ async def test_parameter(init_dataclasses_and_load_schema):
     assert len(updated_before) == 0
     updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 14, 12, 30))
     assert len(updated_before) == 1
-    assert updated_before[0].id == parameters[2].id
+    assert (updated_before[0].environment, updated_before[0].name) == (parameters[2].environment, parameters[2].name)
     updated_before = await data.Parameter.get_updated_before(datetime.datetime(2018, 7, 15, 12, 30))
-    list_of_ids = [x.id for x in updated_before]
+    list_of_ids = [(x.environment, x.name) for x in updated_before]
     assert len(updated_before) == 2
-    assert parameters[0].id in list_of_ids
-    assert parameters[2].id in list_of_ids
+    assert (parameters[0].environment, parameters[0].name) in list_of_ids
+    assert (parameters[2].environment, parameters[2].name) in list_of_ids
 
 
 @pytest.mark.asyncio
@@ -1464,20 +1479,20 @@ async def test_parameter_list_parameters(init_dataclasses_and_load_schema):
     await env.insert()
 
     metadata_param1 = {"test1": "testval1", "test2": "testval2"}
-    parameter1 = data.Parameter(name="param", value="val", environment=env.id, source="test", metadata=metadata_param1)
+    parameter1 = data.Parameter(name="param1", value="val", environment=env.id, source="test", metadata=metadata_param1)
     await parameter1.insert()
 
     metadata_param2 = {"test3": "testval3"}
-    parameter2 = data.Parameter(name="param", value="val", environment=env.id, source="test", metadata=metadata_param2)
+    parameter2 = data.Parameter(name="param2", value="val", environment=env.id, source="test", metadata=metadata_param2)
     await parameter2.insert()
 
     results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1"})
     assert len(results) == 1
-    assert results[0].id == parameter1.id
+    assert (results[0].environment, results[0].name) == (parameter1.environment, parameter1.name)
 
     results = await data.Parameter.list_parameters(env.id, **{"test1": "testval1", "test2": "testval2"})
     assert len(results) == 1
-    assert results[0].id == parameter1.id
+    assert (results[0].environment, results[0].name) == (parameter1.environment, parameter1.name)
 
     results = await data.Parameter.list_parameters(env.id, **{})
     assert len(results) == 2
@@ -1523,7 +1538,7 @@ async def test_form(init_dataclasses_and_load_schema):
 
     retrieved_form = await data.Form.get_form(env.id, "a type")
     assert retrieved_form is not None
-    assert retrieved_form.id == form.id
+    assert (retrieved_form.environment, retrieved_form.form_type) == (form.environment, form.form_type)
 
     non_existing_form = await data.Form.get_form(env.id, "non-existing-form")
     assert non_existing_form is None
@@ -1722,7 +1737,8 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     # ResourceAction 1
     timestamp_ra1 = datetime.datetime.now() - datetime.timedelta(days=8)
     log_line_ra1 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=1)
-    ra1 = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+    action_id = uuid.uuid4()
+    ra1 = data.ResourceAction(environment=env.id, resource_version_ids=["id1"], action_id=action_id,
                               action=const.ResourceAction.store, started=timestamp_ra1, finished=datetime.datetime.now(),
                               messages=[log_line_ra1])
     await ra1.insert()
@@ -1730,7 +1746,8 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     # ResourceAction 2
     timestamp_ra2 = datetime.datetime.now() - datetime.timedelta(days=6)
     log_line_ra2 = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)
-    ra2 = data.ResourceAction(environment=env.id, resource_version_ids=["id"], action_id=uuid.uuid4(),
+    action_id = uuid.uuid4()
+    ra2 = data.ResourceAction(environment=env.id, resource_version_ids=["id2"], action_id=action_id,
                               action=const.ResourceAction.store, started=timestamp_ra2, finished=datetime.datetime.now(),
                               messages=[log_line_ra2])
     await ra2.insert()
@@ -1739,7 +1756,7 @@ async def test_purgelog_test(init_dataclasses_and_load_schema):
     await data.ResourceAction.purge_logs()
     assert len(await data.ResourceAction.get_list()) == 1
     remaining_resource_action = (await data.ResourceAction.get_list())[0]
-    assert remaining_resource_action.id == ra2.id
+    assert remaining_resource_action.action_id == ra2.action_id
 
 
 @pytest.mark.asyncio
