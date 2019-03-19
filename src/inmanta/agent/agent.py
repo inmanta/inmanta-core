@@ -37,7 +37,6 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-from inmanta.const import ResourceState, ResourceAction
 from typing import Tuple, Optional, Generator, Any, Dict, List
 from inmanta.agent.handler import ResourceHandler
 
@@ -85,8 +84,8 @@ class ResourceAction(object):
         # resourceid -> attribute -> {current: , desired:}
         self.changes: Optional[Dict[str, Dict[str, Dict[str, str]]]] = None
         self.undeployable: Optional[const.ResourceState] = None
-        self.reason:str = reason
-        self.logger:Logger = self.scheduler.logger
+        self.reason: str = reason
+        self.logger: Logger = self.scheduler.logger
 
     def is_running(self) -> bool:
         return self.running
@@ -100,7 +99,10 @@ class ResourceAction(object):
             self.future.set_result(ResourceActionResult(False, False, True))
 
     @gen.coroutine
-    def send_in_progress(self, action_id: uuid.UUID, start: float, status: ResourceState =ResourceState.deploying) -> NoneGen:
+    def send_in_progress(self,
+                         action_id: uuid.UUID,
+                         start: float,
+                         status: const.ResourceState = const.ResourceState.deploying) -> NoneGen:
         yield self.scheduler.get_client().resource_action_update(tid=self.scheduler._env_id,
                                                                  resource_ids=[str(self.resource.id)],
                                                                  action_id=action_id,
@@ -127,7 +129,7 @@ class ResourceAction(object):
         if not event_only:
             yield self.send_in_progress(ctx.action_id, start)
         else:
-            yield self.send_in_progress(ctx.action_id, start, status=ResourceState.processing_events)
+            yield self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
 
         # setup provider
         try:
@@ -162,7 +164,7 @@ class ResourceAction(object):
         # event processing
         if len(events) > 0 and provider.can_process_events():
             if not event_only:
-                yield self.send_in_progress(ctx.action_id, start, status=ResourceState.processing_events)
+                yield self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
             try:
                 ctx.info("Sending events to %(resource_id)s because of modified dependencies",
                          resource_id=str(self.resource.id))
@@ -376,13 +378,13 @@ class ResourceScheduler(object):
         self.ratelimiter = ratelimiter
         self.version: int = 0
         # the reason the last run was started
-        self.reason = ""
+        self.reason: str = ""
         # was the last run a repair run?
-        self.is_repair = False
+        self.is_repair: bool = False
         # if this value is not None, a new repair run will be started after the current run is done
         # this field is both flag and value, to ensure consistency
-        self._resume_reason = None
-        self.logger = agent.logger
+        self._resume_reason: Optional[str] = None
+        self.logger: Logger = agent.logger
 
     def get_scheduled_resource_actions(self) -> List[ResourceAction]:
         return list(self.generation.values())
@@ -393,10 +395,10 @@ class ResourceScheduler(object):
                 return False
         return True
 
-    def is_normal_deploy_running(self):
+    def is_normal_deploy_running(self) -> bool:
         return not self.finished() and not self.is_repair
 
-    def reload(self, resources, undeployable={}, reason: str="RELOAD", is_repair=False):
+    def reload(self, resources, undeployable={}, reason: str="RELOAD", is_repair=False) -> None:
         """
         Schedule a new set of resources for execution.
 
@@ -505,7 +507,7 @@ class AgentInstance(object):
         self.name = name
         self._uri = uri
 
-        self.logger = LOGGER.getChild(self.name)
+        self.logger: Logger = LOGGER.getChild(self.name)
 
         # the lock for changing the current ongoing deployment
         self.critical_ratelimiter = locks.Semaphore(1)
@@ -514,12 +516,12 @@ class AgentInstance(object):
 
         # multi threading control
         # threads to setup connections
-        self.provider_thread_pool = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % name)
+        self.provider_thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(1, thread_name_prefix="ProviderPool_%s" % name)
         # threads to work
-        self.thread_pool = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
+        self.thread_pool: ThreadPoolExecutor = ThreadPoolExecutor(process.poolsize, thread_name_prefix="Pool_%s" % name)
         self.ratelimiter = locks.Semaphore(process.poolsize)
 
-        self._env_id = process._env_id
+        self._env_id: uuid.UUID = process._env_id
 
         self.sessionid = process.sessionid
 
