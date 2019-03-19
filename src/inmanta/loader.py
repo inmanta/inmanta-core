@@ -219,7 +219,6 @@ class CodeLoader(object):
     def deploy_version(self, key: str, module_name: str, module_source: str) -> None:
         """ Deploy a new version of the modules
         """
-        assert False
         # if the module is new, or update
         if module_name not in self.__modules or key != self.__modules[module_name][0]:
             LOGGER.info("Deploying code (key=%s, module=%s)", key, mod[1])
