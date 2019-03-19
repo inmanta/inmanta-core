@@ -913,7 +913,6 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def get_by_sid(cls, sid):
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
-
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
