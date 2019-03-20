@@ -1122,13 +1122,19 @@ class Form(BaseDocument):
         else:
             return forms[0]
 
+    def to_dict(self):
+        me = super(Form, self).to_dict()
+        me["id"] =  self.form_type
+        return me
+
 
 class FormRecord(BaseDocument):
     """
         A form record
     """
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    form = Field(field_type=uuid.UUID, required=True)
+    environment = Field(field_type=uuid.UUID, required=True)
+    form = Field(field_type=str, required=True)
     fields = Field(field_type=dict)
     changed = Field(field_type=datetime.datetime)
 
