@@ -28,9 +28,8 @@ import typing
 
 from tornado import concurrent
 
-
 from inmanta.agent.io import get_io
-from inmanta import protocol, resources, const, data
+from inmanta import protocol, resources, const, data_pg as data
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
 import uuid

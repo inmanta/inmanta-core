@@ -19,7 +19,7 @@
 import uuid
 import datetime
 
-from inmanta import data, const
+from inmanta import data_pg as data, const
 from .common import ArgOption
 from .decorators import method
 from . import exceptions
@@ -889,7 +889,7 @@ def get_agent_process(id: uuid.UUID):
     """
         Return a detailed report for a node
 
-        :param agentid: The id of the node
+        :param agent_sid: The session id of the agent
         :return: The requested node
     """
 

@@ -31,7 +31,7 @@ import psutil
 import pytest
 from _pytest.fixtures import fixture
 
-from inmanta import agent, data, const, execute, config
+from inmanta import agent, const, execute, config, data_pg as data
 from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext, CRUDHandler, ResourcePurged
 from inmanta.resources import resource, Resource, PurgeableResource, IgnoreResourceException
 import inmanta.agent.agent
@@ -675,6 +675,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert result.code == 200
 
     changes = result.result["dryrun"]["resources"]
+
     assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
     assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
     assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
@@ -870,7 +871,7 @@ async def test_deploy_with_undefined(server_multi, client_multi, resource_contai
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_server_restart(resource_container, server, mongo_db, client):
+async def test_server_restart(resource_container, server, postgres_db, client):
     """
         dryrun and deploy a configuration model
     """
@@ -893,10 +894,10 @@ async def test_server_restart(resource_container, server, mongo_db, client):
     resource_container.Provider.set("agent1", "key3", "value")
 
     await server.stop()
-
     ibl = InmantaBootloader()
     server = ibl.restserver
     await ibl.start()
+
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -1317,18 +1318,19 @@ async def test_server_agent_api(resource_container, client, server):
         agents.remove(proc["endpoints"][0]["name"])
 
     assert_equal_ish({'processes': [{'expired': None, 'environment': env_id,
-                                     'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}], 'id': UNKWN,
+                                     'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}],
                                      'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN},
                                     {'expired': None, 'environment': env_id,
                                      'endpoints': [{'name': UNKWN, 'process': UNKWN, 'id': UNKWN}],
-                                     'id': UNKWN, 'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}
+                                     'hostname': UNKWN, 'first_seen': UNKWN, 'last_seen': UNKWN}
                                     ]},
                      result.result, ['name', 'first_seen'])
 
-    agentid = result.result["processes"][0]["id"]
+    print(result.__dict__)
+    agent_sid = result.result["processes"][0]["sid"]
     endpointid = [x["endpoints"][0]["id"] for x in result.result["processes"] if x["endpoints"][0]["name"] == "agent1"][0]
 
-    result = await client.get_agent_process(id=agentid)
+    result = await client.get_agent_process(id=agent_sid)
     assert result.code == 200
 
     result = await client.get_agent_process(id=uuid.uuid4())
@@ -2752,14 +2754,14 @@ async def test_autostart_mapping(server, client, resource_container, environment
 
 
 @pytest.mark.asyncio(timeout=15)
-async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment):
+async def test_autostart_clear_environment(server_multi, client_multi, resource_container, environment_multi):
     """
         Test clearing an environment with autostarted agents. After clearing, autostart should still work
     """
     resource_container.Provider.reset()
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
-    env = await data.Environment.get_by_id(uuid.UUID(environment))
+    env = await data.Environment.get_by_id(uuid.UUID(environment_multi))
     await env.set(data.AUTOSTART_AGENT_MAP, {"agent1": ""})
     await env.set(data.AUTO_DEPLOY, True)
     await env.set(data.PUSH_ON_AUTO_DEPLOY, True)
@@ -2778,21 +2780,21 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
                  ]
 
     client = client_multi
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = await client.get_version(environment, version)
+    result = await client.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment_multi)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment)
+        result = await client.list_agents(tid=environment_multi)
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
@@ -2801,7 +2803,7 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert len(children) + 1 == len(current_process.children(recursive=True))
 
     # clear environment
-    await client.clear_environment(environment)
+    await client.clear_environment(environment_multi)
 
     # Autostarted agent should be terminated after clearing the environment
     assert len(children) == len(current_process.children(recursive=True))
@@ -2832,21 +2834,21 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
                   }
                  ]
 
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    result = await client.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # check deploy
-    result = await client.get_version(environment, version)
+    result = await client.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["released"]
     assert result.result["model"]["total"] == 1
     assert result.result["model"]["result"] == "deploying"
 
-    result = await client.list_agents(tid=environment)
+    result = await client.list_agents(tid=environment_multi)
     assert result.code == 200
 
     while len([x for x in result.result["agents"] if x["state"] == "up"]) < 1:
-        result = await client.list_agents(tid=environment)
+        result = await client.list_agents(tid=environment_multi)
         await asyncio.sleep(0.1)
 
     assert len(result.result["agents"]) == 1
@@ -3642,6 +3644,12 @@ async def test_s_deploy_during_deploy(resource_container, server, client, enviro
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy 1", incremental_deploy=True, is_repair_run=False)
+
+    # Make sure that resource key1 is fully deployed before triggering the interrupt
+    timeout_time = time.time() + 10
+    while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
+        await asyncio.sleep(0.1)
+
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
@@ -3721,6 +3729,12 @@ async def test_s_full_deploy_interrupts_incremental_deploy(resource_container,
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=True, is_repair_run=False)
+
+    # Make sure that resource key1 is fully deployed before triggering the interrupt
+    timeout_time = time.time() + 10
+    while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
+        await asyncio.sleep(0.1)
+
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)
@@ -3798,6 +3812,12 @@ async def test_s_incremental_deploy_interrupts_full_deploy(resource_container,
     # Initial deploy
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(reason="Initial Deploy", incremental_deploy=False, is_repair_run=False)
+
+    # Make sure that resource key1 is fully deployed before triggering the interrupt
+    timeout_time = time.time() + 10
+    while (await client.get_version(environment, version1)).result["model"]["done"] < 1 and time.time() < timeout_time:
+        await asyncio.sleep(0.1)
+
     version2 = version1 + 1
     resources_version_2 = get_resources(version2, "value3")
     await _deploy_resources(client, environment, resources_version_2, version2, False)

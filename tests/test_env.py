@@ -24,6 +24,7 @@ import pytest
 
 
 def test_basic_install(tmpdir):
+
     env_dir1 = tmpdir.mkdir("env1").strpath
 
     with pytest.raises(ImportError):
