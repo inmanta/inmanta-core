@@ -127,8 +127,6 @@ class DocumentMeta(type):
             if hasattr(base, "_fields"):
                 dct["_fields"].update(base._fields)
 
-        if len(dct["_fields"]) == 0:
-            print(class_name, bases, dict)
         return type.__new__(cls, class_name, bases, dct)
 
 
