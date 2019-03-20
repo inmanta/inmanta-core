@@ -1373,8 +1373,12 @@ async def test_data_document_recursion(init_dataclasses_and_load_schema):
     await env.insert()
 
     now = datetime.datetime.now()
-    ra = data.ResourceAction(environment=env.id, resource_version_ids=["test"], action_id=uuid.uuid4(), action=const.ResourceAction.store,
-                             started=now, finished=now,
+    ra = data.ResourceAction(environment=env.id,
+                             resource_version_ids=["test"],
+                             action_id=uuid.uuid4(),
+                             action=const.ResourceAction.store,
+                             started=now,
+                             finished=now,
                              messages=[data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=2)])
     await ra.insert()
 
@@ -1542,6 +1546,32 @@ async def test_form(init_dataclasses_and_load_schema):
 
     non_existing_form = await data.Form.get_form(env.id, "non-existing-form")
     assert non_existing_form is None
+
+
+@pytest.mark.asyncio
+async def test_formrecord(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    form = data.Form(environment=env.id, form_type="a type")
+    await form.insert()
+
+    fields_for_record = {"field1": "val1", "field2": "val2"}
+    changed = datetime.datetime.now()
+    formrecord = data.FormRecord(environment=env.id, form=form.form_type, fields=fields_for_record, changed=changed)
+    await formrecord.insert()
+
+    results = await data.FormRecord.get_list()
+    assert len(results) == 1
+    result = results[0]
+    assert result.id == formrecord.id
+    assert len(result.fields) == 2
+    for key, value in fields_for_record.items():
+        assert result.fields[key] == value
+    assert result.changed == formrecord.changed
 
 
 @pytest.mark.asyncio

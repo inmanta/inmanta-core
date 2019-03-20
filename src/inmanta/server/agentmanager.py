@@ -213,7 +213,8 @@ class AgentManager(ServerSlice, SessionListener):
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
-            proc = yield data.AgentProcess.get_by_sid(sid)
+            proc = yield data.AgentProcess.get_one(sid=sid)
+
             if proc is None:
                 proc = data.AgentProcess(hostname=nodename, environment=tid, first_seen=now, last_seen=now, sid=sid)
                 yield proc.insert()

@@ -804,7 +804,6 @@ class Environment(BaseDocument):
 
             await Parameter.delete_all(environment=self.id)
             await Form.delete_all(environment=self.id)
-            await FormRecord.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
         else:
@@ -914,7 +913,6 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def get_by_sid(cls, sid):
         objects = await cls.get_list(limit=DBLIMIT, expired=None, sid=sid)
-
         if len(objects) == 0:
             return None
         elif len(objects) > 1:
@@ -1124,7 +1122,7 @@ class Form(BaseDocument):
 
     def to_dict(self):
         me = super(Form, self).to_dict()
-        me["id"] =  self.form_type
+        me["id"] = self.form_type
         return me
 
 
@@ -1417,7 +1415,7 @@ class ResourceAction(BaseDocument):
         ra_table_name = cls.table_name()
         rvid_table_name = ResourceVersionId.table_name()
         subquery = "SELECT r.action_id FROM %s r LEFT OUTER JOIN %s i ON (r.action_id = i.action_id) WHERE i.environment=$1" \
-                % (ra_table_name, rvid_table_name)
+                   % (ra_table_name, rvid_table_name)
         query = "DELETE FROM %s WHERE action_id=ANY(%s)" % (ra_table_name, subquery)
         await cls._execute_query(query, cls._get_value(environment))
 

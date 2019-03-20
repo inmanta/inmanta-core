@@ -24,7 +24,6 @@ import json
 from collections import defaultdict
 
 
-
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
@@ -703,11 +702,9 @@ def form_import(client: Client, environment: str, form_type: str, file: str) -> 
     if form_type != form_type_def["form_type"]:
         raise click.ClickException("Unable to load form data for %s into form %s" % (form_type_def["form_type"], form_type))
 
-    form_id = form_type_def["id"]
-
     records = cast(List[Dict[str, Any]], data["records"])
     for record in records:
-        if record["form"] == form_id:
+        if record["form"] == form_type:
             client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))
 
 
