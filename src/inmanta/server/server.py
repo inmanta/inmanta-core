@@ -518,7 +518,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if form_type is None:
             return 404, {"message": "No form is defined with id %s" % form_type}
 
-        records = yield data.FormRecord.get_list(form=form_type.id)
+        records = yield data.FormRecord.get_list(form=form_type.form_type)
 
         if not include_record:
             return 200, {"records": [{"id": r.id, "changed": r.changed} for r in records]}
@@ -539,7 +539,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def update_record(self, env, record_id, form):
         record = yield data.FormRecord.get_by_id(record_id)
-        form_def = yield data.Form.get_by_id(record.form)
+        form_def = yield data.Form.get_one(form_type=record.form)
         record.changed = datetime.datetime.now()
 
         for k, _v in form_def.fields.items():
@@ -572,7 +572,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if form_obj is None:
             return 404, {"message": "The form %s does not exist in env %s" % (env.id, form_type)}
 
-        record = data.FormRecord(environment=env.id, form=form_obj.id, fields={})
+        record = data.FormRecord(form=form_obj.form_type, fields={})
         record.changed = datetime.datetime.now()
 
         for k, _v in form_obj.fields.items():

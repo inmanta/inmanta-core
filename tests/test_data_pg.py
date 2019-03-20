@@ -1545,6 +1545,32 @@ async def test_form(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
+async def test_formrecord(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    form = data.Form(environment=env.id, form_type="a type")
+    await form.insert()
+
+    fields_for_record = {"field1": "val1", "field2": "val2"}
+    changed = datetime.datetime.now()
+    formrecord = data.FormRecord(form=form.form_type, fields=fields_for_record, changed=changed)
+    await formrecord.insert()
+
+    results = await data.FormRecord.get_list()
+    assert len(results) == 1
+    result = results[0]
+    assert result.id == formrecord.id
+    assert len(result.fields) == 2
+    for key, value in fields_for_record.items():
+        assert result.fields[key] == value
+    assert result.changed == formrecord.changed
+
+
+@pytest.mark.asyncio
 async def test_compile_get_reports(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

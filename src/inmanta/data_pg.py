@@ -804,7 +804,6 @@ class Environment(BaseDocument):
 
             await Parameter.delete_all(environment=self.id)
             await Form.delete_all(environment=self.id)
-            await FormRecord.delete_all(environment=self.id)
             await Resource.delete_all(environment=self.id)
             await ResourceAction.delete_all(environment=self.id)
         else:
@@ -1127,7 +1126,7 @@ class FormRecord(BaseDocument):
         A form record
     """
     id = Field(field_type=uuid.UUID, required=True, part_of_primary_key=True)
-    form = Field(field_type=uuid.UUID, required=True)
+    form = Field(field_type=str, required=True)
     fields = Field(field_type=dict)
     changed = Field(field_type=datetime.datetime)
 

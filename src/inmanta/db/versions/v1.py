@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS public.parameter (
 -- Table: public.form
 CREATE TABLE IF NOT EXISTS public.form (
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
-    form_type varchar NOT NULL,
+    form_type varchar NOT NULL UNIQUE,
     options JSONB,
     fields JSONB,
     defaults JSONB,
@@ -178,10 +178,9 @@ CREATE TABLE IF NOT EXISTS public.form (
 CREATE TABLE IF NOT EXISTS public.formrecord(
     id uuid PRIMARY KEY,
     form varchar NOT NULL,
-    environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     fields JSONB,
     changed timestamp,
-    FOREIGN KEY (environment, form) REFERENCES form(environment, form_type) ON DELETE CASCADE
+    FOREIGN KEY (form) REFERENCES form(form_type) ON DELETE CASCADE
 );
 
 -- Table: public.compile
