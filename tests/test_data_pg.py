@@ -1341,7 +1341,8 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
     resource_action.add_logs([data.LogLine.log(logging.WARNING, "warning version %(version)d", version=100, timestamp=times)])
     await resource_action.save()
 
-    resource_actions = await data.ResourceAction.get_log("std::File[agent1,path=/etc/motd],v=%1")
+    resource_actions = await data.ResourceAction.get_log(env.id,
+                                                         "std::File[agent1,path=/etc/motd],v=%1")
     assert len(resource_actions) == 11
     for i in range(len(resource_actions)):
         action = resource_actions[i]
@@ -1349,14 +1350,16 @@ async def test_resource_action_get_logs(init_dataclasses_and_load_schema):
             assert action.action == const.ResourceAction.dryrun
         else:
             assert action.action == const.ResourceAction.deploy
-    resource_actions = await data.ResourceAction.get_log("std::File[agent1,path=/etc/motd],v=%1",
+    resource_actions = await data.ResourceAction.get_log(env.id,
+                                                         "std::File[agent1,path=/etc/motd],v=%1",
                                                          const.ResourceAction.dryrun.name)
     assert len(resource_actions) == 1
     action = resource_actions[0]
     assert action.action == const.ResourceAction.dryrun
     assert action.messages[0]["level"] == LogLevel.WARNING.name
     assert action.messages[0]["timestamp"] == times
-    resource_actions = await data.ResourceAction.get_log("std::File[agent1,path=/etc/motd],v=%1",
+    resource_actions = await data.ResourceAction.get_log(env.id,
+                                                         "std::File[agent1,path=/etc/motd],v=%1",
                                                          const.ResourceAction.deploy.name, limit=2)
     assert len(resource_actions) == 2
     for action in resource_actions:
