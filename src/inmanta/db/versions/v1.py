@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS public.resourceversionid (
     PRIMARY KEY(environment, action_id, resource_version_id)
 );
 
-CREATE INDEX resourceversionid_environment_resource_version_id ON resource (environment, resource_version_id);
+CREATE INDEX resourceversionid_environment_resource_version_id ON resourceversionid (environment, resource_version_id);
 
 -- Table: public.code
 -- There is no foreign key constraint from code to configurationmodel, since the code is uploaded
