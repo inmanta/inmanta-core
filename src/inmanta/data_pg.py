@@ -1210,7 +1210,7 @@ class ResourceAction(BaseDocument):
     async def insert(self):
         async with self._connection_pool.acquire() as con:
             records = ((self._environment, resource_version_id, self.action_id)
-                        for resource_version_id in self.resource_version_ids)
+                       for resource_version_id in self.resource_version_ids)
             async with con.transaction():
                 await super(ResourceAction, self).insert(connection=con)
                 await con.copy_records_to_table(
