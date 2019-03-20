@@ -579,7 +579,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if form_obj is None:
             return 404, {"message": "The form %s does not exist in env %s" % (env.id, form_type)}
 
-        record = data.FormRecord(environment=env.id, form=form_obj.form_type,  fields={})
+        record = data.FormRecord(environment=env.id, form=form_obj.form_type, fields={})
         record.changed = datetime.datetime.now()
 
         for k, _v in form_obj.fields.items():
