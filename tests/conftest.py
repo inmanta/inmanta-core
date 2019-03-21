@@ -33,7 +33,9 @@ from inmanta import data_pg as data, config
 import inmanta.compiler as compiler
 from inmanta.module import Project
 from inmanta import resources, export
-from inmanta.agent import handler, agent
+import inmanta.agent
+from inmanta.agent import handler
+from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from click import testing
 import inmanta.main
@@ -136,10 +138,10 @@ def restore_cwd():
 
 @pytest.fixture(scope="function")
 def no_agent_backoff():
-    backoff = agent.GET_RESOURCE_BACKOFF
-    agent.GET_RESOURCE_BACKOFF = 0
+    backoff = inmanta.agent.agent.GET_RESOURCE_BACKOFF
+    inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
     yield
-    agent.GET_RESOURCE_BACKOFF = backoff
+    inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
 
 
 @pytest.fixture()
@@ -192,7 +194,23 @@ async def agent_multi(server_multi, environment_multi):
 
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
-    a = agent.Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
+    a = Agent(hostname="node1", environment=environment_multi, agent_map={"agent1": "localhost"}, code_loader=False)
+    a.add_end_point_name("agent1")
+    await a.start()
+    await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    yield a
+
+    await a.stop()
+
+
+@pytest.fixture(scope="function")
+async def agent(server, environment):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
+    a = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     a.add_end_point_name("agent1")
     await a.start()
     await utils.retry_limited(lambda: len(agentmanager.sessions) == 1, 10)

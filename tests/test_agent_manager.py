@@ -99,7 +99,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
         elif state == "up":
             assert agent.primary is not None
             agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_by_id(agent_instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
             assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 
@@ -186,33 +186,33 @@ async def test_api(init_dataclasses_and_load_schema):
     code, all_agents = await am.list_agent_processes(None, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
                                'environment': env3.id}]}
 
     assert_equal_ish(shouldbe, all_agents, ['hostname', 'name'])
-    agentid = all_agents['processes'][0]['id']
+    agentid = all_agents['processes'][0]['sid']
 
     code, all_agents = await am.list_agent_processes(env.id, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
@@ -287,7 +287,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
         elif state == "up":
             assert agent.primary is not None
             agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_by_id(agent_instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
             assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 

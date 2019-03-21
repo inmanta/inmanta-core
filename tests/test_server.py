@@ -28,7 +28,6 @@ from inmanta import data_pg as data, config, const
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
 
 from datetime import datetime
-from uuid import UUID
 from inmanta.util import hash_file
 from inmanta.export import upload_code, unknown_parameters
 import asyncio
@@ -88,7 +87,6 @@ async def test_autostart_dual_env(client, server):
     """
         Test auto start of agent
     """
-
     agentmanager = server.get_slice("server").agentmanager
     sessionendpoint = server.get_slice("session")
 
@@ -1007,39 +1005,6 @@ async def test_batched_code_upload(server_multi, client_multi, sync_client_multi
         res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
         assert res.result["sources"] == sourcemap
-
-
-@pytest.mark.asyncio(timeout=30)
-async def test_legacy_code(server_multi, client_multi, environment_multi, agent_multi):
-    """
-        Test the server to manage the updates on a model during agent deploy
-    """
-    version = 2
-
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
-
-    res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
-    )
-    assert res.code == 200
-
-    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
-
-    code = data.Code(environment=UUID(environment_multi), version=version, resource="std::File", sources=sources)
-    await code.insert()
-
-    res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource="std::File")
-    assert res.code == 200
-    assert res.result["sources"] == sources
 
 
 @pytest.mark.asyncio(timeout=30)

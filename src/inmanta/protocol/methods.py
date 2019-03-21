@@ -889,7 +889,7 @@ def get_agent_process(id: uuid.UUID):
     """
         Return a detailed report for a node
 
-        :param agentid: The id of the node
+        :param agent_sid: The session id of the agent
         :return: The requested node
     """
 
