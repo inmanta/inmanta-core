@@ -34,7 +34,7 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import gen, locks, process, ioloop
-from typing import Dict, Any
+from typing import Dict, Any, Generator
 
 from inmanta import const
 from inmanta import data_pg as data, config
@@ -44,6 +44,7 @@ from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
+from inmanta.types import JsonType
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
@@ -776,7 +777,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.get_resources_for_agent, env="tid")
     @gen.coroutine
-    def get_resources_for_agent(self, env: Environment, agent: str, version: str, incremental_deploy: bool) -> Dict[str, Any]:
+    def get_resources_for_agent(self,
+                                env: Environment,
+                                agent: str,
+                                version: str,
+                                incremental_deploy: bool) -> Generator[Any, Any, JsonType]:
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
@@ -786,7 +791,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return result
 
     @gen.coroutine
-    def get_all_resources_for_agent(self, env: Environment, agent: str, version: str) -> Dict[str, Any]:
+    def get_all_resources_for_agent(self, env: Environment, agent: str, version: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
         if version is None:
             cm = yield data.ConfigurationModel.get_latest_version(env.id)
@@ -820,7 +825,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     @gen.coroutine
-    def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Dict[str, Any]:
+    def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
 
         cm = yield data.ConfigurationModel.get_latest_version(env.id)

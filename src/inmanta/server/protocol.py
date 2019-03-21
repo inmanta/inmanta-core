@@ -16,6 +16,7 @@
     Contact: code@inmanta.com
 """
 import inmanta.protocol.endpoints
+from inmanta.types import JsonType
 from inmanta.util import Scheduler
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
@@ -316,7 +317,7 @@ class Session(object):
         except gen.TimeoutError:
             return None
 
-    def set_reply(self, reply_id: uuid.UUID, data: Dict[str, Any]) -> None:
+    def set_reply(self, reply_id: uuid.UUID, data: JsonType) -> None:
         LOGGER.log(3, "Received Reply: %s", reply_id)
         if reply_id in self._replies:
             future: asyncio.Future = self._replies[reply_id]
@@ -449,7 +450,7 @@ class SessionManager(ServerSlice):
     @handle(methods.heartbeat_reply)
     @gen.coroutine
     def heartbeat_reply(
-        self, sid: uuid.UUID, reply_id: uuid.UUID, data: Dict[str, Any]
+        self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         try:
             env = self._sessions[sid]

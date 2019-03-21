@@ -24,12 +24,11 @@ import enum
 
 from tornado import gen, escape
 from inmanta import const
+from inmanta.types import JsonType
 from inmanta.protocol import common, exceptions
 from inmanta import config as inmanta_config
 
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping, Generator  # noqa: F401
-
-JsonDict = Dict[str, Any]
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -48,7 +47,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 
 
 def authorize_request(
-    auth_data: Dict[str, str], metadata: Dict[str, str], message: Dict[str, Any], config: common.UrlMethod
+    auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
 ) -> None:
     """
         Authorize a request based on the given data
@@ -97,7 +96,7 @@ class CallArguments(object):
         self._request_headers = request_headers
         self._argspec = inspect.getfullargspec(self._properties.function)
 
-        self._call_args: Dict[str, Any] = {}
+        self._call_args: JsonType = {}
         self._headers: Dict[str, str] = {}
         self._metadata: Dict[str, Any] = {}
 
@@ -261,13 +260,13 @@ class RESTBase(object):
     def id(self) -> str:
         return self._id
 
-    def _decode(self, body: str) -> Optional[JsonDict]:
+    def _decode(self, body: str) -> Optional[JsonType]:
         """
             Decode a response body
         """
         result = None
         if body is not None and len(body) > 0:
-            result = cast(JsonDict, json.loads(escape.to_basestring(body)))
+            result = cast(JsonType, json.loads(escape.to_basestring(body)))
 
         return result
 

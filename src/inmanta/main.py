@@ -33,7 +33,9 @@ import texttable
 from time import sleep
 
 
-from typing import Optional, cast, Dict, Any, List, Callable
+from typing import Optional, cast, Dict, List, Callable
+
+from inmanta.types import JsonType
 
 
 class Client(object):
@@ -55,8 +57,8 @@ class Client(object):
         self._client = protocol.SyncClient("cmdline")
 
     def do_request(
-        self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}, allow_none: bool=False
-    ) -> Optional[Dict[str, Any]]:
+        self, method_name: str, key_name: Optional[str]=None, arguments: JsonType={}, allow_none: bool=False
+    ) -> Optional[JsonType]:
         """
             Do a request and return the response
         """
@@ -95,13 +97,13 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}) -> List[Dict[str, str]]:
+    def get_list(self, method_name: str, key_name: Optional[str]=None, arguments: JsonType={}) -> List[Dict[str, str]]:
         """
             Same as do request, but return type is a list of dicts
         """
         return cast(List[Dict[str, str]], self.do_request(method_name, key_name, arguments, False))
 
-    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: Dict[str, Any] = {}) -> Dict[str, str]:
+    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> Dict[str, str]:
         """
             Same as do request, but return type is a list of dicts
         """
@@ -702,7 +704,7 @@ def form_import(client: Client, environment: str, form_type: str, file: str) -> 
     if form_type != form_type_def["form_type"]:
         raise click.ClickException("Unable to load form data for %s into form %s" % (form_type_def["form_type"], form_type))
 
-    records = cast(List[Dict[str, Any]], data["records"])
+    records = cast(List[JsonType], data["records"])
     for record in records:
         if record["form"] == form_type:
             client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))

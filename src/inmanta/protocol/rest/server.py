@@ -18,7 +18,7 @@
 import ssl
 import uuid
 
-from typing import Optional, Dict, Any, List, Generator, NoReturn
+from typing import Optional, Dict, List
 
 import tornado
 from pyformance import timer
@@ -28,9 +28,7 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
-
-
-NoneGen = Generator[Any, Any, NoReturn]
+from inmanta.types import NoneGen, JsonType
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -68,7 +66,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return common.decode_token(parts[1])
 
-    def respond(self, body: Optional[Dict[str, Any]], headers: Dict[str, str], status: int) -> None:
+    def respond(self, body: Optional[JsonType], headers: Dict[str, str], status: int) -> None:
         if CONTENT_TYPE not in headers:
             headers[CONTENT_TYPE] = JSON_CONTENT
         elif headers[CONTENT_TYPE] != JSON_CONTENT:

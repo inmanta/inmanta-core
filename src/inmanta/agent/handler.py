@@ -33,6 +33,7 @@ from inmanta import protocol, resources, const, data_pg as data
 from inmanta.module import Project
 from inmanta.agent.cache import AgentCache
 import uuid
+from typing import Dict
 
 LOGGER = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ class HandlerContext(object):
         self._created = False
         self._change = const.Change.nochange
 
-        self._changes = {}
+        self._changes: Dict[str, Dict[str, str]] = {}
 
         if action_id is None:
             action_id = uuid.uuid4()
@@ -197,7 +198,7 @@ class HandlerContext(object):
         return self._created or self._updated or self._purged
 
     @property
-    def change(self):
+    def change(self) -> const.Change:
         return self._change
 
     def add_change(self, name: str, desired: typing.Any, current: typing.Any=None) -> None:
@@ -239,7 +240,7 @@ class HandlerContext(object):
         self._changes.update(changes)
 
     @property
-    def changes(self):
+    def changes(self) -> Dict[str, Dict[str, str]]:
         return self._changes
 
     def log_msg(self, level: int, msg: str, args: list, kwargs: dict) -> dict:
