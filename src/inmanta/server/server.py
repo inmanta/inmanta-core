@@ -39,6 +39,7 @@ from typing import Dict, Any
 from inmanta import const
 from inmanta import data_pg as data, config
 from inmanta.data_pg import Environment
+from inmanta.reporter import InfluxReporter
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
@@ -130,6 +131,8 @@ class Server(protocol.ServerSlice):
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
+        self.start_metric_reporters()
+
         yield super().start()
 
     @gen.coroutine
@@ -137,6 +140,20 @@ class Server(protocol.ServerSlice):
         yield super().stop()
         self._close_resource_action_loggers()
         yield data.disconnect()
+
+    def start_metric_reporters(self) -> None:
+        if opt.influxdb_host.get():
+            rep = InfluxReporter(
+                server=opt.influxdb_host.get(),
+                port=opt.influxdb_port.get(),
+                database=opt.influxdb_name.get(),
+                username=opt.influxdb_username.get(),
+                password=opt.influxdb_password,
+                reporting_interval=opt.influxdb_interval.get(),
+                autocreate_database=True,
+                tags=opt.influxdb_tags.get()
+            )
+            rep.start()
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:

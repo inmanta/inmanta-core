@@ -15,6 +15,7 @@ requires = [
     "PyJWT",
     "cryptography",
     "jinja2",
+    "pyformance"
 ]
 
 setup(
