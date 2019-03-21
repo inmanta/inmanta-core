@@ -37,6 +37,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, DynamicStatement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
+from inmanta.types import JsonType
 from inmanta.util import get_compiler_version
 from typing import Tuple, List, Dict
 from typing import Optional
@@ -260,7 +261,7 @@ class ModuleLike(object):
             @param path: root git directory
         """
         self._path = path
-        self._meta = {}  # type: Dict[str, Any]
+        self._meta = {}  # type: JsonType
 
     def get_name(self) -> str:
         raise NotImplementedError()

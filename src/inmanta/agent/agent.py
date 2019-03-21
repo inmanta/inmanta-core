@@ -39,11 +39,10 @@ from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 from typing import Tuple, Optional, Generator, Any, Dict, List
 from inmanta.agent.handler import ResourceHandler
+from inmanta.types import NoneGen
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
-
-NoneGen = Generator[Any, Any, None]
 
 
 class ResourceActionResult(object):

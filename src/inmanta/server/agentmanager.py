@@ -27,6 +27,7 @@ from inmanta import data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
+from inmanta.types import NoneGen, Apireturn
 
 import logging
 import os
@@ -43,9 +44,6 @@ import asyncio
 from typing import Optional, Dict, Any, List, Generator, Tuple
 from uuid import UUID
 from inmanta.server.server import Server
-
-Apireturn = Generator[Any, Any, Tuple[int, Dict[str, Any]]]
-NoneGen = Generator[Any, Any, None]
 
 
 LOGGER = logging.getLogger(__name__)

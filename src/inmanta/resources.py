@@ -24,8 +24,10 @@ import re
 from inmanta.execute import util, runtime
 from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
 from inmanta.module import Project
+from inmanta.types import JsonType
 
 from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING, Callable
+
 
 if TYPE_CHECKING:
     from inmanta import export
@@ -327,7 +329,7 @@ class Resource(metaclass=ResourceMeta):
         return obj
 
     @classmethod
-    def deserialize(cls, obj_map: Dict[str, Any]) -> "Resource":
+    def deserialize(cls, obj_map: JsonType) -> "Resource":
         """
         Deserialize the resource from the given dictionary
         """
@@ -403,7 +405,7 @@ class Resource(metaclass=ResourceMeta):
 
         return res
 
-    def serialize(self) -> Dict[str, Any]:
+    def serialize(self) -> JsonType:
         """
             Serialize this resource to its dictionary representation
         """
@@ -454,7 +456,7 @@ class Id(object):
         self._attribute_value = attribute_value
         self._version = version
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> JsonType:
         return {"entity_type": self._entity_type,
                 "agent_name": self.agent_name,
                 "attribute": self.attribute,
