@@ -37,7 +37,7 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-from typing import Tuple, Optional, Generator, Any, Dict, List
+from typing import Tuple, Optional, Generator, Any, Dict, List, TYPE_CHECKING
 from inmanta.agent.handler import ResourceHandler
 from inmanta.types import NoneGen
 
@@ -61,11 +61,18 @@ class ResourceActionResult(object):
         return "%r %r %r" % (self.success, self.receive_events, self.cancel)
 
 
+# https://mypy.readthedocs.io/en/latest/common_issues.html#using-classes-that-are-generic-in-stubs-but-not-at-runtime
+if TYPE_CHECKING:
+    ResourceActionResultFuture = asyncio.Future[ResourceActionResult]
+else:
+    ResourceActionResultFuture = asyncio.Future
+
+
 class ResourceAction(object):
 
     resource: Resource
     resource_id: Id
-    future: asyncio.Future[ResourceActionResult]
+    future: ResourceActionResultFuture
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
@@ -75,7 +82,7 @@ class ResourceAction(object):
         self.resource: Resource = resource
         if self.resource is not None:
             self.resource_id: Id = resource.id
-        self.future: Future[ResourceActionResult] = Future()
+        self.future: ResourceActionResultFuture = Future()
         self.running: bool = False
         self.gid: uuid.UUID = gid
         self.status: Optional[const.ResourceState] = None
