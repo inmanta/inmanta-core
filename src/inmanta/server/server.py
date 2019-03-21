@@ -771,7 +771,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if log_action is not None:
                 action_name = log_action.name
 
-            actions = yield data.ResourceAction.get_log(resource_version_id=resource_id, action=action_name, limit=log_limit)
+            actions = yield data.ResourceAction.get_log(
+                environment=env.id,
+                resource_version_id=resource_id,
+                action=action_name,
+                limit=log_limit)
 
         return 200, {"resource": resv, "logs": actions}
 
@@ -929,10 +933,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         d = {"model": version}
 
+        # todo: batch get_log into single query?
         d["resources"] = []
         for res_dict in resources:
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(res_dict["resource_version_id"], log_filter, limit)
+                res_dict["actions"] = yield data.ResourceAction.get_log(
+                    env.id,
+                    res_dict["resource_version_id"],
+                    log_filter,
+                    limit)
 
             d["resources"].append(res_dict)
 
