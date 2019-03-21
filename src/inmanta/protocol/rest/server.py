@@ -118,7 +118,7 @@ class RESTHandler(tornado.web.RequestHandler):
             self.respond(e.to_body(), {}, e.to_status())
 
         finally:
-            self.finish()
+            yield self.finish()
 
     @gen.coroutine
     def head(self, *args: str, **kwargs: str) -> NoneGen:

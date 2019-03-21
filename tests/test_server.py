@@ -24,10 +24,10 @@ import os
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data, const, config
+from inmanta import data_pg as data, config, const
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
+
 from datetime import datetime
-from uuid import UUID
 from inmanta.util import hash_file
 from inmanta.export import upload_code, unknown_parameters
 import asyncio
@@ -53,6 +53,7 @@ async def test_autostart(server, client, environment):
 
     res = await agentmanager._ensure_agents(env, ["iaas_agent"])
     assert res
+
     await retry_limited(lambda: len(sessionendpoint._sessions) == 1, 20)
     assert len(sessionendpoint._sessions) == 1
     res = await agentmanager._ensure_agents(env, ["iaas_agent"])
@@ -184,11 +185,11 @@ async def test_version_removal(client, server):
 
 @pytest.mark.asyncio(timeout=30)
 @pytest.mark.slowtest
-async def test_get_resource_for_agent(motor, server_multi, client_multi, environment):
+async def test_get_resource_for_agent(server_multi, client_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
-    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment, code_loader=False)
+    agent = Agent("localhost", {"nvblah": "localhost"}, environment=environment_multi, code_loader=False)
     await agent.start()
     aclient = agent._client
 
@@ -231,47 +232,48 @@ async def test_get_resource_for_agent(motor, server_multi, client_multi, environ
                   'state': 'running',
                   'version': version}]
 
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
-    result = await client_multi.list_versions(environment)
+    result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
     assert result.result["count"] == 1
 
-    result = await client_multi.release_version(environment, version, False)
+    result = await client_multi.release_version(environment_multi, version, False)
     assert result.code == 200
 
-    result = await client_multi.get_version(environment, version)
+    result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["version"] == version
     assert result.result["model"]["total"] == len(resources)
     assert result.result["model"]["released"]
     assert result.result["model"]["result"] == "deploying"
 
-    result = await aclient.get_resources_for_agent(environment, "vm1.dev.inmanta.com")
+    result = await aclient.get_resources_for_agent(environment_multi, "vm1.dev.inmanta.com")
     assert result.code == 200
     assert len(result.result["resources"]) == 3
 
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
+    result = await aclient.resource_action_update(environment_multi,
                                                   ["std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d" % version],
                                                   action_id, "deploy", now, now, "deployed", [], {})
 
     assert result.code == 200
 
-    result = await client_multi.get_version(environment, version)
+    result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 1
 
     action_id = uuid.uuid4()
     now = datetime.now()
-    result = await aclient.resource_action_update(environment,
+    result = await aclient.resource_action_update(environment_multi,
                                                   ["std::File[vm1.dev.inmanta.com,path=/etc/hostname],v=%d" % version],
                                                   action_id, "deploy", now, now, "deployed", [], {})
     assert result.code == 200
 
-    result = await client_multi.get_version(environment, version)
+    result = await client_multi.get_version(environment_multi, version)
     assert result.code == 200
     assert result.result["model"]["done"] == 2
     await agent.stop()
@@ -308,7 +310,7 @@ async def test_get_environment(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_resource_update(client, server, environment):
+async def test_resource_update(postgresql_client, client, server, environment):
     """
         Test updating resources and logging
     """
@@ -688,6 +690,7 @@ async def test_purge_on_delete_compile_failed(client, server, environment):
     result = await client.get_version(environment, version)
     assert result.code == 200
     assert result.result["model"]["total"] == 0
+    await agent.stop()
     assert len(result.result["unknowns"]) == 1
 
 
@@ -893,10 +896,10 @@ async def test_purge_on_delete_ignore(client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_tokens(server_multi, client_multi, environment):
+async def test_tokens(server_multi, client_multi, environment_multi):
     # Test using API tokens
     test_token = client_multi._transport_instance.token
-    token = await client_multi.create_token(environment, ["api"], idempotent=True)
+    token = await client_multi.create_token(environment_multi, ["api"], idempotent=True)
     jot = token.result["token"]
 
     assert jot != test_token
@@ -907,14 +910,14 @@ async def test_tokens(server_multi, client_multi, environment):
     result = await client_multi.list_environments()
     assert result.code == 401
 
-    result = await client_multi.list_versions(environment)
+    result = await client_multi.list_versions(environment_multi)
     assert result.code == 200
 
-    token = await client_multi.create_token(environment, ["agent"], idempotent=True)
+    token = await client_multi.create_token(environment_multi, ["agent"], idempotent=True)
     agent_jot = token.result["token"]
 
     client_multi._transport_instance.token = agent_jot
-    result = await client_multi.list_versions(environment)
+    result = await client_multi.list_versions(environment_multi)
     assert result.code == 401
 
 
@@ -925,7 +928,7 @@ def make_source(collector, filename, module, source, req):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_code_upload(motor, server_multi, client_multi, agent_multi, environment_multi):
+async def test_code_upload(server_multi, client_multi, agent_multi, environment_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -959,7 +962,7 @@ async def test_code_upload(motor, server_multi, client_multi, agent_multi, envir
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_batched_code_upload(motor, server_multi, client_multi, sync_client_multi, environment_multi, agent_multi):
+async def test_batched_code_upload(server_multi, client_multi, sync_client_multi, environment_multi, agent_multi):
     """
         Test the server to manage the updates on a model during agent deploy
     """
@@ -1005,40 +1008,7 @@ async def test_batched_code_upload(motor, server_multi, client_multi, sync_clien
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_legacy_code(motor, server_multi, client_multi, environment_multi, agent_multi):
-    """
-        Test the server to manage the updates on a model during agent deploy
-    """
-    version = 2
-
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
-
-    res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
-    )
-    assert res.code == 200
-
-    sources = {"a.py": "ujeknceds", "b.py": "weknewbevbvebedsvb"}
-
-    code = data.Code(environment=UUID(environment_multi), version=version, resource="std::File", sources=sources)
-    await code.insert()
-
-    res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource="std::File")
-    assert res.code == 200
-    assert res.result["sources"] == sources
-
-
-@pytest.mark.asyncio(timeout=30)
-async def test_resource_action_log(motor, server_multi, client_multi, environment):
+async def test_resource_action_log(server_multi, client_multi, environment_multi):
     version = 1
     resources = [{'group': 'root',
                   'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
@@ -1050,10 +1020,11 @@ async def test_resource_action_log(motor, server_multi, client_multi, environmen
                   'reload': False,
                   'requires': [],
                   'version': version}]
-    res = await client_multi.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
+    res = await client_multi.put_version(tid=environment_multi, version=version, resources=resources, unknowns=[],
+                                         version_info={})
     assert res.code == 200
 
-    resource_action_log = server.Server.get_resource_action_log_file(environment)
+    resource_action_log = server.Server.get_resource_action_log_file(environment_multi)
     assert os.path.isfile(resource_action_log)
     assert os.stat(resource_action_log).st_size != 0
 
@@ -1067,3 +1038,25 @@ async def test_invalid_sid(server_multi, client_multi, environment_multi):
     res = await client_multi.get_code(tid=environment_multi, id=1, resource="std::File")
     assert res.code == 400
     assert res.result["message"] == "Invalid request: this is an agent to server call, it should contain an agent session id"
+
+
+@pytest.mark.asyncio(timeout=30)
+async def test_get_param(server, client, environment):
+    metadata = {"key1": "val1", "key2": "val2"}
+    await client.set_param(environment, "param", "source", "val", "", metadata, False)
+    await client.set_param(environment, "param2", "source2", "val2", "", {"a": "b"}, False)
+
+    res = await client.list_params(tid=environment, query={"key1": "val1"})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 1
+    metadata_received = parameters[0]["metadata"]
+    assert len(metadata_received) == 2
+    for k, v in metadata.items():
+        assert k in metadata_received
+        assert metadata_received[k] == v
+
+    res = await client.list_params(tid=environment, query={})
+    assert res.code == 200
+    parameters = res.result["parameters"]
+    assert len(parameters) == 2

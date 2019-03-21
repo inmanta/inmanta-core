@@ -21,7 +21,7 @@ import sys
 import uuid
 
 import colorlog
-from inmanta import data
+from inmanta import data_pg as data
 import pytest
 from tornado.gen import sleep
 from utils import retry_limited
@@ -85,7 +85,7 @@ class Agent(protocol.SessionEndpoint):
 
 
 async def get_environment(env: uuid.UUID, metadata: dict):
-    return data.Environment(from_mongo=True, _id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
+    return data.Environment(from_postgres=True, id=env, name="test", project=env, repo_url="xx", repo_branch="xx")
 
 
 @pytest.mark.asyncio
@@ -235,8 +235,6 @@ async def test_timeout(unused_tcp_port):
         assert server.expires == 1
         await agent.stop()
         await server.stop()
-
         await rs.stop()
-        await agent.stop()
     finally:
         ENV_OPTS["tid"].getter = old_get_env

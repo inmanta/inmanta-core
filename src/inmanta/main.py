@@ -27,9 +27,11 @@ from collections import defaultdict
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
+from inmanta.resources import Id
 import click
 import texttable
 from time import sleep
+
 
 from typing import Optional, cast, Dict, Any, List, Callable
 
@@ -589,12 +591,14 @@ def version_report(client: Client, environment: str, version: str, l: bool) -> N
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
+            parsed_resource_version_id = Id.parse_id(agents[agent][t][0]["resource_version_id"])
             click.echo(click.style("Resource type:", bold=True)
-                       + "{type} ({attr})".format(type=t, attr=agents[agent][t][0]["id_attribute_name"]))
+                       + "{type} ({attr})".format(type=t, attr=parsed_resource_version_id.attribute))
             click.echo("-" * 72)
 
             for res in agents[agent][t]:
-                click.echo((click.style(res["id_attribute_value"], bold=True) + " (#actions=%d)") % len(res["actions"]))
+                parsed_id = Id.parse_id(res["resource_version_id"])
+                click.echo((click.style(parsed_id.attribute_value, bold=True) + " (#actions=%d)") % len(res["actions"]))
                 # for dryrun show only the latest, for deploy all
                 if not result["model"]["released"]:
                     if len(res["actions"]) > 0:
@@ -700,11 +704,9 @@ def form_import(client: Client, environment: str, form_type: str, file: str) -> 
     if form_type != form_type_def["form_type"]:
         raise click.ClickException("Unable to load form data for %s into form %s" % (form_type_def["form_type"], form_type))
 
-    form_id = form_type_def["id"]
-
     records = cast(List[JsonType], data["records"])
     for record in records:
-        if record["form"] == form_id:
+        if record["form"] == form_type:
             client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))
 
 

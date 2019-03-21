@@ -85,7 +85,7 @@ mkdir ../intermediate/
 cd ../intermediate/
  
 cp ../root/intermediate1.key .
-cp ../root/intermediate1.crt .
+cp ../root/q.crt .
  
 # Create a few files where the CA will store it's serials:
 touch certindex
@@ -177,9 +177,8 @@ authorityKeyIdentifier=keyid:always
  extendedKeyUsage = clientAuth
 EOF
 
-cd ..
 
-mkdir enduser-certs
+mkdir ../enduser-certs
 openssl genrsa -out ../enduser-certs/server.key  -passout pass:test 4096
  
  
@@ -187,7 +186,7 @@ openssl req -new -sha256 -key ../enduser-certs/server.key -out ../enduser-certs/
  
 
  
-export ALTNAME="DNS:test.inmanta.com, IP:127.0.0.1"  
+export ALTNAME="DNS:localhost, IP:127.0.0.1"  
 openssl ca -batch -config ca-srv.conf -notext -in ../enduser-certs/server.csr -out ../enduser-certs/server.crt -passin pass:test
  
 cat ../root/rootca.crt intermediate1.crt > ../enduser-certs/server.chain 

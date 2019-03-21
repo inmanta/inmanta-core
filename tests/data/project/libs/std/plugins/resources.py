@@ -21,7 +21,7 @@ import os
 import re
 import urllib
 
-from inmanta import data
+from inmanta import data_pg as data
 from inmanta.agent.handler import provider, ResourceHandler, HandlerContext, CRUDHandler, ResourcePurged
 from inmanta.execute.util import Unknown
 from inmanta.resources import Resource, PurgeableResource, resource, ResourceNotFoundExcpetion, IgnoreResourceException

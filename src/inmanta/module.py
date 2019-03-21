@@ -30,7 +30,7 @@ from tarfile import TarFile
 from pkg_resources import parse_version, parse_requirements
 import yaml
 
-from inmanta import env
+from inmanta import env, const
 from inmanta import plugins
 from inmanta.ast import Namespace, CompilerException, ModuleNotFoundException, Location, LocatableString, Range
 from inmanta.ast.blocks import BasicBlock
@@ -1048,14 +1048,14 @@ class Module(ModuleLike):
 
         try:
             mod_name = self._meta["name"]
-            imp.load_package("inmanta_plugins." + mod_name, plugin_dir)
+            imp.load_package(const.PLUGINS_PACKAGE + "." + mod_name, plugin_dir)
 
             self._plugin_namespaces.append(mod_name)
 
             for py_file in glob.glob(os.path.join(plugin_dir, "*.py")):
                 if not py_file.endswith("__init__.py"):
                     # name of the python module
-                    sub_mod = "inmanta_plugins." + mod_name + "." + os.path.basename(py_file).split(".")[0]
+                    sub_mod = const.PLUGINS_PACKAGE + "." + mod_name + "." + os.path.basename(py_file).split(".")[0]
                     self._plugin_namespaces.append(sub_mod)
 
                     # load the python file

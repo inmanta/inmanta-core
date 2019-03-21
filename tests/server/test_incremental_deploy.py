@@ -24,7 +24,7 @@ import time
 from inmanta.server import SLICE_SERVER
 import uuid
 from datetime import datetime
-from inmanta import data, const
+from inmanta import data_pg as data, const
 from inmanta.const import ResourceState, ResourceAction
 import logging
 from typing import List, Dict, Any
