@@ -22,6 +22,7 @@ import logging
 import glob
 import imp
 
+from inmanta import const
 from inmanta.execute import scheduler
 from inmanta.ast import Namespace, LocatableString, Range
 from inmanta.ast.statements.define import DefineEntity, DefineRelation, PluginStatement
@@ -149,7 +150,7 @@ class Compiler(object):
         for name, cls in PluginMeta.get_functions().items():
 
             mod_ns = cls.__module__.split(".")
-            if mod_ns[0] != "inmanta_plugins":
+            if mod_ns[0] != const.PLUGINS_PACKAGE:
                 raise Exception("All plugin modules should be loaded in the impera_plugins package not in %s" % cls.__module__)
 
             mod_ns = mod_ns[1:]
