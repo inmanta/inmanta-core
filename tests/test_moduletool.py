@@ -587,8 +587,8 @@ def test_project_freeze_bad(modules_dir, modules_repo, capsys, caplog):
 
     out, err = capsys.readouterr()
 
-    assert len(err) == 0
-    assert len(out) == 0
+    assert len(err) == 0, err
+    assert len(out) == 0, out
     assert "requirement mod2<2016 on module mod2 not fullfilled, now at version 2016.1" in caplog.text
 
     assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
@@ -659,8 +659,8 @@ freeze_operator: ==
         out, err = capsys.readouterr()
 
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-        assert len(err) == 0
-        assert len(out) == 0
+        assert len(err) == 0, err
+        assert len(out) == 0, out
 
         with open("project.yml", "r") as fh:
             assert fh.read() == ("""name: modA
@@ -696,7 +696,7 @@ def test_module_freeze(modules_dir, modules_repo, capsys):
         out, err = capsys.readouterr()
 
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-        assert len(err) == 0
+        assert len(err) == 0, err
         assert out == ("""name: modC
 license: Apache 2.0
 version: '3.2'
@@ -718,7 +718,7 @@ def test_module_freeze_self(modules_dir, modules_repo, capsys):
         out, err = capsys.readouterr()
 
         assert os.path.getsize(os.path.join(coroot, "project.yml")) != 0
-        assert len(err) == 0
+        assert len(err) == 0, err
         assert out == ("""name: modC
 license: Apache 2.0
 version: '3.2'
