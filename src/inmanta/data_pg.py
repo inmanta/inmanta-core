@@ -463,7 +463,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_statement, value)
 
     @classmethod
-    def _get_value(cls, value):
+    def _get_value(cls, value, convert_list_to_str=False):
         if isinstance(value, dict):
             return json.dumps(cls._get_value_of_dict(value))
 
@@ -471,7 +471,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
             return json.dumps(cls._get_value_of_dict(value.to_dict()))
 
         if isinstance(value, list):
-            return [cls._get_value(x) for x in value]
+            result = [cls._get_value(x) for x in value]
+            if convert_list_to_str and not isinstance(result, str):
+                return json.dumps(result)
+            else:
+                return result
 
         if isinstance(value, enum.Enum):
             return value.name
@@ -1373,7 +1377,8 @@ class ResourceAction(BaseDocument):
                                 dollarmark_resource_and_field + ", " + dollarmark_change + ", TRUE)"
                 values = values + [self._get_value(resource),
                                    self._get_value([resource, field]),
-                                   self._get_value(change)]
+                                   self._get_value(change, convert_list_to_str=True)
+                                   ]
                 offset += 3
         set_statement = "changes=" + set_statement
         return (set_statement, values)
