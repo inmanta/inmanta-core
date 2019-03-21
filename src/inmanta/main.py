@@ -33,7 +33,7 @@ import texttable
 from time import sleep
 
 
-from typing import Optional, cast, Dict, Any, List, Callable
+from typing import Optional, cast, Dict, List, Callable
 
 from inmanta.types import JsonType
 

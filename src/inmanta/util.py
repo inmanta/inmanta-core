@@ -25,7 +25,7 @@ import warnings
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, Any
+from typing import Callable, Dict, Union, Tuple
 
 from inmanta.types import JsonType
 

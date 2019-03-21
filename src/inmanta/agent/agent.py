@@ -67,7 +67,7 @@ class ResourceAction(object):
     resource_id: Id
     future: asyncio.Future[ResourceActionResult]
 
-    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason:str) -> None:
+    def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
             :param gid A unique identifier to identify a deploy. This is local to this agent.
         """
@@ -761,7 +761,7 @@ class AgentInstance(object):
                                 changes = ctx.changes
                                 if changes is None:
                                     changes = {}
-                                if(ctx.status == ResourceState.failed):
+                                if(ctx.status == const.ResourceState.failed):
                                     changes["handler"] = {"current": "FAILED", "desired": "Handler failed"}
                                 yield self.get_client().dryrun_update(tid=self._env_id, id=dry_run_id, resource=res["id"],
                                                                       changes=changes)

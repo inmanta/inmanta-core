@@ -18,7 +18,7 @@
 import ssl
 import uuid
 
-from typing import Optional, Dict, Any, List, Generator, NoReturn
+from typing import Optional, Dict, List
 
 import tornado
 from tornado import gen, httpserver, web, routing
@@ -28,6 +28,7 @@ from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
 from inmanta.types import NoneGen, JsonType
+
 
 class RESTHandler(tornado.web.RequestHandler):
     """
