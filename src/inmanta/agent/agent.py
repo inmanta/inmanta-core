@@ -130,7 +130,7 @@ class ResourceAction(object):
         """
         ctx.debug("Start deploy %(deploy_id)s of resource %(resource_id)s",
                   deploy_id=self.gid, resource_id=self.resource_id)
-        provider: ResourceHandler
+        provider: Optional[ResourceHandler] = None
 
         if not event_only:
             yield self.send_in_progress(ctx.action_id, start)
