@@ -1271,7 +1271,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
     resource_action.add_changes({"rid": {"field1": {"old": "a", "new": "b"}, "field2": {}}})
     await resource_action.save()
 
-    resource_action.add_changes({"rid": {"field2": {"old": "c", "new": "d"}, "field3": {}}})
+    resource_action.add_changes({"rid": {"field2": {"old": "c", "new": "d"}, "field3": ['removed', 'installed']}})
     await resource_action.save()
 
     resource_action.add_logs([{}, {}])
@@ -1302,7 +1302,7 @@ async def test_resource_action(init_dataclasses_and_load_schema):
         assert ra.changes["rid"]["field1"]["new"] == "b"
         assert ra.changes["rid"]["field2"]["old"] == "c"
         assert ra.changes["rid"]["field2"]["new"] == "d"
-        assert ra.changes["rid"]["field3"] == {}
+        assert ra.changes["rid"]["field3"] == ['removed', 'installed']
         assert ra.status == const.ResourceState.failed
 
         assert len(ra.messages) == 4

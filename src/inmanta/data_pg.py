@@ -1373,10 +1373,21 @@ class ResourceAction(BaseDocument):
                                 dollarmark_resource_and_field + ", " + dollarmark_change + ", TRUE)"
                 values = values + [self._get_value(resource),
                                    self._get_value([resource, field]),
-                                   self._get_value(change)]
+                                   self._get_as_jsonb(change)
+                                   ]
                 offset += 3
         set_statement = "changes=" + set_statement
         return (set_statement, values)
+
+    def _get_as_jsonb(self, obj):
+        """
+             A PostgreSQL jsonb type should be passed to AsyncPG as a string type.
+             As such this method should return a string type.
+        """
+        result = self._get_value(obj)
+        if not isinstance(result, str):
+            result = json.dumps(result)
+        return result
 
     async def save(self):
         """
