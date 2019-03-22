@@ -222,6 +222,10 @@ async def agent(server, environment):
 
 @pytest.fixture(scope="function")
 async def server(event_loop, inmanta_config, postgres_db, database_name):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -258,7 +262,10 @@ async def server(event_loop, inmanta_config, postgres_db, database_name):
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
 async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request):
-
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
