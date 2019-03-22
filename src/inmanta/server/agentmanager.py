@@ -126,8 +126,6 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-        self.running: bool = False
-
     @gen.coroutine
     def prestart(self, server: protocol.Server) -> NoneGen:
         yield ServerSlice.prestart(self, server)
