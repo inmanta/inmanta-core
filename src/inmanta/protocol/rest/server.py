@@ -210,6 +210,7 @@ class RESTServer(RESTBase):
         self.inflight_counter = 0
         # event indicating no more in flight requests
         self.idle_event = asyncio.Event()
+        self.idle_event.set()
 
     def start_request(self):
         self.idle_event.clear()
@@ -263,8 +264,7 @@ class RESTServer(RESTBase):
 
         LOGGER.debug("Start REST transport")
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         """
             Stop the current server
         """
