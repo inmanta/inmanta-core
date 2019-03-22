@@ -341,7 +341,7 @@ class Session(object):
         return self.client
 
     def abort(self):
-        "send poison pill"
+        "Send poison pill to signal termination."
         self._queue.put(None)
 
 
