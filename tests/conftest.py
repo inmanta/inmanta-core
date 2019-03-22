@@ -134,7 +134,7 @@ async def create_db(postgres_db, database_name):
 
 
 @pytest.fixture(scope="function")
-async def clean_db(postgresql_client):
+async def clean_db(postgresql_client, create_db):
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
     tables_to_preserve = [x.table_name() for x in data._classes]
