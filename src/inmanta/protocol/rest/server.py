@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import ssl
 import uuid
 
@@ -89,6 +90,7 @@ class RESTHandler(tornado.web.RequestHandler):
             raise exceptions.NotFound("This method does not exist")
 
         with timer("rpc." + call_config.method_name).time():
+            self._transport.start_request()
             self.set_header("Access-Control-Allow-Origin", "*")
             try:
                 message = self._transport._decode(self.request.body)
@@ -122,6 +124,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
             finally:
                 yield self.finish()
+                self._transport.end_request()
 
     @gen.coroutine
     def head(self, *args: str, **kwargs: str) -> NoneGen:
@@ -199,6 +202,19 @@ class RESTServer(RESTBase):
         self._id = id
         self.headers: Dict[str, str] = {}
         self.session_manager = session_manager
+        # number of ongoing requests
+        self.inflight_counter = 0
+        # event indicating no more in flight requests
+        self.idle_event = asyncio.Event()
+
+    def start_request(self):
+        self.idle_event.clear()
+        self.inflight_counter += 1
+
+    def end_request(self):
+        self.inflight_counter -= 1
+        if self.inflight_counter == 0:
+            self.idle_event.set()
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
@@ -252,4 +268,5 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             self._http_server.stop()
 
+        yield self.idle_event.wait()
         yield self._http_server.close_all_connections()

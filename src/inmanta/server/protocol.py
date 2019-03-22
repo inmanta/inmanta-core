@@ -149,6 +149,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self._name: str = name
         self._handlers: List[routing.Rule] = []
         self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
+        self.running: bool = False # for debugging
 
     @abc.abstractmethod
     @gen.coroutine
@@ -161,9 +162,11 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         """
             Start the server slice.
         """
+        self.running = True
 
     @gen.coroutine
     def stop(self) -> Generator[Any, Any, None]:
+        self.running = False
         self._sched.stop()
 
     name = property(lambda self: self._name)
@@ -381,6 +384,7 @@ class SessionManager(ServerSlice):
         """
             Start the server slice.
         """
+        yield super().start()
 
     @gen.coroutine
     def stop(self) -> None:
