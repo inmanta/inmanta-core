@@ -198,8 +198,8 @@ class AttributeReferenceAnchor(Anchor):
     def resolve(self) -> Location:
         instancetype = self.namespace.get_type(self.type)
         # type check impossible atm due to import loop
-        # assert isinstance(instancetype, Entity)
-        return instancetype.get_attribute(self.attribute).get_location()
+        # assert isinstance(instancetype, EntityLike)
+        return instancetype.get_entity().get_attribute(self.attribute).get_location()
 
 
 class Namespaced(Locatable):

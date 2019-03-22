@@ -42,17 +42,21 @@ implementation a for Test:
 end
 
 implement Test using a
+
+typedef Test3 as Test(b="a")
+
+y = Test3(a="xx")
 """, autostd=False)
     anchormap = compiler.anchormap()
 
-    assert len(anchormap) == 9
+    assert len(anchormap) == 13
 
     checkmap = {(r.lnr, r.start_char, r.end_char): t.lnr for r, t in anchormap}
 
     def verify_anchor(flnr, s, e, tolnr):
         assert checkmap[(flnr, s, e)] == tolnr
 
-    for f, t in anchormap:
+    for f, t in sorted(anchormap, key=lambda x: x[0].lnr):
         print("%s:%d -> %s" % (f, f.end_char, t))
     verify_anchor(7, 22, 26, 2)
     verify_anchor(8, 5, 8, 13)
@@ -63,6 +67,10 @@ implement Test using a
     verify_anchor(19, 22, 26, 2)
     verify_anchor(23, 11, 15, 2)
     verify_anchor(23, 22, 23, 19)
+    verify_anchor(25, 18, 22, 2)
+    verify_anchor(25, 23, 24, 4)
+    verify_anchor(27, 5, 10, 25)
+    verify_anchor(27, 11, 12, 3)
 
 
 def test_anchors_two(snippetcompiler):
