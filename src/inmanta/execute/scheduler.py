@@ -28,10 +28,10 @@ from inmanta.ast.type import TYPES, Type
 from inmanta.ast.statements.define import DefineEntity, DefineImplement, DefineTypeDefault, DefineIndex, DefineRelation
 from inmanta.execute.runtime import Resolver, ExecutionContext, QueueScheduler, ExecutionUnit
 from inmanta.ast.entity import Entity
-from inmanta.ast import RuntimeException, MultiException, CycleExcpetion
+from inmanta.ast import RuntimeException, MultiException, CycleExcpetion, Location
 from inmanta.execute.tracking import ModuleTracker
 import itertools
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 
 DEBUG = True
 LOGGER = logging.getLogger(__name__)
@@ -175,7 +175,7 @@ class Scheduler(object):
 
         self.types = {k: v for k, v in types_and_impl.items() if isinstance(v, Type)}
 
-    def anchormap(self, compiler, statements, blocks):
+    def anchormap(self, compiler, statements, blocks) -> List[Tuple[Location, Location]]:
         prev = time.time()
 
         # first evaluate all definitions, this should be done in one iteration
