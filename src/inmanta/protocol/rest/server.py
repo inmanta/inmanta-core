@@ -30,7 +30,6 @@ from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
 from inmanta.types import NoneGen, JsonType
-from tornado.iostream import StreamClosedError
 
 
 class RESTHandler(tornado.web.RequestHandler):

@@ -28,7 +28,7 @@ from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
-from typing import Dict, Tuple, Callable, Optional, List, Union, Any, Generator
+from typing import Dict, Tuple, Callable, Optional, List, Union
 
 import logging
 import asyncio
@@ -150,7 +150,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self._name: str = name
         self._handlers: List[routing.Rule] = []
         self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
-        self.running: bool = False # for debugging
+        self.running: bool = False  # for debugging
 
     @abc.abstractmethod
     @gen.coroutine
@@ -312,8 +312,8 @@ class Session(object):
             call_list: List[common.Request] = []
             call = yield self._queue.get(timeout=IOLoop.current().time() + self._interval)
             if call is None:
-                    # aborting session
-                    return None
+                # aborting session
+                return None
             call_list.append(call)
             while self._queue.qsize() > 0:
                 call = yield self._queue.get()

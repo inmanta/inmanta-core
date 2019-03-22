@@ -253,7 +253,7 @@ async def server(event_loop, inmanta_config, postgres_db, database_name):
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
     shutil.rmtree(state_dir)
 
 
@@ -317,7 +317,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
 
     shutil.rmtree(state_dir)
 
