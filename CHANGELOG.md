@@ -1,13 +1,15 @@
-v 2019.1.3 (2019-03-15)
+v 2019.1.4
 Changes in this release:
 - bugfix for incorrect cache clearing in incremental deploy (#1016)
+
+v 2019.1.3 (2019-03-15)
+Changes in this release:
 - bugfix for irregular behavior of datetime.isoformat
 - bugfix for autostarted agents not restarting for changed configuration
 
 v 2019.1.1 (2019-03-08)
 Changes in this release:
 - changed incremental deploy to have a more natural UI
-
 v 2019.1 (2019-03-06)
 Changes in this release:
 - Various bugfixes and performance enhancements (#873, #772, #958, #959, #955)
