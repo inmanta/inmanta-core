@@ -30,6 +30,7 @@ from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
 from inmanta.types import NoneGen, JsonType
+from tornado.iostream import StreamClosedError
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -123,7 +124,10 @@ class RESTHandler(tornado.web.RequestHandler):
                 self.respond(e.to_body(), {}, e.to_status())
 
             finally:
-                yield self.finish()
+                try:
+                    yield self.finish()
+                except Exception:
+                    LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
                 self._transport.end_request()
 
     @gen.coroutine
@@ -268,5 +272,7 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             self._http_server.stop()
 
+    @gen.coroutine
+    def join(self) -> NoneGen:
         yield self.idle_event.wait()
         yield self._http_server.close_all_connections()

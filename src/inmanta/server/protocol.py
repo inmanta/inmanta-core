@@ -136,6 +136,7 @@ class Server(endpoints.Endpoint):
         yield self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
             yield endpoint.stop()
+        yield self._transport.join()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget):
@@ -310,9 +311,15 @@ class Session(object):
         try:
             call_list: List[common.Request] = []
             call = yield self._queue.get(timeout=IOLoop.current().time() + self._interval)
+            if call is None:
+                    # aborting session
+                    return None
             call_list.append(call)
             while self._queue.qsize() > 0:
                 call = yield self._queue.get()
+                if call is None:
+                    # aborting session
+                    return None
                 call_list.append(call)
 
             return call_list
@@ -332,6 +339,10 @@ class Session(object):
 
     def get_client(self) -> ReturnClient:
         return self.client
+
+    def abort(self):
+        "send poison pill"
+        self._queue.put(None)
 
 
 class SessionListener(object):
@@ -395,6 +406,7 @@ class SessionManager(ServerSlice):
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)
+            session.abort()
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         if isinstance(sid, str):
