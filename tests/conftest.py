@@ -249,7 +249,11 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, postgres_db, database_name, clean_reset):
+async def server(event_loop, inmanta_config, postgres_db, database_name, clean_reset):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
 
@@ -270,13 +274,14 @@ async def server(inmanta_config, postgres_db, database_name, clean_reset):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
+    config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
     shutil.rmtree(state_dir)
 
 
@@ -284,8 +289,11 @@ async def server(inmanta_config, postgres_db, database_name, clean_reset):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, postgres_db, database_name, request, clean_reset):
-
+async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -330,13 +338,14 @@ async def server_multi(inmanta_config, postgres_db, database_name, request, clea
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
+    config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
 
     shutil.rmtree(state_dir)
 

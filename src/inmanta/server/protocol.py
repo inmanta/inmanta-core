@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import inmanta.protocol.endpoints
-from inmanta.types import JsonType
+from inmanta.types import JsonType, NoneGen
 from inmanta.util import Scheduler
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
@@ -28,7 +28,7 @@ from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
-from typing import Dict, Tuple, Callable, Optional, List, Union, Any, Generator
+from typing import Dict, Tuple, Callable, Optional, List, Union
 
 import logging
 import asyncio
@@ -98,7 +98,7 @@ class Server(endpoints.Endpoint):
     id = property(get_id)
 
     @gen.coroutine
-    def start(self) -> None:
+    def start(self) -> NoneGen:
         """
             Start the transport.
 
@@ -121,7 +121,7 @@ class Server(endpoints.Endpoint):
         yield self._transport.start(self.get_slices().values(), self._handlers)
 
     @gen.coroutine
-    def stop(self) -> None:
+    def stop(self) -> NoneGen:
         """
             Stop the transport.
 
@@ -136,6 +136,7 @@ class Server(endpoints.Endpoint):
         yield self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
             yield endpoint.stop()
+        yield self._transport.join()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget):
@@ -149,21 +150,24 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self._name: str = name
         self._handlers: List[routing.Rule] = []
         self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
+        self.running: bool = False  # for debugging
 
     @abc.abstractmethod
     @gen.coroutine
-    def prestart(self, server: Server) -> Generator[Any, Any, None]:
+    def prestart(self, server: Server) -> NoneGen:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
     @gen.coroutine
     @abc.abstractmethod
-    def start(self) -> Generator[Any, Any, None]:
+    def start(self) -> NoneGen:
         """
             Start the server slice.
         """
+        self.running = True
 
     @gen.coroutine
-    def stop(self) -> Generator[Any, Any, None]:
+    def stop(self) -> NoneGen:
+        self.running = False
         self._sched.stop()
 
     name = property(lambda self: self._name)
@@ -307,9 +311,15 @@ class Session(object):
         try:
             call_list: List[common.Request] = []
             call = yield self._queue.get(timeout=IOLoop.current().time() + self._interval)
+            if call is None:
+                # aborting session
+                return None
             call_list.append(call)
             while self._queue.qsize() > 0:
                 call = yield self._queue.get()
+                if call is None:
+                    # aborting session
+                    return None
                 call_list.append(call)
 
             return call_list
@@ -329,6 +339,10 @@ class Session(object):
 
     def get_client(self) -> ReturnClient:
         return self.client
+
+    def abort(self):
+        "Send poison pill to signal termination."
+        self._queue.put(None)
 
 
 class SessionListener(object):
@@ -381,6 +395,7 @@ class SessionManager(ServerSlice):
         """
             Start the server slice.
         """
+        yield super().start()
 
     @gen.coroutine
     def stop(self) -> None:
@@ -391,6 +406,7 @@ class SessionManager(ServerSlice):
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)
+            session.abort()
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         if isinstance(sid, str):

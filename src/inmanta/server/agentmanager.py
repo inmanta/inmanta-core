@@ -126,8 +126,6 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-        self.running: bool = False
-
     @gen.coroutine
     def prestart(self, server: protocol.Server) -> NoneGen:
         yield ServerSlice.prestart(self, server)
@@ -165,7 +163,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     @gen.coroutine
     def start(self) -> NoneGen:
-        self.running = True
+        yield super().start()
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
@@ -173,8 +171,6 @@ class AgentManager(ServerSlice, SessionListener):
     @gen.coroutine
     def stop(self) -> NoneGen:
         yield super().stop()
-
-        self.running = False
         yield self.terminate_agents()
 
     # Agent Management
