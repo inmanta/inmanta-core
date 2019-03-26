@@ -828,7 +828,10 @@ def monitor_deploy(client: Client, environment: str) -> None:
 
     versions = cast(Dict[str, List[Dict[str, str]]], client.do_request("list_versions", arguments=dict(tid=tid)))
     allversion = versions["versions"]
-    first: Dict[str, str] = next(version for version in allversion if version["result"] != "pending")
+    try:
+        first: Dict[str, str] = next(version for version in allversion if version["result"] != "pending")
+    except StopIteration:
+        raise click.ClickException("Environment %s doesn't contain a released configuration model" % environment)
 
     total = int(first["total"])
     done = int(first["done"])
