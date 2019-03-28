@@ -10,14 +10,13 @@ import re
 
 
 class QueryMockHandler(tornado.web.RequestHandler):
-
     def initialize(self, parent):
         self.parent = parent
 
     def get(self, *args, **kwargs):
         self.parent.querycount += 1
         try:
-            assert self.request.query_arguments["q"] == [b'CREATE DATABASE metrics']
+            assert self.request.query_arguments["q"] == [b"CREATE DATABASE metrics"]
         except Exception as e:
             # carry over  failures
             self.parent.failure = e
@@ -27,7 +26,6 @@ influxlineprotocol = re.compile(r"\w+(,\w+=\w+)* (\w+=[\d.e+-]*)(,\w+=[\d.e+-]*)
 
 
 class WriteMockHandler(tornado.web.RequestHandler):
-
     def initialize(self, parent):
         self.parent = parent
 
@@ -44,7 +42,6 @@ class WriteMockHandler(tornado.web.RequestHandler):
 
 
 class InfluxdbMock(object):
-
     def __init__(self, socket):
         self.querycount = 0
         self.writecount = 0
@@ -54,28 +51,27 @@ class InfluxdbMock(object):
         self.app = tornado.web.Application(
             [
                 url(r"/query", QueryMockHandler, kwargs={"parent": self}),
-                url(r"/write", WriteMockHandler, kwargs={"parent": self})
-            ])
+                url(r"/write", WriteMockHandler, kwargs={"parent": self}),
+            ]
+        )
 
         self.server = HTTPServer(self.app)
         self.server.add_sockets([socket])
         _addr, port = socket.getsockname()
         self.port = port
 
-class MockReporter(AsyncReporter):
 
+class MockReporter(AsyncReporter):
     def __init__(self, interval):
         super().__init__(None, interval)
         self.waiter = asyncio.locks.Semaphore(0)
         self.in_count = 0
         self.count = 0
 
-    async def report_now(
-        self, registry = None, timestamp = None
-    ) -> None:
-        self.in_count+=1
+    async def report_now(self, registry=None, timestamp=None) -> None:
+        self.in_count += 1
         await self.waiter.acquire()
-        self.count+=1
+        self.count += 1
 
 
 @pytest.fixture
@@ -87,7 +83,9 @@ def influxdb(event_loop, free_socket):
 
 @pytest.mark.asyncio
 async def test_influxdb(influxdb):
-    rep = InfluxReporter(port=influxdb.port, tags={"mark": "X"}, autocreate_database=True)
+    rep = InfluxReporter(
+        port=influxdb.port, tags={"mark": "X"}, autocreate_database=True
+    )
     with timer("test").time():
         pass
 
@@ -124,5 +122,5 @@ async def test_timing():
     base = mr.count
     assert base < 4
     await asyncio.sleep(0.01)
-    assert mr.count == base+1
+    assert mr.count == base + 1
     mr.stop()
