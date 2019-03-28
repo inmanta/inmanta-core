@@ -3,8 +3,9 @@ import tornado
 from tornado.web import url
 
 from tornado.httpserver import HTTPServer
-from inmanta.reporter import InfluxReporter
+from inmanta.reporter import InfluxReporter, AsyncReporter
 from pyformance import timer
+import asyncio
 import re
 
 
@@ -61,6 +62,21 @@ class InfluxdbMock(object):
         _addr, port = socket.getsockname()
         self.port = port
 
+class MockReporter(AsyncReporter):
+
+    def __init__(self, interval):
+        super().__init__(None, interval)
+        self.waiter = asyncio.locks.Semaphore(0)
+        self.in_count = 0
+        self.count = 0
+
+    async def report_now(
+        self, registry = None, timestamp = None
+    ) -> None:
+        self.in_count+=1
+        await self.waiter.acquire()
+        self.count+=1
+
 
 @pytest.fixture
 def influxdb(event_loop, free_socket):
@@ -88,3 +104,25 @@ async def test_influxdb(influxdb):
 
     for line in influxdb.lines:
         assert "mark=X" in line
+
+
+@pytest.mark.asyncio
+async def test_timing():
+    mr = MockReporter(0.01)
+    mr.start()
+    assert mr.count == 0
+    await asyncio.sleep(0.01)
+    assert mr.in_count == 1
+    mr.waiter.release()
+    await asyncio.sleep(0.0)
+    assert mr.count == 1
+
+    # allow to run multiple times
+    for i in range(5):
+        mr.waiter.release()
+    await asyncio.sleep(0.0)
+    base = mr.count
+    assert base < 4
+    await asyncio.sleep(0.01)
+    assert mr.count == base+1
+    mr.stop()
