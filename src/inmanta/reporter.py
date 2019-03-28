@@ -53,7 +53,7 @@ class AsyncReporter(object):
             except Exception:
                 LOGGER.warning("Could not send metrics report", exc_info=True)
             next_loop_time += self.reporting_interval
-            wait = max(0, next_loop_time - time.time())
+            wait = max(0, next_loop_time - loop.time())
             await asyncio.sleep(wait)
 
     async def report_now(
