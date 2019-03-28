@@ -106,21 +106,36 @@ async def test_influxdb(influxdb):
 
 @pytest.mark.asyncio
 async def test_timing():
+    # Attempt to deploy every 0.01 seconds,
+    # Deploy hangs on a semaphore, so test case can control progress
     mr = MockReporter(0.01)
     mr.start()
+
+    # no deploy done
     assert mr.count == 0
+    # wait for deploy
     await asyncio.sleep(0.01)
+    # one is waiting
     assert mr.in_count == 1
+    # release
     mr.waiter.release()
+    # wait 0 to allow reporter to make progress
     await asyncio.sleep(0.0)
+    # one deploy done
     assert mr.count == 1
 
-    # allow to run multiple times
+    # allow to run free to test timing
     for i in range(5):
         mr.waiter.release()
-    await asyncio.sleep(0.0)
+
+    # wait 0 to allow reporter to make progress
+    await asyncio.sleep(0)
+    # how many are we now?
     base = mr.count
+    # should be sufficiently far of the lock
+    # otherwise test always succeeds
     assert base < 4
+    # wait for one more
     await asyncio.sleep(0.01)
     assert mr.count == base + 1
     mr.stop()
