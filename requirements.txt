@@ -34,3 +34,4 @@ pep8-naming==0.8.2
 flake8==3.7.7
 psutil==5.6.1
 pyformance==0.4
+psycopg2==2.7.7
