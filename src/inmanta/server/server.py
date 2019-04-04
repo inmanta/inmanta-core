@@ -108,6 +108,7 @@ class Server(protocol.ServerSlice):
         self._increment_cache = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks = defaultdict(lambda: locks.Lock())
+        self._influx_db_reporter = None
 
     @gen.coroutine
     def prestart(self, server):
@@ -141,20 +142,25 @@ class Server(protocol.ServerSlice):
         yield super().stop()
         self._close_resource_action_loggers()
         yield data.disconnect()
+        self.stop_metric_reporters()
+
+    def stop_metric_reporters(self) -> None:
+        if self._influx_db_reporter:
+            self._influx_db_reporter.stop()
+            self._influx_db_reporter = None
 
     def start_metric_reporters(self) -> None:
         if opt.influxdb_host.get():
-            rep = InfluxReporter(
-                server=opt.influxdb_host.get(),
-                port=opt.influxdb_port.get(),
-                database=opt.influxdb_name.get(),
-                username=opt.influxdb_username.get(),
-                password=opt.influxdb_password,
-                reporting_interval=opt.influxdb_interval.get(),
-                autocreate_database=True,
-                tags=opt.influxdb_tags.get()
-            )
-            rep.start()
+            self._influx_db_reporter = InfluxReporter(server=opt.influxdb_host.get(),
+                                                      port=opt.influxdb_port.get(),
+                                                      database=opt.influxdb_name.get(),
+                                                      username=opt.influxdb_username.get(),
+                                                      password=opt.influxdb_password,
+                                                      reporting_interval=opt.influxdb_interval.get(),
+                                                      autocreate_database=True,
+                                                      tags=opt.influxdb_tags.get()
+                                                      )
+            self._influx_db_reporter.start()
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:
