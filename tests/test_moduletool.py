@@ -281,6 +281,13 @@ def modules_repo(modules_dir):
     masterproject = makemodule(reporoot, "masterproject", project=True, imports=["mod8"], install_mode=INSTALL_MASTER)
     commitmodule(masterproject, "first commit")
 
+    masterproject_multi_mod = makemodule(reporoot,
+                                             "masterproject_multi_mod",
+                                             project=True,
+                                             imports=["mod2", "mod8"],
+                                             install_mode=INSTALL_MASTER)
+    commitmodule(masterproject_multi_mod, "first commit")
+
     nover = makemodule(reporoot, "nover", [])
     commitmodule(nover, "first commit")
     add_file(nover, "signal", "present", "second commit")
@@ -736,38 +743,47 @@ requires:
     verify()
 
 
-def test_module_update_with_install_mode_master(tmpdir, modules_dir, modules_repo):
-    # Make a copy of masterproject
-    masterproject = tmpdir.join("masterproject")
-    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "masterproject"), masterproject],
+@pytest.mark.parametrize("kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated",
+                         [({}, True, True),
+                          ({"module": "mod2"}, True, False),
+                          ({"module": "mod8"}, False, True)])
+def test_module_update_with_install_mode_master(tmpdir, modules_dir, modules_repo,
+                                                kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated):
+    # Make a copy of masterproject_multi_mod
+    masterproject_multi_mod = tmpdir.join("masterproject_multi_mod")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "masterproject_multi_mod")],
                             cwd=tmpdir, stderr=subprocess.STDOUT)
+    libs_folder = os.path.join(masterproject_multi_mod, "libs")
+    os.mkdir(libs_folder)
 
-    # Set masterproject as current project
-    os.chdir(masterproject)
-    os.curdir = masterproject
+    # Set masterproject_multi_mod as current project
+    os.chdir(masterproject_multi_mod)
+    os.curdir = masterproject_multi_mod
     Config.load_config()
 
-    # Make a copy of mod8, which is a dependency of masterproject
-    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "mod8")],
-                            cwd=tmpdir, stderr=subprocess.STDOUT)
+    # Dependencies masterproject_multi_mod
+    for mod in ["mod2", "mod8"]:
+        # Clone mod in root tmpdir
+        subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", mod)],
+                                cwd=tmpdir, stderr=subprocess.STDOUT)
+        # Clone mod from root of tmpdir into libs folder of masterproject_multi_mod
+        subprocess.check_output(["git", "clone", os.path.join(tmpdir, mod)],
+                                cwd=libs_folder, stderr=subprocess.STDOUT)
 
-    # Clone copy of mod8 into libs folder of masterproject
-    libs_folder_master_project = os.path.join(masterproject, "libs")
-    os.mkdir(libs_folder_master_project)
-    subprocess.check_output(["git", "clone", os.path.join(tmpdir, "mod8")],
-                            cwd=libs_folder_master_project, stderr=subprocess.STDOUT)
+        # Update module in root of tmpdir by adding an extra file
+        file_name_extra_file = "test_file"
+        path_mod = os.path.join(tmpdir, mod)
+        add_file(path_mod, file_name_extra_file, "test", "Second commit")
 
-    # Update mod8 by adding an extra file (-> the mod8 module outside of masterproject)
-    file_name_extra_file = "test_file"
-    path_mod8 = os.path.join(tmpdir, "mod8")
-    add_file(path_mod8, file_name_extra_file, "test", "Second commit")
+        # Assert test_file not present in libs folder of masterproject_multi_mod
+        path_extra_file = os.path.join(libs_folder, mod, file_name_extra_file)
+        assert not os.path.exists(path_extra_file)
 
-    # Assert test_file not present in mod8 module of masterproject
-    path_extra_file_project_copy = os.path.join(masterproject, "libs", "mod8", file_name_extra_file)
-    assert not os.path.exists(path_extra_file_project_copy)
+    # Update module(s) of masterproject_multi_mod
+    ModuleTool().update(**kwargs_update_method)
 
-    # Update all modules of masterproject
-    ModuleTool().update()
-
-    # Assert test_file is present in mod8 of masterproject
-    assert os.path.exists(path_extra_file_project_copy)
+    # Assert availability of test_file in masterproject_multi_mod
+    extra_file_mod2 = os.path.join(libs_folder, "mod2", file_name_extra_file)
+    assert os.path.exists(extra_file_mod2) == mod2_should_be_updated
+    extra_file_mod8 = os.path.join(libs_folder, "mod8", file_name_extra_file)
+    assert os.path.exists(extra_file_mod8) == mod8_should_be_updated
