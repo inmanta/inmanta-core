@@ -734,3 +734,40 @@ requires:
     os.curdir = modp
     app(["module", "freeze", "-o", "-"])
     verify()
+
+
+def test_module_update_with_install_mode_master(tmpdir, modules_dir, modules_repo):
+    # Make a copy of masterproject
+    masterproject = tmpdir.join("masterproject")
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "masterproject"), masterproject],
+                            cwd=tmpdir, stderr=subprocess.STDOUT)
+
+    # Set masterproject as current project
+    os.chdir(masterproject)
+    os.curdir = masterproject
+    Config.load_config()
+
+    # Make a copy of mod8, which is a dependency of masterproject
+    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "mod8")],
+                            cwd=tmpdir, stderr=subprocess.STDOUT)
+
+    # Clone copy of mod8 into libs folder of masterproject
+    libs_folder_master_project = os.path.join(masterproject, "libs")
+    os.mkdir(libs_folder_master_project)
+    subprocess.check_output(["git", "clone", os.path.join(tmpdir, "mod8")],
+                            cwd=libs_folder_master_project, stderr=subprocess.STDOUT)
+
+    # Update mod8 by adding an extra file (-> the mod8 module outside of masterproject)
+    file_name_extra_file = "test_file"
+    path_mod8 = os.path.join(tmpdir, "mod8")
+    add_file(path_mod8, file_name_extra_file, "test", "Second commit")
+
+    # Assert test_file not present in mod8 module of masterproject
+    path_extra_file_project_copy = os.path.join(masterproject, "libs", "mod8", file_name_extra_file)
+    assert not os.path.exists(path_extra_file_project_copy)
+
+    # Update all modules of masterproject
+    ModuleTool().update()
+
+    # Assert test_file is present in mod8 of masterproject
+    assert os.path.exists(path_extra_file_project_copy)
