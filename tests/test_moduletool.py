@@ -282,10 +282,10 @@ def modules_repo(modules_dir):
     commitmodule(masterproject, "first commit")
 
     masterproject_multi_mod = makemodule(reporoot,
-                                             "masterproject_multi_mod",
-                                             project=True,
-                                             imports=["mod2", "mod8"],
-                                             install_mode=INSTALL_MASTER)
+                                         "masterproject_multi_mod",
+                                         project=True,
+                                         imports=["mod2", "mod8"],
+                                         install_mode=INSTALL_MASTER)
     commitmodule(masterproject_multi_mod, "first commit")
 
     nover = makemodule(reporoot, "nover", [])
