@@ -151,6 +151,18 @@ def install_project(modules_dir, name, config=True):
     return coroot
 
 
+def clone_repo(source_dir, repo_name, destination_dir):
+    subprocess.check_output(["git", "clone", os.path.join(source_dir, repo_name)],
+                            cwd=destination_dir,
+                            stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "config", "user.email", '"test@test.example"'],
+                            cwd=os.path.join(destination_dir, repo_name),
+                            stderr=subprocess.STDOUT)
+    subprocess.check_output(["git", "config", "user.name", 'Tester test'],
+                            cwd=os.path.join(destination_dir, repo_name),
+                            stderr=subprocess.STDOUT)
+
+
 class BadModProvider(object):
 
     def __init__(self, parent, badname):
@@ -751,8 +763,7 @@ def test_module_update_with_install_mode_master(tmpdir, modules_dir, modules_rep
                                                 kwargs_update_method, mod2_should_be_updated, mod8_should_be_updated):
     # Make a copy of masterproject_multi_mod
     masterproject_multi_mod = tmpdir.join("masterproject_multi_mod")
-    subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", "masterproject_multi_mod")],
-                            cwd=tmpdir, stderr=subprocess.STDOUT)
+    clone_repo(modules_repo, "masterproject_multi_mod", tmpdir)
     libs_folder = os.path.join(masterproject_multi_mod, "libs")
     os.mkdir(libs_folder)
 
@@ -764,11 +775,10 @@ def test_module_update_with_install_mode_master(tmpdir, modules_dir, modules_rep
     # Dependencies masterproject_multi_mod
     for mod in ["mod2", "mod8"]:
         # Clone mod in root tmpdir
-        subprocess.check_output(["git", "clone", os.path.join(modules_dir, "repos", mod)],
-                                cwd=tmpdir, stderr=subprocess.STDOUT)
+        clone_repo(modules_repo, mod, tmpdir)
+
         # Clone mod from root of tmpdir into libs folder of masterproject_multi_mod
-        subprocess.check_output(["git", "clone", os.path.join(tmpdir, mod)],
-                                cwd=libs_folder, stderr=subprocess.STDOUT)
+        clone_repo(tmpdir, mod, libs_folder)
 
         # Update module in root of tmpdir by adding an extra file
         file_name_extra_file = "test_file"
