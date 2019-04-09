@@ -399,7 +399,8 @@ def get_resources_for_agent(
     agent: str,
     sid: uuid.UUID = None,
     version: int = None,
-    incremental_deploy: bool = False):
+    incremental_deploy: bool = False
+):
     """
         Return the most recent state for the resources associated with agent, or the version requested
 

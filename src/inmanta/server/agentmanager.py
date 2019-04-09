@@ -337,7 +337,7 @@ class AgentManager(ServerSlice, SessionListener):
                    env: data.Environment,
                    sid: uuid.UUID,
                    agent: str):
-        prim = self.tid_endpoint_to_session.get((env.id, agent),None)
+        prim = self.tid_endpoint_to_session.get((env.id, agent), None)
         if prim is None:
             return False
         return prim.get_id() == sid

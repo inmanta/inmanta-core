@@ -25,12 +25,10 @@ import time
 import utils
 from inmanta.agent.agent import Agent
 
-from inmanta.server.protocol import Session, SessionManager
-
 from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER
 import uuid
 from datetime import datetime
-from inmanta import data_pg as data, const, config
+from inmanta import data_pg as data, const
 from inmanta.const import ResourceState, ResourceAction
 import logging
 from typing import List, Dict, Any
@@ -93,7 +91,7 @@ class MultiVersionSetup(object):
         version: int,
         agent: str = "agent1",
         requires: List[str] = [],
-        send_event: bool = False
+        send_event: bool = False,
     ) -> str:
         """
             requires: list of resource identifiers
@@ -110,7 +108,13 @@ class MultiVersionSetup(object):
         return id
 
     def add_resource(
-        self, name: str, scenario: str, increment: bool, agent="agent1", requires=[], send_event: bool = False
+        self,
+        name: str,
+        scenario: str,
+        increment: bool,
+        agent="agent1",
+        requires=[],
+        send_event: bool = False,
     ) -> str:
         v = self.firstversion
         rid = "test::Resource[%s,key=%s]" % (agent, name)
@@ -133,7 +137,12 @@ class MultiVersionSetup(object):
 
         endpoints = list(self.results.keys())
 
-        a = Agent(hostname="node1", environment=environment, agent_map={e: "localhost" for e in endpoints}, code_loader=False)
+        a = Agent(
+            hostname="node1",
+            environment=environment,
+            agent_map={e: "localhost" for e in endpoints},
+            code_loader=False,
+        )
         for e in endpoints:
             a.add_end_point_name(e)
         await a.start()
@@ -141,7 +150,7 @@ class MultiVersionSetup(object):
 
         return a
 
-    async def setup(self, serverdirect: Server, env: UUID, sid:UUID):
+    async def setup(self, serverdirect: Server, env: UUID, sid: UUID):
         for version in range(0, len(self.versions)):
             if self.versions[version]:
                 res = await serverdirect.put_version(
@@ -182,7 +191,9 @@ class MultiVersionSetup(object):
                 env, agent, version=None, incremental_deploy=True, sid=sid
             )
 
-            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(results)
+            assert sorted([x["resource_id"] for x in payload["resources"]]) == sorted(
+                results
+            )
             allresources.update({r["resource_id"]: r for r in payload["resources"]})
 
         return allresources
@@ -292,18 +303,12 @@ async def test_deploy(server, agent: Agent, environment, caplog):
 
         # Cannot request increment for specific version
         result, _ = await serverdirect.get_resources_for_agent(
-            env,
-            "agent1",
-            version=version,
-            incremental_deploy=True,
-            sid=sid)
+            env, "agent1", version=version, incremental_deploy=True, sid=sid
+        )
         assert result == 500
         result, _ = await serverdirect.get_resources_for_agent(
-            env,
-            "agent1",
-            version=v2,
-            incremental_deploy=True,
-            sid=sid)
+            env, "agent1", version=v2, incremental_deploy=True, sid=sid
+        )
         assert result == 500
 
     for record in caplog.records:
@@ -347,7 +352,9 @@ async def test_deploy_scenarios(server, agent: Agent, environment, caplog):
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_removed_req_by_increment(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_removed_req_by_increment(
+    server, agent: Agent, environment, caplog
+):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         serverdirect = server.get_slice(SLICE_SERVER)
@@ -374,7 +381,6 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
         # acquire raw server
         serverdirect = server.get_slice(SLICE_SERVER)
 
-
         # acquire env object
         env = await data.Environment.get_by_id(uuid.UUID(environment))
 
@@ -393,7 +399,9 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
             resources = await setup.setup(serverdirect, env, sid)
             print(sorted(resources[id2]["attributes"]["requires"]))
             print(sorted(sorted([id3, id4])))
-            assert sorted([strip_version(r) for r in resources[id2]["attributes"]["requires"]]) == sorted([id3, id4])
+            assert sorted(
+                [strip_version(r) for r in resources[id2]["attributes"]["requires"]]
+            ) == sorted([id3, id4])
 
         finally:
             await agent.stop()
@@ -403,7 +411,9 @@ async def test_deploy_scenarios_removed_req_by_increment2(server, environment, c
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event(
+    server, agent: Agent, environment, caplog
+):
     with caplog.at_level(logging.WARNING):
         # acquire raw server
         serverdirect = server.get_slice(SLICE_SERVER)
@@ -427,7 +437,9 @@ async def test_deploy_scenarios_added_by_send_event(server, agent: Agent, enviro
 
 
 @pytest.mark.asyncio
-async def test_deploy_scenarios_added_by_send_event_cad(server, agent: Agent, environment, caplog):
+async def test_deploy_scenarios_added_by_send_event_cad(
+    server, agent: Agent, environment, caplog
+):
     # ensure CAD does not change send_event
     with caplog.at_level(logging.WARNING):
         # acquire raw server
