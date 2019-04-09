@@ -49,10 +49,13 @@ from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
 
-from typing import List
+from typing import List, TYPE_CHECKING
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
+
+if TYPE_CHECKING:
+    from inmanta.server.agentmanager import AgentManager
 
 DBLIMIT = 100000
 
@@ -112,7 +115,7 @@ class Server(protocol.ServerSlice):
 
     @gen.coroutine
     def prestart(self, server):
-        self.agentmanager = server.get_slice("agentmanager")
+        self.agentmanager: "AgentManager" = server.get_slice("agentmanager")
 
     @gen.coroutine
     def start(self):
@@ -791,7 +794,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                 env: Environment,
                                 agent: str,
                                 version: str,
+                                sid: uuid.UUID,
                                 incremental_deploy: bool) -> Generator[Any, Any, JsonType]:
+
+        if not self.agentmanager.is_primary(env, sid, agent):
+            return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
