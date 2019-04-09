@@ -142,6 +142,9 @@ class CLIGitProvider(GitProvider):
         subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+    def pull(self, repo: str) -> str:
+        return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
+
     def push(self, repo: str) -> str:
         return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"],
                                        cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
@@ -809,6 +812,8 @@ class Module(ModuleLike):
 
         if install_mode == INSTALL_MASTER:
             gitprovider.checkout_tag(path, "master")
+            if fetch:
+                gitprovider.pull(path)
         else:
             release_only = (install_mode == INSTALL_RELEASES)
             version = cls.get_suitable_version_for(modulename, requirements, path, release_only=release_only)
