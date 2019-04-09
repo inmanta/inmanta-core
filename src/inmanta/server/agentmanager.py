@@ -333,6 +333,15 @@ class AgentManager(ServerSlice, SessionListener):
         yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
         self.add_future(session.get_client().set_state(agent.name, True))
 
+    def is_primary(self,
+                   env: data.Environment,
+                   sid: uuid.UUID,
+                   agent: str):
+        prim = self.tid_endpoint_to_session.get((env.id, agent), None)
+        if prim is None:
+            return False
+        return prim.get_id() == sid
+
     @gen.coroutine
     def clean_db(self) -> NoneGen:
         with (yield self.session_lock.acquire()):

@@ -4347,3 +4347,42 @@ async def test_1016_cache_invalidation(server, agent, client, environment, resou
     idx2 = log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 0 resources because test deploy", idx1)
     # then non-empty increment deploy
     log_index(caplog, "inmanta.agent.agent.agent1", logging.DEBUG, "Pulled 1 resources because call to trigger_update", idx2)
+
+
+@pytest.mark.asyncio
+async def test_agent_lockout(resource_container, environment, server, client):
+    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
+
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    agent2 = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
+    agent2.add_end_point_name("agent1")
+    await agent2.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
+
+    version = int(time.time())
+
+    resource = {
+        'key': 'key1',
+        'value': 'Test value %T',
+        'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+        'send_event': False,
+        'purged': False,
+        'requires': [],
+    }
+
+    result = await client.put_version(tid=environment, version=version, resources=[resource], unknowns=[],
+                                      version_info={})
+    assert result.code == 200
+
+    result = await client.release_version(environment, version, False)
+    assert result.code == 200
+
+    assert agent._instances["agent1"].is_enabled()
+    assert not agent2._instances["agent1"].is_enabled()
+
+    result = await agent2._instances["agent1"].get_client().get_resources_for_agent(tid=environment, agent="agent1")
+    assert result.code == 409

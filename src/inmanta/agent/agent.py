@@ -682,6 +682,8 @@ class AgentInstance(object):
             self._get_resource_timeout = GET_RESOURCE_BACKOFF * self._get_resource_duration + end
             if result.code == 404:
                 self.logger.info("No released configuration model version available for %s", reason)
+            elif result.code == 409:
+                self.logger.warning("We are not currently primary during %s: %s", reason, result.result)
             elif result.code != 200:
                 self.logger.warning("Got an error while pulling resources for %s. %s",
                                     reason,
