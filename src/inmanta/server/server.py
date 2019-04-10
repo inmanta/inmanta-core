@@ -34,23 +34,28 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import gen, locks, process, ioloop
-from typing import Dict, Any
+from typing import Dict, Any, Generator
 
 from inmanta import const
 from inmanta import data_pg as data, config
 from inmanta.data_pg import Environment
+from inmanta.reporter import InfluxReporter
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
+from inmanta.types import JsonType
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
 
-from typing import List
+from typing import List, TYPE_CHECKING
 
 LOGGER = logging.getLogger(__name__)
 agent_lock = locks.Lock()
+
+if TYPE_CHECKING:
+    from inmanta.server.agentmanager import AgentManager
 
 DBLIMIT = 100000
 
@@ -106,10 +111,11 @@ class Server(protocol.ServerSlice):
         self._increment_cache = {}
         # lock to ensure only one inflight request
         self._increment_cache_locks = defaultdict(lambda: locks.Lock())
+        self._influx_db_reporter = None
 
     @gen.coroutine
     def prestart(self, server):
-        self.agentmanager = server.get_slice("agentmanager")
+        self.agentmanager: "AgentManager" = server.get_slice("agentmanager")
 
     @gen.coroutine
     def start(self):
@@ -130,6 +136,8 @@ class Server(protocol.ServerSlice):
 
         ioloop.IOLoop.current().add_callback(self._purge_versions)
 
+        self.start_metric_reporters()
+
         yield super().start()
 
     @gen.coroutine
@@ -137,6 +145,25 @@ class Server(protocol.ServerSlice):
         yield super().stop()
         self._close_resource_action_loggers()
         yield data.disconnect()
+        self.stop_metric_reporters()
+
+    def stop_metric_reporters(self) -> None:
+        if self._influx_db_reporter:
+            self._influx_db_reporter.stop()
+            self._influx_db_reporter = None
+
+    def start_metric_reporters(self) -> None:
+        if opt.influxdb_host.get():
+            self._influx_db_reporter = InfluxReporter(server=opt.influxdb_host.get(),
+                                                      port=opt.influxdb_port.get(),
+                                                      database=opt.influxdb_name.get(),
+                                                      username=opt.influxdb_username.get(),
+                                                      password=opt.influxdb_password,
+                                                      reporting_interval=opt.influxdb_interval.get(),
+                                                      autocreate_database=True,
+                                                      tags=opt.influxdb_tags.get()
+                                                      )
+            self._influx_db_reporter.start()
 
     @staticmethod
     def get_resource_action_log_file(environment: uuid.UUID) -> str:
@@ -753,13 +780,25 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if log_action is not None:
                 action_name = log_action.name
 
-            actions = yield data.ResourceAction.get_log(resource_version_id=resource_id, action=action_name, limit=log_limit)
+            actions = yield data.ResourceAction.get_log(
+                environment=env.id,
+                resource_version_id=resource_id,
+                action=action_name,
+                limit=log_limit)
 
         return 200, {"resource": resv, "logs": actions}
 
     @protocol.handle(methods.get_resources_for_agent, env="tid")
     @gen.coroutine
-    def get_resources_for_agent(self, env: Environment, agent: str, version: str, incremental_deploy: bool) -> Dict[str, Any]:
+    def get_resources_for_agent(self,
+                                env: Environment,
+                                agent: str,
+                                version: str,
+                                sid: uuid.UUID,
+                                incremental_deploy: bool) -> Generator[Any, Any, JsonType]:
+
+        if not self.agentmanager.is_primary(env, sid, agent):
+            return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
@@ -769,7 +808,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return result
 
     @gen.coroutine
-    def get_all_resources_for_agent(self, env: Environment, agent: str, version: str) -> Dict[str, Any]:
+    def get_all_resources_for_agent(self, env: Environment, agent: str, version: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
         if version is None:
             cm = yield data.ConfigurationModel.get_latest_version(env.id)
@@ -803,7 +842,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     @gen.coroutine
-    def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Dict[str, Any]:
+    def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
 
         cm = yield data.ConfigurationModel.get_latest_version(env.id)
@@ -907,10 +946,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         d = {"model": version}
 
+        # todo: batch get_log into single query?
         d["resources"] = []
         for res_dict in resources:
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(res_dict["resource_version_id"], log_filter, limit)
+                res_dict["actions"] = yield data.ResourceAction.get_log(
+                    env.id,
+                    res_dict["resource_version_id"],
+                    log_filter,
+                    limit)
 
             d["resources"].append(res_dict)
 
@@ -1410,6 +1454,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             model = yield data.ConfigurationModel.get_version(env.id, model_version)
 
             if model.done == model.total:
+                LOGGER.info("marking model %s %d as done", env.id, model_version)
                 yield model.mark_done()
 
             waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)

@@ -124,7 +124,7 @@ Primitive types
 The basic primitive types are ``string``, ``number`` or ``bool``.
 
 Constrained primitive types can be derived from the basic primitive type with a typedef statement.
-Constrained primitive types add additional constraints to the basic primitive type with either a regex or a logical condition.
+Constrained primitive types add additional constraints to the basic primitive type with either a Python regex or a logical condition.
 The name of the constrained primitive type must not collide with the name of a variable or type in the same lexical scope.
 
 .. code-block:: antlr

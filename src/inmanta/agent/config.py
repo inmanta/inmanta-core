@@ -50,10 +50,6 @@ Set this to 0 to disable splaytime.
 It will wait this number of second before performing the first deploy.
 Each subsequent deploy will start agent-interval seconds after the previous one.""", is_time)
 
-agent_antisplay = \
-    Option("config", "agent-run-at-start", False,
-           "run the agent at startup, even if a splay time is set", is_bool)
-
 agent_reconnect_delay = \
     Option("config", "agent-reconnect-delay", 5,
            "Time to wait after a failed heartbeat message. DO NOT SET TO 0 ", is_int)

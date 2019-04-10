@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 
-from inmanta.config import Option, is_int, is_bool, is_time, is_str_opt
+from inmanta.config import Option, is_int, is_bool, is_time, is_str_opt, is_map
 from inmanta.config import state_dir, log_dir
 import logging
 
@@ -40,6 +40,23 @@ db_password = Option("database", "password", None, "The password that belong to 
 #############################
 transport_port = Option("server_rest_transport", "port", 8888, "The port on which the server listens for connections")
 
+#############################
+# Influxdb
+#############################
+influxdb_host = Option("influxdb", "host", "", "Hostname or IP of the influxdb server to send reports to")
+influxdb_port = Option("influxdb", "port", 8086, "The port of the influxdb server", is_int)
+influxdb_name = Option("influxdb", "name", "inmanta", "The name of the database on the influxdb server")
+influxdb_username = Option("influxdb", "username", None, "The username to access the database in the influxdb server")
+influxdb_password = Option("influxdb", "password", None, "The password that belong to the influxdb user")
+
+influxdb_interval = Option("influxdb", "interval", 30, "Interval with which to report to influxdb", is_int)
+influxdb_tags = Option(
+    "influxdb",
+    "tags",
+    "",
+    "a dict of tags to attach to all influxdb records in the form tag=value,tag=value",
+    is_map
+)
 
 #############################
 # server

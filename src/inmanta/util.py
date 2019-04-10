@@ -25,7 +25,9 @@ import warnings
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, Any
+from typing import Callable, Dict, Union, Tuple
+
+from inmanta.types import JsonType
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -69,7 +71,7 @@ def hash_file(content: str) -> str:
     return sha1sum.hexdigest()
 
 
-def is_call_ok(result: Union[int, Tuple[int, Dict[str, Any]]]) -> bool:
+def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
     if isinstance(result, tuple):
         if len(result) == 2:
             code, reply = result

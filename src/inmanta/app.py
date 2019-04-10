@@ -40,6 +40,7 @@ import socket
 import signal
 
 import colorlog
+
 from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
@@ -49,6 +50,7 @@ from tornado import gen
 from inmanta import protocol, module, moduletool, const
 from inmanta.export import cfg_env, ModelExporter
 import yaml
+
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.ast import CompilerException
 import asyncio

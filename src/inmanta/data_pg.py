@@ -127,8 +127,6 @@ class DocumentMeta(type):
             if hasattr(base, "_fields"):
                 dct["_fields"].update(base._fields)
 
-        if len(dct["_fields"]) == 0:
-            print(class_name, bases, dict)
         return type.__new__(cls, class_name, bases, dct)
 
 
@@ -1211,30 +1209,39 @@ class ResourceAction(BaseDocument):
 
     async def insert(self):
         async with self._connection_pool.acquire() as con:
+            records = ((self._environment, resource_version_id, self.action_id)
+                       for resource_version_id in self.resource_version_ids)
             async with con.transaction():
                 await super(ResourceAction, self).insert(connection=con)
-                for resource_version_id in self.resource_version_ids:
-                    new_obj = ResourceVersionId(environment=self._environment,
-                                                resource_version_id=resource_version_id,
-                                                action_id=self.action_id)
-                    await new_obj.insert(connection=con)
+                await con.copy_records_to_table(
+                    ResourceVersionId.table_name(),
+                    columns=["environment", "resource_version_id", "action_id"],
+                    records=records
+                )
 
     @classmethod
     async def get_by_id(cls, doc_id: uuid.UUID):
-        query = cls._get_select_star_statement() + " WHERE r.id=$1"
-        values = [cls._get_value(doc_id)]
-        result = await cls._get_resource_action_objects(query, values)
-        if len(result) > 0:
-            return result[0]
+        query = "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "\
+                "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "\
+                "send_event from resourceaction r where r.action_id = $1;"
+        async with cls._connection_pool.acquire() as con:
+            result = await con.fetchrow(query, cls._get_value(doc_id))
+            if result is None:
+                return None
+            else:
+                return cls(**dict(result), from_postgres=True)
 
     @classmethod
     async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
-        sql_query = cls._get_select_star_statement()
+        sql_query = "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "\
+                    "as resource_version_ids, action_id, action, started, finished, messages, status, changes, change, "\
+                    "send_event from resourceaction r"
         (filter_statement, values) = cls._get_composed_filter(**query, col_name_prefix='r')
         if filter_statement:
             sql_query += " WHERE " + filter_statement
-        result = await cls._get_resource_action_objects(sql_query, values)
-        return result
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(sql_query, *values)]
 
     @classmethod
     def _get_select_star_statement(cls):
@@ -1261,19 +1268,23 @@ class ResourceAction(BaseDocument):
         return result
 
     @classmethod
-    async def get_log(cls, resource_version_id, action=None, limit=0):
-        query = cls._get_select_star_statement()
-        query += " WHERE i.resource_version_id=$1"
-        values = [cls._get_value(resource_version_id)]
+    async def get_log(cls, environment, resource_version_id, action=None, limit=0):
+        query = "select array(select resource_version_id from resourceversionid rvi where rvi.action_id=r.action_id) "\
+                "as resource_version_ids, r.action_id as action_id, action, started, finished, messages, status, changes,"\
+                " change, send_event from resourceaction r "\
+                "RIGHT OUTER JOIN resourceversionid rvid on (rvid.action_id=r.action_id) """ \
+                "where rvid.environment=$1 and  rvid.resource_version_id=$2 "
+        values = [cls._get_value(environment), cls._get_value(resource_version_id)]
         if action is not None:
-            query += " AND action=$2"
+            query += " AND action=$3"
             values.append(cls._get_value(action))
         query += " ORDER BY started DESC"
         if limit is not None and limit > 0:
-            query += " LIMIT $" + str(len(values) + 1)
+            query += " LIMIT $%d" % (len(values) + 1)
             values.append(cls._get_value(limit))
-        result = await cls._get_resource_action_objects(query, values)
-        return result
+        async with cls._connection_pool.acquire() as con:
+            async with con.transaction():
+                return [cls(**dict(record), from_postgres=True) async for record in con.cursor(query, *values)]
 
     @classmethod
     async def _get_resource_action_objects(cls, query, values):
@@ -1362,10 +1373,21 @@ class ResourceAction(BaseDocument):
                                 dollarmark_resource_and_field + ", " + dollarmark_change + ", TRUE)"
                 values = values + [self._get_value(resource),
                                    self._get_value([resource, field]),
-                                   self._get_value(change)]
+                                   self._get_as_jsonb(change)
+                                   ]
                 offset += 3
         set_statement = "changes=" + set_statement
         return (set_statement, values)
+
+    def _get_as_jsonb(self, obj):
+        """
+             A PostgreSQL jsonb type should be passed to AsyncPG as a string type.
+             As such this method should return a string type.
+        """
+        result = self._get_value(obj)
+        if not isinstance(result, str):
+            result = json.dumps(result)
+        return result
 
     async def save(self):
         """

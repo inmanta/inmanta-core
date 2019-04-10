@@ -117,6 +117,11 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     ts1.get_client().reset_mock()
     await assert_agents("paused", "up", "down", sid2=ts1.id)
 
+    # test is_primary
+    assert am.is_primary(env, ts1.id, "agent2")
+    assert not am.is_primary(env, ts1.id, "agent1")
+    assert not am.is_primary(env, uuid4(), "agent2")
+
     # alive
     am.seen(ts1, ["agent1", "agent2"])
     await futures.proccess()
@@ -132,6 +137,12 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
+    # test is_primary
+    assert not am.is_primary(env, ts2.id, "agent1")
+    assert not am.is_primary(env, ts1.id, "agent1")
+    assert am.is_primary(env, ts1.id, "agent2")
+    assert am.is_primary(env, ts2.id, "agent3")
+
     # expire first
     am.expire(ts1, 100)
     await futures.proccess()
@@ -145,6 +156,10 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     await futures.proccess()
     assert len(am.sessions) == 0
     await assert_agents("paused", "down", "down")
+
+    # test is_primary
+    assert not am.is_primary(env, ts1.id, "agent2")
+    assert not am.is_primary(env, ts2.id, "agent3")
 
 
 @pytest.mark.asyncio(timeout=30)

@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS public.resource (
 );
 
 CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
-CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id);
+CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model);
 CREATE UNIQUE INDEX resource_env_resourceversionid_index ON resource (environment, resource_version_id);
 
 -- Table: public.resourceaction
@@ -87,6 +87,10 @@ CREATE TABLE IF NOT EXISTS public.resourceversionid (
     resource_version_id varchar NOT NULL,
     PRIMARY KEY(environment, action_id, resource_version_id)
 );
+
+CREATE INDEX resourceversionid_environment_resource_version_id ON resourceversionid (environment, resource_version_id);
+CREATE INDEX resourceversionid_action_id ON resourceversionid (action_id);
+
 
 -- Table: public.code
 -- There is no foreign key constraint from code to configurationmodel, since the code is uploaded

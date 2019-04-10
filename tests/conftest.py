@@ -44,15 +44,18 @@ from inmanta.server.bootloader import InmantaBootloader
 from inmanta.server import SLICE_AGENT_MANAGER
 from inmanta.export import cfg_env, unknown_parameters
 import traceback
-from tornado import process
+from tornado import process, netutil
 import asyncio
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 import asyncpg
+from asyncpg.exceptions import DuplicateDatabaseError
 from inmanta.postgresproc import PostgresProc
 import sys
 import pkg_resources
 from typing import Optional, Dict
 from inmanta import protocol
+import pyformance
+from pyformance.registry import MetricsRegistry
 
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
@@ -63,8 +66,8 @@ def postgres_db(postgresql_proc):
     yield postgresql_proc
 
 
-@pytest.fixture
-async def postgresql_client(postgres_db, database_name, clean_reset):
+@pytest.fixture(scope="function")
+async def postgresql_client(postgres_db, database_name):
     client = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user, database=database_name)
     try:
         yield client
@@ -73,8 +76,10 @@ async def postgresql_client(postgres_db, database_name, clean_reset):
 
 
 @pytest.fixture(scope="function")
-async def init_dataclasses_and_load_schema(tmpdir, postgres_db, database_name, clean_reset):
+async def init_dataclasses_and_load_schema(postgres_db, database_name, clean_reset):
     await data.connect(postgres_db.host, postgres_db.port, database_name, postgres_db.user, None)
+    yield
+    await data.disconnect()
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -91,10 +96,24 @@ def deactive_venv():
     pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
 
+def reset_metrics():
+    pyformance.set_global_registry(MetricsRegistry())
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def clean_reset(create_db, clean_db):
+    reset_all_objects()
+    config.Config._reset()
+    yield
+    config.Config._reset()
+    reset_all_objects()
+
+
 def reset_all_objects():
     resources.resource.reset()
     process.Subprocess.uninitialize()
     asyncio.set_child_watcher(None)
+    reset_metrics()
     # No dynamic loading of commands at the moment, so no need to reset/reload
     # command.Commander.reset()
     handler.Commander.reset()
@@ -102,20 +121,36 @@ def reset_all_objects():
     unknown_parameters.clear()
 
 
-@pytest.fixture(scope="function", autouse=True)
-async def clean_reset(postgres_db, database_name):
-    reset_all_objects()
+@pytest.fixture(scope="function")
+async def create_db(postgres_db, database_name):
     connection = await asyncpg.connect(host=postgres_db.host, port=postgres_db.port, user=postgres_db.user)
     try:
-        await connection.execute("DROP DATABASE IF EXISTS " + database_name)
         await connection.execute("CREATE DATABASE " + database_name)
-        yield
-        await data.disconnect()
-        config.Config._reset()
-        await connection.execute("DROP DATABASE " + database_name)
+    except DuplicateDatabaseError:
+        pass
     finally:
         await connection.close()
-    reset_all_objects()
+
+
+@pytest.fixture(scope="function")
+async def clean_db(postgresql_client, create_db):
+    """
+        1) Truncated tables: All tables which are part of the inmanta schema, except for the schemaversion table. The version
+                             number stored in the schemaversion table is read by the Inmanta server during startup.
+        2) Dropped tables: All tables which are not part of the inmanta schema. Some tests create additional tables, which are
+                           not part of the Inmanta schema. These should be cleaned-up before running a new test.
+    """
+    tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    tables_in_db = [x["table_name"] for x in tables_in_db]
+    tables_to_preserve = [x.table_name() for x in data._classes]
+    tables_to_truncate = [x for x in tables_in_db if x != data.SchemaVersion.table_name() and x in tables_to_preserve]
+    tables_to_drop = [x for x in tables_in_db if x not in tables_to_preserve]
+    if tables_to_drop:
+        drop_query = "DROP TABLE %s CASCADE" % ', '.join(tables_to_drop)
+        await postgresql_client.execute(drop_query)
+    if tables_to_truncate:
+        truncate_query = "TRUNCATE %s CASCADE" % ', '.join(tables_to_truncate)
+        await postgresql_client.execute(truncate_query)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -134,6 +169,13 @@ def no_agent_backoff():
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
     yield
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
+
+
+@pytest.fixture()
+def free_socket():
+    sock = netutil.bind_sockets(0, "127.0.0.1", family=socket.AF_INET)[0]
+    yield sock
+    sock.close()
 
 
 def get_free_tcp_port():
@@ -167,7 +209,7 @@ def inmanta_config():
     yield config.Config._get_instance()
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def database_name():
     ten_random_digits = ''.join(random.choice(string.digits) for _ in range(10))
     yield "inmanta" + ten_random_digits
@@ -206,9 +248,15 @@ async def agent(server, environment):
 
 
 @pytest.fixture(scope="function")
-async def server(inmanta_config, postgres_db, database_name):
+async def server(event_loop, inmanta_config, postgres_db, database_name, clean_reset):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     # fix for fact that pytest_tornado never set IOLoop._instance, the IOLoop of the main thread
     # causes handler failure
+
+    reset_metrics()
 
     state_dir = tempfile.mkdtemp()
 
@@ -225,13 +273,14 @@ async def server(inmanta_config, postgres_db, database_name):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
+    config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
     shutil.rmtree(state_dir)
 
 
@@ -239,8 +288,11 @@ async def server(inmanta_config, postgres_db, database_name):
                 params=[(True, True, False), (True, False, False), (False, True, False),
                         (False, False, False), (True, True, True)],
                 ids=["SSL and Auth", "SSL", "Auth", "Normal", "SSL and Auth with not self signed certificate"])
-async def server_multi(inmanta_config, postgres_db, database_name, request):
-
+async def server_multi(event_loop, inmanta_config, postgres_db, database_name, request, clean_reset):
+    """
+    :param event_loop: explicitly include event_loop to make sure event loop started before and closed after this fixture.
+    May not be required
+    """
     state_dir = tempfile.mkdtemp()
 
     ssl, auth, ca = request.param
@@ -285,13 +337,14 @@ async def server_multi(inmanta_config, postgres_db, database_name, request):
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
+    config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
 
     yield ibl.restserver
 
-    await ibl.stop()
+    await asyncio.wait_for(ibl.stop(), 10)
 
     shutil.rmtree(state_dir)
 

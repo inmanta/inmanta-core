@@ -37,6 +37,7 @@ from inmanta.ast.blocks import BasicBlock
 from inmanta.ast.statements import DefinitionStatement, BiStatement, Statement, DynamicStatement
 from inmanta.ast.statements.define import DefineImport
 from inmanta.parser import plyInmantaParser
+from inmanta.types import JsonType
 from inmanta.util import get_compiler_version
 from typing import Tuple, List, Dict
 from typing import Optional
@@ -140,6 +141,9 @@ class CLIGitProvider(GitProvider):
     def tag(self, repo: str, tag: str) -> None:
         subprocess.check_call(["git", "tag", "-a", "-m", "auto tag by module tool", tag], cwd=repo,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def pull(self, repo: str) -> str:
+        return subprocess.check_output(["git", "pull"], cwd=repo, stderr=subprocess.DEVNULL).decode("utf-8")
 
     def push(self, repo: str) -> str:
         return subprocess.check_output(["git", "push", "--follow-tags", "--porcelain"],
@@ -260,7 +264,7 @@ class ModuleLike(object):
             @param path: root git directory
         """
         self._path = path
-        self._meta = {}  # type: Dict[str, Any]
+        self._meta = {}  # type: JsonType
 
     def get_name(self) -> str:
         raise NotImplementedError()
@@ -348,7 +352,7 @@ class Project(ModuleLike):
             raise Exception("Project directory does not contain a project file")
 
         with open(project_file, "r") as fd:
-            self._meta = yaml.load(fd)
+            self._meta = yaml.safe_load(fd)
 
         if "modulepath" not in self._meta:
             raise Exception("modulepath is required in the project(.yml) file")
@@ -808,6 +812,8 @@ class Module(ModuleLike):
 
         if install_mode == INSTALL_MASTER:
             gitprovider.checkout_tag(path, "master")
+            if fetch:
+                gitprovider.pull(path)
         else:
             release_only = (install_mode == INSTALL_RELEASES)
             version = cls.get_suitable_version_for(modulename, requirements, path, release_only=release_only)
@@ -857,7 +863,7 @@ class Module(ModuleLike):
                                     comp_version: "Version") -> "Optional[Version]":
         def get_cv_for(best: "Version") -> "Optional[Version]":
             cfg = gitprovider.get_file_for_version(path, str(best), "module.yml")
-            cfg = yaml.load(cfg)
+            cfg = yaml.safe_load(cfg)
             if "compiler_version" not in cfg:
                 return None
             v = cfg["compiler_version"]
@@ -916,7 +922,7 @@ class Module(ModuleLike):
             Load the module definition file
         """
         with open(self.get_config_file_name(), "r") as fd:
-            mod_def = yaml.load(fd)
+            mod_def = yaml.safe_load(fd)
 
             if mod_def is None or len(mod_def) < len(Module.requires_fields):
                 raise InvalidModuleFileException("The module file of %s does not have the required fields: %s" %

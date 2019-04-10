@@ -210,11 +210,11 @@ def test_check_shutdown():
     process = do_run([sys.executable, os.path.join(os.path.dirname(__file__), "miniapp.py")])
     # wait for handler to be in place
     try:
-        process.communicate(timeout=1)
+        process.communicate(timeout=2)
     except TimeoutExpired:
         pass
     process.send_signal(signal.SIGUSR1)
-    out, err = do_kill(process, killtime=5, termtime=2)
+    out, err = do_kill(process, killtime=6, termtime=3)
     print(out, err)
     assert "----- Thread Dump ----" in out
     assert "STOP" in out

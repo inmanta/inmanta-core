@@ -94,9 +94,8 @@ class BashIO(IOBase):
             return list(args)
 
         else:
-            arg_str = subprocess.list2cmdline(args)
             sudo_cmd = ["sudo", "-E"]
-            ret = sudo_cmd + ["-u", self.run_as, "sh", "-c", arg_str]
+            ret = sudo_cmd + ["-u", self.run_as] + list(args)
             return ret
 
     def is_remote(self):

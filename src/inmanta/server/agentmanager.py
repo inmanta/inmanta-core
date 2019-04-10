@@ -27,6 +27,7 @@ from inmanta import data_pg as data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
+from inmanta.types import NoneGen, Apireturn
 
 import logging
 import os
@@ -43,9 +44,6 @@ import asyncio
 from typing import Optional, Dict, Any, List, Generator, Tuple
 from uuid import UUID
 from inmanta.server.server import Server
-
-Apireturn = Generator[Any, Any, Tuple[int, Dict[str, Any]]]
-NoneGen = Generator[Any, Any, None]
 
 
 LOGGER = logging.getLogger(__name__)
@@ -128,8 +126,6 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-        self.running: bool = False
-
     @gen.coroutine
     def prestart(self, server: protocol.Server) -> NoneGen:
         yield ServerSlice.prestart(self, server)
@@ -167,7 +163,7 @@ class AgentManager(ServerSlice, SessionListener):
 
     @gen.coroutine
     def start(self) -> NoneGen:
-        self.running = True
+        yield super().start()
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
@@ -175,8 +171,6 @@ class AgentManager(ServerSlice, SessionListener):
     @gen.coroutine
     def stop(self) -> NoneGen:
         yield super().stop()
-
-        self.running = False
         yield self.terminate_agents()
 
     # Agent Management
@@ -338,6 +332,15 @@ class AgentManager(ServerSlice, SessionListener):
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
         yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
         self.add_future(session.get_client().set_state(agent.name, True))
+
+    def is_primary(self,
+                   env: data.Environment,
+                   sid: uuid.UUID,
+                   agent: str):
+        prim = self.tid_endpoint_to_session.get((env.id, agent), None)
+        if prim is None:
+            return False
+        return prim.get_id() == sid
 
     @gen.coroutine
     def clean_db(self) -> NoneGen:

@@ -27,15 +27,13 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, NoRet
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
+from inmanta.types import NoneGen
 from . import common
 from .rest import client
 
 from tornado import ioloop, gen
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
-
-
-NoneGen = Generator[Any, Any, None]
 
 
 class CallTarget(object):
