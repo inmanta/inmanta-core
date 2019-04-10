@@ -21,7 +21,7 @@ import asyncio
 
 import pytest
 from inmanta.server.agentmanager import AgentManager
-from inmanta import data
+from inmanta import data_pg as data
 from inmanta.protocol import Result
 from utils import assert_equal_ish, UNKWN
 
@@ -68,10 +68,11 @@ class MockSession(object):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_primary_selection(motor):
-    data.use_motor(motor)
+async def test_primary_selection(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
 
-    env = data.Environment(name="testenv", project=uuid4())
+    env = data.Environment(name="testenv", project=project.id)
     await env.insert()
 
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
@@ -98,7 +99,7 @@ async def test_primary_selection(motor):
         elif state == "up":
             assert agent.primary is not None
             agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_by_id(agent_instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
             assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 
@@ -116,6 +117,11 @@ async def test_primary_selection(motor):
     ts1.get_client().reset_mock()
     await assert_agents("paused", "up", "down", sid2=ts1.id)
 
+    # test is_primary
+    assert am.is_primary(env, ts1.id, "agent2")
+    assert not am.is_primary(env, ts1.id, "agent1")
+    assert not am.is_primary(env, uuid4(), "agent2")
+
     # alive
     am.seen(ts1, ["agent1", "agent2"])
     await futures.proccess()
@@ -131,6 +137,12 @@ async def test_primary_selection(motor):
     ts2.get_client().reset_mock()
     await assert_agents("paused", "up", "up", sid2=ts1.id, sid3=ts2.id)
 
+    # test is_primary
+    assert not am.is_primary(env, ts2.id, "agent1")
+    assert not am.is_primary(env, ts1.id, "agent1")
+    assert am.is_primary(env, ts1.id, "agent2")
+    assert am.is_primary(env, ts2.id, "agent3")
+
     # expire first
     am.expire(ts1, 100)
     await futures.proccess()
@@ -145,15 +157,22 @@ async def test_primary_selection(motor):
     assert len(am.sessions) == 0
     await assert_agents("paused", "down", "down")
 
+    # test is_primary
+    assert not am.is_primary(env, ts1.id, "agent2")
+    assert not am.is_primary(env, ts2.id, "agent3")
+
 
 @pytest.mark.asyncio(timeout=30)
-async def test_api(motor):
-    data.use_motor(motor)
+async def test_api(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
 
-    env = data.Environment(name="testenv", project=uuid4())
+    env = data.Environment(name="testenv", project=project.id)
     await env.insert()
-    env2 = data.Environment(name="testenv2", project=uuid4())
+    env2 = data.Environment(name="testenv2", project=project.id)
     await env2.insert()
+    env3 = data.Environment(name="testenv3", project=project.id)
+    await env3.insert()
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
     await data.Agent(environment=env.id, name="agent3", paused=False).insert()
@@ -173,8 +192,7 @@ async def test_api(motor):
     ts2 = MockSession(uuid4(), env.id, ["agent3", "agent2"], "ts2")
     am.new_session(ts2)
     # third session
-    env3 = uuid4()
-    ts3 = MockSession(uuid4(), env3, ["agentx"], "ts3")
+    ts3 = MockSession(uuid4(), env3.id, ["agentx"], "ts3")
     am.new_session(ts3)
 
     await futures.proccess()
@@ -183,33 +201,33 @@ async def test_api(motor):
     code, all_agents = await am.list_agent_processes(None, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts3',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
-                               'environment': env3}]}
+                               'environment': env3.id}]}
 
     assert_equal_ish(shouldbe, all_agents, ['hostname', 'name'])
-    agentid = all_agents['processes'][0]['id']
+    agentid = all_agents['processes'][0]['sid']
 
     code, all_agents = await am.list_agent_processes(env.id, None)
     assert code == 200
 
-    shouldbe = {'processes': [{'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
+    shouldbe = {'processes': [{'first_seen': UNKWN, 'expired': None, 'hostname': 'ts1',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent1', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
                                'environment': env.id},
-                              {'id': UNKWN, 'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
+                              {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
                                [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
                                 {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
@@ -255,10 +273,11 @@ async def test_api(motor):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_db_clean(motor):
-    data.use_motor(motor)
+async def test_db_clean(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
 
-    env = data.Environment(name="testenv", project=uuid4())
+    env = data.Environment(name="testenv", project=project.id)
     await env.insert()
     await data.Agent(environment=env.id, name="agent1", paused=True).insert()
     await data.Agent(environment=env.id, name="agent2", paused=False).insert()
@@ -283,7 +302,7 @@ async def test_db_clean(motor):
         elif state == "up":
             assert agent.primary is not None
             agent_instance = await data.AgentInstance.get_by_id(agent.primary)
-            agent_proc = await data.AgentProcess.get_by_id(agent_instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=agent_instance.process)
             assert agent_proc.sid == sid
             assert agent.get_status() == "up"
 

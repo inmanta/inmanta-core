@@ -1,13 +1,12 @@
 from setuptools import setup, find_packages
 
 requires = [
+    "asyncpg",
     "click",
     "colorlog",
     "execnet",
-    "motor >= 1.1",
     "netifaces",
     "ply",
-    "pymongo",
     "python-dateutil",
     "pyyaml",
     "texttable",
@@ -16,6 +15,7 @@ requires = [
     "PyJWT",
     "cryptography",
     "jinja2",
+    "pyformance"
 ]
 
 setup(
@@ -56,5 +56,5 @@ setup(
             "inmanta = inmanta.app:app",
         ]
     },
-
+    
 )

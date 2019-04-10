@@ -403,7 +403,7 @@ version: 0.0.1dev0""" % {"name": name})
             else:
                 spec = specs[module]
                 try:
-                    Module.update(project, name, spec, install_mode=project._install_mode)
+                    Module.update(project, module, spec, install_mode=project._install_mode)
                 except Exception:
                     LOGGER.exception("Failed to update module")
 

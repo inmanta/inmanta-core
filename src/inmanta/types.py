@@ -1,5 +1,5 @@
 """
-    Copyright 2017 Inmanta
+    Copyright 2019 Inmanta
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,11 +15,9 @@
 
     Contact: code@inmanta.com
 """
+# This file defines named type definition for the Inmanta code base
+from typing import Generator, Any, Tuple, Dict
 
-from inmanta import data_pg as data
-
-"""
-    This constant is required by the std module
-"""
-# TODO: Move to Const
-AUTOSTART_AGENT_MAP = data.AUTOSTART_AGENT_MAP
+NoneGen = Generator[Any, Any, None]
+JsonType = Dict[str, Any]
+Apireturn = Generator[Any, Any, Tuple[int, JsonType]]

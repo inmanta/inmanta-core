@@ -27,11 +27,15 @@ from collections import defaultdict
 from inmanta import protocol
 from inmanta.config import Config, cmdline_rest_transport
 from inmanta.const import AgentTriggerMethod, TIME_ISOFMT
+from inmanta.resources import Id
 import click
 import texttable
 from time import sleep
 
-from typing import Optional, cast, Dict, Any, List, Callable
+
+from typing import Optional, cast, Dict, List, Callable
+
+from inmanta.types import JsonType
 
 
 class Client(object):
@@ -53,8 +57,8 @@ class Client(object):
         self._client = protocol.SyncClient("cmdline")
 
     def do_request(
-        self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}, allow_none: bool=False
-    ) -> Optional[Dict[str, Any]]:
+        self, method_name: str, key_name: Optional[str]=None, arguments: JsonType={}, allow_none: bool=False
+    ) -> Optional[JsonType]:
         """
             Do a request and return the response
         """
@@ -93,13 +97,13 @@ class Client(object):
 
             raise Exception(("An error occurred while requesting %s" % key_name) + msg)
 
-    def get_list(self, method_name: str, key_name: Optional[str]=None, arguments: Dict[str, Any]={}) -> List[Dict[str, str]]:
+    def get_list(self, method_name: str, key_name: Optional[str]=None, arguments: JsonType={}) -> List[Dict[str, str]]:
         """
             Same as do request, but return type is a list of dicts
         """
         return cast(List[Dict[str, str]], self.do_request(method_name, key_name, arguments, False))
 
-    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: Dict[str, Any] = {}) -> Dict[str, str]:
+    def get_dict(self, method_name: str, key_name: Optional[str] = None, arguments: JsonType = {}) -> Dict[str, str]:
         """
             Same as do request, but return type is a list of dicts
         """
@@ -587,12 +591,14 @@ def version_report(client: Client, environment: str, version: str, l: bool) -> N
         click.echo("=" * 72)
 
         for t in sorted(agents[agent].keys()):
+            parsed_resource_version_id = Id.parse_id(agents[agent][t][0]["resource_version_id"])
             click.echo(click.style("Resource type:", bold=True)
-                       + "{type} ({attr})".format(type=t, attr=agents[agent][t][0]["id_attribute_name"]))
+                       + "{type} ({attr})".format(type=t, attr=parsed_resource_version_id.attribute))
             click.echo("-" * 72)
 
             for res in agents[agent][t]:
-                click.echo((click.style(res["id_attribute_value"], bold=True) + " (#actions=%d)") % len(res["actions"]))
+                parsed_id = Id.parse_id(res["resource_version_id"])
+                click.echo((click.style(parsed_id.attribute_value, bold=True) + " (#actions=%d)") % len(res["actions"]))
                 # for dryrun show only the latest, for deploy all
                 if not result["model"]["released"]:
                     if len(res["actions"]) > 0:
@@ -698,11 +704,9 @@ def form_import(client: Client, environment: str, form_type: str, file: str) -> 
     if form_type != form_type_def["form_type"]:
         raise click.ClickException("Unable to load form data for %s into form %s" % (form_type_def["form_type"], form_type))
 
-    form_id = form_type_def["id"]
-
-    records = cast(List[Dict[str, Any]], data["records"])
+    records = cast(List[JsonType], data["records"])
     for record in records:
-        if record["form"] == form_id:
+        if record["form"] == form_type:
             client.do_request("create_record", "record", arguments=dict(tid=tid, form_type=form_type, form=record["fields"]))
 
 
@@ -824,7 +828,10 @@ def monitor_deploy(client: Client, environment: str) -> None:
 
     versions = cast(Dict[str, List[Dict[str, str]]], client.do_request("list_versions", arguments=dict(tid=tid)))
     allversion = versions["versions"]
-    first: Dict[str, str] = next(version for version in allversion if version["result"] != "pending")
+    try:
+        first: Dict[str, str] = next(version for version in allversion if version["result"] != "pending")
+    except StopIteration:
+        raise click.ClickException("Environment %s doesn't contain a released configuration model" % environment)
 
     total = int(first["total"])
     done = int(first["done"])

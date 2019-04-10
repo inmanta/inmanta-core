@@ -19,7 +19,7 @@
 import uuid
 import datetime
 
-from inmanta import data, const
+from inmanta import data_pg as data, const
 from .common import ArgOption
 from .decorators import method
 from . import exceptions
@@ -394,12 +394,19 @@ def get_resource(
 
 
 @method(method_name="resource", operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
-def get_resources_for_agent(tid: uuid.UUID, agent: str, version: int = None, incremental_deploy: bool = False):
+def get_resources_for_agent(
+    tid: uuid.UUID,
+    agent: str,
+    sid: uuid.UUID = None,
+    version: int = None,
+    incremental_deploy: bool = False
+):
     """
         Return the most recent state for the resources associated with agent, or the version requested
 
         :param tid: The id of the environment this resource belongs to
         :param agent: The agent
+        :param sid: Session id of the agent (transparently added by agent client)
         :param version: The version to retrieve. If none, the latest available version is returned. With a specific version
                         that version is returned, even if it has not been released yet.
         :param incremental_deploy: Indicates whether the server should only return the resources that changed since the
@@ -889,7 +896,7 @@ def get_agent_process(id: uuid.UUID):
     """
         Return a detailed report for a node
 
-        :param agentid: The id of the node
+        :param agent_sid: The session id of the agent
         :return: The requested node
     """
 

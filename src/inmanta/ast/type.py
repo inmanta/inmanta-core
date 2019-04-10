@@ -523,6 +523,10 @@ class ConstraintType(NamedType):
     def get_namespace(self) -> "Namespace":
         return self.namespace
 
+    def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
+        return DuplicateException(
+            self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
+
 
 def create_function(expression):
     """

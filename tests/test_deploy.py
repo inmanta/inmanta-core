@@ -25,7 +25,7 @@ import pytest
 
 @pytest.mark.skip(reason="very unstable test")
 @pytest.mark.asyncio(timeout=60)
-async def test_deploy(snippetcompiler, tmpdir, mongo_db, motor):
+async def test_deploy(snippetcompiler, tmpdir, postgres_db):
     file_name = tmpdir.join("test_file")
     snippetcompiler.setup_for_snippet(
         """
@@ -39,7 +39,7 @@ async def test_deploy(snippetcompiler, tmpdir, mongo_db, motor):
     Options = collections.namedtuple("Options", ["no_agent_log", "dryrun", "map", "agent"])
     options = Options(no_agent_log=False, dryrun=False, map="", agent="")
 
-    run = deploy.Deploy(mongoport=mongo_db.port)
+    run = deploy.Deploy(postgresport=postgres_db.port)
     try:
         run.run(options, only_setup=True)
         await run.do_deploy(False, "")
@@ -62,3 +62,22 @@ async def test_fork(server):
         i += 1
         sub_process = process.Subprocess(["true"])
         await sub_process.wait_for_exit(raise_error=False)
+
+
+@pytest.mark.timeout(30)
+def test_embedded_inmanta_server(tmpdir):
+    project_dir = tmpdir.mkdir("project")
+    os.chdir(project_dir)
+    main_cf_file = project_dir.join("main.cf")
+    project_yml_file = project_dir.join("project.yml")
+    with open(project_yml_file, 'w') as f:
+        f.write("name: test\n")
+        f.write("modulepath: " + str(project_dir.join("libs")) + "\n")
+        f.write("downloadpath: " + str(project_dir.join("libs")) + "\n")
+        f.write("repo: https://github.com/inmanta/\n")
+        f.write("description: Test\n")
+    with open(main_cf_file, 'w') as f:
+        f.write("")
+    depl = deploy.Deploy()
+    assert depl.setup()
+    depl.stop()

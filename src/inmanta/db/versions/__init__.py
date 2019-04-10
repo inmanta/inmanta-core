@@ -15,11 +15,3 @@
 
     Contact: code@inmanta.com
 """
-
-from inmanta import data_pg as data
-
-"""
-    This constant is required by the std module
-"""
-# TODO: Move to Const
-AUTOSTART_AGENT_MAP = data.AUTOSTART_AGENT_MAP
