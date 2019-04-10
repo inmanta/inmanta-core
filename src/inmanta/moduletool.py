@@ -47,8 +47,6 @@ def set_yaml_order_perserving():
     !!! Big Side-effect !!!
 
     Library is not OO, unavoidable
-
-    Will no longer be needed in python3.7
     """
     _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
 
@@ -182,7 +180,7 @@ class ProjectTool(ModuleLikeTool):
         set_yaml_order_perserving()
 
         with open(project.get_config_file_name(), "r") as fd:
-            newconfig = yaml.safe_load(fd)
+            newconfig = yaml.load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
@@ -194,7 +192,7 @@ class ProjectTool(ModuleLikeTool):
         else:
             outfile = open(outfile, "w", encoding='UTF-8')
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        outfile.write(yaml.dump(newconfig, default_flow_style=False))
 
 
 class ModuleTool(ModuleLikeTool):
@@ -264,7 +262,7 @@ class ModuleTool(ModuleLikeTool):
                             default=None)
         freeze.add_argument("--operator",
                             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-                                 " project.yml is used which defaults to ~=",
+                            " project.yml is used which defaults to ~=",
                             default=None)
 
     def get_project_for_module(self, module):
@@ -607,7 +605,7 @@ requires:
         set_yaml_order_perserving()
 
         with open(module.get_config_file_name(), "r") as fd:
-            newconfig = yaml.safe_load(fd)
+            newconfig = yaml.load(fd)
 
         requires = sorted([k + " " + v for k, v in freeze.items()])
         newconfig["requires"] = requires
@@ -619,4 +617,4 @@ requires:
         else:
             outfile = open(outfile, "w", encoding='UTF-8')
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
+        outfile.write(yaml.dump(newconfig, default_flow_style=False))
