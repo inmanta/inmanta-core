@@ -21,7 +21,6 @@ import re
 
 from inmanta.execute import util, runtime
 from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
-from inmanta.module import Project
 from inmanta.types import JsonType
 
 from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING, Callable
