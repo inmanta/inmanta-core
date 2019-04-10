@@ -47,6 +47,8 @@ def set_yaml_order_perserving():
     !!! Big Side-effect !!!
 
     Library is not OO, unavoidable
+
+    Will no longer be needed in python3.7
     """
     _mapping_tag = yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG
 
@@ -192,7 +194,7 @@ class ProjectTool(ModuleLikeTool):
         else:
             outfile = open(outfile, "w", encoding='UTF-8')
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False))
+        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
 
 
 class ModuleTool(ModuleLikeTool):
@@ -262,7 +264,7 @@ class ModuleTool(ModuleLikeTool):
                             default=None)
         freeze.add_argument("--operator",
                             help="Comparison operator used to freeze versions, If not set, the freeze_operator option in"
-                            " project.yml is used which defaults to ~=",
+                                 " project.yml is used which defaults to ~=",
                             default=None)
 
     def get_project_for_module(self, module):
@@ -617,4 +619,4 @@ requires:
         else:
             outfile = open(outfile, "w", encoding='UTF-8')
 
-        outfile.write(yaml.dump(newconfig, default_flow_style=False))
+        outfile.write(yaml.dump(newconfig, default_flow_style=False, sort_keys=False))
