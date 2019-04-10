@@ -177,3 +177,8 @@ Start the server and make sure it is started at boot.
 
   sudo systemctl enable inmanta-server
   sudo systemctl start inmanta-server
+
+Step 7: Connect to the dashboard
+--------------------------------
+
+The server dashboard is now available on port '8888'
