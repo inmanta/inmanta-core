@@ -1086,9 +1086,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         skippeable = sorted(list(skippeable - set(undeployable)))
 
         try:
-            cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
-                                         total=len(resources), version_info=version_info, undeployable=undeployable,
-                                         skipped_for_undeployable=skippeable)
+            cm = yield data.ConfigurationModel.new(environment=env.id, version=version, date=datetime.datetime.now(),
+                                                   total=len(resources), version_info=version_info, undeployable=undeployable,
+                                                   skipped_for_undeployable=skippeable)
             yield cm.insert()
         except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
@@ -1445,7 +1445,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)
-                yield data.ConfigurationModel.set_ready(env.id, res.model, res.resource_id, status)
                 model_version = res.model
 
                 if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:

@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 from typing import Set, Dict, List
 from configparser import RawConfigParser
 from inmanta.const import ResourceState
@@ -304,6 +303,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
+    async def _fetch_val(cls, query, *values):
+        async with cls._connection_pool.acquire() as con:
+            return await con.fetchval(query, *values)
+
+    @classmethod
+    async def _fetch_one(cls, query, *values):
+        async with cls._connection_pool.acquire() as con:
+            return await con.fetchrow(query, *values)
+
+    @classmethod
     async def _fetch_query(cls, query, *values):
         async with cls._connection_pool.acquire() as con:
             return await con.fetch(query, *values)
@@ -515,7 +524,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         result.append(cls(from_postgres=True, **record))
                 return result
 
-    def _to_dict(self, mongo_pk=False):
+    def to_dict(self):
         """
             Return a dict representing the document
         """
@@ -538,9 +547,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = typing.default_value
 
         return result
-
-    def to_dict(self):
-        return self._to_dict()
 
 
 class Project(BaseDocument):
@@ -1795,7 +1801,6 @@ class ConfigurationModel(BaseDocument):
         :param released: Is this model released and available for deployment?
         :param deployed: Is this model deployed?
         :param result: The result of the deployment. Success or error.
-        :param status: The deployment status of all included resources
         :param version_info: Version metadata
         :param total: The total number of resources
     """
@@ -1806,7 +1811,6 @@ class ConfigurationModel(BaseDocument):
     released = Field(field_type=bool, default=False)
     deployed = Field(field_type=bool, default=False)
     result = Field(field_type=const.VersionState, default=const.VersionState.pending)
-    status = Field(field_type=dict, default={})
     version_info = Field(field_type=dict)
 
     total = Field(field_type=int, default=0)
@@ -1815,19 +1819,65 @@ class ConfigurationModel(BaseDocument):
     undeployable = Field(field_type=list, required=False)
     skipped_for_undeployable = Field(field_type=list, required=False)
 
+    def __init__(self, **kwargs):
+        super(ConfigurationModel, self).__init__(**kwargs)
+        self._done = None
+
+    async def _set_done(self):
+        query = f"SELECT count(*) FROM {Resource.table_name()} WHERE environment=$1 AND model=$2 AND last_deploy IS NOT NULL"
+        values = [self._get_value(self.environment), self._get_value(self.version)]
+        result = await self._fetch_one(query, *values)
+        self._done = int(result["count"])
+
     @property
     def done(self):
-        return len(self.status)
+        if self._done is None:
+            raise Exception("_done field not set")
+        return self._done
+
+    @classmethod
+    async def new(cls, **kwargs):
+        result = cls(**kwargs)
+        await result._set_done()
+        return result
 
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
-        dct["done"] = self.done
+        dct["done"] = self._done
         return dct
+
+    @classmethod
+    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+        (filterstr, values) = cls._get_composed_filter(col_name_prefix='c', **query)
+        where_statement = f"WHERE {filterstr} " if filterstr else ""
+        order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
+        limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
+        offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
+        query = f"SELECT c.*, SUM(CASE WHEN r.last_deploy IS NOT NULL THEN 1 ELSE 0 END) AS done " + \
+                f"FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r " + \
+                f"ON c.environment = r.environment AND c.version = r.model " + \
+                f"{where_statement} " + \
+                f"GROUP BY c.environment, c.version " + \
+                f"{order_by_statement} " + \
+                f"{limit_statement} " + \
+                f"{offset_statement}"
+        query_result = await cls._fetch_query(query, *values)
+        result = []
+        for record in query_result:
+            record = dict(record)
+            if no_obj:
+                result.append(record)
+            else:
+                done = record['done']
+                del record['done']
+                obj = cls(from_postgres=True, **record)
+                obj._done = done
+                result.append(obj)
+        return result
 
     @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
         result = cls._create_dict(from_postgres, kwargs)
-        result["done"] = len(result["status"])
         return result
 
     @classmethod
@@ -1872,23 +1922,6 @@ class ConfigurationModel(BaseDocument):
         versions = await cls.get_list(order_by_column="version", order="DESC", limit=limit, offset=start,
                                       environment=environment)
         return versions
-
-    @classmethod
-    async def set_ready(cls, environment, version, resource_id, status):
-        """
-            Mark a resource as deployed in the configuration model status
-        """
-        resource_version_id = "%s,v=%s" % (resource_id, version)
-        entry_uuid = uuid.uuid5(environment, resource_version_id)
-        # entry_uuid = uuid.uuid5(resource_uuid, resource_id)
-        value_entry = {"status": cls._get_value(status), "id": resource_id}
-
-        (filter_statement, values) = cls._get_composed_filter(version=version, environment=environment, offset=3)
-        query = "UPDATE " + cls.table_name() + \
-                " SET status=jsonb_set(status, $1::text[], $2, TRUE)" \
-                " WHERE " + filter_statement
-        values = [[cls._get_value(entry_uuid)], cls._get_value(value_entry)] + values
-        await cls._execute_query(query, *values)
 
     async def delete_cascade(self):
         await Code.delete_all(environment=self.environment, version=self.version)
@@ -1935,12 +1968,23 @@ class ConfigurationModel(BaseDocument):
 
     async def mark_done(self):
         """ mark this deploy as done """
-        result = const.VersionState.success
-        for state in self.status.values():
-            if state["status"] != "deployed":
-                result = const.VersionState.failed
-
-        await self.update_fields(deployed=True, result=result)
+        subquery = f"(EXISTS(" + \
+                   f"SELECT 1 " + \
+                   f"FROM {Resource.table_name()} " + \
+                   f"WHERE environment=$1 AND model=$2 AND status != $3" + \
+                   f"))::boolean"
+        query = f"UPDATE {self.table_name()} " + \
+                f"SET " + \
+                f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) " \
+                f"WHERE environment=$1 AND version=$2 RETURNING result"
+        values = [self._get_value(self.environment),
+                  self._get_value(self.version),
+                  self._get_value(const.ResourceState.deployed),
+                  self._get_value(const.VersionState.failed),
+                  self._get_value(const.VersionState.success)]
+        result = await self._fetch_val(query, *values)
+        self.result = const.VersionState[result]
+        self.deployed = True
 
     async def get_increment(self):
         """
