@@ -975,18 +975,18 @@ class Agent(SessionEndpoint):
                 result = yield self._client.get_code(environment, version, rt)
 
                 if result.code == 200:
-                    for key, source in result.result["sources"].items():
+                    for hash_value, (path, name, content, requires) in result.result["sources"].items():
                         try:
-                            LOGGER.debug("Installing handler %s for %s", rt, source[1])
-                            yield self._install(key, source)
-                            LOGGER.debug("Installed handler %s for %s", rt, source[1])
+                            LOGGER.debug("Installing handler %s for %s", rt, name)
+                            yield self._install(hash_value, name, content, requires)
+                            LOGGER.debug("Installed handler %s for %s", rt, name)
                         except Exception:
-                            LOGGER.exception("Failed to install handler %s for %s", rt, source[1])
+                            LOGGER.exception("Failed to install handler %s for %s", rt, name)
 
     @gen.coroutine
-    def _install(self, key, source):
-        yield self.thread_pool.submit(self._env.install_from_list, source[3], True)
-        yield self.thread_pool.submit(self._loader.deploy_version, key, source)
+    def _install(self, hash_value, module_name, module_source, module_requires):
+        yield self.thread_pool.submit(self._env.install_from_list, module_requires, True)
+        yield self.thread_pool.submit(self._loader.deploy_version, hash_value, module_name, module_source)
 
     @protocol.handle(methods.trigger, env="tid", agent="id")
     @gen.coroutine

@@ -16,14 +16,11 @@
     Contact: code@inmanta.com
 """
 
-import hashlib
-import inspect
 import logging
 import re
 
 from inmanta.execute import util, runtime
 from inmanta.execute.proxy import DynamicProxy, UnknownException, UnsetException, DictProxy, SequenceProxy
-from inmanta.module import Project
 from inmanta.types import JsonType
 
 from typing import Dict, Tuple, Type, Iterator, Optional, List, Set, Any, TYPE_CHECKING, Callable
@@ -92,31 +89,12 @@ class resource(object):  # noqa: N801
         return (None, None)
 
     @classmethod
-    def sources(cls) -> Dict:
+    def get_resources(cls) -> Iterator[Tuple[str, Type["Resource"]]]:
+        """ Return an iterator over resource type, resource definition
         """
-        Get all source files that define resources
-        """
-        resource_to_sources = {}
-
-        for name, (resource, _options) in cls._resources.items():
-            sources = {}
-            resource_to_sources[name] = sources
-            file_name = inspect.getsourcefile(resource)
-
-            with open(file_name, "r") as fd:
-                source_code = fd.read()
-
-            sha1sum = hashlib.new("sha1")
-            sha1sum.update(source_code.encode("utf-8"))
-
-            hv = sha1sum.hexdigest()
-
-            if hv not in sources:
-                module_name = resource.__module__.split(".")[1]
-                req = Project.get().modules[module_name].get_python_requirements_as_list()
-                sources[hv] = (file_name, resource.__module__, source_code, req)
-
-        return resource_to_sources
+        return (
+            (resource_type, resource_definition) for resource_type, (resource_definition, _options) in cls._resources.items()
+        )
 
     @classmethod
     def reset(cls) -> None:
@@ -364,7 +342,7 @@ class Resource(metaclass=ResourceMeta):
     def __init__(self, _id: "Id") -> None:
         self.id = _id
         self.version = 0
-        self.requires: Set["Id"] = set()
+        self.requires: Set[Resource] = set()
         self.unknowns: Set[str] = set()
 
         if not hasattr(self.__class__, "fields"):

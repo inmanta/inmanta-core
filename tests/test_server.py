@@ -24,7 +24,8 @@ import os
 from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
-from inmanta import data_pg as data, config, const
+from inmanta.agent import handler
+from inmanta import data_pg as data, config, const, loader, resources
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
 
 from datetime import datetime
@@ -931,8 +932,7 @@ def make_source(collector, filename, module, source, req):
 
 @pytest.mark.asyncio(timeout=30)
 async def test_code_upload(server_multi, client_multi, agent_multi, environment_multi):
-    """
-        Test the server to manage the updates on a model during agent deploy
+    """ Test upload of a single code definition
     """
     version = 1
 
@@ -964,49 +964,41 @@ async def test_code_upload(server_multi, client_multi, agent_multi, environment_
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_batched_code_upload(server_multi, client_multi, sync_client_multi, environment_multi, agent_multi):
+async def test_batched_code_upload(
+    server_multi, client_multi, sync_client_multi, environment_multi, agent_multi, snippetcompiler
+):
+    """ Test uploading all code definitions at once
     """
-        Test the server to manage the updates on a model during agent deploy
-    """
-    version = 1
+    config.Config.set("compiler_rest_transport", "request_timeout", "1")
 
-    resources = [{'group': 'root',
-                  'hash': '89bf880a0dc5ffc1156c8d958b4960971370ee6a',
-                  'id': 'std::File[vm1.dev.inmanta.com,path=/etc/sysconfig/network],v=%d' % version,
-                  'owner': 'root',
-                  'path': '/etc/sysconfig/network',
-                  'permissions': 644,
-                  'purged': False,
-                  'reload': False,
-                  'requires': [],
-                  'version': version}]
+    snippetcompiler.setup_for_snippet("""
+    h = std::Host(name="test", os=std::linux)
+    f = std::ConfigFile(host=h, path="/etc/motd", content="test", purge_on_delete=true)
+    """)
+    version, _ = await snippetcompiler.do_export_and_deploy(do_raise=False)
 
-    res = await client_multi.put_version(
-        tid=environment_multi, version=version, resources=resources, unknowns=[], version_info={}
-    )
-    assert res.code == 200
+    code_manager = loader.CodeManager()
 
-    asources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
-    asources = make_source(asources, "b.py", "std.xxx", "rvvWBVWHUvejIVJE UWEBVKW", ["pytest"])
+    for type_name, resource_definition in resources.resource.get_resources():
+        code_manager.register_code(type_name, resource_definition)
 
-    bsources = make_source({}, "a.py", "std.test", "wlkvsdbhewvsbk vbLKBVWE wevbhbwhBH", [])
-    bsources = make_source(bsources, "c.py", "std.xxx", "enhkahEUWLGBVFEHJ UWEBVKW", ["pytest"])
-
-    csources = make_source({}, "a.py", "sss", "ujekncedsiekvsd", [])
-
-    sources = {"std::File": asources,
-               "std::Other": bsources,
-               "std:xxx": csources
-               }
+    for type_name, handler_definition in handler.Commander.get_providers():
+        code_manager.register_code(type_name, handler_definition)
 
     await asyncio.get_event_loop().run_in_executor(
-        None, lambda: upload_code(sync_client_multi, environment_multi, version, sources)
+        None, lambda: upload_code(sync_client_multi, environment_multi, version, code_manager)
     )
 
-    for name, sourcemap in sources.items():
+    for name, source_info in code_manager.get_types():
         res = await agent_multi._client.get_code(tid=environment_multi, id=version, resource=name)
         assert res.code == 200
-        assert res.result["sources"] == sourcemap
+        assert len(source_info) == 1
+        info = source_info[0]
+        assert info.hash in res.result["sources"]
+        code = res.result["sources"][info.hash]
+
+        assert info.content == code[2]
+        assert info.requires == code[3]
 
 
 @pytest.mark.asyncio(timeout=30)
