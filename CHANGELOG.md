@@ -4,7 +4,8 @@ Changes in this release:
 - Migration from mongodb to postgres
 - added metering using pyformance
 - added influxdb reporter for protocol endpoint metrics
-- Remove the configuration option agent-run-at-start (#1055)  
+- Remove the configuration option agent-run-at-start (#1055)
+- Add project id and environment id as optional parameters to API call (#1001)
 
 v 2019.1 (2019-03-06)
 Changes in this release:

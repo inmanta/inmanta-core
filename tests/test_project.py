@@ -15,6 +15,8 @@
 
     Contact: code@inmanta.com
 """
+import uuid
+
 import pytest
 
 
@@ -126,3 +128,19 @@ async def test_project_cascade(client):
 
     result = await client.list_environments()
     assert len(result.result["environments"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_with_id(client):
+    project_id = uuid.uuid4()
+    result = await client.create_project(name="test_project", project_id=project_id)
+    assert result.result["project"]["id"] == str(project_id)
+
+    env_id = uuid.uuid4()
+    result = await client.create_environment(project_id=project_id, name="test_env", environment_id=env_id)
+    env = result.result["environment"]
+    assert env["id"] == str(env_id)
+    assert env["project"] == str(project_id)
+
+    result = await client.create_environment(project_id=project_id, name="test_env2", environment_id=env_id)
+    assert result.code == 500

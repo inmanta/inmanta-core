@@ -152,9 +152,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
     def _create_dict(cls, from_postgres, kwargs):
         result = {}
         fields = cls._fields.copy()
-        if "id" in fields and not from_postgres:
-            if "id" in kwargs:
-                raise AttributeError("The id attribute is generated per collection by the document class.")
+
+        if "id" in fields and "id" not in kwargs:
             kwargs["id"] = cls._new_id()
 
         for name, value in kwargs.items():
