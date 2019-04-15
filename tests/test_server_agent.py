@@ -1135,7 +1135,8 @@ async def test_spontaneous_repair(resource_container, server, client):
 
     async def verify_deployment_result():
         result = await client.get_version(env_id, version)
-        assert result.result["model"]["done"] == len(resources)
+        # A repair run may put one resource from the deployed state to the deploying state.
+        assert len(resources) - 1 <= result.result["model"]["done"] <= len(resources)
 
         assert resource_container.Provider.isset("agent1", "key1")
         assert resource_container.Provider.get("agent1", "key1") == "value1"
