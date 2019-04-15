@@ -847,7 +847,7 @@ class Commander(object):
         cls.__command_functions[resource][name] = provider
 
     @classmethod
-    def get_provides(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
+    def get_providers(cls) -> typing.Iterator[Tuple[str, typing.Type["ResourceHandler"]]]:
         """ Return an iterator over resource type, handler definition
         """
         for resource_type, handler_map in cls.__command_functions.items():

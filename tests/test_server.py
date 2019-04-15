@@ -982,7 +982,7 @@ async def test_batched_code_upload(
     for type_name, resource_definition in resources.resource.get_resources():
         code_manager.register_code(type_name, resource_definition)
 
-    for type_name, handler_definition in handler.Commander.get_provides():
+    for type_name, handler_definition in handler.Commander.get_providers():
         code_manager.register_code(type_name, handler_definition)
 
     await asyncio.get_event_loop().run_in_executor(

@@ -362,7 +362,7 @@ class Exporter(object):
         for type_name, resource_definition in resource.get_resources():
             code_manager.register_code(type_name, resource_definition)
 
-        for type_name, handler_definition in Commander.get_provides():
+        for type_name, handler_definition in Commander.get_providers():
             code_manager.register_code(type_name, handler_definition)
 
         LOGGER.info("Uploading source files")

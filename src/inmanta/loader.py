@@ -36,6 +36,11 @@ MODULE_DIR = "modules"
 LOGGER = logging.getLogger(__name__)
 
 
+class SourceNotFoundException(Exception):
+    """ This exception is raised when the source of the provided type is not found
+    """
+
+
 class SourceInfo(object):
     """ This class is used to store information related to source code information
     """
@@ -110,7 +115,7 @@ class CodeManager(object):
         """
         file_name = self.get_object_source(instance)
         if file_name is None:
-            raise Exception("Unable to locate source code of instance %s for entity %s" % (inspect, type_name))
+            raise SourceNotFoundException("Unable to locate source code of instance %s for entity %s" % (inspect, type_name))
 
         if type_name not in self.__type_file:
             self.__type_file[type_name] = set()
@@ -123,10 +128,13 @@ class CodeManager(object):
         if file_name not in self.__file_info:
             self.__file_info[file_name] = SourceInfo(file_name, instance.__module__)
 
-    def get_object_source(self, instance: object) -> str:
+    def get_object_source(self, instance: object) -> Optional[str]:
         """ Get the path of the source file in which type_object is defined
         """
-        return inspect.getsourcefile(instance)
+        try:
+            return inspect.getsourcefile(instance)
+        except TypeError:
+            return None
 
     def get_file_hashes(self) -> Iterable[str]:
         """ Return the hashes of all source files
@@ -158,7 +166,6 @@ class CodeLoader(object):
     def __init__(self, code_dir: str) -> None:
         self.__code_dir = code_dir
         self.__modules: Dict[str, Tuple[str, types.ModuleType]] = {}
-        self.__current_version: int = 0
 
         self.__check_dir()
         self.load_modules()
@@ -168,12 +175,6 @@ class CodeLoader(object):
             Load all existing modules
         """
         mod_dir = os.path.join(self.__code_dir, MODULE_DIR)
-
-        if os.path.exists(os.path.join(self.__code_dir, VERSION_FILE)):
-            fd = open(os.path.join(self.__code_dir, VERSION_FILE), "r")
-            self.__current_version = int(fd.read())
-            fd.close()
-
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
 
         for py in glob.glob(os.path.join(mod_dir, "*.py")):
@@ -215,12 +216,12 @@ class CodeLoader(object):
         except ImportError:
             LOGGER.exception("Unable to load module %s" % mod_name)
 
-    def deploy_version(self, key: str, module_name: str, module_source: str) -> None:
+    def deploy_version(self, hash_value: str, module_name: str, module_source: str) -> None:
         """ Deploy a new version of the modules
         """
         # if the module is new, or update
-        if module_name not in self.__modules or key != self.__modules[module_name][0]:
-            LOGGER.info("Deploying code (key=%s, module=%s)", key, module_name)
+        if module_name not in self.__modules or hash_value != self.__modules[module_name][0]:
+            LOGGER.info("Deploying code (hv=%s, module=%s)", hash_value, module_name)
             # write the new source
             source_file = os.path.join(self.__code_dir, MODULE_DIR, module_name + ".py")
 
@@ -229,6 +230,6 @@ class CodeLoader(object):
             fd.close()
 
             # (re)load the new source
-            self._load_module(module_name, source_file, key)
+            self._load_module(module_name, source_file, hash_value)
 
         pkg_resources.working_set = pkg_resources.WorkingSet._build_master()
