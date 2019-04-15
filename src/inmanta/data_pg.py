@@ -1821,39 +1821,38 @@ class ConfigurationModel(BaseDocument):
 
     def __init__(self, **kwargs):
         super(ConfigurationModel, self).__init__(**kwargs)
-        self._done = None
-
-    async def _set_done(self):
-        query = f"SELECT count(*) FROM {Resource.table_name()} WHERE environment=$1 AND model=$2 AND last_deploy IS NOT NULL"
-        values = [self._get_value(self.environment), self._get_value(self.version)]
-        result = await self._fetch_one(query, *values)
-        self._done = int(result["count"])
+        self._status = {}
+        self._done = 0
 
     @property
     def done(self):
-        if self._done is None:
-            raise Exception("_done field not set")
         return self._done
 
     @classmethod
-    async def new(cls, **kwargs):
-        result = cls(**kwargs)
-        await result._set_done()
+    async def _get_status_field(cls, environment, version):
+        query = f"SELECT resource_version_id, status FROM {Resource.table_name()} WHERE environment=$1 AND model=$2"
+        values = [cls._get_value(environment), cls._get_value(version)]
+        query_result = await cls._fetch_query(query, *values)
+        result = {}
+        for record in query_result:
+            resource_version_id = record["resource_version_id"]
+            status = record["status"]
+            entry_uuid = str(uuid.uuid5(environment, resource_version_id))
+            value_entry = {"status": status, "id": resource_version_id}
+            result[entry_uuid] = value_entry
         return result
-
-    def to_dict(self):
-        dct = BaseDocument.to_dict(self)
-        dct["done"] = self._done
-        return dct
 
     @classmethod
     async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
-        (filterstr, values) = cls._get_composed_filter(col_name_prefix='c', **query)
+        transient_states = ','.join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
+        transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
+        (filterstr, values) = cls._get_composed_filter(col_name_prefix='c', offset=len(transient_states_values) + 1, **query)
+        values = transient_states_values + values
         where_statement = f"WHERE {filterstr} " if filterstr else ""
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
-        query = f"SELECT c.*, SUM(CASE WHEN r.last_deploy IS NOT NULL THEN 1 ELSE 0 END) AS done " + \
+        query = f"SELECT c.*, SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done " + \
                 f"FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r " + \
                 f"ON c.environment = r.environment AND c.version = r.model " + \
                 f"{where_statement} " + \
@@ -1866,19 +1865,22 @@ class ConfigurationModel(BaseDocument):
         for record in query_result:
             record = dict(record)
             if no_obj:
+                record["status"] = await cls._get_status_field(record["environment"], record["version"])
                 result.append(record)
             else:
-                done = record['done']
-                del record['done']
+                done = record["done"]
+                del record["done"]
                 obj = cls(from_postgres=True, **record)
                 obj._done = done
+                obj._status = await cls._get_status_field(obj.environment, obj.version)
                 result.append(obj)
         return result
 
-    @classmethod
-    def _create_dict_wrapper(cls, from_postgres, kwargs):
-        result = cls._create_dict(from_postgres, kwargs)
-        return result
+    def to_dict(self):
+        dct = BaseDocument.to_dict(self)
+        dct["status"] = dict(self._status)
+        dct["done"] = self._done
+        return dct
 
     @classmethod
     async def get_version(cls, environment, version):

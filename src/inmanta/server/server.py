@@ -1086,9 +1086,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         skippeable = sorted(list(skippeable - set(undeployable)))
 
         try:
-            cm = yield data.ConfigurationModel.new(environment=env.id, version=version, date=datetime.datetime.now(),
-                                                   total=len(resources), version_info=version_info, undeployable=undeployable,
-                                                   skipped_for_undeployable=skippeable)
+            cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
+                                         total=len(resources), version_info=version_info, undeployable=undeployable,
+                                         skipped_for_undeployable=skippeable)
             yield cm.insert()
         except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
