@@ -141,3 +141,6 @@ async def test_create_with_id(client):
     env = result.result["environment"]
     assert env["id"] == str(env_id)
     assert env["project"] == str(project_id)
+
+    result = await client.create_environment(project_id=project_id, name="test_env2", environment_id=env_id)
+    assert result.code == 500
