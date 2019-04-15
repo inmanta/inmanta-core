@@ -359,6 +359,7 @@ class Exporter(object):
         code_manager = loader.CodeManager()
         LOGGER.info("Sending resources and handler source to server")
 
+        # Load both resource definition and handlers
         for type_name, resource_definition in resource.get_resources():
             code_manager.register_code(type_name, resource_definition)
 

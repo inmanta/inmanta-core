@@ -165,7 +165,7 @@ class CodeLoader(object):
 
     def __init__(self, code_dir: str) -> None:
         self.__code_dir = code_dir
-        self.__modules: Dict[str, Tuple[str, types.ModuleType]] = {}
+        self.__modules: Dict[str, Tuple[str, types.ModuleType]] = {}  # A map with all modules we loaded, and its hv
 
         self.__check_dir()
         self.load_modules()
