@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-
 from typing import Set, Dict, List
 from configparser import RawConfigParser
 from inmanta.const import ResourceState
@@ -303,6 +302,16 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
+    async def _fetch_val(cls, query, *values):
+        async with cls._connection_pool.acquire() as con:
+            return await con.fetchval(query, *values)
+
+    @classmethod
+    async def _fetch_one(cls, query, *values):
+        async with cls._connection_pool.acquire() as con:
+            return await con.fetchrow(query, *values)
+
+    @classmethod
     async def _fetch_query(cls, query, *values):
         async with cls._connection_pool.acquire() as con:
             return await con.fetch(query, *values)
@@ -514,7 +523,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         result.append(cls(from_postgres=True, **record))
                 return result
 
-    def _to_dict(self, mongo_pk=False):
+    def to_dict(self):
         """
             Return a dict representing the document
         """
@@ -537,9 +546,6 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[name] = typing.default_value
 
         return result
-
-    def to_dict(self):
-        return self._to_dict()
 
 
 class Project(BaseDocument):
@@ -1794,7 +1800,6 @@ class ConfigurationModel(BaseDocument):
         :param released: Is this model released and available for deployment?
         :param deployed: Is this model deployed?
         :param result: The result of the deployment. Success or error.
-        :param status: The deployment status of all included resources
         :param version_info: Version metadata
         :param total: The total number of resources
     """
@@ -1805,7 +1810,6 @@ class ConfigurationModel(BaseDocument):
     released = Field(field_type=bool, default=False)
     deployed = Field(field_type=bool, default=False)
     result = Field(field_type=const.VersionState, default=const.VersionState.pending)
-    status = Field(field_type=dict, default={})
     version_info = Field(field_type=dict)
 
     total = Field(field_type=int, default=0)
@@ -1814,20 +1818,70 @@ class ConfigurationModel(BaseDocument):
     undeployable = Field(field_type=list, required=False)
     skipped_for_undeployable = Field(field_type=list, required=False)
 
+    def __init__(self, **kwargs):
+        super(ConfigurationModel, self).__init__(**kwargs)
+        self._status = {}
+        self._done = 0
+
     @property
-    def done(self):
-        return len(self.status)
+    def done(self) -> int:
+        return self._done
+
+    @classmethod
+    async def _get_status_field(cls, environment, values):
+        """
+            This field is required to ensure backward compatibility on the API.
+        """
+        result = {}
+        for value_entry in values:
+            value_entry = json.loads(value_entry)
+            entry_uuid = str(uuid.uuid5(environment, value_entry['id']))
+            result[entry_uuid] = value_entry
+        return result
+
+    @classmethod
+    async def get_list(cls, order_by_column=None, order="ASC", limit=None, offset=None, no_obj=False, **query):
+        transient_states = ','.join(["$" + str(i) for i in range(1, len(const.TRANSIENT_STATES) + 1)])
+        transient_states_values = [cls._get_value(s) for s in const.TRANSIENT_STATES]
+        (filterstr, values) = cls._get_composed_filter(col_name_prefix='c', offset=len(transient_states_values) + 1, **query)
+        values = transient_states_values + values
+        where_statement = f"WHERE {filterstr} " if filterstr else ""
+        order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
+        limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
+        offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
+        query = f"SELECT c.*, SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done ," + \
+                f"array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_version_id) " + \
+                f"      FROM {Resource.table_name()} AS r2 " \
+                f"      WHERE c.environment=r2.environment AND c.version=r2.model" \
+                f"      ) AS status " + \
+                f"FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r " + \
+                f"ON c.environment = r.environment AND c.version = r.model " + \
+                f"{where_statement} " + \
+                f"GROUP BY c.environment, c.version " + \
+                f"{order_by_statement} " + \
+                f"{limit_statement} " + \
+                f"{offset_statement}"
+        query_result = await cls._fetch_query(query, *values)
+        result = []
+        for record in query_result:
+            record = dict(record)
+            if no_obj:
+                record['status'] = await cls._get_status_field(record["environment"], record['status'])
+                result.append(record)
+            else:
+                done = record.pop("done")
+                status = await cls._get_status_field(record["environment"], record.pop("status"))
+                obj = cls(from_postgres=True, **record)
+                obj._done = done
+                obj._status = status
+                result.append(obj)
+        return result
 
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
-        dct["done"] = self.done
+        dct["status"] = dict(self._status)
+        dct["done"] = self._done
         return dct
-
-    @classmethod
-    def _create_dict_wrapper(cls, from_postgres, kwargs):
-        result = cls._create_dict(from_postgres, kwargs)
-        result["done"] = len(result["status"])
-        return result
 
     @classmethod
     async def get_version(cls, environment, version):
@@ -1871,23 +1925,6 @@ class ConfigurationModel(BaseDocument):
         versions = await cls.get_list(order_by_column="version", order="DESC", limit=limit, offset=start,
                                       environment=environment)
         return versions
-
-    @classmethod
-    async def set_ready(cls, environment, version, resource_id, status):
-        """
-            Mark a resource as deployed in the configuration model status
-        """
-        resource_version_id = "%s,v=%s" % (resource_id, version)
-        entry_uuid = uuid.uuid5(environment, resource_version_id)
-        # entry_uuid = uuid.uuid5(resource_uuid, resource_id)
-        value_entry = {"status": cls._get_value(status), "id": resource_id}
-
-        (filter_statement, values) = cls._get_composed_filter(version=version, environment=environment, offset=3)
-        query = "UPDATE " + cls.table_name() + \
-                " SET status=jsonb_set(status, $1::text[], $2, TRUE)" \
-                " WHERE " + filter_statement
-        values = [[cls._get_value(entry_uuid)], cls._get_value(value_entry)] + values
-        await cls._execute_query(query, *values)
 
     async def delete_cascade(self):
         await Code.delete_all(environment=self.environment, version=self.version)
@@ -1934,12 +1971,23 @@ class ConfigurationModel(BaseDocument):
 
     async def mark_done(self):
         """ mark this deploy as done """
-        result = const.VersionState.success
-        for state in self.status.values():
-            if state["status"] != "deployed":
-                result = const.VersionState.failed
-
-        await self.update_fields(deployed=True, result=result)
+        subquery = f"(EXISTS(" + \
+                   f"SELECT 1 " + \
+                   f"FROM {Resource.table_name()} " + \
+                   f"WHERE environment=$1 AND model=$2 AND status != $3" + \
+                   f"))::boolean"
+        query = f"UPDATE {self.table_name()} " + \
+                f"SET " + \
+                f"deployed=True, result=(CASE WHEN {subquery} THEN $4::versionstate ELSE $5::versionstate END) " \
+                f"WHERE environment=$1 AND version=$2 RETURNING result"
+        values = [self._get_value(self.environment),
+                  self._get_value(self.version),
+                  self._get_value(const.ResourceState.deployed),
+                  self._get_value(const.VersionState.failed),
+                  self._get_value(const.VersionState.success)]
+        result = await self._fetch_val(query, *values)
+        self.result = const.VersionState[result]
+        self.deployed = True
 
     async def get_increment(self):
         """
@@ -1980,11 +2028,10 @@ class ConfigurationModel(BaseDocument):
         work = list(r for r in resources)
 
         # get versions
-        version_records = await self.get_list(order_by_column="version",
-                                              order="DESC",
-                                              no_obj=True,
-                                              environment=self.environment,
-                                              released=True)
+        query = f"SELECT version FROM {self.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
+        values = [self._get_value(self.environment)]
+        version_records = await self._fetch_query(query, *values)
+
         versions = [record["version"] for record in version_records]
 
         for version in versions:

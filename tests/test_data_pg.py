@@ -559,12 +559,10 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0,
-                                 version_info={})
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
     await cm.insert()
 
-    amount_of_done_resources = cm.done
-    assert amount_of_done_resources == 0
+    assert cm.done == 0
 
     path = "/etc/file"
     key = "std::File[agent1,path=" + path + "]"
@@ -573,11 +571,46 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     await resource.insert()
 
     assert cm.done == 0
-
-    await data.ConfigurationModel.set_ready(env.id, version, resource.resource_id, const.ResourceState.deployed)
-
+    await resource.update_fields(status=const.ResourceState.deployed)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert cm.done == 1
+
+
+@pytest.mark.asyncio
+async def test_model_get_list(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env1 = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env1.insert()
+    env2 = data.Environment(name="prod", project=project.id, repo_url="", repo_branch="")
+    await env2.insert()
+
+    for env in [env1, env2]:
+        for i in range(2):
+            cm = data.ConfigurationModel(environment=env.id, version=i, date=datetime.datetime.now(), total=0, version_info={})
+            await cm.insert()
+
+            for r in range(3):
+                if r % 2 == 0:
+                    res = data.Resource.new(environment=env.id, status=const.ResourceState.deployed,
+                                            resource_version_id=f"std::File[agent1,path=/etc/file{r}],v={i}",
+                                            attributes={"purge_on_delete": False}, last_deploy=datetime.datetime.now())
+                else:
+                    res = data.Resource.new(environment=env.id, status=const.ResourceState.deploying,
+                                            resource_version_id=f"std::File[agent1,path=/etc/file{r}],v={i}",
+                                            attributes={"purge_on_delete": False})
+                await res.insert()
+
+    for env in [env1, env2]:
+        cms = await data.ConfigurationModel.get_list(environment=env.id)
+        assert len(cms) == 2
+        for c in cms:
+            assert c.environment == env.id
+            assert c.done == 2
+
+    cms = await data.ConfigurationModel.get_list(environment=uuid.uuid4())
+    assert not cms
 
 
 @pytest.mark.asyncio
@@ -589,8 +622,7 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0,
-                                 version_info={})
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=0, version_info={})
     await cm.insert()
 
     path = "/etc/file"
@@ -616,6 +648,45 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
+@pytest.mark.parametrize("resource_state, version_state", [
+    (const.ResourceState.deployed, const.VersionState.success),
+    (const.ResourceState.failed, const.VersionState.failed),
+    (const.ResourceState.undefined, const.VersionState.failed),
+    (const.ResourceState.skipped_for_undefined, const.VersionState.failed),
+    (const.ResourceState.cancelled, const.VersionState.failed),
+    (const.ResourceState.skipped, const.VersionState.failed)
+])
+@pytest.mark.asyncio
+async def test_mark_done(init_dataclasses_and_load_schema, resource_state, version_state):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=2, version_info={})
+    await cm.insert()
+
+    assert cm.done == 0
+
+    path1 = "/etc/file1"
+    key1 = "std::File[agent1,path=" + path1 + "]"
+    resource1 = data.Resource.new(environment=env.id, resource_version_id=key1 + ",v=%d" % version,
+                                  attributes={"path": path1}, status=resource_state)
+    await resource1.insert()
+
+    path2 = "/etc/file2"
+    key2 = "std::File[agent1,path=" + path2 + "]"
+    resource2 = data.Resource.new(environment=env.id, resource_version_id=key2 + ",v=%d" % version,
+                                  attributes={"path": path2}, status=const.ResourceState.deployed)
+    await resource2.insert()
+
+    assert cm.result == const.VersionState.pending
+    await cm.mark_done()
+    assert cm.result == version_state
+
+
 @pytest.mark.asyncio
 async def test_undeployable_cache_lazy(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
@@ -625,8 +696,8 @@ async def test_undeployable_cache_lazy(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=5, version_info={},
-                                  released=False, deployed=False)
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=5,
+                                  version_info={}, released=False, deployed=False)
     await cm1.insert()
     await populate_model(env.id, version)
 
@@ -662,7 +733,8 @@ async def test_undeployable_skip_cache_lazy(init_dataclasses_and_load_schema):
                                   date=datetime.datetime.now(),
                                   total=5,
                                   version_info={},
-                                  released=False, deployed=False)
+                                  released=False,
+                                  deployed=False)
     await cm1.insert()
     await populate_model(env.id, version)
 
@@ -727,8 +799,8 @@ async def test_resource_purge_on_delete(init_dataclasses_and_load_schema):
 
     # model 1
     version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=2, version_info={},
-                                  released=True, deployed=True)
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=2,
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
@@ -775,8 +847,8 @@ async def test_issue_422(init_dataclasses_and_load_schema):
 
     # model 1
     version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={},
-                                  released=True, deployed=True)
+    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/motd],v=%s" % version,
@@ -850,8 +922,7 @@ async def test_get_resources(init_dataclasses_and_load_schema):
 
     version = 1
     cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={},
-                                  released=True, deployed=True)
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     resource_ids = []
@@ -885,8 +956,7 @@ async def test_get_resources_for_version(init_dataclasses_and_load_schema):
     resource_ids_version_one = []
     version = 1
     cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                 version_info={},
-                                 released=True, deployed=True)
+                                 version_info={}, released=True, deployed=True)
     await cm.insert()
     for i in range(1, 11):
         res = data.Resource.new(environment=env.id,
@@ -899,8 +969,7 @@ async def test_get_resources_for_version(init_dataclasses_and_load_schema):
     resource_ids_version_two = []
     version += 1
     cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                 version_info={},
-                                 released=True, deployed=True)
+                                 version_info={}, released=True, deployed=True)
     await cm.insert()
     for i in range(11, 21):
         res = data.Resource.new(environment=env.id,
@@ -912,8 +981,7 @@ async def test_get_resources_for_version(init_dataclasses_and_load_schema):
 
     for version in range(3, 5):
         cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                     version_info={},
-                                     released=True, deployed=True)
+                                     version_info={}, released=True, deployed=True)
         await cm.insert()
 
     async def make_with_status(i, status):
@@ -956,8 +1024,7 @@ async def test_escaped_resources(init_dataclasses_and_load_schema):
 
     version = 1
     cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={},
-                                  released=True, deployed=True)
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     routes = {"8.0.0.0/8": "1.2.3.4", "0.0.0.0/0": "127.0.0.1"}
@@ -983,8 +1050,7 @@ async def test_resource_provides(init_dataclasses_and_load_schema):
 
     version = 1
     cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={},
-                                  released=True, deployed=True)
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%d" % version,
@@ -1022,8 +1088,7 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
 
     for version in range(1, 4):
         cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                      version_info={},
-                                      released=True, deployed=True)
+                                      version_info={}, released=True, deployed=True)
         await cm1.insert()
 
     res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=1",
@@ -1065,8 +1130,7 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     # model 1
     version = 1
     cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={},
-                                  released=True, deployed=True)
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
@@ -1128,8 +1192,7 @@ async def test_resource_get_requires(init_dataclasses_and_load_schema):
 
     version = 1
     cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={},
-                                  released=True, deployed=True)
+                                  version_info={}, released=True, deployed=True)
     await cm1.insert()
 
     res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%d" % version,
@@ -1395,8 +1458,7 @@ async def test_code(init_dataclasses_and_load_schema):
     await env.insert()
 
     version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
-                                 total=1, version_info={})
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
     await cm.insert()
 
     code1 = data.Code(environment=env.id, resource="std::File", version=version, source_refs={"ref": "ref"})
@@ -1406,8 +1468,7 @@ async def test_code(init_dataclasses_and_load_schema):
     await code2.insert()
 
     version2 = version + 1
-    cm2 = data.ConfigurationModel(environment=env.id, version=version2, date=datetime.datetime.now(),
-                                  total=1, version_info={})
+    cm2 = data.ConfigurationModel(environment=env.id, version=version2, date=datetime.datetime.now(), total=1, version_info={})
     await cm2.insert()
 
     code3 = data.Code(environment=env.id, resource="std::Directory", version=version2, source_refs={})

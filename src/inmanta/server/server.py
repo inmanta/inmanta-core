@@ -1445,7 +1445,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             model_version = None
             for res in resources:
                 yield res.update_fields(last_deploy=finished, status=status)
-                yield data.ConfigurationModel.set_ready(env.id, res.model, res.resource_id, status)
                 model_version = res.model
 
                 if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:

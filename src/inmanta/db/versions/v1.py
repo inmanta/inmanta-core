@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS public.configurationmodel (
     released boolean DEFAULT false,
     deployed boolean DEFAULT false,
     result versionstate DEFAULT 'pending',
-    status JSONB DEFAULT '{}',
     version_info JSONB,
     total integer DEFAULT 0,
     undeployable varchar[],
