@@ -4405,7 +4405,6 @@ async def test_agent_lockout(resource_container, environment, server, client):
 
     result = await agent2._instances["agent1"].get_client().get_resources_for_agent(tid=environment, agent="agent1")
     assert result.code == 409
-    
+
     await agent.stop()
     await agent2.stop()
-
