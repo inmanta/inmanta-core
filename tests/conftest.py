@@ -276,7 +276,6 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
 
-
     ibl = InmantaBootloader()
     await ibl.start()
 

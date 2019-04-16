@@ -2696,7 +2696,7 @@ def ps_diff(original, current_process, diff=0):
             Process(proc.pid)
         except NoSuchProcess:
             return True
-        except:
+        except Exception:
             return False
         return False
 
@@ -2706,9 +2706,9 @@ def ps_diff(original, current_process, diff=0):
         original = [c for c in original if not is_terminated(c)]
 
     assert len(original) + diff == len(current), \
-        """procs found: 
+        """procs found:
         pre:%s
-        post:%s """ % (original, current)
+        post:%s""" % (original, current)
 
 
 @pytest.mark.asyncio(timeout=15)
