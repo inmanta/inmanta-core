@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import json
 from collections import defaultdict, namedtuple
 import time
 import uuid
@@ -30,6 +31,7 @@ import psutil
 
 import pytest
 from _pytest.fixtures import fixture
+from psutil import Process, NoSuchProcess
 
 from inmanta import agent, const, execute, config, data_pg as data
 from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext, CRUDHandler, ResourcePurged
@@ -2686,6 +2688,29 @@ async def test_auto_deploy_no_splay(server, client, resource_container, environm
     assert result.result["agents"][0]["name"] == "agent1"
 
 
+def ps_diff(original, current_process, diff=0):
+    current = current_process.children(recursive=True)
+
+    def is_terminated(proc):
+        try:
+            Process(proc.pid)
+        except NoSuchProcess:
+            return True
+        except Exception:
+            return False
+        return False
+
+    if not len(original) + diff == len(current):
+        # can be in terminated state apparently
+        current = [c for c in current if not is_terminated(c)]
+        original = [c for c in original if not is_terminated(c)]
+
+    assert len(original) + diff == len(current), \
+        """procs found:
+        pre:%s
+        post:%s""" % (original, current)
+
+
 @pytest.mark.asyncio(timeout=15)
 async def test_autostart_mapping(server, client, resource_container, environment):
     """
@@ -2805,13 +2830,13 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
     # clear environment
     await client.clear_environment(environment_multi)
 
     # Autostarted agent should be terminated after clearing the environment
-    assert len(children) == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 0)
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
     items = await data.Resource.get_list()
@@ -2860,7 +2885,7 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
 
 async def setup_environment_with_agent(client, project_name):
@@ -2926,13 +2951,13 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
     result = await client.delete_environment(id=env_id)
     assert result.code == 200
 
     # The autostarted agent should be terminated when its environment is deleted.
-    assert len(children) == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 0)
 
 
 @pytest.mark.asyncio(timeout=15)
@@ -2944,14 +2969,14 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
     await setup_environment_with_agent(client, "proj2")
 
     # Two autostarted agents should be running (one in proj1 and one in proj2).
-    assert len(children) + 2 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 2)
 
     result = await client.delete_project(id=project1_id)
     assert result.code == 200
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
 
 @pytest.mark.asyncio
@@ -2998,6 +3023,11 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
             logger.info(versions.result)
             versions = await client.list_versions(environment)
             await asyncio.sleep(0.1)
+
+        reports = await client.get_reports(environment)
+        for report in reports.result["reports"]:
+            data = await client.get_report(report["id"])
+            print(json.dumps(data.result, indent=4))
 
         return versions.result
 
