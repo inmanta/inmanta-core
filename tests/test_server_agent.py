@@ -525,8 +525,10 @@ def resource_container():
         def do_changes(self, ctx, resource, changes):
             logger.info("Hanging waiter %s", self.traceid)
             waiter.acquire()
-            waiter.wait()
+            notified_before_timeout = waiter.wait(timeout=10)
             waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout occured")
             logger.info("Releasing waiter %s", self.traceid)
             if "purged" in changes:
                 if changes["purged"]["desired"]:
@@ -561,8 +563,10 @@ def resource_container():
         def process_events(self, ctx, resource, events):
             logger.info("Hanging Event waiter %s", self.traceid)
             waiter.acquire()
-            waiter.wait()
+            notified_before_timeout = waiter.wait(timeout=10)
             waiter.release()
+            if not notified_before_timeout:
+                raise Exception("Timeout")
             logger.info("Releasing Event waiter %s", self.traceid)
 
     yield ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters,
@@ -3381,18 +3385,22 @@ async def test_s_repair_postponed_due_to_running_deploy(resource_container,
 
     resources_version_1 = get_resources(version1, "a")
 
+    # Put a new version of the configurationmodel
     await _deploy_resources(client, environment, resources_version_1, version1, False)
+    # Make the agent pickup the new version
+    # key3: Readcount=1; writecount=1
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
+    # key3: Readcount=2; writecount=1
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
 
     def wait_condition():
-        return resource_container.Provider.readcount(agent_name, "key1") != 2 \
-            or resource_container.Provider.changecount(agent_name, "key1") != 1
+        return not (resource_container.Provider.readcount(agent_name, "key3") == 2
+                    and resource_container.Provider.changecount(agent_name, "key3") == 1)
 
     await resource_container.wait_for_condition_with_waiters(wait_condition)
 
-    assert resource_container.Provider.readcount(agent_name, "key1") == 2
-    assert resource_container.Provider.changecount(agent_name, "key1") == 1
+    assert resource_container.Provider.readcount(agent_name, "key3") == 2
+    assert resource_container.Provider.changecount(agent_name, "key3") == 1
 
     assert resource_container.Provider.get("agent1", "key1") == "value2"
 
@@ -4030,6 +4038,8 @@ async def test_eventprocessing(resource_container, client, server, environment):
     """
         Test retrieving facts from the agent
     """
+    config.Config.set("config", "agent-deploy-interval", "0")
+    config.Config.set("config", "agent-repair-interval", "0")
     agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
@@ -4406,3 +4416,6 @@ async def test_agent_lockout(resource_container, environment, server, client):
 
     result = await agent2._instances["agent1"].get_client().get_resources_for_agent(tid=environment, agent="agent1")
     assert result.code == 409
+
+    await agent.stop()
+    await agent2.stop()
