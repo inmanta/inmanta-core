@@ -2687,6 +2687,14 @@ async def test_auto_deploy_no_splay(server, client, resource_container, environm
     assert result.result["agents"][0]["name"] == "agent1"
 
 
+def ps_diff(original, current_process, diff=0):
+    current = current_process.children(recursive=True)
+    assert len(original) + diff == len(current), \
+        """procs found: 
+        pre:%s
+        post:%s """ % (original, current)
+
+
 @pytest.mark.asyncio(timeout=15)
 async def test_autostart_mapping(server, client, resource_container, environment):
     """
@@ -2806,15 +2814,13 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True)), \
-        "procs found: %s %s" % (children, current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
     # clear environment
     await client.clear_environment(environment_multi)
 
     # Autostarted agent should be terminated after clearing the environment
-    assert len(children) == len(current_process.children(recursive=True)), \
-        "procs found: %s %s" % (children, current_process.children(recursive=True))
+    ps_diff(children, current_process, 0)
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
     items = await data.Resource.get_list()
@@ -2863,7 +2869,7 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
 
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
 
 async def setup_environment_with_agent(client, project_name):
@@ -2929,13 +2935,13 @@ async def test_stop_autostarted_agents_on_environment_removal(server, client, re
     (project_id, env_id) = await setup_environment_with_agent(client, "proj")
 
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
     result = await client.delete_environment(id=env_id)
     assert result.code == 200
 
     # The autostarted agent should be terminated when its environment is deleted.
-    assert len(children) == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 0)
 
 
 @pytest.mark.asyncio(timeout=15)
@@ -2947,14 +2953,14 @@ async def test_stop_autostarted_agents_on_project_removal(server, client, resour
     await setup_environment_with_agent(client, "proj2")
 
     # Two autostarted agents should be running (one in proj1 and one in proj2).
-    assert len(children) + 2 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 2)
 
     result = await client.delete_project(id=project1_id)
     assert result.code == 200
 
     # The autostarted agent of proj1 should be terminated when its project is deleted
     # The autostarted agent of proj2 keep running
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    ps_diff(children, current_process, 1)
 
 
 @pytest.mark.asyncio
