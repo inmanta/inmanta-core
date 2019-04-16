@@ -2703,6 +2703,7 @@ def ps_diff(original, current_process, diff=0):
     if not len(original) + diff == len(current):
         # can be in terminated state apparently
         current = [c for c in current if not is_terminated(c)]
+        original = [c for c in original if not is_terminated(c)]
 
     assert len(original) + diff == len(current), \
         """procs found: 
