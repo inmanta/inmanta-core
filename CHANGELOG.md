@@ -6,6 +6,7 @@ Changes in this release:
 - added influxdb reporter for protocol endpoint metrics
 - Remove the configuration option agent-run-at-start (#1055)
 - Add project id and environment id as optional parameters to API call (#1001)
+- Fixed an issue which cleared the environment on remote python 2 interpreters
 
 v 2019.1 (2019-03-06)
 Changes in this release:
@@ -37,8 +38,8 @@ DEPRECATIONS:
 - Minimal python version is now python 3.6
 - Removal of snapshot and restore functionality from the server (#789)
 - Removed the non-version api (#526)
-- The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are 
-deprecated in favour of agent-deploy-interval, agent-deploy-splay-time, autostart_agent_deploy_interval 
+- The config option agent-interval, agent-splay, autostart_agent_interval and autostart_splay are
+deprecated in favour of agent-deploy-interval, agent-deploy-splay-time, autostart_agent_deploy_interval
 and autostart_agent_deploy_splay_time respectively. The deprecated options will be removed in release 2019.2
 
 v 2018.3 (2018-12-07)
