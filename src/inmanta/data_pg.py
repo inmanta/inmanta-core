@@ -1824,20 +1824,18 @@ class ConfigurationModel(BaseDocument):
         self._done = 0
 
     @property
-    def done(self):
+    def done(self) -> int:
         return self._done
 
     @classmethod
-    async def _get_status_field(cls, environment, version):
-        query = f"SELECT resource_version_id, status FROM {Resource.table_name()} WHERE environment=$1 AND model=$2"
-        values = [cls._get_value(environment), cls._get_value(version)]
-        query_result = await cls._fetch_query(query, *values)
+    async def _get_status_field(cls, environment, values):
+        """
+            This field is required to ensure backward compatibility on the API.
+        """
         result = {}
-        for record in query_result:
-            resource_version_id = record["resource_version_id"]
-            status = record["status"]
-            entry_uuid = str(uuid.uuid5(environment, resource_version_id))
-            value_entry = {"status": status, "id": resource_version_id}
+        for value_entry in values:
+            value_entry = json.loads(value_entry)
+            entry_uuid = str(uuid.uuid5(environment, value_entry['id']))
             result[entry_uuid] = value_entry
         return result
 
@@ -1851,7 +1849,11 @@ class ConfigurationModel(BaseDocument):
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
-        query = f"SELECT c.*, SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done " + \
+        query = f"SELECT c.*, SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done ," + \
+                f"array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_version_id) " + \
+                f"      FROM {Resource.table_name()} AS r2 " \
+                f"      WHERE c.environment=r2.environment AND c.version=r2.model" \
+                f"      ) AS status " + \
                 f"FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r " + \
                 f"ON c.environment = r.environment AND c.version = r.model " + \
                 f"{where_statement} " + \
@@ -1864,14 +1866,14 @@ class ConfigurationModel(BaseDocument):
         for record in query_result:
             record = dict(record)
             if no_obj:
-                record["status"] = await cls._get_status_field(record["environment"], record["version"])
+                record['status'] = await cls._get_status_field(record["environment"], record['status'])
                 result.append(record)
             else:
-                done = record["done"]
-                del record["done"]
+                done = record.pop("done")
+                status = await cls._get_status_field(record["environment"], record.pop("status"))
                 obj = cls(from_postgres=True, **record)
                 obj._done = done
-                obj._status = await cls._get_status_field(obj.environment, obj.version)
+                obj._status = status
                 result.append(obj)
         return result
 
