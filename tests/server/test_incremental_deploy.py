@@ -28,7 +28,7 @@ from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_SERVER, SLICE_AGENT_MANAGER
 import uuid
 from datetime import datetime
-from inmanta import data_pg as data, const
+from inmanta import data_pg as data, const, config
 from inmanta.const import ResourceState, ResourceAction
 import logging
 from typing import List, Dict, Any
@@ -133,9 +133,13 @@ class MultiVersionSetup(object):
         return rid
 
     async def setup_agent(self, server, environment):
+
         agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
         endpoints = list(self.results.keys())
+
+        config.Config.set("config", "agent-deploy-interval", "0")
+        config.Config.set("config", "agent-repair-interval", "0")
 
         a = Agent(
             hostname="node1",

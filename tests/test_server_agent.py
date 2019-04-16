@@ -3350,21 +3350,40 @@ async def test_s_repair_postponed_due_to_running_deploy(resource_container,
     resource_container.Provider.set("agent1", "key1", "value1")
 
     version1 = int(time.time())
-    resources_version_1 = [
-        {
-            'key': 'key1',
-            'value': 'value2',
-            'id': 'test::Resource[agent1,key=key1],v=%d' % version1,
-            'send_event': False,
-            'purged': False,
-            'requires': []
-        },
-    ]
+
+    resource_container.Provider.set("agent1", "key1", "value1")
+    resource_container.Provider.set("agent1", "key2", "value1")
+    resource_container.Provider.set("agent1", "key3", "value1")
+
+    def get_resources(version, value_resource_three):
+        return [{'key': 'key1',
+                 'value': 'value2',
+                 'id': 'test::Resource[agent1,key=key1],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': []
+                 },
+                {'key': 'key2',
+                 'value': 'value2',
+                 'id': 'test::Wait[agent1,key=key2],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Resource[agent1,key=key1],v=%d' % version]
+                 },
+                {'key': 'key3',
+                 'value': value_resource_three,
+                 'id': 'test::Resource[agent1,key=key3],v=%d' % version,
+                 'send_event': False,
+                 'purged': False,
+                 'requires': ['test::Wait[agent1,key=key2],v=%d' % version]
+                 }
+                ]
+
+    resources_version_1 = get_resources(version1, "a")
 
     await _deploy_resources(client, environment, resources_version_1, version1, False)
     await myagent_instance.get_latest_version_for_agent(reason="Deploy", incremental_deploy=True, is_repair_run=False)
     await myagent_instance.get_latest_version_for_agent(reason="Repair", incremental_deploy=False, is_repair_run=True)
-    await _wait_until_deployment_finishes(client, environment, version1)
 
     def wait_condition():
         return resource_container.Provider.readcount(agent_name, "key1") != 2 \
