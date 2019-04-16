@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import json
 from collections import defaultdict, namedtuple
 import time
 import uuid
@@ -2993,6 +2994,11 @@ async def test_server_recompile(server_multi, client_multi, environment_multi):
             logger.info(versions.result)
             versions = await client.list_versions(environment)
             await asyncio.sleep(0.1)
+
+        reports = await client.get_reports(environment)
+        for report in reports.result["reports"]:
+            data = await client.get_report(report["id"])
+            print(json.dumps(data.result, indent=4))
 
         return versions.result
 
