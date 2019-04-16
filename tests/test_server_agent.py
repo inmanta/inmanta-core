@@ -2806,13 +2806,15 @@ async def test_autostart_clear_environment(server_multi, client_multi, resource_
     assert len(result.result["agents"]) == 1
     assert len([x for x in result.result["agents"] if x["state"] == "up"]) == 1
     # One autostarted agent should running as a subprocess
-    assert len(children) + 1 == len(current_process.children(recursive=True))
+    assert len(children) + 1 == len(current_process.children(recursive=True)), \
+        "procs found: %s %s" % (children, current_process.children(recursive=True))
 
     # clear environment
     await client.clear_environment(environment_multi)
 
     # Autostarted agent should be terminated after clearing the environment
-    assert len(children) == len(current_process.children(recursive=True))
+    assert len(children) == len(current_process.children(recursive=True)), \
+        "procs found: %s %s" % (children, current_process.children(recursive=True))
     items = await data.ConfigurationModel.get_list()
     assert len(items) == 0
     items = await data.Resource.get_list()
