@@ -2028,11 +2028,10 @@ class ConfigurationModel(BaseDocument):
         work = list(r for r in resources)
 
         # get versions
-        version_records = await self.get_list(order_by_column="version",
-                                              order="DESC",
-                                              no_obj=True,
-                                              environment=self.environment,
-                                              released=True)
+        query = f"SELECT version FROM {self.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
+        values = [self._get_value(self.environment)]
+        version_records = await self._fetch_query(query, *values)
+
         versions = [record["version"] for record in version_records]
 
         for version in versions:
