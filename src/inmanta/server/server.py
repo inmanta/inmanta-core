@@ -1727,7 +1727,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Already recompiling")
             return
 
-
         if last_recompile is None:
             wait = 0
             LOGGER.info("First recompile")
@@ -1737,7 +1736,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         self._recompiles[env.id] = self
         ioloop.IOLoop.current().add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
-
 
     @gen.coroutine
     def _run_compile_stage(self, name, cmd, cwd, **kwargs):
@@ -1818,17 +1816,20 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
                     if o is not None and env.repo_branch != o.group(1):
                         LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
-                        result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir)
+                        result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch],
+                                                               project_dir)
                         stages.append(result)
 
                 if update_repo:
                     result = yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     stages.append(result)
                     LOGGER.info("Installing and updating modules")
-                    result = yield self._run_compile_stage("Installing modules", inmanta_path + ["modules", "install"], project_dir,
+                    result = yield self._run_compile_stage("Installing modules", inmanta_path + ["modules", "install"],
+                                                           project_dir,
                                                            env=os.environ.copy())
                     stages.append(result)
-                    result = yield self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir,
+                    result = yield self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"],
+                                                           project_dir,
                                                            env=os.environ.copy())
                     stages.append(result)
 
