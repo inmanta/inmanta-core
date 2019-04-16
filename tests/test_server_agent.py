@@ -31,6 +31,7 @@ import psutil
 
 import pytest
 from _pytest.fixtures import fixture
+from psutil import Process, NoSuchProcess
 
 from inmanta import agent, const, execute, config, data_pg as data
 from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext, CRUDHandler, ResourcePurged
@@ -2689,6 +2690,20 @@ async def test_auto_deploy_no_splay(server, client, resource_container, environm
 
 def ps_diff(original, current_process, diff=0):
     current = current_process.children(recursive=True)
+
+    def is_terminated(proc):
+        try:
+            Process(proc.pid)
+        except NoSuchProcess:
+            return True
+        except:
+            return False
+        return False
+
+    if not len(original) + diff == len(current):
+        # can be in terminated state apparently
+        current = [c for c in current if not is_terminated(c)]
+
     assert len(original) + diff == len(current), \
         """procs found: 
         pre:%s
