@@ -401,7 +401,7 @@ class LocalIO(IOBase):
             new_env = {}
             for k, v in current_env.items():
                 new_env[k.encode()] = str(v).encode()
-            new_env = current_env
+            current_env = new_env
 
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)
