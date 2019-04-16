@@ -60,9 +60,12 @@ AGENT_ENV_OPTS = {"tid": ArgOption(header=const.INMANTA_MT_HEADER, reply_header=
 
 
 @method(method_name="project", operation="PUT", client_types=["api"])
-def create_project(name):
+def create_project(name: str, project_id: uuid.UUID = None):
     """
         Create a new project
+
+        :param name: The name of the project
+        :param project_id: A unique uuid, when it is not provided the server generates one
     """
 
 
@@ -94,18 +97,19 @@ def get_project(id: uuid.UUID):
     """
 
 
-# Method for working with environments
-
-
+# Methods for working with environments
 @method(method_name="environment", operation="PUT", client_types=["api"])
-def create_environment(project_id: uuid.UUID, name: str, repository: str = None, branch: str = None):
+def create_environment(
+        project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: uuid.UUID = None
+):
     """
         Create a new environment
 
-        :param project_id The id of the project this environment belongs to
-        :param name The name of the environment
-        :param repository The url (in git form) of the repository
-        :param branch The name of the branch in the repository
+        :param project_id: The id of the project this environment belongs to
+        :param name: The name of the environment
+        :param repository: The url (in git form) of the repository
+        :param branch: The name of the branch in the repository
+        :param environment_id: A unique environment id, if none an id is allocated by the server
     """
 
 
@@ -114,10 +118,10 @@ def modify_environment(id: uuid.UUID, name: str, repository: str = None, branch:
     """
         Modify the given environment
 
-        :param id The id of the environment
-        :param name The name of the environment
-        :param repository The url (in git form) of the repository
-        :param branch The name of the branch in the repository
+        :param id: The id of the environment
+        :param name: The name of the environment
+        :param repository: The url (in git form) of the repository
+        :param branch: The name of the branch in the repository
     """
 
 
@@ -142,9 +146,9 @@ def get_environment(id: uuid.UUID, versions: int = None, resources: int = None):
     """
         Get an environment and all versions associated
 
-        :param id The id of the environment to return
-        :param versions Include this many available version for this environment.
-        :param resources Include this many available resources for this environment.
+        :param id: The id of the environment to return
+        :param versions: Include this many available version for this environment.
+        :param resources: Include this many available resources for this environment.
     """
 
 

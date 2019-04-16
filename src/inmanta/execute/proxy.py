@@ -18,6 +18,7 @@
 
 from copy import copy
 from collections import Mapping
+from typing import Union, Any
 
 from inmanta.execute.util import Unknown, NoneValue
 from inmanta.ast import RuntimeException
@@ -74,7 +75,7 @@ class DynamicProxy(object):
         return item
 
     @classmethod
-    def return_value(cls, value):
+    def return_value(cls, value: Any) -> Union[str, tuple, int, float, bool, "DynamicProxy"]:
         if value is None:
             return None
 

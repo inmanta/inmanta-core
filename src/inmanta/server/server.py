@@ -1469,9 +1469,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     # Project handlers
     @protocol.handle(methods.create_project)
     @gen.coroutine
-    def create_project(self, name):
+    def create_project(self, name, project_id):
+        if project_id is None:
+            project_id = uuid.uuid4()
         try:
-            project = data.Project(name=name)
+            project = data.Project(id=project_id, name=name)
             yield project.insert()
         except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "A project with name %s already exists." % name}
@@ -1537,7 +1539,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     # Environment handlers
     @protocol.handle(methods.create_environment)
     @gen.coroutine
-    def create_environment(self, project_id, name, repository, branch):
+    def create_environment(self, project_id, name, repository, branch, environment_id):
+        if environment_id is None:
+            environment_id = uuid.uuid4()
+
         if (repository is None and branch is not None) or (repository is not None and branch is None):
             return 500, {"message": "Repository and branch should be set together."}
 
@@ -1552,7 +1557,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
                          (project.name, project.id, name)}
 
-        env = data.Environment(name=name, project=project_id, repo_url=repository, repo_branch=branch)
+        env = data.Environment(
+            id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch
+        )
         yield env.insert()
         return 200, {"environment": env}
 
