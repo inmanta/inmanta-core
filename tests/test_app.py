@@ -24,7 +24,6 @@ import re
 from threading import Timer
 
 import inmanta.util
-import utils
 from inmanta import const
 import signal
 from subprocess import TimeoutExpired
