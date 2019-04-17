@@ -63,7 +63,8 @@ machine. This gives faster feedback to developers, but makes the compilation les
 collaboration.
 
 Both the developer machine and the server need to have Inmanta installed. To compile and export models to the server from the
-developer machine a `.inmanta` file is required to connect the compiler with the server.
+developer machine a `.inmanta` file is required in the project directory (where you find the main.cf and the project.yaml file)
+to connect the compiler with the server.
 
 Create a `.inmanta` file in the project directory and include the following configuration::
 
@@ -74,7 +75,13 @@ Create a `.inmanta` file in the project directory and include the following conf
     host=$SERVER_ADDRESS
     port=$SERVER_PORT
 
-Replace $ENV_ID, $SERVER_ADDRESS and $SERVER_PORT with the correct values.
+Replace ``$ENV_ID``, ``$SERVER_ADDRESS`` and ``$SERVER_PORT`` with the correct values (See :inmanta.config:group:`compiler_rest_transport`
+for more details when using ssl and or auth, :inmanta.config:option:`config.environment` explains the environment setting). A best
+practice is to not add the .inmanta to the git repository. Because different developer may use different orchestration servers.
+
+ * ``inmanta compile`` compiles the current project but does not upload the result to the orchestration server.
+ * ``inmanta export`` compiles and uploads the current project to the orchestration server. Depending on the environment settings the server will release and deploy the model or it becomes available in the `new` state.
+ * ``inmanta export -d`` compiles, uploads and releases the current project. The result will start deploying immediately.
 
 
 Autonomous server
