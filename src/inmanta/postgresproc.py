@@ -20,7 +20,7 @@ import tempfile
 import subprocess
 import shutil
 
-from typing import Optional, Any
+from typing import Optional
 
 
 PG_CTL_BIN = "pg_ctl"

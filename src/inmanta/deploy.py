@@ -23,9 +23,9 @@ import sys
 import time
 import socket
 import argparse
-from os import read
 
 from inmanta import module, config, protocol, const, data_pg as data, postgresproc
+from inmanta.server import config as server_opts
 
 from typing import Optional, Tuple, List, Dict, Iterable, Set
 
@@ -48,17 +48,16 @@ class FinishedException(Exception):
 
 class Deploy(object):
     _data_path: str
+    _project_path: str
     _server_proc: subprocess.Popen
     _postgresproc: postgresproc.PostgresProc
     _client: protocol.SyncClient
     _environment_id: str
 
-    def __init__(self, postgresport: int = 0) -> None:
+    def __init__(self, options: argparse.Namespace, postgresport: int = 0) -> None:
         self._postgresport = postgresport
         self._server_port = 0
-        self._agent = None
-
-        self._agent_ready = False
+        self._options = options
 
         loud_logger = logging.getLogger("inmanta.protocol")
         loud_logger.propagate = False
@@ -116,6 +115,13 @@ port=%(server_port)s
 """
             % vars_in_configfile
         )
+
+        dash_path = server_opts.dash_path.get()
+        if self._options.dashboard:
+            if not os.path.exists(dash_path):
+                LOGGER.error("Dashboard requested but the configured path does not exist: %s", dash_path)
+            else:
+                config_file += f"\n[dashboard]\npath={dash_path}\n"
 
         server_config = os.path.join(self._data_path, "server.cfg")
         with open(server_config, "w+") as fd:
@@ -255,6 +261,14 @@ port=%(server_port)s
                 return False
 
         self._environment_id = env_id
+
+        # link the project into the server environment
+        server_env = os.path.join(self._data_path, "state", "server", "environments", self._environment_id)
+        full_path = os.path.abspath(self._project_path)
+        if not os.path.islink(server_env) or os.readlink(server_env) != full_path:
+            os.unlink(server_env)
+            os.symlink(full_path, server_env)
+
         return True
 
     def setup(self) -> bool:
@@ -263,6 +277,7 @@ port=%(server_port)s
         """
         # create local storage
         project = module.Project.get()
+        self._project_path = project.project_path
         self._data_path = os.path.join(project.project_path, "data", "deploy")
         LOGGER.debug("Storing state data in %s", self._data_path)
         self._ensure_dir(os.path.join(project.project_path, "data"))
@@ -321,7 +336,7 @@ port=%(server_port)s
 
         return {x["agent"] for x in version_result.result["resources"]}
 
-    def deploy(self, dry_run: bool) -> None:
+    def deploy(self, dry_run: bool, report: bool = True) -> None:
         version = self._latest_version(self._environment_id)
         LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
@@ -337,12 +352,14 @@ port=%(server_port)s
             self._client.release_version(
                 tid=self._environment_id, id=version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
             )
-            self.progress_deploy_report(version)
+            if report:
+                self.progress_deploy_report(version)
 
         else:
             result = self._client.dryrun_request(tid=self._environment_id, id=version)
             dryrun_id = result.result["dryrun"]["id"]
-            self.progress_dryrun_report(dryrun_id)
+            if report:
+                self.progress_dryrun_report(dryrun_id)
 
     def _get_deploy_stats(self, version: int) -> Tuple[int, int, Dict[str, str]]:
         version_result = self._client.get_version(tid=self._environment_id, id=version)
@@ -438,9 +455,20 @@ port=%(server_port)s
 
         raise FinishedException()
 
-    def run(self, options: argparse.Namespace) -> None:
+    def run(self) -> None:
+        if self._options.dashboard:
+            print(
+                "Dashboard available at "
+                f"http://localhost:{self._server_port}/dashboard/#!/environment/{self._environment_id}/portal"
+            )
+
         self.export()
-        self.deploy(dry_run=options.dryrun)
+        self.deploy(dry_run=self._options.dryrun, report=not self._options.dashboard)
+
+        if self._options.dashboard:
+            print("Press ctrl+c to exit")
+            while True:
+                time.sleep(1)
 
     def stop(self) -> None:
         if hasattr(self, "_server_proc"):
