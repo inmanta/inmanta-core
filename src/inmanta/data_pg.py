@@ -1877,31 +1877,6 @@ class ConfigurationModel(BaseDocument):
                 result.append(obj)
         return result
 
-    @classmethod
-    async def update_deployed_flag(cls, environment, version):
-        query = f"""UPDATE {ConfigurationModel.table_name()}
-                    SET deployed=True,
-                        result=(CASE WHEN (
-                                     EXISTS(SELECT 1
-                                            FROM {Resource.table_name()}
-                                            WHERE environment=$1 AND model=$2 AND status != $3)
-                                     )::boolean
-                                THEN $4::versionstate
-                                ELSE $5::versionstate END
-                        )
-                    WHERE environment=$1 AND version=$2 AND
-                          total=(SELECT COUNT(*)
-                                 FROM Resource
-                                 WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying'
-                                )
-                )"""
-        values = [cls._get_value(environment),
-                  cls._get_value(version),
-                  cls._get_value(ResourceState.deployed),
-                  cls._get_value(const.VersionState.failed),
-                  cls._get_value(const.VersionState.success)]
-        await cls._execute_query(query, *values)
-
     def to_dict(self):
         dct = BaseDocument.to_dict(self)
         dct["status"] = dict(self._status)
@@ -2013,6 +1988,31 @@ class ConfigurationModel(BaseDocument):
         result = await self._fetch_val(query, *values)
         self.result = const.VersionState[result]
         self.deployed = True
+
+    @classmethod
+    async def mark_done_if_done(cls, environment, version):
+        query = f"""UPDATE {ConfigurationModel.table_name()}
+                        SET deployed=True,
+                            result=(CASE WHEN (
+                                         EXISTS(SELECT 1
+                                                FROM {Resource.table_name()}
+                                                WHERE environment=$1 AND model=$2 AND status != $3)
+                                         )::boolean
+                                    THEN $4::versionstate
+                                    ELSE $5::versionstate END
+                            )
+                        WHERE environment=$1 AND version=$2 AND
+                              total=(SELECT COUNT(*)
+                                     FROM Resource
+                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying'
+                                    )
+                    )"""
+        values = [cls._get_value(environment),
+                  cls._get_value(version),
+                  cls._get_value(ResourceState.deployed),
+                  cls._get_value(const.VersionState.failed),
+                  cls._get_value(const.VersionState.success)]
+        await cls._execute_query(query, *values)
 
     async def get_increment(self):
         """

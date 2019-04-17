@@ -590,7 +590,7 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     (const.ResourceState.processing_events, True),
 ])
 @pytest.mark.asyncio
-async def test_update_deployed_status(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
+async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
     project = data.Project(name="test")
     await project.insert()
 
@@ -610,12 +610,12 @@ async def test_update_deployed_status(init_dataclasses_and_load_schema, resource
     await resource.insert()
 
     assert not cm.deployed
-    await data.ConfigurationModel.update_deployed_flag(env.id, cm.version)
+    await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert not cm.deployed
 
     await resource.update_fields(status=resource_state)
-    await data.ConfigurationModel.update_deployed_flag(env.id, cm.version)
+    await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert cm.deployed == should_be_deployed
 

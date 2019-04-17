@@ -1450,7 +1450,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:
                     yield data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
 
-            yield data.ConfigurationModel.update_deployed_flag(env.id, model_version)
+            yield data.ConfigurationModel.mark_done_if_done(env.id, model_version)
 
             waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
                                   for res in resources for prov in res.provides])
