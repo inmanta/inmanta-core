@@ -614,6 +614,41 @@ async def test_model_get_list(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
+async def test_model_serialization(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = int(time.time())
+    now = datetime.datetime.now()
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=now, total=1, version_info={})
+    await cm.insert()
+
+    assert cm.done == 0
+
+    path = "/etc/file"
+    key = "std::File[agent1,path=" + path + "]"
+    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                 attributes={"path": path}, status=const.ResourceState.deployed)
+    await resource.insert()
+
+    cm = await data.ConfigurationModel.get_one(environment=env.id, version=version)
+    dct = cm.to_dict()
+    assert dct['version'] == version
+    assert dct['environment'] == env.id
+    assert dct['date'] == now
+    assert not dct['released']
+    assert not dct['deployed']
+    assert dct['result'] == const.VersionState.pending
+    assert dct['version_info'] == {}
+    assert dct['total'] == 1
+    assert dct['done'] == 1
+    assert dct['status'] == {str(uuid.uuid5(env.id, key)): {"id": key, "status": const.ResourceState.deployed.name}}
+
+
+@pytest.mark.asyncio
 async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
