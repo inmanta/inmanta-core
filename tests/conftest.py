@@ -273,6 +273,7 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
+    config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
@@ -338,6 +339,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
+    config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
@@ -495,6 +497,11 @@ class SnippetCompilationTest(KeepOnFail):
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
     def setup_for_snippet(self, snippet, autostd=True):
+        self.setup_for_snippet_external(snippet)
+
+        Project.set(Project(self.project_dir, autostd=autostd))
+
+    def setup_for_snippet_external(self, snippet):
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
@@ -504,14 +511,11 @@ class SnippetCompilationTest(KeepOnFail):
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
                 % (self.libs,
-                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.libs))
-
+                   os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
+                   self.libs))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
             x.write(snippet)
-
-        Project.set(Project(self.project_dir, autostd=autostd))
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)
