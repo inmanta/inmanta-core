@@ -26,8 +26,20 @@ from pytest import fixture
 
 from inmanta import const, data_pg as data
 from inmanta.agent.agent import Agent
-from inmanta.agent.handler import provider, ResourceHandler, SkipResource, HandlerContext, CRUDHandler, ResourcePurged
-from inmanta.resources import resource, Resource, PurgeableResource, IgnoreResourceException
+from inmanta.agent.handler import (
+    provider,
+    ResourceHandler,
+    SkipResource,
+    HandlerContext,
+    CRUDHandler,
+    ResourcePurged,
+)
+from inmanta.resources import (
+    resource,
+    Resource,
+    PurgeableResource,
+    IgnoreResourceException,
+)
 from inmanta.server import SLICE_AGENT_MANAGER
 from utils import retry_limited
 
@@ -40,7 +52,8 @@ async def get_agent(server, environment, *endpoints, hostname="nodes1"):
         hostname=hostname,
         environment=environment,
         agent_map={agent: "localhost" for agent in endpoints},
-        code_loader=False)
+        code_loader=False,
+    )
     for agentname in endpoints:
         agent.add_end_point_name(agentname)
     await agent.start()
@@ -82,13 +95,22 @@ def log_index(caplog, loggerpart, level, msg, after=0):
     assert False
 
 
-async def _deploy_resources(client, environment, resources, version, push, agent_trigger_method=None):
-    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[],
-                                      version_info={})
+async def _deploy_resources(
+    client, environment, resources, version, push, agent_trigger_method=None
+):
+    result = await client.put_version(
+        tid=environment,
+        version=version,
+        resources=resources,
+        unknowns=[],
+        version_info={},
+    )
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(environment, version, push, agent_trigger_method)
+    result = await client.release_version(
+        environment, version, push, agent_trigger_method
+    )
     assert result.code == 200
 
     assert not result.result["model"]["deployed"]
@@ -121,15 +143,23 @@ async def _wait_for_n_deploying(client, environment, version, n, timeout=10):
     async def in_progress():
         result = await client.get_version(environment, version)
         assert result.code == 200
-        res = [res for res in result.result["resources"] if res["status"] == "deploying"]
+        res = [
+            res for res in result.result["resources"] if res["status"] == "deploying"
+        ]
         return len(res) >= n
 
     await retry_limited(in_progress, timeout)
 
 
-ResourceContainer = namedtuple('ResourceContainer', ['Provider', 'waiter',
-                                                     'wait_for_done_with_waiters',
-                                                     'wait_for_condition_with_waiters'])
+ResourceContainer = namedtuple(
+    "ResourceContainer",
+    [
+        "Provider",
+        "waiter",
+        "wait_for_done_with_waiters",
+        "wait_for_condition_with_waiters",
+    ],
+)
 
 
 @fixture(scope="function")
@@ -139,6 +169,7 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::Fact", agent="agent", id_attribute="key")
@@ -146,13 +177,15 @@ def resource_container():
         """
             A file on a filesystem
         """
-        fields = ("key", "value", "purged", "skip", "factvalue", 'skipFact')
+
+        fields = ("key", "value", "purged", "skip", "factvalue", "skipFact")
 
     @resource("test::Fail", agent="agent", id_attribute="key")
     class FailR(Resource):
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::Wait", agent="agent", id_attribute="key")
@@ -160,6 +193,7 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::WaitEvent", agent="agent", id_attribute="key")
@@ -167,6 +201,7 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::Noprov", agent="agent", id_attribute="key")
@@ -174,6 +209,7 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::FailFast", agent="agent", id_attribute="key")
@@ -181,6 +217,7 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::BadEvents", agent="agent", id_attribute="key")
@@ -188,6 +225,7 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @resource("test::BadPost", agent="agent", id_attribute="key")
@@ -195,11 +233,11 @@ def resource_container():
         """
             A file on a filesystem
         """
+
         fields = ("key", "value", "purged")
 
     @provider("test::Resource", name="test_resource")
     class Provider(ResourceHandler):
-
         def check_resource(self, ctx, resource):
             self.read(resource.id.get_agent_name(), resource.key)
             assert resource.value != const.UNKNOWN_STRING
@@ -230,7 +268,11 @@ def resource_container():
                     ctx.set_created()
 
             elif "value" in changes:
-                ctx.info("Set key '%(key)s' to value '%(value)s'", key=resource.key, value=resource.value)
+                ctx.info(
+                    "Set key '%(key)s' to value '%(value)s'",
+                    key=resource.key,
+                    value=resource.value,
+                )
                 self.touch(resource.id.get_agent_name(), resource.key)
                 self.set(resource.id.get_agent_name(), resource.key, resource.value)
                 ctx.set_updated()
@@ -238,21 +280,28 @@ def resource_container():
             return changes
 
         def facts(self, ctx, resource):
-            return {"length": len(self.get(resource.id.get_agent_name(), resource.key)), "key1": "value1",
-                    "key2": "value2"}
+            return {
+                "length": len(self.get(resource.id.get_agent_name(), resource.key)),
+                "key1": "value1",
+                "key2": "value2",
+            }
 
         def can_process_events(self) -> bool:
             return True
 
         def process_events(self, ctx, resource, events):
-            self.__class__._EVENTS[resource.id.get_agent_name()][resource.key].append(events)
+            self.__class__._EVENTS[resource.id.get_agent_name()][resource.key].append(
+                events
+            )
             super(Provider, self).process_events(ctx, resource, events)
 
         def can_reload(self) -> bool:
             return True
 
         def do_reload(self, ctx, resource):
-            self.__class__._RELOAD_COUNT[resource.id.get_agent_name()][resource.key] += 1
+            self.__class__._RELOAD_COUNT[resource.id.get_agent_name()][
+                resource.key
+            ] += 1
 
         _STATE = defaultdict(dict)
         _WRITE_COUNT = defaultdict(lambda: defaultdict(lambda: 0))
@@ -341,10 +390,11 @@ def resource_container():
 
     @provider("test::Fail", name="test_fail")
     class Fail(ResourceHandler):
-
         def check_resource(self, ctx, resource):
             current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+            current.purged = not Provider.isset(
+                resource.id.get_agent_name(), resource.key
+            )
 
             if not current.purged:
                 current.value = Provider.get(resource.id.get_agent_name(), resource.key)
@@ -358,16 +408,16 @@ def resource_container():
 
     @provider("test::FailFast", name="test_failfast")
     class FailFast(ResourceHandler):
-
         def check_resource(self, ctx, resource):
             raise Exception()
 
     @provider("test::Fact", name="test_fact")
     class Fact(ResourceHandler):
-
         def check_resource(self, ctx, resource):
             current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+            current.purged = not Provider.isset(
+                resource.id.get_agent_name(), resource.key
+            )
 
             current.value = "that"
 
@@ -395,7 +445,6 @@ def resource_container():
 
     @provider("test::BadEvents", name="test_bad_events")
     class BadEvents(ResourceHandler):
-
         def check_resource(self, ctx, resource):
             current = resource.clone()
             return current
@@ -411,7 +460,6 @@ def resource_container():
 
     @provider("test::BadPost", name="test_bad_posts")
     class BadPost(Provider):
-
         def post(self, ctx, resource) -> None:
             raise Exception()
 
@@ -420,6 +468,7 @@ def resource_container():
         """
             A resource that can modify the agentmap for autostarted agents
         """
+
         fields = ("agentname", "uri", "autostart")
 
         @staticmethod
@@ -436,15 +485,20 @@ def resource_container():
     class AgentConfigHandler(CRUDHandler):
         def _get_map(self) -> dict:
             def call():
-                return self.get_client().get_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP)
+                return self.get_client().get_setting(
+                    tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP
+                )
 
             value = self.run_sync(call)
             return value.result["value"]
 
         def _set_map(self, agent_config: dict) -> None:
             def call():
-                return self.get_client().set_setting(tid=self._agent.environment, id=data.AUTOSTART_AGENT_MAP,
-                                                     value=agent_config)
+                return self.get_client().set_setting(
+                    tid=self._agent.environment,
+                    id=data.AUTOSTART_AGENT_MAP,
+                    value=agent_config,
+                )
 
             return self.run_sync(call)
 
@@ -467,15 +521,22 @@ def resource_container():
             del agent_config[resource.agentname]
             self._set_map(agent_config)
 
-        def update_resource(self, ctx: HandlerContext, changes: dict, resource: AgentConfig) -> None:
+        def update_resource(
+            self, ctx: HandlerContext, changes: dict, resource: AgentConfig
+        ) -> None:
             agent_config = ctx.get("map")
             agent_config[resource.agentname] = resource.uri
             self._set_map(agent_config)
 
     waiter = Condition()
 
-    async def wait_for_done_with_waiters(client, env_id, version, wait_for_this_amount_of_resources_in_done=None,
-                                         timeout=10):
+    async def wait_for_done_with_waiters(
+        client,
+        env_id,
+        version,
+        wait_for_this_amount_of_resources_in_done=None,
+        timeout=10,
+    ):
         # unhang waiters
         result = await client.get_version(env_id, version)
         assert result.code == 200
@@ -483,11 +544,18 @@ def resource_container():
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")
-            if wait_for_this_amount_of_resources_in_done \
-               and result.result["model"]["done"] - wait_for_this_amount_of_resources_in_done >= 0:
+            if (
+                wait_for_this_amount_of_resources_in_done
+                and result.result["model"]["done"]
+                - wait_for_this_amount_of_resources_in_done
+                >= 0
+            ):
                 break
             result = await client.get_version(env_id, version)
-            logger.info("waiting with waiters, %s resources done", result.result["model"]["done"])
+            logger.info(
+                "waiting with waiters, %s resources done",
+                result.result["model"]["done"],
+            )
             waiter.acquire()
             waiter.notifyAll()
             waiter.release()
@@ -511,14 +579,15 @@ def resource_container():
 
     @provider("test::Wait", name="test_wait")
     class Wait(ResourceHandler):
-
         def __init__(self, agent, io=None):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
 
         def check_resource(self, ctx, resource):
             current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+            current.purged = not Provider.isset(
+                resource.id.get_agent_name(), resource.key
+            )
 
             if not current.purged:
                 current.value = Provider.get(resource.id.get_agent_name(), resource.key)
@@ -540,7 +609,9 @@ def resource_container():
                     Provider.delete(resource.id.get_agent_name(), resource.key)
                     ctx.set_purged()
                 else:
-                    Provider.set(resource.id.get_agent_name(), resource.key, resource.value)
+                    Provider.set(
+                        resource.id.get_agent_name(), resource.key, resource.value
+                    )
                     ctx.set_created()
 
             if "value" in changes:
@@ -549,14 +620,15 @@ def resource_container():
 
     @provider("test::WaitEvent", name="test_wait_Event")
     class WaitE(Provider):
-
         def __init__(self, agent, io=None):
             super().__init__(agent, io)
             self.traceid = uuid.uuid4()
 
         def check_resource(self, ctx, resource):
             current = resource.clone()
-            current.purged = not Provider.isset(resource.id.get_agent_name(), resource.key)
+            current.purged = not Provider.isset(
+                resource.id.get_agent_name(), resource.key
+            )
 
             if not current.purged:
                 current.value = Provider.get(resource.id.get_agent_name(), resource.key)
@@ -574,6 +646,10 @@ def resource_container():
                 raise Exception("Timeout")
             logger.info("Releasing Event waiter %s", self.traceid)
 
-    yield ResourceContainer(Provider=Provider, wait_for_done_with_waiters=wait_for_done_with_waiters,
-                            waiter=waiter, wait_for_condition_with_waiters=wait_for_condition_with_waiters)
+    yield ResourceContainer(
+        Provider=Provider,
+        wait_for_done_with_waiters=wait_for_done_with_waiters,
+        waiter=waiter,
+        wait_for_condition_with_waiters=wait_for_condition_with_waiters,
+    )
     Provider.reset()

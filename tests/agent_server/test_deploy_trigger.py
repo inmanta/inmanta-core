@@ -7,7 +7,8 @@ from agent_server.conftest import (
     _deploy_resources,
     log_contains,
     log_doesnt_contain,
-    get_agent)
+    get_agent,
+)
 from utils import retry_limited, AsyncClosing
 
 
