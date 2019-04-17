@@ -22,9 +22,14 @@ import subprocess
 import sys
 import time
 import socket
+import argparse
+from os import read
 
 from inmanta import module, config, protocol, const, data_pg as data, postgresproc
 
+from typing import Optional, Tuple, List, Dict, Iterable, Set
+
+from inmanta.types import JsonType
 
 LOGGER = logging.getLogger(__name__)
 PORT_START = 40000
@@ -42,16 +47,16 @@ class FinishedException(Exception):
 
 
 class Deploy(object):
-    def __init__(self, postgresport=0):
-        self._postgresproc = None
+    _data_path: str
+    _server_proc: subprocess.Popen
+    _postgresproc: postgresproc.PostgresProc
+    _client: protocol.SyncClient
+    _environment_id: str
+
+    def __init__(self, postgresport: int = 0) -> None:
         self._postgresport = postgresport
         self._server_port = 0
-        self._data_path = None
-        self._server_proc = None
         self._agent = None
-        self._client = None
-
-        self._environment_id = None
 
         self._agent_ready = False
 
@@ -61,12 +66,12 @@ class Deploy(object):
         loud_logger = logging.getLogger("tornado")
         loud_logger.propagate = False
 
-    def _ensure_dir(self, path):
+    def _ensure_dir(self, path: str) -> None:
         if not os.path.exists(path):
             LOGGER.debug("Creating directory %s", path)
             os.mkdir(path)
 
-    def setup_server(self):
+    def setup_server(self) -> bool:
         state_dir = os.path.join(self._data_path, "state")
         self._ensure_dir(state_dir)
 
@@ -78,9 +83,14 @@ class Deploy(object):
 
         config.Config.set("client_rest_transport", "port", str(self._server_port))
 
-        vars_in_configfile = {"state_dir": state_dir, "log_dir": log_dir, "server_port": self._server_port,
-                              "postgres_port": self._postgresport}
-        config_file = """
+        vars_in_configfile = {
+            "state_dir": state_dir,
+            "log_dir": log_dir,
+            "server_port": self._server_port,
+            "postgres_port": self._postgresport,
+        }
+        config_file = (
+            """
 [database]
 name=postgres
 port=%(postgres_port)s
@@ -103,7 +113,9 @@ port=%(server_port)s
 
 [cmdline_rest_transport]
 port=%(server_port)s
-""" % vars_in_configfile
+"""
+            % vars_in_configfile
+        )
 
         server_config = os.path.join(self._data_path, "server.cfg")
         with open(server_config, "w+") as fd:
@@ -120,7 +132,7 @@ port=%(server_port)s
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
                 try:
-                    s.connect(('localhost', int(self._server_port)))
+                    s.connect(("localhost", int(self._server_port)))
                     return True
                 except (IOError, socket.error):
                     time.sleep(0.25)
@@ -129,53 +141,60 @@ port=%(server_port)s
 
         return False
 
-    def setup_postgresql(self):
+    def setup_postgresql(self) -> bool:
         # start a local postgresql server on a random port
         if self._postgresport == 0:
             self._postgresport = PORT_START + random.randint(0, 2000)
             postgres_dir = os.path.join(self._data_path, "postgres")
-            os.mkdir(postgres_dir)
             self._postgresproc = postgresproc.PostgresProc(port=self._postgresport, db_path=postgres_dir)
             LOGGER.debug("Starting postgresql on port %d", self._postgresport)
             if not self._postgresproc.start():
-                LOGGER.error("Unable to start postgresqlinstance on port %d and data directory %s",
-                             self._postgresport, postgres_dir)
+                LOGGER.error(
+                    "Unable to start postgresql instance on port %d and data directory %s", self._postgresport, postgres_dir
+                )
                 return False
 
         return True
 
-    def _create_project(self, project_name):
+    def _create_project(self, project_name: str) -> Optional[str]:
         LOGGER.debug("Creating project %s", project_name)
         result = self._client.create_project(project_name)
         if result.code != 200:
             LOGGER.error("Unable to create project %s", project_name)
-            return False
+            return None
 
         return result.result["project"]["id"]
 
-    def _create_environment(self, project_id, environment_name):
+    def _create_environment(self, project_id: str, environment_name: str) -> Optional[str]:
         LOGGER.debug("Creating environment %s in project %s", environment_name, project_id)
         result = self._client.create_environment(project_id=project_id, name=environment_name)
         if result.code != 200:
             LOGGER.error("Unable to create environment %s", environment_name)
-            return False
+            return None
 
-        return result.result["environment"]["id"]
+        env_id: str = result.result["environment"]["id"]
 
-    def _latest_version(self, environment_id):
+        self._client.set_setting(env_id, "autostart_agent_deploy_splay_time", 0)
+        self._client.set_setting(env_id, "autostart_agent_deploy_interval", 0)
+        self._client.set_setting(env_id, "autostart_agent_repair_splay_time", 0)
+        self._client.set_setting(env_id, "autostart_agent_repair_interval", 0)
+
+        return env_id
+
+    def _latest_version(self, environment_id: str) -> Optional[int]:
         result = self._client.list_versions(tid=environment_id)
         if result.code != 200:
             LOGGER.error("Unable to get all version of environment %s", environment_id)
             return None
 
         if "versions" in result.result and len(result.result["versions"]) > 0:
-            versions = [x["version"] for x in result.result["versions"]]
+            versions: List[int] = [x["version"] for x in result.result["versions"]]
             sorted(versions)
             return versions[0]
 
         return None
 
-    def setup_project(self):
+    def setup_project(self) -> bool:
         """
             Set up the configured project and environment on the embedded server
         """
@@ -224,19 +243,21 @@ port=%(server_port)s
             LOGGER.error("Unable to retrieve environments from server")
             return False
 
+        env_id = None
         for env in environments.result["environments"]:
             if project_id == env["project"] and environment_name == env["name"]:
-                self._environment_id = env["id"]
+                env_id = env["id"]
                 break
 
-        if self._environment_id is None:
-            self._environment_id = self._create_environment(project_id, environment_name)
-            if not self._environment_id:
+        if env_id is None:
+            env_id = self._create_environment(project_id, environment_name)
+            if not env_id:
                 return False
 
+        self._environment_id = env_id
         return True
 
-    def setup(self):
+    def setup(self) -> bool:
         """
             Run inmanta locally
         """
@@ -259,14 +280,22 @@ port=%(server_port)s
 
         return True
 
-    def export(self):
+    def export(self) -> bool:
         """
             Export a version to the embedded server
         """
         inmanta_path = [sys.executable, "-m", "inmanta.app"]
 
-        cmd = inmanta_path + ["-vvv", "export", "-e", str(self._environment_id), "--server_address", "localhost",
-                              "--server_port", str(self._server_port)]
+        cmd = inmanta_path + [
+            "-vvv",
+            "export",
+            "-e",
+            str(self._environment_id),
+            "--server_address",
+            "localhost",
+            "--server_port",
+            str(self._server_port),
+        ]
 
         sub_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
@@ -284,7 +313,7 @@ port=%(server_port)s
         LOGGER.info("Export of model complete")
         return True
 
-    def get_agents_for_model(self, version):
+    def get_agents_for_model(self, version: int) -> Iterable[str]:
         version_result = self._client.get_version(tid=self._environment_id, id=version)
         if version_result.code != 200:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
@@ -292,7 +321,7 @@ port=%(server_port)s
 
         return {x["agent"] for x in version_result.result["resources"]}
 
-    def deploy(self, dry_run):
+    def deploy(self, dry_run: bool) -> None:
         version = self._latest_version(self._environment_id)
         LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
@@ -305,8 +334,9 @@ port=%(server_port)s
 
         # release the version!
         if not dry_run:
-            self._client.release_version(tid=self._environment_id, id=version, push=True,
-                                         agent_trigger_method=const.AgentTriggerMethod.push_full_deploy)
+            self._client.release_version(
+                tid=self._environment_id, id=version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
+            )
             self.progress_deploy_report(version)
 
         else:
@@ -314,11 +344,11 @@ port=%(server_port)s
             dryrun_id = result.result["dryrun"]["id"]
             self.progress_dryrun_report(dryrun_id)
 
-    def _get_deploy_stats(self, version):
+    def _get_deploy_stats(self, version: int) -> Tuple[int, int, Dict[str, str]]:
         version_result = self._client.get_version(tid=self._environment_id, id=version)
         if version_result.code != 200:
             LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
-            return []
+            return (0, 0, {})
 
         total = 0
         deployed = 0
@@ -332,20 +362,21 @@ port=%(server_port)s
 
         return total, deployed, ready
 
-    def progress_deploy_report(self, version):
+    def progress_deploy_report(self, version: int) -> None:
         print("Starting deploy")
-        current_ready = set()
+        current_ready: Set[str] = set()
         total = 0
         deployed = -1
         while total > deployed:
             total, deployed, ready = self._get_deploy_stats(version)
 
-            new = ready.keys() - current_ready
-            current_ready = ready
+            ready_keys = set(ready.keys())
+            new = ready_keys - current_ready
+            current_ready = ready_keys
 
             # if we already printed progress, move cursor one line up
             if deployed >= 0:
-                sys.stdout.write('\033[1A')
+                sys.stdout.write("\033[1A")
                 sys.stdout.flush()
 
             for res in new:
@@ -356,7 +387,7 @@ port=%(server_port)s
 
         print("Deploy ready")
 
-    def _get_dryrun_status(self, dryrun_id):
+    def _get_dryrun_status(self, dryrun_id: str) -> Tuple[int, int, JsonType]:
         result = self._client.dryrun_report(self._environment_id, dryrun_id)
 
         if result.code != 200:
@@ -365,25 +396,25 @@ port=%(server_port)s
         data = result.result["dryrun"]
         return data["total"], data["todo"], data["resources"]
 
-    def progress_dryrun_report(self, dryrun_id):
+    def progress_dryrun_report(self, dryrun_id: str) -> None:
         print("Starting dryrun")
 
-        current_ready = set()
-        total = 0
+        current_ready: Set[str] = set()
         todo = 1
         while todo > 0:
             # if we already printed progress, move cursor one line up
             if len(current_ready) > 0:
-                sys.stdout.write('\033[1A')
+                sys.stdout.write("\033[1A")
                 sys.stdout.flush()
 
             total, todo, ready = self._get_dryrun_status(dryrun_id)
 
-            new = ready.keys() - current_ready
-            current_ready = ready
+            ready_keys: Set[str] = set(ready.keys())
+            new = ready_keys - current_ready
+            current_ready = ready_keys
 
             for res in new:
-                changes = ready[res]["changes"]
+                changes: Dict[str, Tuple[str, str]] = ready[res]["changes"]
                 if len(changes) == 0:
                     print("%s - no changes" % res)
                 else:
@@ -407,13 +438,13 @@ port=%(server_port)s
 
         raise FinishedException()
 
-    def run(self, options, only_setup=False):
+    def run(self, options: argparse.Namespace) -> None:
         self.export()
         self.deploy(dry_run=options.dryrun)
 
-    def stop(self):
-        if self._server_proc is not None:
-            self._server_proc.kill()
+    def stop(self) -> None:
+        if hasattr(self, "_server_proc"):
+            self._server_proc.terminate()
 
-        if self._postgresproc is not None:
+        if hasattr(self, "_postgresproc"):
             self._postgresproc.stop()
