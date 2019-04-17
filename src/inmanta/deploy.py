@@ -24,10 +24,10 @@ import time
 import socket
 import argparse
 
-from inmanta import module, config, protocol, const, data_pg as data, postgresproc
+from inmanta import module, config, protocol, const, postgresproc
 from inmanta.server import config as server_opts
 
-from typing import Optional, Tuple, List, Dict, Iterable, Set
+from typing import Optional, Tuple, List, Dict, Set
 
 from inmanta.types import JsonType
 
