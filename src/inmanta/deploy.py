@@ -266,7 +266,8 @@ port=%(server_port)s
         server_env = os.path.join(self._data_path, "state", "server", "environments", self._environment_id)
         full_path = os.path.abspath(self._project_path)
         if not os.path.islink(server_env) or os.readlink(server_env) != full_path:
-            os.unlink(server_env)
+            if os.path.exists(server_env):
+                os.unlink(server_env)
             os.symlink(full_path, server_env)
 
         if not os.path.exists(os.path.join(full_path, ".git")) and self._options.dashboard:
