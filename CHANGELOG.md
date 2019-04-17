@@ -1,6 +1,6 @@
 v 2019.2
 Changes in this release:
-- various bugfixes (#1046, #968)
+- various bugfixes (#1046, #968, #1045)
 - Migration from mongodb to postgres
 - added metering using pyformance
 - added influxdb reporter for protocol endpoint metrics
