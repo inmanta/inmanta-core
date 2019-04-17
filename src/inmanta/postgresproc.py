@@ -19,12 +19,16 @@ import os
 import tempfile
 import subprocess
 import shutil
+import logging
 
 from typing import Optional
 
 
 PG_CTL_BIN = "pg_ctl"
 INITDB_BIN = "initdb"
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def find_executable(executable: str) -> Optional[str]:
@@ -76,8 +80,8 @@ class PostgresProc(object):
             process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             process.communicate()
             return process.returncode == 0
-        except Exception as e:
-            print(e)
+        except Exception:
+            LOGGER.exception("Failed to initialize the database.")
             return False
         finally:
             if old_wc is not None:
@@ -106,9 +110,12 @@ class PostgresProc(object):
 
         os.chmod(self.db_path, 0o700)
         args = [self.initdb_bin, "-D", self.db_path, "--auth-host", "trust", "-U", "postgres"]
-        process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        process.communicate()
+        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = process.communicate()
         if process.returncode != 0:
+            LOGGER.error("Failed to initialize db path")
+            LOGGER.error("out: %s", out)
+            LOGGER.error("err: %s", err)
             raise Exception("Failed to initialize db path.")
 
     def stop(self) -> None:
