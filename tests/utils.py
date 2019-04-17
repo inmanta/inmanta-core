@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-import socket
 import time
 import asyncio
 import inspect
@@ -82,12 +81,3 @@ class AsyncClosing(object):
         await self.closable.stop()
 
 
-def get_free_tcp_port():
-    """
-        Semi safe method for getting a random port. This may contain a race condition.
-    """
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
-    _addr, port = tcp.getsockname()
-    tcp.close()
-    return str(port)

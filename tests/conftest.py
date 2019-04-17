@@ -57,7 +57,7 @@ from inmanta import protocol
 import pyformance
 from pyformance.registry import MetricsRegistry
 
-from utils import get_free_tcp_port
+from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
