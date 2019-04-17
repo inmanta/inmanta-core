@@ -146,7 +146,7 @@ class Scheduler(object):
             warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)
 
 
-def get_free_tcp_port():
+def get_free_tcp_port() -> str:
     """
         Semi safe method for getting a random port. This may contain a race condition.
     """

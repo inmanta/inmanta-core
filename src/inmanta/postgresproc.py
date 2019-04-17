@@ -55,10 +55,10 @@ class PostgresProc(object):
                 raise AssertionError("DB path should be a directory, but it is a file.")
 
         self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
-        assert self.pg_ctl_bin, f"Could not find '{PG_CTL_BIN}'' in system PATH. Make sure you have PostgreSQL installed."
+        assert self.pg_ctl_bin, f"Could not find '{PG_CTL_BIN}' in system PATH. Make sure you have PostgreSQL installed."
 
         self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
-        assert self.initdb_bin, f"Could not find '{INITDB_BIN}'' in system PATH. Make sure you have PostgreSQL installed."
+        assert self.initdb_bin, f"Could not find '{INITDB_BIN}' in system PATH. Make sure you have PostgreSQL installed."
 
     def start(self) -> bool:
         """

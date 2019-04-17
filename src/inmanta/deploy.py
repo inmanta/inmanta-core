@@ -17,7 +17,6 @@
 """
 import logging
 import os
-import random
 import subprocess
 import sys
 import time
@@ -30,9 +29,9 @@ from inmanta.server import config as server_opts
 from typing import Optional, Tuple, List, Dict, Set
 
 from inmanta.types import JsonType
+from inmanta.util import get_free_tcp_port
 
 LOGGER = logging.getLogger(__name__)
-PORT_START = 40000
 MAX_TRIES = 25
 
 
@@ -65,6 +64,18 @@ class Deploy(object):
         loud_logger = logging.getLogger("tornado")
         loud_logger.propagate = False
 
+    def _check_result(self, result: protocol.Result, fatal: bool=True) -> protocol.Result:
+        """ Check the result of a call protocol call. If the result is not 200, issue an error
+        """
+        if result.code != 200:
+            msg = f"Server request failed with code {result.code} and result {result.result}"
+            LOGGER.error(msg)
+
+            if fatal:
+                raise Exception(msg)
+
+        return result
+
     def _ensure_dir(self, path: str) -> None:
         if not os.path.exists(path):
             LOGGER.debug("Creating directory %s", path)
@@ -77,7 +88,7 @@ class Deploy(object):
         log_dir = os.path.join(self._data_path, "logs")
         self._ensure_dir(log_dir)
 
-        self._server_port = PORT_START + random.randint(0, 2000)
+        self._server_port = int(get_free_tcp_port())
         assert self._server_port != self._postgresport
 
         config.Config.set("client_rest_transport", "port", str(self._server_port))
@@ -150,7 +161,7 @@ port=%(server_port)s
     def setup_postgresql(self) -> bool:
         # start a local postgresql server on a random port
         if self._postgresport == 0:
-            self._postgresport = PORT_START + random.randint(0, 2000)
+            self._postgresport = int(get_free_tcp_port())
             postgres_dir = os.path.join(self._data_path, "postgres")
             self._postgresproc = postgresproc.PostgresProc(port=self._postgresport, db_path=postgres_dir)
             LOGGER.debug("Starting postgresql on port %d", self._postgresport)
@@ -180,10 +191,10 @@ port=%(server_port)s
 
         env_id: str = result.result["environment"]["id"]
 
-        self._client.set_setting(env_id, "autostart_agent_deploy_splay_time", 0)
-        self._client.set_setting(env_id, "autostart_agent_deploy_interval", 0)
-        self._client.set_setting(env_id, "autostart_agent_repair_splay_time", 0)
-        self._client.set_setting(env_id, "autostart_agent_repair_interval", 600)
+        self._check_result(self._client.set_setting(env_id, "autostart_agent_deploy_splay_time", 0))
+        self._check_result(self._client.set_setting(env_id, "autostart_agent_deploy_interval", 0))
+        self._check_result(self._client.set_setting(env_id, "autostart_agent_repair_splay_time", 0))
+        self._check_result(self._client.set_setting(env_id, "autostart_agent_repair_interval", 600))
 
         return env_id
 
@@ -342,14 +353,14 @@ port=%(server_port)s
 
         # release the version!
         if not dry_run:
-            self._client.release_version(
+            self._check_result(self._client.release_version(
                 tid=self._environment_id, id=version, push=True, agent_trigger_method=const.AgentTriggerMethod.push_full_deploy
-            )
+            ))
             if report:
                 self.progress_deploy_report(version)
 
         else:
-            result = self._client.dryrun_request(tid=self._environment_id, id=version)
+            result = self._check_result(self._client.dryrun_request(tid=self._environment_id, id=version))
             dryrun_id = result.result["dryrun"]["id"]
             if report:
                 self.progress_dryrun_report(dryrun_id)
@@ -366,7 +377,7 @@ port=%(server_port)s
 
         for res in version_result.result["resources"]:
             total += 1
-            if res["status"] not in [const.ResourceState.available.name, const.ResourceState.deploying.name]:
+            if res["status"] not in const.TRANSIENT_STATES:
                 deployed += 1
                 ready[res["id"]] = res["status"]
 
