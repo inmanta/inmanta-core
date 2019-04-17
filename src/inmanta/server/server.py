@@ -39,12 +39,13 @@ from typing import Dict, Any, Generator
 from inmanta import const
 from inmanta import data_pg as data, config
 from inmanta.data_pg import Environment
+from inmanta.protocol.common import attach_warnings
 from inmanta.reporter import InfluxReporter
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-from inmanta.types import JsonType
+from inmanta.types import JsonType, Apireturn
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
@@ -1190,6 +1191,61 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
 
         return 200, {"model": model}
+
+    @protocol.handle(methods.deploy, env="tid")
+    @gen.coroutine
+    def deploy(self,
+               env: data.Environment,
+               agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+               agents: List[str] = None) -> Apireturn:
+        warnings = []
+
+        # get latest version
+        cm = yield data.ConfigurationModel.get_latest_version(env.id)
+        if cm is None:
+            return 404, {"message": "No version available"}
+        version_id = cm.version
+
+        # filter agents
+        allagents = yield data.ConfigurationModel.get_agents(env.id, version_id)
+        if agents is not None:
+            required = set(agents)
+            present = set(allagents)
+            allagents = list(required.intersection(present))
+            notfound = required - present
+            if notfound:
+                warnings.append(
+                    "Model version %d does not contain agents named [%s]" % (
+                        version_id,
+                        ",".join(sorted(list(notfound)))
+                    )
+                )
+
+        if not allagents:
+            return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
+
+        present = set()
+        absent = set()
+
+        yield self.agentmanager._ensure_agents(env, allagents)
+
+        for agent in allagents:
+            client = self.get_agent_client(env.id, agent)
+            if client is not None:
+                incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                future = client.trigger(env.id, agent, incremental_deploy)
+                self.add_future(future)
+                present.add(agent)
+            else:
+                absent.add(agent)
+
+        if absent:
+            warnings.append("Could not reach agents named [%s]" % ",".join(sorted(list(absent))))
+
+        if not present:
+            return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
+
+        return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
 
     @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
     @gen.coroutine

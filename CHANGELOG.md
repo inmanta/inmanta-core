@@ -7,6 +7,7 @@ Changes in this release:
 - Remove the configuration option agent-run-at-start (#1055)
 - Add project id and environment id as optional parameters to API call (#1001)
 - Fixed an issue which cleared the environment on remote python 2 interpreters
+- Added API endpoint to trigger agents deploy (#1052)
 - Documentation updates and improvements (#905)
 
 v 2019.1 (2019-03-06)

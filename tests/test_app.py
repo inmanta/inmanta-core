@@ -21,8 +21,9 @@ import os
 import subprocess
 import pytest
 import re
-import conftest
 from threading import Timer
+
+import inmanta.util
 from inmanta import const
 import signal
 from subprocess import TimeoutExpired
@@ -38,7 +39,7 @@ def get_command(
         os.mkdir(directory)
     config_file = os.path.join(root_dir, "inmanta.cfg")
 
-    port = conftest.get_free_tcp_port()
+    port = inmanta.util.get_free_tcp_port()
 
     with open(config_file, "w+") as f:
         f.write("[config]\n")
