@@ -1849,18 +1849,18 @@ class ConfigurationModel(BaseDocument):
         order_by_statement = f"ORDER BY {order_by_column} {order} " if order_by_column else ""
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
-        query = f"""SELECT c.*, 
+        query = f"""SELECT c.*,
                            SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
                            array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
-                                 FROM {Resource.table_name()} AS r2 
+                                 FROM {Resource.table_name()} AS r2
                                  WHERE c.environment=r2.environment AND c.version=r2.model
-                                ) AS status 
-                    FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r 
-                    ON c.environment = r.environment AND c.version = r.model 
-                    {where_statement} 
-                    GROUP BY c.environment, c.version 
-                    {order_by_statement} 
-                    {limit_statement} 
+                                ) AS status
+                    FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r
+                    ON c.environment = r.environment AND c.version = r.model
+                    {where_statement}
+                    GROUP BY c.environment, c.version
+                    {order_by_statement}
+                    {limit_statement}
                     {offset_statement}"""
         query_result = await cls._fetch_query(query, *values)
         result = []
