@@ -1828,13 +1828,13 @@ class ConfigurationModel(BaseDocument):
         return self._done
 
     @classmethod
-    async def _get_status_field(cls, environment, values):
+    async def _get_status_field(cls, environment: uuid.UUID, values: str) -> dict:
         """
             This field is required to ensure backward compatibility on the API.
         """
         result = {}
+        values = json.loads(values)
         for value_entry in values:
-            value_entry = json.loads(value_entry)
             entry_uuid = str(uuid.uuid5(environment, value_entry['id']))
             result[entry_uuid] = value_entry
         return result
@@ -1850,10 +1850,10 @@ class ConfigurationModel(BaseDocument):
         limit_statement = f"LIMIT {limit} " if limit is not None and limit > 0 else ""
         offset_statement = f"OFFSET {offset} " if offset is not None and offset > 0 else ""
         query = f"SELECT c.*, SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done ," + \
-                f"array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_version_id) " + \
+                f"to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_version_id) " + \
                 f"      FROM {Resource.table_name()} AS r2 " \
                 f"      WHERE c.environment=r2.environment AND c.version=r2.model" \
-                f"      ) AS status " + \
+                f"      )) AS status " + \
                 f"FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r " + \
                 f"ON c.environment = r.environment AND c.version = r.model " + \
                 f"{where_statement} " + \
@@ -1988,6 +1988,31 @@ class ConfigurationModel(BaseDocument):
         result = await self._fetch_val(query, *values)
         self.result = const.VersionState[result]
         self.deployed = True
+
+    @classmethod
+    async def mark_done_if_done(cls, environment, version):
+        query = f"""UPDATE {ConfigurationModel.table_name()}
+                        SET deployed=True,
+                            result=(CASE WHEN (
+                                         EXISTS(SELECT 1
+                                                FROM {Resource.table_name()}
+                                                WHERE environment=$1 AND model=$2 AND status != $3)
+                                         )::boolean
+                                    THEN $4::versionstate
+                                    ELSE $5::versionstate END
+                            )
+                        WHERE environment=$1 AND version=$2 AND
+                              total=(SELECT COUNT(*)
+                                     FROM Resource
+                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying'
+                                    )
+                    )"""
+        values = [cls._get_value(environment),
+                  cls._get_value(version),
+                  cls._get_value(ResourceState.deployed),
+                  cls._get_value(const.VersionState.failed),
+                  cls._get_value(const.VersionState.success)]
+        await cls._execute_query(query, *values)
 
     async def get_increment(self):
         """
