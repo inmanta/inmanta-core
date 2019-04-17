@@ -354,19 +354,20 @@ def test_check_bad_shutdown():
 def test_compiler_exception_output(snippetcompiler):
     snippetcompiler.setup_for_snippet_external(
         """
-    typedef isa as string matching self=="a"
-    
-    entity A:
-        isa name
-    end
-    
-    a=A(name="b")
-    """
+typedef isa as string matching self=="a"
+
+entity A:
+    isa name
+end
+
+a=A(name="b")
+"""
     )
 
-    output = """Could not set attribute `name` on instance `__config__::A (instantiated at ./main.cf:8)` (reported in Construct(A) (./main.cf:8))
+    output = """Could not set attribute `name` on instance `__config__::A (instantiated at ./main.cf:8)`"""
+    """ (reported in Construct(A) (./main.cf:8))
 caused by:
-  Invalid value 'b', constraint does not match (reported in __config__::isa (./main.cf:2:13))
+  Invalid value 'b', constraint does not match (reported in __config__::isa (./main.cf:2:9))
 """
 
     def exec(*cmd):
