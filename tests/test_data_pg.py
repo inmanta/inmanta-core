@@ -576,6 +576,50 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     assert cm.done == 1
 
 
+@pytest.mark.parametrize("resource_state, should_be_deployed", [
+    (const.ResourceState.unavailable, True),
+    (const.ResourceState.skipped, True),
+    (const.ResourceState.dry, True),
+    (const.ResourceState.deployed, True),
+    (const.ResourceState.failed, True),
+    (const.ResourceState.deploying, False),
+    (const.ResourceState.available, False),
+    (const.ResourceState.cancelled, True),
+    (const.ResourceState.undefined, True),
+    (const.ResourceState.skipped_for_undefined, True),
+    (const.ResourceState.processing_events, True),
+])
+@pytest.mark.asyncio
+async def test_update_deployed_status(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1, version_info={})
+    await cm.insert()
+
+    assert cm.done == 0
+
+    path = "/etc/file"
+    key = "std::File[agent1,path=" + path + "]"
+    resource = data.Resource.new(environment=env.id, resource_version_id=key + ",v=%d" % version,
+                                 attributes={"path": path})
+    await resource.insert()
+
+    assert not cm.deployed
+    await data.ConfigurationModel.update_deployed_flag(env.id, cm.version)
+    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
+    assert not cm.deployed
+
+    await resource.update_fields(status=resource_state)
+    await data.ConfigurationModel.update_deployed_flag(env.id, cm.version)
+    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
+    assert cm.deployed == should_be_deployed
+
+
 @pytest.mark.asyncio
 async def test_model_get_list(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
