@@ -66,3 +66,18 @@ def assert_graph(graph, expected):
     elines = sorted(elines)
 
     assert elines == lines, (lines, elines)
+
+
+class AsyncClosing(object):
+
+    def __init__(self, awaitable):
+        self.awaitable = awaitable
+
+    async def __aenter__(self):
+        self.closable = await self.awaitable
+        return object
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.closable.stop()
+
+

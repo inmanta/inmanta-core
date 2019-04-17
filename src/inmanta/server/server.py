@@ -39,12 +39,13 @@ from typing import Dict, Any, Generator
 from inmanta import const
 from inmanta import data_pg as data, config
 from inmanta.data_pg import Environment
+from inmanta.protocol.common import attach_warnings
 from inmanta.reporter import InfluxReporter
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-from inmanta.types import JsonType
+from inmanta.types import JsonType, Apireturn
 from inmanta.util import hash_file
 from inmanta.const import UNDEPLOYABLE_STATES
 from inmanta.protocol import encode_token, methods
@@ -431,7 +432,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 "type": "param",
                 "params": [(param_id, resource_id)],
             }
-            yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=compile_metadata)
+            yield self._async_recompile(env, False, metadata=compile_metadata)
 
         if resource_id is None:
             resource_id = ""
@@ -462,7 +463,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 compile_metadata["params"].append((name, resource_id))
 
         if recompile:
-            yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=compile_metadata)
+            yield self._async_recompile(env, False, metadata=compile_metadata)
 
         return 200
 
@@ -484,7 +485,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "type": "param",
             "params": [(param.name, param.resource_id)]
         }
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
+        yield self._async_recompile(env, False, metadata=metadata)
 
         return 200
 
@@ -595,7 +596,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "form": form
         }
 
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
+        yield self._async_recompile(env, False, metadata=metadata)
         return 200, {"record": record}
 
     @protocol.handle(methods.create_record, env="tid")
@@ -626,7 +627,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "records": [str(record.id)],
             "form": form
         }
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
+        yield self._async_recompile(env, False, metadata=metadata)
 
         return 200, {"record": record}
 
@@ -642,7 +643,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "records": [str(record.id)],
             "form": record.form
         }
-        yield self._async_recompile(env, False, opt.server_wait_after_param.get(), metadata=metadata)
+        yield self._async_recompile(env, False, metadata=metadata)
 
         return 200
 
@@ -1191,6 +1192,61 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"model": model}
 
+    @protocol.handle(methods.deploy, env="tid")
+    @gen.coroutine
+    def deploy(self,
+               env: data.Environment,
+               agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+               agents: List[str] = None) -> Apireturn:
+        warnings = []
+
+        # get latest version
+        cm = yield data.ConfigurationModel.get_latest_version(env.id)
+        if cm is None:
+            return 404, {"message": "No version available"}
+        version_id = cm.version
+
+        # filter agents
+        allagents = yield data.ConfigurationModel.get_agents(env.id, version_id)
+        if agents is not None:
+            required = set(agents)
+            present = set(allagents)
+            allagents = list(required.intersection(present))
+            notfound = required - present
+            if notfound:
+                warnings.append(
+                    "Model version %d does not contain agents named [%s]" % (
+                        version_id,
+                        ",".join(sorted(list(notfound)))
+                    )
+                )
+
+        if not allagents:
+            return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
+
+        present = set()
+        absent = set()
+
+        yield self.agentmanager._ensure_agents(env, allagents)
+
+        for agent in allagents:
+            client = self.get_agent_client(env.id, agent)
+            if client is not None:
+                incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
+                future = client.trigger(env.id, agent, incremental_deploy)
+                self.add_future(future)
+                present.add(agent)
+            else:
+                absent.add(agent)
+
+        if absent:
+            warnings.append("Could not reach agents named [%s]" % ",".join(sorted(list(absent))))
+
+        if not present:
+            return attach_warnings(404, {"message": "No agent could be reached"}, warnings)
+
+        return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
+
     @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
     @gen.coroutine
     def dryrun_request(self, env, version_id):
@@ -1711,7 +1767,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200
 
     @gen.coroutine
-    def _async_recompile(self, env, update_repo, wait=0, metadata={}):
+    def _async_recompile(self, env, update_repo, metadata={}):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
@@ -1726,16 +1782,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Already recompiling")
             return
 
-        if last_recompile is None or (datetime.datetime.now() - datetime.timedelta(0, wait_time)) > last_recompile:
-            if last_recompile is None:
-                LOGGER.info("First recompile")
-            else:
-                LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
-
-            self._recompiles[env.id] = self
-            ioloop.IOLoop.current().add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
+        if last_recompile is None:
+            wait = 0
+            LOGGER.info("First recompile")
         else:
-            LOGGER.info("Not recompiling, last recompile less than %s ago (last was at %s)", wait_time, last_recompile)
+            wait = max(0, wait_time - (datetime.datetime.now() - last_recompile).total_seconds())
+            LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
+
+        self._recompiles[env.id] = self
+        ioloop.IOLoop.current().add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
 
     @gen.coroutine
     def _run_compile_stage(self, name, cmd, cwd, **kwargs):
@@ -1783,46 +1838,55 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 LOGGER.info("Creating project directory for environment %s at %s", environment_id, project_dir)
                 os.mkdir(project_dir)
 
-            # checkout repo
-            if not os.path.exists(os.path.join(project_dir, ".git")):
-                LOGGER.info("Cloning repository into environment directory %s", project_dir)
-                result = yield self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."], project_dir)
-                stages.append(result)
-                if result.returncode > 0:
-                    return
+            if not env.repo_url:
+                if not os.path.exists(os.path.join(project_dir, ".git")):
+                    LOGGER.warning("Project not found and repository not set %s", project_dir)
+            else:
+                # checkout repo
+                if not os.path.exists(os.path.join(project_dir, ".git")):
+                    LOGGER.info("Cloning repository into environment directory %s", project_dir)
+                    result = yield self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."],
+                                                           project_dir)
+                    stages.append(result)
+                    if result.returncode > 0:
+                        return
 
-            elif update_repo:
-                LOGGER.info("Fetching changes from repo %s", env.repo_url)
-                result = yield self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url], project_dir)
-                stages.append(result)
+                elif update_repo:
+                    LOGGER.info("Fetching changes from repo %s", env.repo_url)
+                    result = yield self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url],
+                                                           project_dir)
+                    stages.append(result)
+                if env.repo_branch:
+                    # verify if branch is correct
+                    LOGGER.debug("Verifying correct branch")
+                    sub_process = process.Subprocess(["git", "branch"],
+                                                     stdout=process.Subprocess.STREAM,
+                                                     stderr=process.Subprocess.STREAM,
+                                                     cwd=project_dir)
 
-            # verify if branch is correct
-            LOGGER.debug("Verifying correct branch")
-            sub_process = process.Subprocess(["git", "branch"],
-                                             stdout=process.Subprocess.STREAM,
-                                             stderr=process.Subprocess.STREAM,
-                                             cwd=project_dir)
+                    out, _, _ = yield [sub_process.stdout.read_until_close(),
+                                       sub_process.stderr.read_until_close(),
+                                       sub_process.wait_for_exit(raise_error=False)]
 
-            out, _, _ = yield [sub_process.stdout.read_until_close(),
-                               sub_process.stderr.read_until_close(),
-                               sub_process.wait_for_exit(raise_error=False)]
+                    o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
+                    if o is not None and env.repo_branch != o.group(1):
+                        LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
+                        result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch],
+                                                               project_dir)
+                        stages.append(result)
 
-            o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
-            if o is not None and env.repo_branch != o.group(1):
-                LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
-                result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch], project_dir)
-                stages.append(result)
-
-            if update_repo:
-                result = yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
-                stages.append(result)
-                LOGGER.info("Installing and updating modules")
-                result = yield self._run_compile_stage("Installing modules", inmanta_path + ["modules", "install"], project_dir,
-                                                       env=os.environ.copy())
-                stages.append(result)
-                result = yield self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"], project_dir,
-                                                       env=os.environ.copy())
-                stages.append(result)
+                if update_repo:
+                    result = yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                    stages.append(result)
+                    LOGGER.info("Installing and updating modules")
+                    result = yield self._run_compile_stage("Installing modules", inmanta_path + ["modules", "install"],
+                                                           project_dir,
+                                                           env=os.environ.copy())
+                    stages.append(result)
+                    result = yield self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"],
+                                                           project_dir,
+                                                           env=os.environ.copy())
+                    stages.append(result)
 
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()

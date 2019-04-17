@@ -57,6 +57,7 @@ from inmanta import protocol
 import pyformance
 from pyformance.registry import MetricsRegistry
 
+from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -178,17 +179,6 @@ def free_socket():
     sock.close()
 
 
-def get_free_tcp_port():
-    """
-        Semi safe method for getting a random port. This may contain a race condition.
-    """
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
-    _addr, port = tcp.getsockname()
-    tcp.close()
-    return str(port)
-
-
 @pytest.fixture()
 def free_port():
     port = get_free_tcp_port()
@@ -273,6 +263,7 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "10")
+    config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
 
     ibl = InmantaBootloader()
@@ -338,6 +329,7 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
     config.Config.set("server", "agent-timeout", "2")
     config.Config.set("agent", "agent-repair-interval", "0")
+    config.Config.set("server", "auto-recompile-wait", "0")
 
     ibl = InmantaBootloader()
     await ibl.start()
