@@ -269,6 +269,11 @@ port=%(server_port)s
             os.unlink(server_env)
             os.symlink(full_path, server_env)
 
+        if not os.path.exists(os.path.join(full_path, ".git")) and self._options.dashboard:
+            LOGGER.error(
+                "Make sure the project is a git repository, otherwise the embedded server cannot recompile the model."
+            )
+
         return True
 
     def setup(self) -> bool:
