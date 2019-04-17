@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Gener
 
 from inmanta import execute, const
 from inmanta import config as inmanta_config
+from inmanta.types import JsonType
 from . import exceptions
 
 if TYPE_CHECKING:
@@ -395,6 +396,14 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
+    if warnings:
+        meta = value.setdefault("metadata", {})
+        warns = meta.setdefault("warnings", [])
+        warns.extend(warnings)
+    return code, value
 
 
 def json_encode(value: Dict[str, Any]) -> str:

@@ -15,6 +15,7 @@
 
     Contact: code@inmanta.com
 """
+import socket
 import time
 import asyncio
 import inspect
@@ -66,3 +67,27 @@ def assert_graph(graph, expected):
     elines = sorted(elines)
 
     assert elines == lines, (lines, elines)
+
+
+class AsyncClosing(object):
+
+    def __init__(self, awaitable):
+        self.awaitable = awaitable
+
+    async def __aenter__(self):
+        self.closable = await self.awaitable
+        return object
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.closable.stop()
+
+
+def get_free_tcp_port():
+    """
+        Semi safe method for getting a random port. This may contain a race condition.
+    """
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.bind(('', 0))
+    _addr, port = tcp.getsockname()
+    tcp.close()
+    return str(port)
