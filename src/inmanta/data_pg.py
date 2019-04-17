@@ -1879,21 +1879,22 @@ class ConfigurationModel(BaseDocument):
 
     @classmethod
     async def update_deployed_flag(cls, environment, version):
-        query = f"UPDATE {ConfigurationModel.table_name()} " \
-                f"SET deployed=True, " \
-                f"result=(CASE WHEN (" \
-                f"        EXISTS(SELECT 1 FROM {Resource.table_name()} " \
-                f"               WHERE environment=$1 AND model=$2 AND status != $3)" \
-                f"               )::boolean " \
-                f"        THEN $4::versionstate " \
-                f"        ELSE $5::versionstate END" \
-                f"        ) " \
-                f"WHERE " \
-                f"environment=$1 AND version=$2 AND " \
-                f"total=(SELECT COUNT(*) " \
-                f"       FROM Resource " \
-                f"       WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying')" \
-                f");"
+        query = f"""UPDATE {ConfigurationModel.table_name()}
+                    SET deployed=True,
+                        result=(CASE WHEN (
+                                     EXISTS(SELECT 1 
+                                            FROM {Resource.table_name()}
+                                            WHERE environment=$1 AND model=$2 AND status != $3)
+                                     )::boolean
+                                THEN $4::versionstate
+                                ELSE $5::versionstate END
+                        )
+                    WHERE environment=$1 AND version=$2 AND
+                          total=(SELECT COUNT(*)
+                                 FROM Resource
+                                 WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying'
+                                )
+                )"""
         values = [cls._get_value(environment),
                   cls._get_value(version),
                   cls._get_value(ResourceState.deployed),
