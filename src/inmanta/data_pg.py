@@ -1882,7 +1882,7 @@ class ConfigurationModel(BaseDocument):
         query = f"""UPDATE {ConfigurationModel.table_name()}
                     SET deployed=True,
                         result=(CASE WHEN (
-                                     EXISTS(SELECT 1 
+                                     EXISTS(SELECT 1
                                             FROM {Resource.table_name()}
                                             WHERE environment=$1 AND model=$2 AND status != $3)
                                      )::boolean
