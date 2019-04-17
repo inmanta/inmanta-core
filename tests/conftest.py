@@ -487,6 +487,11 @@ class SnippetCompilationTest(KeepOnFail):
         return {"env": self.env, "libs": self.libs, "project": self.project_dir}
 
     def setup_for_snippet(self, snippet, autostd=True):
+        self.setup_for_snippet_external(snippet)
+
+        Project.set(Project(self.project_dir, autostd=autostd))
+
+    def setup_for_snippet_external(self, snippet):
         with open(os.path.join(self.project_dir, "project.yml"), "w") as cfg:
             cfg.write(
                 """
@@ -496,14 +501,11 @@ class SnippetCompilationTest(KeepOnFail):
             version: 1.0
             repo: ['https://github.com/inmanta/']"""
                 % (self.libs,
-                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
-                    self.libs))
-
+                   os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "modules"),
+                   self.libs))
         self.main = os.path.join(self.project_dir, "main.cf")
         with open(self.main, "w") as x:
             x.write(snippet)
-
-        Project.set(Project(self.project_dir, autostd=autostd))
 
     def do_export(self, include_status=False, do_raise=True):
         return self._do_export(deploy=False, include_status=include_status, do_raise=do_raise)

@@ -358,11 +358,7 @@ def export(options):
     version, _ = export.run(types, scopes, metadata=metadata, model_export=options.model_export)
 
     if exp is not None:
-        if not options.errors:
-            print(exp, file=sys.stderr)
-            sys.exit(1)
-        else:
-            raise exp
+        raise exp
 
     if options.model:
         modelexporter = ModelExporter(types)
