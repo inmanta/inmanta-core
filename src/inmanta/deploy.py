@@ -377,7 +377,7 @@ port=%(server_port)s
 
         for res in version_result.result["resources"]:
             total += 1
-            if res["status"] not in const.TRANSIENT_STATES:
+            if res["status"] not in [x.name for x in const.TRANSIENT_STATES]:
                 deployed += 1
                 ready[res["id"]] = res["status"]
 
