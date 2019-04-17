@@ -183,7 +183,7 @@ port=%(server_port)s
         self._client.set_setting(env_id, "autostart_agent_deploy_splay_time", 0)
         self._client.set_setting(env_id, "autostart_agent_deploy_interval", 0)
         self._client.set_setting(env_id, "autostart_agent_repair_splay_time", 0)
-        self._client.set_setting(env_id, "autostart_agent_repair_interval", 0)
+        self._client.set_setting(env_id, "autostart_agent_repair_interval", 600)
 
         return env_id
 
@@ -334,24 +334,11 @@ port=%(server_port)s
         LOGGER.info("Export of model complete")
         return True
 
-    def get_agents_for_model(self, version: int) -> Iterable[str]:
-        version_result = self._client.get_version(tid=self._environment_id, id=version)
-        if version_result.code != 200:
-            LOGGER.error("Unable to get version %d of environment %s", version, self._environment_id)
-            return []
-
-        return {x["agent"] for x in version_result.result["resources"]}
-
     def deploy(self, dry_run: bool, report: bool = True) -> None:
         version = self._latest_version(self._environment_id)
         LOGGER.info("Latest version for created environment is %s", version)
         if version is None:
             return
-
-        # Update the agentmap to autostart all agents
-        agents = self.get_agents_for_model(version)
-        LOGGER.debug("Agent(s) %s defined, adding them to autostart agent map", ", ".join(agents))
-        result = self._client.get_setting(tid=self._environment_id, id=data.AUTOSTART_AGENT_MAP)
 
         # release the version!
         if not dry_run:
@@ -379,7 +366,7 @@ port=%(server_port)s
 
         for res in version_result.result["resources"]:
             total += 1
-            if res["status"] != const.ResourceState.available.name:
+            if res["status"] not in [const.ResourceState.available.name, const.ResourceState.deploying.name]:
                 deployed += 1
                 ready[res["id"]] = res["status"]
 

@@ -25,10 +25,11 @@ import pytest
 
 def test_deploy(snippetcompiler, tmpdir, postgres_db):
     file_name = tmpdir.join("test_file")
+    # TODO: when agentconfig deploys no longer require an agent restart, define a new agent. Currently this makes the
+    # test to slow.
     snippetcompiler.setup_for_snippet(
         """
     host = std::Host(name="internal", os=std::linux)
-    std::AgentConfig(autostart=true, agentname="internal")
     file = std::Symlink(host=host, source="/dev/null", target="%s")
     """
         % file_name
