@@ -354,20 +354,20 @@ def test_check_bad_shutdown():
 def test_compiler_exception_output(snippetcompiler):
     snippetcompiler.setup_for_snippet_external(
         """
-typedef isa as string matching self=="a"
-
-entity A:
-    isa name
+entity Test:
+    number attr
 end
 
-a=A(name="b")
+implement Test using std::none
+
+o = Test(attr="1234")
 """
     )
 
-    output = """Could not set attribute `name` on instance `__config__::A (instantiated at ./main.cf:8)`"""
-    """ (reported in Construct(A) (./main.cf:8))
+    output = """Could not set attribute `attr` on instance `__config__::Test (instantiated at ./main.cf:8)` """ \
+        """(reported in Construct(Test) (./main.cf:8))
 caused by:
-  Invalid value 'b', constraint does not match (reported in __config__::isa (./main.cf:2:9))
+  Invalid value '1234', expected Number (reported in Construct(Test) (./main.cf:8))
 """
 
     def exec(*cmd):
