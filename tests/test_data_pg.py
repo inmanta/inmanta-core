@@ -727,6 +727,29 @@ async def test_model_delete_cascade(init_dataclasses_and_load_schema):
     assert (await data.UnknownParameter.get_by_id(unknown_parameter.id)) is None
 
 
+@pytest.mark.asyncio
+async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env_dev = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env_dev.insert()
+    env_prod = data.Environment(name="prod", project=project.id, repo_url="", repo_branch="")
+    await env_prod.insert()
+
+    now = datetime.datetime.now()
+    await data.ConfigurationModel(environment=env_dev.id, version=4, total=0, date=now, released=True).insert()
+    await data.ConfigurationModel(environment=env_dev.id, version=7, total=0, date=now, released=True).insert()
+    await data.ConfigurationModel(environment=env_dev.id, version=9, total=0, date=now, released=False).insert()
+
+    await data.ConfigurationModel(environment=env_prod.id, version=15, total=0, date=now, released=False).insert()
+    await data.ConfigurationModel(environment=env_prod.id, version=11, total=0, date=now, released=False).insert()
+
+    assert await data.ConfigurationModel.get_version_nr_latest_version(env_dev.id) == 7
+    assert await data.ConfigurationModel.get_version_nr_latest_version(env_prod.id) is None
+    assert await data.ConfigurationModel.get_version_nr_latest_version(uuid.uuid4()) is None
+
+
 @pytest.mark.parametrize("resource_state, version_state", [
     (const.ResourceState.deployed, const.VersionState.success),
     (const.ResourceState.failed, const.VersionState.failed),
