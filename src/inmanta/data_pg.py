@@ -1852,9 +1852,10 @@ class ConfigurationModel(BaseDocument):
         query = f"""SELECT c.*,
                            SUM(CASE WHEN r.status NOT IN({transient_states}) THEN 1 ELSE 0 END) AS done,
                            to_json(array(SELECT jsonb_build_object('status', r2.status, 'id', r2.resource_id)
-                                 FROM {Resource.table_name()} AS r2
-                                 WHERE c.environment=r2.environment AND c.version=r2.model
-                                )) AS status
+                                         FROM {Resource.table_name()} AS r2
+                                         WHERE c.environment=r2.environment AND c.version=r2.model
+                                        )
+                           ) AS status
                     FROM {cls.table_name()} AS c LEFT OUTER JOIN {Resource.table_name()} AS r
                     ON c.environment = r.environment AND c.version = r.model
                     {where_statement}
