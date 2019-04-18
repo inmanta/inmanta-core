@@ -1908,8 +1908,8 @@ class ConfigurationModel(BaseDocument):
         """
             Get the version number of the latest released version in the given environment.
         """
-        query = f"""SELECT version 
-                    FROM {ConfigurationModel.table_name()} 
+        query = f"""SELECT version
+                    FROM {ConfigurationModel.table_name()}
                     WHERE environment=$1 AND released=true
                     ORDER BY version DESC
                     LIMIT 1
