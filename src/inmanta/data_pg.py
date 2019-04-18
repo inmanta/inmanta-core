@@ -2083,9 +2083,9 @@ class ConfigurationModel(BaseDocument):
         work = list(r for r in resources)
 
         # get versions
-        query = f"SELECT version FROM {self.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
-        values = [self._get_value(self.environment)]
-        version_records = await self._fetch_query(query, *values)
+        query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
+        values = [cls._get_value(environment)]
+        version_records = await cls._fetch_query(query, *values)
 
         versions = [record["version"] for record in version_records]
 
@@ -2093,7 +2093,7 @@ class ConfigurationModel(BaseDocument):
             # todo in next verion
             next = []
 
-            vresources = await Resource.get_resources_for_version_raw(self.environment, version, projection)
+            vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:
