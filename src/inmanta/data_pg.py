@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Set, Dict, List
+from typing import Set, Dict, List, Optional
 from configparser import RawConfigParser
 from inmanta.const import ResourceState
 from collections import defaultdict
@@ -302,12 +302,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values, connection=connection)
 
     @classmethod
-    async def _fetch_val(cls, query, *values):
+    async def _fetchval(cls, query, *values):
         async with cls._connection_pool.acquire() as con:
             return await con.fetchval(query, *values)
 
     @classmethod
-    async def _fetch_one(cls, query, *values):
+    async def _fetchrow(cls, query, *values):
         async with cls._connection_pool.acquire() as con:
             return await con.fetchrow(query, *values)
 
@@ -1904,6 +1904,22 @@ class ConfigurationModel(BaseDocument):
         return versions[0]
 
     @classmethod
+    async def get_version_nr_latest_version(cls, environment: uuid.UUID) -> Optional[int]:
+        """
+            Get the version number of the latest released version in the given environment.
+        """
+        query = f"""SELECT version 
+                    FROM {ConfigurationModel.table_name()} 
+                    WHERE environment=$1 AND released=true
+                    ORDER BY version DESC
+                    LIMIT 1
+                    """
+        result = await cls._fetchrow(query, cls._get_value(environment))
+        if not result:
+            return None
+        return result['version']
+
+    @classmethod
     async def get_agents(cls, environment, version):
         """
             Returns a list of all agents that have resources defined in this configuration model
@@ -1985,7 +2001,7 @@ class ConfigurationModel(BaseDocument):
                   self._get_value(const.ResourceState.deployed),
                   self._get_value(const.VersionState.failed),
                   self._get_value(const.VersionState.success)]
-        result = await self._fetch_val(query, *values)
+        result = await self._fetchval(query, *values)
         self.result = const.VersionState[result]
         self.deployed = True
 
