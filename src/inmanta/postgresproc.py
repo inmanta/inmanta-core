@@ -19,40 +19,48 @@ import os
 import tempfile
 import subprocess
 import shutil
+import logging
+
+from typing import Optional
 
 
-PG_CTL_BIN = 'pg_ctl'
-INITDB_BIN = 'initdb'
+PG_CTL_BIN = "pg_ctl"
+INITDB_BIN = "initdb"
 
 
-def find_executable(executable):
+LOGGER = logging.getLogger(__name__)
+
+
+def find_executable(executable: str) -> Optional[str]:
     """
         Scan PATH for an executable.
     """
-    for path in os.environ.get('PATH', '').split(os.pathsep):
+    for path in os.environ.get("PATH", "").split(os.pathsep):
         path = os.path.abspath(path)
         executable_path = os.path.join(path, executable)
         if os.path.isfile(executable_path):
             return executable_path
 
+    return None
+
 
 class PostgresProc(object):
-
-    def __init__(self, port, pg_ctl_bin=None, initdb_bin=None, db_path=None):
+    def __init__(
+        self, port: int, pg_ctl_bin: Optional[str] = None, initdb_bin: Optional[str] = None, db_path: Optional[str] = None
+    ) -> None:
         self.port = port
         self.db_path = db_path
         if self.db_path:
             if os.path.exists(self.db_path) and os.path.isfile(self.db_path):
-                raise AssertionError('DB path should be a directory, but it is a file.')
+                raise AssertionError("DB path should be a directory, but it is a file.")
 
         self.pg_ctl_bin = pg_ctl_bin or find_executable(PG_CTL_BIN)
-        assert self.pg_ctl_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.'\
-                                .format(PG_CTL_BIN)
-        self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
-        assert self.initdb_bin, 'Could not find "{}" in system PATH. Make sure you have PostgreSQL installed.' \
-                                .format(INITDB_BIN)
+        assert self.pg_ctl_bin, f"Could not find '{PG_CTL_BIN}' in system PATH. Make sure you have PostgreSQL installed."
 
-    def start(self):
+        self.initdb_bin = initdb_bin or find_executable(INITDB_BIN)
+        assert self.initdb_bin, f"Could not find '{INITDB_BIN}' in system PATH. Make sure you have PostgreSQL installed."
+
+    def start(self) -> bool:
         """
             Start DB.
 
@@ -62,23 +70,25 @@ class PostgresProc(object):
             return True
 
         try:
+            old_wc = os.getcwd()
             self._create_db_path()
             self._init_db()
             self._create_sockets_dir(self.db_path)
-            old_wc = os.getcwd()
+
             os.chdir(self.db_path)
-            args = [self.pg_ctl_bin, "start", "-D", ".",
-                    "-o", "-p " + str(self.port) + " -k " + "sockets", "-s"]
+            args = [self.pg_ctl_bin, "start", "-D", ".", "-o", "-p " + str(self.port) + " -k " + "sockets", "-s"]
             process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             process.communicate()
             return process.returncode == 0
         except Exception:
+            LOGGER.exception("Failed to initialize the database.")
             return False
         finally:
             if old_wc is not None:
                 os.chdir(old_wc)
 
-    def _create_db_path(self):
+    def _create_db_path(self) -> None:
+        """ Create the data directory to store the postgres data in """
         if self.db_path:
             if not os.path.exists(self.db_path):
                 os.mkdir(self.db_path)
@@ -87,21 +97,28 @@ class PostgresProc(object):
             self.db_path = tempfile.mkdtemp()
             self._db_path_is_temporary = True
 
-    def _create_sockets_dir(self, parent_dir):
+    def _create_sockets_dir(self, parent_dir: str) -> str:
         sockets_dir = os.path.join(parent_dir, "sockets")
-        os.mkdir(sockets_dir)
+        if not os.path.exists(sockets_dir):
+            os.mkdir(sockets_dir)
         return sockets_dir
 
-    def _init_db(self):
-        os.chmod(self.db_path, 0o700)
+    def _init_db(self) -> None:
+        """ Init the database if it is not a valid postgres data directory """
+        if os.path.exists(os.path.join(self.db_path, "PG_VERSION")):
+            return
 
+        os.chmod(self.db_path, 0o700)
         args = [self.initdb_bin, "-D", self.db_path, "--auth-host", "trust", "-U", "postgres"]
-        process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        process.communicate()
+        process = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = process.communicate()
         if process.returncode != 0:
+            LOGGER.error("Failed to initialize db path")
+            LOGGER.error("out: %s", out)
+            LOGGER.error("err: %s", err)
             raise Exception("Failed to initialize db path.")
 
-    def stop(self):
+    def stop(self) -> None:
         if not self.running():
             return
         args = [self.pg_ctl_bin, "stop", "-D", self.db_path, "-m", "immediate", "-s"]
@@ -113,17 +130,10 @@ class PostgresProc(object):
             shutil.rmtree(self.db_path)
             self.db_path = None
 
-    def running(self):
+    def running(self) -> bool:
         if self.db_path is None:
             return False
         args = [self.pg_ctl_bin, "status", "-D", self.db_path, "-s"]
         process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         process.communicate()
         return process.returncode == 0
-
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        self.stop()

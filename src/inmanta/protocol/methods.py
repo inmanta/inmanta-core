@@ -518,6 +518,18 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
     """
 
 
+@method(method_name="deploy", operation="POST", arg_options=ENV_OPTS, client_types=["api"])
+def deploy(tid: uuid.UUID, agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+           agents: list = None):
+    """
+        Notify agents to perform a deploy now.
+
+        :param tid: The id of the environment.
+        :param agent_trigger_method: Indicates whether the agents should perform a full or an incremental deploy.
+        :param agents: Optional, names of specific agents to trigger
+    """
+
+
 # Method for requesting and quering a dryrun
 
 

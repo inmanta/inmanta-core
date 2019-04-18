@@ -20,6 +20,7 @@ import functools
 import hashlib
 import itertools
 import logging
+import socket
 import warnings
 
 import pkg_resources
@@ -143,3 +144,14 @@ class Scheduler(object):
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
             warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)
+
+
+def get_free_tcp_port() -> str:
+    """
+        Semi safe method for getting a random port. This may contain a race condition.
+    """
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.bind(('', 0))
+    _addr, port = tcp.getsockname()
+    tcp.close()
+    return str(port)

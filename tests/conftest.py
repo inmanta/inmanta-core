@@ -57,6 +57,7 @@ from inmanta import protocol
 import pyformance
 from pyformance.registry import MetricsRegistry
 
+from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -176,17 +177,6 @@ def free_socket():
     sock = netutil.bind_sockets(0, "127.0.0.1", family=socket.AF_INET)[0]
     yield sock
     sock.close()
-
-
-def get_free_tcp_port():
-    """
-        Semi safe method for getting a random port. This may contain a race condition.
-    """
-    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
-    _addr, port = tcp.getsockname()
-    tcp.close()
-    return str(port)
 
 
 @pytest.fixture()
