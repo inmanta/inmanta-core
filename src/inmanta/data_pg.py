@@ -2044,7 +2044,7 @@ class ConfigurationModel(BaseDocument):
         await cls._execute_query(query, *values)
 
     @classmethod
-    async def get_increment(self, environment: uuid.UUID, version:int):
+    async def get_increment(cls, environment: uuid.UUID, version:int):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -2072,8 +2072,8 @@ class ConfigurationModel(BaseDocument):
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw(
-            self.environment,
-            self.version,
+            environment,
+            version,
             projection_a)
 
         # to increment
