@@ -712,6 +712,7 @@ async def test_model_get_version_nr_latest_version(init_dataclasses_and_load_sch
 
     assert await data.ConfigurationModel.get_version_nr_latest_version(env_dev.id) == 7
     assert await data.ConfigurationModel.get_version_nr_latest_version(env_prod.id) is None
+    assert await data.ConfigurationModel.get_version_nr_latest_version(uuid.uuid4()) is None
 
 
 @pytest.mark.parametrize("resource_state, version_state", [

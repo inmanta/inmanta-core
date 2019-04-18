@@ -1917,7 +1917,7 @@ class ConfigurationModel(BaseDocument):
         result = await cls._fetchrow(query, cls._get_value(environment))
         if not result:
             return None
-        return result['version']
+        return result["version"]
 
     @classmethod
     async def get_agents(cls, environment, version):
