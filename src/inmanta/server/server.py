@@ -812,15 +812,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     def get_all_resources_for_agent(self, env: Environment, agent: str, version: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
         if version is None:
-            cm = yield data.ConfigurationModel.get_latest_version(env.id)
-            if cm is None:
+            version = yield data.ConfigurationModel.get_version_nr_latest_version(env.id)
+            if version is None:
                 return 404, {"message": "No version available"}
 
-            version = cm.version
-
         else:
-            cm = yield data.ConfigurationModel.get_version(environment=env.id, version=version)
-            if cm is None:
+            exists = yield data.ConfigurationModel.version_exists(environment=env.id, version=version)
+            if not exists:
                 return 404, {"message": "The given version does not exist"}
 
         deploy_model = []
@@ -846,18 +844,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     def get_resource_increment_for_agent(self, env: Environment, agent: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
 
-        cm = yield data.ConfigurationModel.get_latest_version(env.id)
-        if cm is None:
+        version = yield data.ConfigurationModel.get_version_nr_latest_version(env.id)
+        if version is None:
             return 404, {"message": "No version available"}
-
-        version = cm.version
 
         increment = self._increment_cache.get(env.id, None)
         if increment is None:
             with (yield self._increment_cache_locks[env.id].acquire()):
                 increment = self._increment_cache.get(env.id, None)
                 if increment is None:
-                    increment = yield cm.get_increment()
+                    increment = yield ConfigurationModel.get_increment(env.id, version)
                     self._increment_cache[env.id] = increment
 
         increment_ids, neg_increment = increment
@@ -1201,10 +1197,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         warnings = []
 
         # get latest version
-        cm = yield data.ConfigurationModel.get_latest_version(env.id)
-        if cm is None:
+        version_id = yield data.ConfigurationModel.get_version_nr_latest_version(env.id)
+        if version_id is None:
             return 404, {"message": "No version available"}
-        version_id = cm.version
 
         # filter agents
         allagents = yield data.ConfigurationModel.get_agents(env.id, version_id)

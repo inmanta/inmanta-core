@@ -17,6 +17,7 @@
 """
 from typing import Set, Dict, List, Optional
 from configparser import RawConfigParser
+
 from inmanta.const import ResourceState
 from collections import defaultdict
 from asyncpg import UndefinedTableError
@@ -1886,6 +1887,16 @@ class ConfigurationModel(BaseDocument):
         return dct
 
     @classmethod
+    async def version_exists(cls, environment, version):
+        query = f"""SELECT 1
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE environment=$1 AND version=$2"""
+        result = await cls._fetchrow(query, cls._get_value(environment), cls._get_value(version))
+        if not result:
+            return False
+        return True
+
+    @classmethod
     async def get_version(cls, environment, version):
         """
             Get a specific version
@@ -2032,7 +2043,8 @@ class ConfigurationModel(BaseDocument):
                   cls._get_value(const.VersionState.success)]
         await cls._execute_query(query, *values)
 
-    async def get_increment(self):
+    @classmethod
+    async def get_increment(self, environment: uuid.UUID, version:int):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
