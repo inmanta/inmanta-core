@@ -48,8 +48,6 @@ CREATE TABLE IF NOT EXISTS public.resource (
     model integer NOT NULL,
     resource_id varchar NOT NULL,
     resource_version_id varchar NOT NULL,
-    resource_type varchar NOT NULL,
-    agent varchar NOT NULL,
     last_deploy timestamp,
     attributes JSONB,
     attribute_hash varchar,
@@ -59,7 +57,6 @@ CREATE TABLE IF NOT EXISTS public.resource (
     FOREIGN KEY (environment, model) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
-CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
 CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model);
 CREATE UNIQUE INDEX resource_env_resourceversionid_index ON resource (environment, resource_version_id);
 
