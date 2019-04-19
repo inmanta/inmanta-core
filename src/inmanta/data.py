@@ -501,13 +501,13 @@ class BaseDocument(object, metaclass=DocumentMeta):
                 result[key] = cls._get_value(value)
         return result
 
-    async def delete(self):
+    async def delete(self, connection=None):
         """
             Delete this document
         """
         (filter_as_string, values) = self._get_filter_on_primary_key_fields()
         query = "DELETE FROM " + self.table_name() + " WHERE " + filter_as_string
-        await self._execute_query(query, *values)
+        await self._execute_query(query, *values, connection=connection)
 
     async def delete_cascade(self):
         await self.delete()
@@ -1956,8 +1956,10 @@ class ConfigurationModel(BaseDocument):
         return versions
 
     async def delete_cascade(self):
-        await Code.delete_all(environment=self.environment, version=self.version)
-        await self.delete()
+        async with self._connection_pool.acquire() as con:
+            async with con.transaction():
+                await Code.delete_all(connection=con, environment=self.environment, version=self.version)
+                await self.delete(connection=con)
 
     async def get_undeployable(self):
         """
