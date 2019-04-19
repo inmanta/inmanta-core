@@ -37,7 +37,7 @@ from tornado import gen, locks, process, ioloop
 from typing import Dict, Any, Generator
 
 from inmanta import const
-from inmanta import data_pg as data, config
+from inmanta import data, config
 from inmanta.protocol.common import attach_warnings
 from inmanta.reporter import InfluxReporter
 from inmanta.server import protocol, SLICE_SERVER

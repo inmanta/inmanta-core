@@ -19,7 +19,7 @@
 import uuid
 import datetime
 
-from inmanta import data_pg as data, const
+from inmanta import data, const
 from .common import ArgOption
 from .decorators import method
 from . import exceptions

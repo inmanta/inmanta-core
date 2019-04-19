@@ -40,7 +40,7 @@ from agent_server.conftest import (
     get_agent,
     _wait_for_n_deploying,
 )
-from inmanta import agent, const, execute, config, data_pg as data
+from inmanta import agent, const, execute, config, data
 from inmanta.agent.agent import Agent
 from inmanta.ast import CompilerException
 from inmanta.config import Config

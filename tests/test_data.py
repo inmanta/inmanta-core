@@ -26,7 +26,7 @@ import types
 import pkgutil
 
 
-from inmanta import data_pg as data, const
+from inmanta import data, const
 from inmanta.const import LogLevel
 from asyncpg import PostgresSyntaxError
 
