@@ -1468,6 +1468,8 @@ class Resource(BaseDocument):
     resource_id = Field(field_type=str, required=True)
     resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
 
+    agent = Field(field_type=str, required=True)
+
     # Field based on content from the resource actions
     last_deploy = Field(field_type=datetime.datetime)
 
@@ -1482,17 +1484,12 @@ class Resource(BaseDocument):
     provides = Field(field_type=list, default=[])  # List of resource versions
 
     @property
-    def agent(self):
-        return self._agent
-
-    @property
     def resource_type(self):
         return self._resource_type
 
     def __init__(self, from_postgres=False, **kwargs):
         super(Resource, self).__init__(from_postgres, **kwargs)
         parsed_id = Id.parse_id(self.resource_version_id)
-        self._agent = parsed_id.agent_name
         self._resource_type = parsed_id.entity_type
 
     def make_hash(self):
@@ -1609,7 +1606,7 @@ class Resource(BaseDocument):
                     parsed_id = Id.parse_id(resource_id)
                     result.append({"resource_id": resource_id,
                                    "resource_type": parsed_id.entity_type,
-                                   "agent": parsed_id.agent_name,
+                                   "agent": latest["agent"],
                                    "latest_version": latest["model"],
                                    "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
                                    "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
@@ -1622,16 +1619,12 @@ class Resource(BaseDocument):
                                         version,
                                         agent=None,
                                         no_obj=False):
-        query = f"SELECT * FROM {Resource.table_name()} WHERE environment=$1 AND model=$2"
-        values = [cls._get_value(environment), cls._get_value(version)]
-
         if agent:
-            query += f" AND resource_id LIKE $3"
-            # Escape characters which have a special meaning in a LIKE-based SQL regex
-            agent_escaped = agent.replace("_", "\\_").replace('%', '\\%')
-            regex = f"%[{agent_escaped},%=%]"
-            values.append(regex)
+            (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
+        else:
+            (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
 
+        query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources = []
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
@@ -1641,7 +1634,6 @@ class Resource(BaseDocument):
                         record["attributes"] = json.loads(record["attributes"])
                         record["id"] = record["resource_version_id"]
                         parsed_id = Id.parse_id(record["resource_version_id"])
-                        record["agent"] = parsed_id.agent_name
                         record["resource_type"] = parsed_id.entity_type
                         resources.append(record)
                     else:
@@ -1697,7 +1689,7 @@ class Resource(BaseDocument):
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
-                    resource_version_id=resource_version_id)
+                    resource_version_id=resource_version_id, agent=vid.agent_name)
 
         attr.update(kwargs)
 
@@ -1800,7 +1792,6 @@ class Resource(BaseDocument):
         self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]
-        dct["agent"] = self._agent
         dct["resource_type"] = self._resource_type
         return dct
 
@@ -1952,15 +1943,13 @@ class ConfigurationModel(BaseDocument):
             Returns a list of all agents that have resources defined in this configuration model
         """
         (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT DISTINCT resource_id FROM " + Resource.table_name() + " WHERE " + filter_statement
-        result = set()
+        query = "SELECT DISTINCT agent FROM " + Resource.table_name() + " WHERE " + filter_statement
+        result = []
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
-                    resource_id = record["resource_id"]
-                    agent_name = Id.parse_id(resource_id).agent_name
-                    result.add(agent_name)
-        return list(result)
+                    result.append(record["agent"])
+        return result
 
     @classmethod
     async def get_versions(cls, environment, start=0, limit=DBLIMIT):
