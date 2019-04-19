@@ -1153,41 +1153,6 @@ async def test_model_get_resources_for_version_optional_args(init_dataclasses_an
 
 
 @pytest.mark.asyncio
-async def test_model_get_resources_for_version_escaping(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = int(time.time())
-    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=5, version_info={})
-    await cm.insert()
-
-    async def insert_resource(env_id, version, agent_name, path, status):
-        resource_version_id = f"std::File[{agent_name},path={path}],v={version}"
-        resource = data.Resource.new(environment=env_id,
-                                     resource_version_id=resource_version_id,
-                                     attributes={"path": path},
-                                     status=status)
-        await resource.insert()
-
-    agent_names = ["agent1.local",
-                   "agent12local",
-                   "agent1_local",
-                   "agent1%local",
-                   "agent12345local"]
-
-    for agent_name in agent_names:
-        await insert_resource(env.id, version, agent_name, "path1", const.ResourceState.deployed)
-
-    for agent_name in agent_names:
-        result = await data.Resource.get_resources_for_version(env.id, version, agent=agent_name)
-        assert len(result) == 1
-        assert result[0].agent == agent_name
-
-
-@pytest.mark.asyncio
 async def test_escaped_resources(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
