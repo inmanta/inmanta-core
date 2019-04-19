@@ -554,7 +554,7 @@ class HostNotFoundException(Exception):
         self.error = error
 
     def to_action(self):
-        from inmanta.data_pg import ResourceAction
+        from inmanta.data import ResourceAction
         ra = ResourceAction()  # @UndefinedVariable
         ra.message = "Failed to access host %s as user %s over ssh." % (self.hostname, self.user)
         ra.data = {"host": self.hostname, "user": self.user, "error": self.error}

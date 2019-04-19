@@ -29,7 +29,7 @@ from tornado import concurrent
 from typing import Tuple
 
 from inmanta.agent.io import get_io
-from inmanta import protocol, resources, const, data_pg as data
+from inmanta import protocol, resources, const, data
 from inmanta.agent.cache import AgentCache
 import uuid
 from typing import Dict

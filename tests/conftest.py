@@ -29,7 +29,7 @@ import logging
 import pytest
 
 import utils
-from inmanta import data_pg as data, config
+from inmanta import data, config
 import inmanta.compiler as compiler
 from inmanta.module import Project
 from inmanta import resources

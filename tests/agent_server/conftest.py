@@ -24,7 +24,7 @@ from threading import Condition
 
 from pytest import fixture
 
-from inmanta import const, data_pg as data
+from inmanta import const, data
 from inmanta.agent.agent import Agent
 from inmanta.agent.handler import (
     provider,

@@ -23,7 +23,7 @@ from tornado import process
 
 
 from inmanta.config import Config
-from inmanta import data_pg as data
+from inmanta import data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config

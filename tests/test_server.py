@@ -25,7 +25,7 @@ from utils import retry_limited
 import pytest
 from inmanta.agent.agent import Agent
 from inmanta.agent import handler
-from inmanta import data_pg as data, config, const, loader, resources
+from inmanta import data, config, const, loader, resources
 from inmanta.server import config as opt, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, server
 
 from datetime import datetime
