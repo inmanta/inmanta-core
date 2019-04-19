@@ -102,13 +102,22 @@ async def test_records(client, environment):
 
     result = await client.create_record(tid=environment, form_type=form_id, form={"field1": 10, "field2": "value"})
     assert result.code == 200
-
     record_id = result.result["record"]["id"]
+
+    result = await client.get_record(tid=environment, id=record_id)
+    assert result.code == 200
+    assert len(result.result["record"]["fields"]) == 2
+    assert result.result["record"]["fields"]["field1"] == 10
+    assert result.result["record"]["fields"]["field2"] == "value"
+
     result = await client.update_record(tid=environment, id=record_id, form={"field1": 20, "field2": "value2"})
     assert result.code == 200
 
     result = await client.get_record(tid=environment, id=record_id)
     assert result.code == 200
+    assert len(result.result["record"]["fields"]) == 2
+    assert result.result["record"]["fields"]["field1"] == 20
+    assert result.result["record"]["fields"]["field2"] == "value2"
 
     result = await client.list_records(tid=environment, form_type=form_id)
     assert result.code == 200
@@ -122,3 +131,7 @@ async def test_records(client, environment):
 
     result = await client.delete_record(tid=environment, id=record_id)
     assert result.code == 200
+
+    result = await client.list_records(tid=environment, form_type=form_id)
+    assert result.code == 200
+    assert len(result.result["records"]) == 1
