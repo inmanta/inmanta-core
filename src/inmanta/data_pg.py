@@ -17,6 +17,7 @@
 """
 from typing import Set, Dict, List, Optional
 from configparser import RawConfigParser
+
 from inmanta.const import ResourceState
 from collections import defaultdict
 from asyncpg import UndefinedTableError
@@ -1886,6 +1887,16 @@ class ConfigurationModel(BaseDocument):
         return dct
 
     @classmethod
+    async def version_exists(cls, environment, version):
+        query = f"""SELECT 1
+                            FROM {ConfigurationModel.table_name()}
+                            WHERE environment=$1 AND version=$2"""
+        result = await cls._fetchrow(query, cls._get_value(environment), cls._get_value(version))
+        if not result:
+            return False
+        return True
+
+    @classmethod
     async def get_version(cls, environment, version):
         """
             Get a specific version
@@ -2032,7 +2043,8 @@ class ConfigurationModel(BaseDocument):
                   cls._get_value(const.VersionState.success)]
         await cls._execute_query(query, *values)
 
-    async def get_increment(self):
+    @classmethod
+    async def get_increment(cls, environment: uuid.UUID, version: int):
         """
         Find resources incremented by this version compared to deployment state transitions per resource
 
@@ -2060,8 +2072,8 @@ class ConfigurationModel(BaseDocument):
 
         # get resources for agent
         resources = await Resource.get_resources_for_version_raw(
-            self.environment,
-            self.version,
+            environment,
+            version,
             projection_a)
 
         # to increment
@@ -2071,9 +2083,9 @@ class ConfigurationModel(BaseDocument):
         work = list(r for r in resources)
 
         # get versions
-        query = f"SELECT version FROM {self.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
-        values = [self._get_value(self.environment)]
-        version_records = await self._fetch_query(query, *values)
+        query = f"SELECT version FROM {cls.table_name()} WHERE environment=$1 AND released=true ORDER BY version DESC"
+        values = [cls._get_value(environment)]
+        version_records = await cls._fetch_query(query, *values)
 
         versions = [record["version"] for record in version_records]
 
@@ -2081,7 +2093,7 @@ class ConfigurationModel(BaseDocument):
             # todo in next verion
             next = []
 
-            vresources = await Resource.get_resources_for_version_raw(self.environment, version, projection)
+            vresources = await Resource.get_resources_for_version_raw(environment, version, projection)
             id_to_resource = {r["resource_id"]: r for r in vresources}
 
             for res in work:
