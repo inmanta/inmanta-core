@@ -1,4 +1,4 @@
-entity Resource extends std::PurgeableResource, std::State:
+entity Resource extends std::PurgeableResource:
     string agent="internal"
     string key
     string value
