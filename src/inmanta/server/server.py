@@ -936,7 +936,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.Resource.get_resources_for_version(env.id, version_id, include_attributes=True, no_obj=True)
+        resources = yield data.Resource.get_resources_for_version(env.id, version_id, no_obj=True)
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 

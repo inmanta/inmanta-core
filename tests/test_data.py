@@ -25,7 +25,6 @@ import inspect
 import types
 import pkgutil
 
-
 from inmanta import data, const
 from inmanta.const import LogLevel
 from asyncpg import PostgresSyntaxError
@@ -1048,7 +1047,7 @@ async def test_get_resources(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_get_resources_for_version(init_dataclasses_and_load_schema):
+async def test_model_get_resources_for_version(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()
 
@@ -1111,9 +1110,46 @@ async def test_get_resources_for_version(init_dataclasses_and_load_schema):
     assert len(resources) == 4
     assert sorted([x.resource_version_id for x in resources]) == sorted([d, s, u, su])
 
-    resources = await data.Resource.get_resources_for_version(env.id, 3, include_undefined=False)
-    assert len(resources) == 2
-    assert sorted([x.resource_version_id for x in resources]) == sorted([d, s])
+
+@pytest.mark.asyncio
+async def test_model_get_resources_for_version_optional_args(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = int(time.time())
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=3, version_info={})
+    await cm.insert()
+
+    async def insert_resource(env_id, version, agent_name, path, status):
+        resource_version_id = f"std::File[{agent_name},path={path}],v={version}"
+        resource = data.Resource.new(environment=env_id,
+                                     resource_version_id=resource_version_id,
+                                     attributes={"path": path},
+                                     status=status)
+        await resource.insert()
+
+    await insert_resource(env.id, version, "agent1", "path1", const.ResourceState.deployed)
+    await insert_resource(env.id, version, "agent2", "path2", const.ResourceState.available)
+    await insert_resource(env.id, version, "agent1", "path3", const.ResourceState.undefined)
+
+    result = await data.Resource.get_resources_for_version(env.id, version)
+    assert len(result) == 3
+    assert sorted([r.agent for r in result]) == ["agent1", "agent1", "agent2"]
+    for r in result:
+        assert len(r.attributes) == 1
+
+    result = await data.Resource.get_resources_for_version(env.id, version, agent="agent2")
+    assert len(result) == 1
+    assert result[0].agent == "agent2"
+
+    result = await data.Resource.get_resources_for_version(env.id, version, no_obj=True)
+    assert len(result) == 3
+    assert sorted([r["agent"] for r in result]) == ["agent1", "agent1", "agent2"]
+    for r in result:
+        assert len(r["attributes"]) == 1
 
 
 @pytest.mark.asyncio
