@@ -32,6 +32,7 @@ import hashlib
 import pkgutil
 import inmanta.db.versions
 
+from inmanta.resources import Id
 from inmanta import const
 import asyncpg
 
@@ -1467,7 +1468,6 @@ class Resource(BaseDocument):
     resource_id = Field(field_type=str, required=True)
     resource_version_id = Field(field_type=str, required=True, part_of_primary_key=True)
 
-    resource_type = Field(field_type=str, required=True)
     agent = Field(field_type=str, required=True)
 
     # Field based on content from the resource actions
@@ -1482,6 +1482,15 @@ class Resource(BaseDocument):
     # if this resource is updated, it must notify all RV's in this list
     # the list contains full rv id's
     provides = Field(field_type=list, default=[])  # List of resource versions
+
+    @property
+    def resource_type(self):
+        return self._resource_type
+
+    def __init__(self, from_postgres=False, **kwargs):
+        super(Resource, self).__init__(from_postgres, **kwargs)
+        parsed_id = Id.parse_id(self.resource_version_id)
+        self._resource_type = parsed_id.entity_type
 
     def make_hash(self):
         character = "|".join(sorted([str(k) + "||" + str(v)
@@ -1594,8 +1603,9 @@ class Resource(BaseDocument):
                     else:
                         deployed = latest
 
+                    parsed_id = Id.parse_id(resource_id)
                     result.append({"resource_id": resource_id,
-                                   "resource_type": latest["resource_type"],
+                                   "resource_type": parsed_id.entity_type,
                                    "agent": latest["agent"],
                                    "latest_version": latest["model"],
                                    "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
@@ -1608,21 +1618,13 @@ class Resource(BaseDocument):
                                         environment,
                                         version,
                                         agent=None,
-                                        include_attributes=True,
-                                        no_obj=False,
-                                        include_undefined=True):
-        projection = "*"
-        if not include_attributes:
-            projection = ','.join(["id", "environment", "model", "resource_id", "resource_version_id",
-                                   "resource_type", "agent", "last_deploy", "status", "provides"])
+                                        no_obj=False):
         if agent:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version, agent=agent)
         else:
             (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        if not include_undefined:
-            filter_statement += " AND status NOT IN ($" + str(len(values) + 1) + ",$" + str(len(values) + 2) + ")"
-            values += [cls._get_value(const.ResourceState.undefined), cls._get_value(const.ResourceState.skipped_for_undefined)]
-        query = "SELECT " + projection + " FROM " + cls.table_name() + " WHERE " + filter_statement
+
+        query = f"SELECT * FROM {Resource.table_name()} WHERE {filter_statement}"
         resources = []
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
@@ -1631,6 +1633,8 @@ class Resource(BaseDocument):
                         record = dict(record)
                         record["attributes"] = json.loads(record["attributes"])
                         record["id"] = record["resource_version_id"]
+                        parsed_id = Id.parse_id(record["resource_version_id"])
+                        record["resource_type"] = parsed_id.entity_type
                         resources.append(record)
                     else:
                         resources.append(cls(from_postgres=True, **record))
@@ -1682,11 +1686,11 @@ class Resource(BaseDocument):
 
     @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
-        from inmanta.resources import Id
         vid = Id.parse_id(resource_version_id)
 
         attr = dict(environment=environment, model=vid.version, resource_id=vid.resource_str(),
-                    resource_version_id=resource_version_id, resource_type=vid.entity_type, agent=vid.agent_name)
+                    resource_version_id=resource_version_id, agent=vid.agent_name)
+
         attr.update(kwargs)
 
         return cls(**attr)
@@ -1788,6 +1792,7 @@ class Resource(BaseDocument):
         self.make_hash()
         dct = super(Resource, self).to_dict()
         dct["id"] = dct["resource_version_id"]
+        dct["resource_type"] = self._resource_type
         return dct
 
 

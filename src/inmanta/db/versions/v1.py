@@ -48,7 +48,6 @@ CREATE TABLE IF NOT EXISTS public.resource (
     model integer NOT NULL,
     resource_id varchar NOT NULL,
     resource_version_id varchar NOT NULL,
-    resource_type varchar NOT NULL,
     agent varchar NOT NULL,
     last_deploy timestamp,
     attributes JSONB,
