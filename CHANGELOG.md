@@ -1,7 +1,7 @@
 v 2019.2
 Changes in this release:
 - Various bugfixes (#1046, #968, #1045)
-- Migration from mongodb to postgres
+- Migration from mongodb to postgres (#1023, #1024, #1025)
 - added metering using pyformance
 - Added influxdb reporter for protocol endpoint metrics
 - Remove the configuration option agent-run-at-start (#1055)
