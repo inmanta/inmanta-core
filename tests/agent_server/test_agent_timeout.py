@@ -58,6 +58,6 @@ async def test_agent_disconnect(
         caplog,
         "inmanta.agent.agent.agent1",
         logging.INFO,
-        "Agent agent1 stopped due because Connection to server lost",
+        "Agent agent1 stopped because Connection to server lost",
         i,
     )

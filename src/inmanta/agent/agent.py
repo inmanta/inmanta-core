@@ -586,7 +586,7 @@ class AgentInstance(object):
         if not self.is_enabled():
             return 200, "already paused"
 
-        self.logger.info("Agent %s stopped due because %s", self.name, reason)
+        self.logger.info("Agent %s stopped because %s", self.name, reason)
 
         self._disable_time_triggers()
         self._enabled = False
