@@ -115,5 +115,5 @@ The main.cf below is a small project that creates a file on a machine:
     user.
 
 Deploy the configuration by exporting the model to an orchestration server. Either commit the code to the git repository and
-configure and inmanta instance to deploy the model (see :ref:`autonomous-server`)
+configure an inmanta instance to deploy the model (see :ref:`autonomous-server`)
 or export the compiled model to an orchestrator (see :ref:`push-to-server`)
