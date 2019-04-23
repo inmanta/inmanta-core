@@ -616,3 +616,22 @@ def postgres_proc(free_port):
     proc = PostgresProc(int(free_port))
     yield proc
     proc.stop()
+
+
+class AsyncCleaner(object):
+
+    def __init__(self):
+        self.register = []
+
+    def add(self, method):
+        self.register.append(method)
+
+    def __call__(self, method):
+        self.add(method)
+
+
+@pytest.fixture
+async def async_finalizer():
+    cleaner = AsyncCleaner()
+    yield cleaner
+    await asyncio.gather(*[item() for item in cleaner.register])
