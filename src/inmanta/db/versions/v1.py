@@ -43,7 +43,6 @@ CREATE TABLE IF NOT EXISTS public.configurationmodel (
 CREATE UNIQUE INDEX configurationmodel_env_version_total_index ON configurationmodel (environment, version DESC, total);
 CREATE UNIQUE INDEX configurationmodel_env_released_version_index ON configurationmodel (environment, released, version DESC);
 
-
 -- Table: public.resources
 CREATE TABLE IF NOT EXISTS public.resource (
     environment uuid NOT NULL,
@@ -65,9 +64,6 @@ CREATE INDEX resource_env_model_status_index ON resource (environment, model, st
 CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
 CREATE INDEX resource_env_resource_id_status ON resource (environment, resource_id, status, model DESC);
 CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model DESC);
-
--- TODO: check if a btree_gin index is faster than two separate indexes
--- Query on: env, model, attributes
 CREATE INDEX resource_attributes_index ON resource USING gin (attributes jsonb_path_ops);
 
 -- Table: public.resourceaction
@@ -98,7 +94,6 @@ CREATE TABLE IF NOT EXISTS public.resourceversionid (
 CREATE INDEX resourceversionid_environment_resource_version_id_index ON resourceversionid (environment, resource_version_id);
 CREATE INDEX resourceversionid_action_id_index ON resourceversionid (action_id);
 
-
 -- Table: public.code
 -- There is no foreign key constraint from code to configurationmodel, since the code is uploaded
 -- to the server before the configuration model is created. Working the other was around results
@@ -110,7 +105,6 @@ CREATE TABLE IF NOT EXISTS public.code (
     source_refs JSONB,
     PRIMARY KEY(environment, version, resource)
 );
-
 
 -- Table: public.unknownparameter
 CREATE TABLE IF NOT EXISTS public.unknownparameter (
@@ -138,8 +132,9 @@ CREATE TABLE IF NOT EXISTS public.agentprocess (
     sid uuid NOT NULL PRIMARY KEY
 );
 
-CREATE UNIQUE INDEX agentprocess_sid_expired_index ON agentprocess (expired, sid);
-CREATE INDEX agentprocess_env_expired_index ON agentprocess (environment, expired);
+CREATE UNIQUE INDEX agentprocess_sid_expired_index ON agentprocess (sid, expired);
+CREATE INDEX agentprocess_env_index ON agentprocess (environment, last_seen ASC NULLS LAST);
+CREATE INDEX agentprocess_env_expired_index ON agentprocess (environment, expired, last_seen ASC NULLS LAST);
 
 -- Table: public.agentinstance
 CREATE TABLE IF NOT EXISTS public.agentinstance (
@@ -160,11 +155,10 @@ CREATE TABLE IF NOT EXISTS public.agent (
     name varchar NOT NULL,
     last_failover timestamp,
     paused boolean DEFAULT false,
--- primary is a reserved keyword in postgresql ==> hange to id_primary
+-- primary is a reserved keyword in postgresql ==> change to id_primary
     id_primary uuid REFERENCES agentinstance(id) ON DELETE CASCADE,
     PRIMARY KEY(environment, name)
 );
-
 
 -- Table: public.parameter
 CREATE TABLE IF NOT EXISTS public.parameter (
@@ -180,9 +174,6 @@ CREATE TABLE IF NOT EXISTS public.parameter (
 
 CREATE INDEX parameter_updated_index ON parameter (updated);
 CREATE INDEX parameter_env_name_resource_id_index ON parameter (environment, name, resource_id);
-
--- TODO: check if a btree_gin index is faster than two separate indexes
--- Query on: environment, metadata
 CREATE INDEX parameter_metadata_index ON parameter USING gin (metadata jsonb_path_ops);
 
 -- Table: public.form

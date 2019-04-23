@@ -900,9 +900,16 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def get_live(cls, environment=None):
         if environment is not None:
-            result = await cls.get_list(limit=DBLIMIT, expired=None, environment=environment)
+            result = await cls.get_list(limit=DBLIMIT,
+                                        environment=environment,
+                                        expired=None,
+                                        order_by_column="last_seen",
+                                        order="ASC NULLS LAST")
         else:
-            result = await cls.get_list(limit=DBLIMIT, expired=None)
+            result = await cls.get_list(limit=DBLIMIT,
+                                        expired=None,
+                                        order_by_column="last_seen",
+                                        order="ASC NULLS LAST")
         return result
 
     @classmethod
@@ -912,7 +919,9 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def get_by_env(cls, env):
-        nodes = await cls.get_list(environment=env)
+        nodes = await cls.get_list(environment=env,
+                                   order_by_column="last_seen",
+                                   order="ASC NULLS LAST")
         return nodes
 
     @classmethod
