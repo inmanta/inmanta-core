@@ -244,5 +244,5 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-linkcheck_ignore = [r'http://localhost:\d+/', r'http://127.0.0.1:\d+']
+linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+']
 

@@ -164,8 +164,8 @@ ssh and if the remote agent is used.
     -rw-------. 1 inmanta inmanta 1679 Mar 21 13:55 /var/lib/inmanta/.ssh/id_rsa
 
 2. Configure ssh to accept all host keys or white list the hosts that are allowed or use signed host keys
-  (depends on your security requirements). This guide configures ssh client for the inmanta user to accept all host keys.
-  Create ``/var/lib/inmanta/.ssh/config`` and create the following content:
+   (depends on your security requirements). This guide configures ssh client for the inmanta user to accept all host keys.
+   Create ``/var/lib/inmanta/.ssh/config`` and create the following content:
 
   .. code-block:: text
 
@@ -180,7 +180,7 @@ ssh and if the remote agent is used.
     sudo chown inmanta:inmanta /var/lib/inmanta/.ssh/config
 
 3. Add the public key to any git repositories and save if to include in configuration models that require remote agents.
-4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store 
+4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
 
