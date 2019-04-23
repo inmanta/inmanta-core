@@ -1249,7 +1249,11 @@ async def test_resource_hash(init_dataclasses_and_load_schema):
 
     readres = await data.Resource.get_resources(env.id,
                                                 [res1.resource_version_id, res2.resource_version_id, res3.resource_version_id])
-    res1, res2, res3 = readres
+
+    resource_map = {r.resource_version_id: r for r in readres}
+    res1 = resource_map[res1.resource_version_id]
+    res2 = resource_map[res2.resource_version_id]
+    res3 = resource_map[res3.resource_version_id]
 
     assert res1.attribute_hash is not None
     assert res1.attribute_hash == res2.attribute_hash
