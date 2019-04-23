@@ -26,10 +26,10 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx_autodoc_annotation',
+extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig',
               'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.inmanta.config',
-              'sphinxcontrib.inmanta.dsl']
+              'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -244,5 +244,5 @@ texinfo_documents = [
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 # texinfo_show_urls = 'footnote'
 
-linkcheck_ignore = [r'http://localhost:\d+/', r'http://127.0.0.1:\d+']
+linkcheck_ignore = [r'http(s)?://localhost:\d+/', r'http://127.0.0.1:\d+']
 

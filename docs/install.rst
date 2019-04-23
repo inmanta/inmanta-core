@@ -1,88 +1,115 @@
 Install Inmanta
 ****************
-This page explain how to install the Inmanta orchestrator software and setup an orchestration server.
+This page explain how to install the Inmanta orchestrator software and setup an orchestration server. On any platform
+Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
-Install software
-################
-Inmanta requires python3 on your system. If you install it from source, python3 and pip need to be
-installed. If you install from package, your package manager installs python3 if not yet available
-on your system.
+.. tabs::
 
-Systems that run the compiler or agent may require to install python packages with pip. These packages are requirments
-of configuration modules. Some python packages, such as OpenStack clients have dependencies that require gcc and 
-python3-devel to be availabe as well. The pre-packaged rpms contain the correct dependencies. When Inmanta is installed from 
-source or pypi they need to be installed manually.
+    .. tab:: CentOS 7
 
-CentOS 7
----------
+        For CentOS use yum and install epel-release:
 
-For CentOS use yum and install epel-release:
+        .. code-block:: sh
 
-.. code-block:: sh
+          cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+          [inmanta-oss-stable]
+          name=Inmanta OSS stable
+          baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
+          gpgcheck=1
+          gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
+          repo_gpgcheck=1
+          enabled=1
+          enabled_metadata=1
+          EOF
 
-  cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
-  [inmanta-oss-stable]
-  name=Inmanta OSS stable
-  baseurl=https://pkg.inmanta.com/inmanta-oss-stable/el7/
-  gpgcheck=1
-  gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
-  repo_gpgcheck=1
-  enabled=1
-  enabled_metadata=1
-  EOF
+          sudo yum install -y epel-release
+          sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
 
-  sudo yum install -y epel-release
-  sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
+        The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config
+        files and systemd unit files. The dashboard is installed with the server package.
 
-The first package (python3-inmanta) contains all the code and the commands. The server and the agent
-packages install config files and systemd unit files. The dashboard is installed with the server
-package.
+    .. tab:: Fedora
 
+        For Fedora use dnf:
 
-Fedora CentOS 7
-----------------
+        .. code-block:: sh
 
-For Fedora use dnf:
+          cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
+          [inmanta-oss-stable]
+          name=Inmanta OSS stable
+          baseurl=https://pkg.inmanta.com/inmanta-oss-stable/f\$releasever/
+          gpgcheck=1
+          gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
+          repo_gpgcheck=1
+          enabled=1
+          enabled_metadata=1
+          EOF
+          sudo dnf install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
 
-.. code-block:: sh
-
-  cat > /etc/yum.repos.d/inmanta_oss_stable.repo <<EOF
-  [inmanta-oss-stable]
-  name=Inmanta OSS stable
-  baseurl=https://pkg.inmanta.com/inmanta-oss-stable/f\$releasever/
-  gpgcheck=1
-  gpgkey=https://pkg.inmanta.com/inmanta-oss-stable/inmanta-oss-stable-public-key
-  repo_gpgcheck=1
-  enabled=1
-  enabled_metadata=1
-  EOF
-  sudo dnf install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
-
-The first package (python3-inmanta) contains all the code and the commands. The server and the agent
-packages install config files and systemd unit files. The dashboard is installed with the server
-package.
+        The first package (python3-inmanta) contains all the code and the commands. The server and the agent
+        packages install config files and systemd unit files. The dashboard is installed with the server
+        package.
 
 
-With pip
----------
-Inmanta can be installed with pip.
+    .. tab:: Other Linux and Mac
 
-.. code-block:: sh
+        First make sure you have Python >= 3.6 and git. Inmanta requires many dependencies so it is recommended to create a virtual env.
+        Next install inmanta with pip install in the newly created virtual env.
 
-    pip install inmanta
+        .. code-block:: sh
+
+            # Install python3 >= 3.6 and git
+            sudo python3 -m venv /opt/inmanta
+            sudo /opt/inmanta/bin/pip install inmanta
+            sudo /opt/inmanta/bin/inmanta --help
 
 
-From source
-------------
+        The misc folder in the source distribution contains systemd service files for both the server and the agent. Also
+        install ``server.cfg`` from the misc folder in ``/etc/inmanta/server.cfg``
 
-Either checkout of the code or use the releases page: https://github.com/inmanta/inmanta/releases
+        If you want to use the dashboard you need to install it as well. Get the source from
+        `our github page <https://github.com/inmanta/inmanta-dashboard/releases>`_ Next, build and install the dashboard. For
+        this you need to have yarn and grunt:
 
-.. code-block:: sh
+        .. code-block:: sh
 
-    git clone https://github.com/inmanta/inmanta.git
-    cd inmanta
-    pip install -c requirements.txt .
+            tar xvfz inmanta-dashboard-20xx.x.x.tar.gz
+            cd inmanta-dashboard-20xx.x.x
+            yarn install
+            grunt dist
 
+        This creates a dist.tgz file in the current directory. Unpack this tarball in ``/opt/inmanta/dashboard`` and point
+        the server in ``/etc/inmanta/server.cfg`` to this location: change :inmanta.config:option:`dashboard.path` to
+        ``/opt/inmanta/dashboard``
+
+
+    .. tab:: Windows
+
+        On Windows only the compile and export commands are supported. This is useful in the :ref:`push-to-server` deployment mode of
+        inmanta. First make sure you have Python >= 3.6 and git. Inmanta requires many dependencies so it is recommended to create a virtual env.
+        Next install inmanta with pip install in the newly created virtual env.
+
+        .. code-block:: powershell
+
+            # Install python3 >= 3.6 and git
+            python3 -m venv C:\inmanta\env
+            C:\inmanta\env\Script\pip install inmanta
+            C:\inmanta\env\Script\inmanta --help
+
+
+    .. tab:: Source
+
+        Get the source either from our `release page on github <https://github.com/inmanta/inmanta/releases>`_ or from source
+        repo.
+
+        .. code-block:: sh
+
+            git clone https://github.com/inmanta/inmanta.git
+            cd inmanta
+            pip install -c requirements.txt .
+
+.. warning::
+    When you use Inmanta modules that depend on python libraries with native code, python headers and a working compiler is required as well.
 
 
 Configure server
@@ -137,8 +164,8 @@ ssh and if the remote agent is used.
     -rw-------. 1 inmanta inmanta 1679 Mar 21 13:55 /var/lib/inmanta/.ssh/id_rsa
 
 2. Configure ssh to accept all host keys or white list the hosts that are allowed or use signed host keys
-  (depends on your security requirements). This guide configures ssh client for the inmanta user to accept all host keys.
-  Create ``/var/lib/inmanta/.ssh/config`` and create the following content:
+   (depends on your security requirements). This guide configures ssh client for the inmanta user to accept all host keys.
+   Create ``/var/lib/inmanta/.ssh/config`` and create the following content:
 
   .. code-block:: text
 
@@ -153,7 +180,7 @@ ssh and if the remote agent is used.
     sudo chown inmanta:inmanta /var/lib/inmanta/.ssh/config
 
 3. Add the public key to any git repositories and save if to include in configuration models that require remote agents.
-4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store 
+4. Test if you can login into a machine that has the public key and make sure ssh does not show you any prompts to store
    the host key.
 
 
