@@ -22,7 +22,7 @@ from collections import defaultdict
 
 from urllib import parse
 from asyncio import Future, ensure_future
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, NoReturn, Generator  # noqa: F401
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator  # noqa: F401
 
 from inmanta import config as inmanta_config
 from inmanta import util
