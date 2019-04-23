@@ -39,8 +39,8 @@ packages install config files and systemd unit files. The dashboard is installed
 package.
 
 
-Fedora CentOS 7
-----------------
+Fedora
+------
 
 For Fedora use dnf:
 
@@ -63,14 +63,32 @@ packages install config files and systemd unit files. The dashboard is installed
 package.
 
 
-With pip
----------
-Inmanta can be installed with pip.
+Linux, Mac and Windows with pip install
+---------------------------------------
+Inmanta published new releases on `PyPI <https://pypi.org/project/inmanta/>`_. You can use the built-in python package manager
+pip to install Inmanta. This should work for all Linux operating systems with Python >= 3.6. The install also works on
+Windows: the compile and export functions. Server and agent is not support for now. Inmanta requires many dependencies so it
+is recommended to use a virtual env to install inmanta. Next to python, it requires git to be available as well.
 
 .. code-block:: sh
+    :caption: Install on Linux (and Mac)
 
-    pip install inmanta
+    # Install python3 >= 3.6 and git
+    python3 -m venv /opt/inmanta
+    /opt/inmanta/bin/pip install inmanta
+    /opt/inmanta/bin/inmanta --help
 
+
+For Windows the commands are similar, except only compile and export are support. This is useful in the :ref:`push-to-server`
+deployment mode of inmanta.
+
+.. code-block:: sh
+    :caption: Install on Windows
+
+    # Install python3 >= 3.6 and git
+    python3 -m venv C:\inmanta\env
+    C:\inmanta\env\Script\pip install inmanta
+    C:\inmanta\env\Script\inmanta --help
 
 From source
 ------------
