@@ -49,20 +49,6 @@ async def test_agent_disconnect(
     )
     i = log_index(
         caplog,
-        "inmanta.protocol.rest",
-        logging.ERROR,
-        "Failed to send request",
-        i
-    )
-    i = log_index(
-        caplog,
-        "inmanta.protocol.endpoints",
-        logging.WARNING,
-        "Heartbeat failed with status 500",
-        i,
-    )
-    i = log_index(
-        caplog,
         "inmanta.agent.agent",
         logging.WARNING,
         "Connection to server lost, taking agents offline",
