@@ -29,7 +29,7 @@ import sys, os
 extensions = ['sphinx.ext.autodoc', 'sphinx_autodoc_annotation',
               'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig',
               'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.inmanta.config',
-              'sphinxcontrib.inmanta.dsl']
+              'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
