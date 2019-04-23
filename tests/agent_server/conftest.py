@@ -73,9 +73,19 @@ def get_resource(version, key="key1", agent="agent1", value="value1"):
 
 
 def log_contains(caplog, loggerpart, level, msg):
+    close = []
     for logger_name, log_level, message in caplog.record_tuples:
-        if loggerpart in logger_name and level == log_level and msg in message:
-            return
+        if msg in message:
+            if loggerpart in logger_name and level == log_level:
+                return
+            else:
+                close.append((logger_name, log_level, message))
+    if close:
+        print("found nearly matching log entry")
+        for logger_name, log_level, message in close:
+            print(logger_name, log_level, message)
+        print("------------")
+
     assert False
 
 
@@ -89,9 +99,20 @@ def log_index(caplog, loggerpart, level, msg, after=0):
     """Find a log in line in the captured log, return the index of the first occurrence
 
        :param after: only consider records after the given index"""
+    close = []
     for i, (logger_name, log_level, message) in enumerate(caplog.record_tuples[after:]):
-        if loggerpart in logger_name and level == log_level and msg in message:
-            return i + after
+        if msg in message:
+            if loggerpart in logger_name and level == log_level:
+                return i + after
+            else:
+                close.append((logger_name, log_level, message))
+
+    if close:
+        print("found nearly matching")
+        for logger_name, log_level, message in close:
+            print(logger_name, log_level, message)
+        print("------------")
+
     assert False
 
 

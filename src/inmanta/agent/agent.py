@@ -576,17 +576,17 @@ class AgentInstance(object):
         if self.is_enabled():
             return 200, "already running"
 
-        self.logger.info("Agent assuming primary role")
+        self.logger.info("Agent assuming primary role for %s", self.name)
 
         self._enable_time_triggers()
         self._enabled = True
         return 200, "unpaused"
 
-    def pause(self):
+    def pause(self, reason="agent lost primary role"):
         if not self.is_enabled():
             return 200, "already paused"
 
-        self.logger.info("Agent lost primary role")
+        self.logger.info("Agent %s stopped due because %s", self.name, reason)
 
         self._disable_time_triggers()
         self._enabled = False
@@ -945,7 +945,7 @@ class Agent(SessionEndpoint):
             return self.pause(agent)
 
     @gen.coroutine
-    def on_reconnect(self):
+    def on_reconnect(self) -> NoneGen:
         for name in self._instances.keys():
             result = yield self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
             if result.code == 200:
@@ -956,6 +956,12 @@ class Agent(SessionEndpoint):
                     LOGGER.warning("Server reported invalid state %s" % (repr(state)))
             else:
                 LOGGER.warning("could not get state from the server")
+
+    @gen.coroutine
+    def on_disconnect(self) -> NoneGen:
+        LOGGER.warning("Connection to server lost, taking agents offline")
+        for agent_instance in self._instances.values():
+            agent_instance.pause("Connection to server lost")
 
     @gen.coroutine
     def get_latest_version(self):

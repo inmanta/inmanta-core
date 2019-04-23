@@ -21,7 +21,7 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Future
+from asyncio import Future, ensure_future
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, NoReturn, Generator  # noqa: F401
 
 from inmanta import config as inmanta_config
@@ -101,7 +101,7 @@ class Endpoint(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        ioloop.IOLoop.current().add_future(future, handle_result)
+        ioloop.IOLoop.current().add_future(ensure_future(future), handle_result)
 
     def get_end_point_names(self) -> List[str]:
         return self._end_point_names
@@ -188,6 +188,10 @@ class SessionEndpoint(Endpoint, CallTarget):
         pass
 
     @gen.coroutine
+    def on_disconnect(self) -> NoneGen:
+        pass
+
+    @gen.coroutine
     def perform_heartbeat(self) -> NoneGen:
         """
             Start a continuous heartbeat call
@@ -224,6 +228,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                     self.reconnect_delay,
                 )
                 connected = False
+                yield self.on_disconnect()
                 yield gen.sleep(self.reconnect_delay)
 
     def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:

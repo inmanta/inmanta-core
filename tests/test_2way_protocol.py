@@ -17,10 +17,8 @@
 """
 
 import logging
-import sys
 import uuid
 
-import colorlog
 from pytest import fixture
 
 from inmanta import data
@@ -81,9 +79,20 @@ class SessionSpy(SessionListener, ServerSlice):
 
 class Agent(protocol.SessionEndpoint):
 
+    def __init__(self, name: str, timeout: int = 120, reconnect_delay: int = 5):
+        super(Agent, self).__init__(name, timeout, reconnect_delay)
+        self.reconnect = 0
+        self.disconnect = 0
+
     @protocol.handle(get_agent_status_x)
     async def get_agent_status_x(self, id):
         return 200, {"status": "ok", "agents": self.end_point_names}
+
+    async def on_reconnect(self) -> None:
+        self.reconnect += 1
+
+    async def on_disconnect(self) -> None:
+        self.disconnect += 1
 
 
 async def get_environment(env: uuid.UUID, metadata: dict):
@@ -129,7 +138,6 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check):
     await agent.stop()
 
 
-
 def configure(unused_tcp_port):
 
     from inmanta.config import Config
@@ -154,19 +162,19 @@ async def check_sessions(sessions):
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio(timeout=30)
-async def test_agent_timeout(unused_tcp_port, no_tid_check):
+async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer):
     from inmanta.config import Config
 
     configure(unused_tcp_port)
 
     Config.set("server", "agent-timeout", "1")
 
-
     rs = Server()
     server = SessionSpy()
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
     rs.add_slice(server)
     await rs.start()
+    async_finalizer(rs.stop)
 
     env = uuid.uuid4()
 
@@ -175,6 +183,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check):
     agent.add_end_point_name("agent")
     agent.set_environment(env)
     await agent.start()
+    async_finalizer(agent.stop)
 
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
@@ -185,6 +194,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check):
     agent2.add_end_point_name("agent")
     agent2.set_environment(env)
     await agent2.start()
+    async_finalizer(agent2.stop)
 
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
@@ -206,15 +216,11 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check):
     print(server.get_sessions())
     await check_sessions(server.get_sessions())
     assert server.expires == 1
-    await agent.stop()
-    await server.stop()
-    await rs.stop()
-
 
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio(timeout=30)
-async def test_agent_timeout(unused_tcp_port, no_tid_check):
+async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer):
     from inmanta.config import Config
 
     configure(unused_tcp_port)
@@ -226,6 +232,7 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check):
     rs.get_slice(SLICE_SESSION_MANAGER).add_listener(server)
     rs.add_slice(server)
     await rs.start()
+    async_finalizer(rs.stop)
 
     env = uuid.uuid4()
 
@@ -234,38 +241,15 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check):
     agent.add_end_point_name("agent")
     agent.set_environment(env)
     await agent.start()
+    async_finalizer(agent.stop)
 
     # wait till up
     await retry_limited(lambda: len(server.get_sessions()) == 1, 0.1)
     assert len(server.get_sessions()) == 1
 
-    # agent 2
-    agent2 = Agent("agent")
-    agent2.add_end_point_name("agent")
-    agent2.set_environment(env)
-    await agent2.start()
-
-    # wait till up
-    await retry_limited(lambda: len(server.get_sessions()) == 2, 0.1)
-    assert len(server.get_sessions()) == 2
-
-    # see if it stays up
-    await check_sessions(server.get_sessions())
-    await sleep(2)
-    assert len(server.get_sessions()) == 2
-    await check_sessions(server.get_sessions())
-
-    # take it down
-    await agent2.stop()
-
-    # timout
-    await sleep(2)
-    # check if down
-    assert len(server.get_sessions()) == 1
-    print(server.get_sessions())
-    await check_sessions(server.get_sessions())
-    assert server.expires == 1
-    await agent.stop()
-    await server.stop()
     await rs.stop()
 
+    # timout
+    await sleep(1.1)
+
+    assert agent.disconnect == 1
