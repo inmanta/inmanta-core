@@ -1260,15 +1260,6 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(sql_query, *values)]
 
     @classmethod
-    def _get_select_star_statement(cls):
-        ra_table_name = cls.table_name()
-        rvid_table_name = ResourceVersionId.table_name()
-        return "SELECT " + \
-               ','.join(['r.' + x for x in cls._fields.keys() if x != "resource_version_ids"]) + ", i.resource_version_id" + \
-               " FROM " + ra_table_name + " r LEFT OUTER JOIN " + rvid_table_name + " i" + \
-               " ON (r.action_id = i.action_id)"
-
-    @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
         result = cls._create_dict(from_postgres, kwargs)
         new_messages = []
@@ -2049,8 +2040,7 @@ class ConfigurationModel(BaseDocument):
                         WHERE environment=$1 AND version=$2 AND
                               total=(SELECT COUNT(*)
                                      FROM Resource
-                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying'
-                                    )
+                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying')
                     )"""
         values = [cls._get_value(environment),
                   cls._get_value(version),
