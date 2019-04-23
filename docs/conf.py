@@ -26,7 +26,7 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx_autodoc_annotation',
+extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.todo', 'sphinx.ext.coverage', 'sphinx.ext.ifconfig',
               'sphinx.ext.viewcode', 'sphinxarg.ext', 'sphinxcontrib.inmanta.config',
               'sphinxcontrib.inmanta.dsl', 'sphinx_tabs.tabs']
