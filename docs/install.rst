@@ -59,9 +59,9 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
         .. code-block:: sh
 
             # Install python3 >= 3.6 and git
-            python3 -m venv /opt/inmanta
-            /opt/inmanta/bin/pip install inmanta
-            /opt/inmanta/bin/inmanta --help
+            sudo python3 -m venv /opt/inmanta
+            sudo /opt/inmanta/bin/pip install inmanta
+            sudo /opt/inmanta/bin/inmanta --help
 
 
         The misc folder in the source distribution contains systemd service files for both the server and the agent. Also
