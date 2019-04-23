@@ -566,7 +566,6 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def update_record(self, env, record_id, form):
         record = yield data.FormRecord.get_by_id(record_id)
-        form_def = yield data.Form.get_one(form_type=record.form)
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % record_id}
         if record.environment != env.id:
