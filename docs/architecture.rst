@@ -54,6 +54,8 @@ additional deploys until ctrl+c is used to terminate the command.
 The all in one deployment is ideal of testing, development and one-off deployments. State related to orchestration is stored
 locally in data/deploy.
 
+.. _push-to-server:
+
 Push to server
 **************
 
@@ -86,6 +88,7 @@ practice is to not add the .inmanta to the git repository. Because different dev
  * ``inmanta export`` compiles and uploads the current project to the orchestration server. Depending on the environment settings the server will release and deploy the model or it becomes available in the `new` state.
  * ``inmanta export -d`` compiles, uploads and releases the current project. The result will start deploying immediately.
 
+.. _autonomous-server:
 
 Autonomous server
 *****************
