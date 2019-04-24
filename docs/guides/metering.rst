@@ -37,7 +37,7 @@ Setup guide
 
     .. code-block:: sh
 
-        influx -precision rfc3339
+        influx
         CREATE DATABASE inmanta
 
 #. Update the inmanta config file, add the following block
