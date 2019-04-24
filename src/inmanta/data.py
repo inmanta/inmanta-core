@@ -1553,18 +1553,6 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_requires(cls, environment, version, resource_version_id):
-        """
-            Return all resource that have the given resource_version_id as requires
-        """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
-                " AND attributes @> $3::jsonb"
-        values.append(cls._get_value({"requires": [resource_version_id]}))
-        resources = await cls.select_query(query, values)
-        return resources
-
-    @classmethod
     async def get_resources_report(cls, environment):
         """
             This method generates a report of all resources in the database, with their latest version, if they are deleted
@@ -1959,12 +1947,6 @@ class ConfigurationModel(BaseDocument):
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
-        if self.undeployable is None:
-            # Fallback if not cached
-            resources = await Resource.get_undeployable(self.environment, self.version)
-            self.undeployable = [resource.resource_id for resource in resources]
-            await self.update_fields(undeployable=self.undeployable)
-
         return self.undeployable
 
     async def get_skipped_for_undeployable(self):
@@ -1972,26 +1954,6 @@ class ConfigurationModel(BaseDocument):
             Returns a list of resource ids (NOT resource version ids)
             of resources which should get a skipped_for_undeployable state
         """
-
-        if self.skipped_for_undeployable is None:
-            undeployable = await Resource.get_undeployable(self.environment, self.version)
-
-            work = list(undeployable)
-            skipped = set()
-
-            while len(work) > 0:
-                current = work.pop()
-                if current.resource_id in skipped:
-                    continue
-                skipped.add(current.resource_id)
-                others = await Resource.get_requires(self.environment, self.version, current.resource_version_id)
-                work.extend(others)
-
-            # get ids
-            undeployable = set([resource.resource_id for resource in undeployable])
-            self.skipped_for_undeployable = sorted(list(skipped - undeployable))
-
-            await self.update_fields(skipped_for_undeployable=self.skipped_for_undeployable)
         return self.skipped_for_undeployable
 
     async def mark_done(self):

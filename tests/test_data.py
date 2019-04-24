@@ -788,75 +788,6 @@ async def test_mark_done(init_dataclasses_and_load_schema, resource_state, versi
     assert cm.result == version_state
 
 
-@pytest.mark.asyncio
-async def test_undeployable_cache_lazy(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=5,
-                                  version_info={}, released=False, deployed=False)
-    await cm1.insert()
-    await populate_model(env.id, version)
-
-    assert cm1.undeployable is None
-
-    undep = await cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
-
-    assert cm1.undeployable is not None
-
-    undep = await cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
-
-    cm1 = await data.ConfigurationModel.get_version(env.id, version)
-
-    assert cm1.undeployable is not None
-
-    undep = await cm1.get_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % 3]
-
-
-@pytest.mark.asyncio
-async def test_undeployable_skip_cache_lazy(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = 2
-    cm1 = data.ConfigurationModel(environment=env.id,
-                                  version=version,
-                                  date=datetime.datetime.now(),
-                                  total=5,
-                                  version_info={},
-                                  released=False,
-                                  deployed=False)
-    await cm1.insert()
-    await populate_model(env.id, version)
-
-    assert cm1.skipped_for_undeployable is None
-
-    undep = await cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
-
-    assert cm1.skipped_for_undeployable is not None
-
-    undep = await cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
-
-    cm1 = await data.ConfigurationModel.get_version(env.id, version)
-
-    assert cm1.skipped_for_undeployable is not None
-
-    undep = await cm1.get_skipped_for_undeployable()
-    assert undep == ["std::File[agent1,path=/tmp/%d]" % 4, "std::File[agent1,path=/tmp/%d]" % 5]
-
-
 async def populate_model(env_id, version):
 
     def get_path(n):
@@ -1322,34 +1253,6 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30)
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
-
-
-@pytest.mark.asyncio
-async def test_resource_get_requires(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    await cm1.insert()
-
-    res1 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%d" % version,
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd"})
-    await res1.insert()
-    res2 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=%d" % version,
-                             status=const.ResourceState.deployed,
-                             attributes={"path": "/etc/motd", "requires": [res1.resource_version_id]})
-    await res2.insert()
-
-    assert (await data.Resource.get_requires(env.id, 1, res2.resource_version_id)) == []
-    resources = await data.Resource.get_requires(env.id, 1, res1.resource_version_id)
-    assert len(resources) == 1
-    assert (resources[0].environment, resources[0].resource_version_id) == (res2.environment, res2.resource_version_id)
 
 
 @pytest.mark.asyncio
