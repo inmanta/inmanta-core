@@ -1567,19 +1567,8 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resources_report(cls, environment):
         """
-            This method generates a report of all resources in the database, with their latest version, if they are deleted
-            and when they are last deployed.
-                    return {"id": self.resource_id,
-                "id_fields": {"type": self.resource_type,
-                              "agent": self.agent,
-                              "attribute": self.attribute_name,
-                              "value": self.attribute_value,
-                              },
-                "latest_version": self.version_latest,
-                "deployed_version": self.version_deployed,
-                "last_deploy": self.last_deploy,
-                "holds_state": self.holds_state,
-                }
+            This method generates a report of all resources in the given environment,
+            with their latest version and when they are last deployed.
         """
         query_resource_ids = f"""
                 SELECT DISTINCT resource_id
@@ -1605,7 +1594,7 @@ class Resource(BaseDocument):
         """
         query = f"""
                 SELECT r1.resource_id, r2.latest_version, r2.latest_agent, r3.deployed_version, r3.last_deploy
-                FROM ({query_resource_ids}) AS r1 INNER JOIN LATERAL ({query_latest_version}) AS r2 
+                FROM ({query_resource_ids}) AS r1 INNER JOIN LATERAL ({query_latest_version}) AS r2
                       ON (r1.resource_id = r2.resource_id)
                       LEFT OUTER JOIN LATERAL ({query_latest_deployed_version}) AS r3
                       ON (r1.resource_id = r3.resource_id)
