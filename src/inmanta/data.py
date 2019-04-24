@@ -1555,50 +1555,51 @@ class Resource(BaseDocument):
     @classmethod
     async def get_resources_report(cls, environment):
         """
-            This method generates a report of all resources in the database, with their latest version, if they are deleted
-            and when they are last deployed.
-                    return {"id": self.resource_id,
-                "id_fields": {"type": self.resource_type,
-                              "agent": self.agent,
-                              "attribute": self.attribute_name,
-                              "value": self.attribute_value,
-                              },
-                "latest_version": self.version_latest,
-                "deployed_version": self.version_deployed,
-                "last_deploy": self.last_deploy,
-                "holds_state": self.holds_state,
-                }
+            This method generates a report of all resources in the given environment,
+            with their latest version and when they are last deployed.
         """
-
-        (filter_statement, values) = cls._get_composed_filter(environment=environment)
-        query = "SELECT DISTINCT resource_id FROM " + cls.table_name() + " WHERE " + filter_statement
+        query_resource_ids = f"""
+                SELECT DISTINCT resource_id
+                FROM {Resource.table_name()}
+                WHERE environment=$1
+        """
+        query_latest_version = f"""
+                SELECT resource_id, model AS latest_version, agent AS latest_agent
+                FROM {Resource.table_name()}
+                WHERE environment=$1 AND
+                      resource_id=r1.resource_id
+                ORDER BY model DESC
+                LIMIT 1
+        """
+        query_latest_deployed_version = f"""
+                SELECT resource_id, model AS deployed_version, last_deploy AS last_deploy
+                FROM {Resource.table_name()}
+                WHERE environment=$1 AND
+                      resource_id=r1.resource_id AND
+                      status != $2
+                ORDER BY model DESC
+                LIMIT 1
+        """
+        query = f"""
+                SELECT r1.resource_id, r2.latest_version, r2.latest_agent, r3.deployed_version, r3.last_deploy
+                FROM ({query_resource_ids}) AS r1 INNER JOIN LATERAL ({query_latest_version}) AS r2
+                      ON (r1.resource_id = r2.resource_id)
+                      LEFT OUTER JOIN LATERAL ({query_latest_deployed_version}) AS r3
+                      ON (r1.resource_id = r3.resource_id)
+        """
+        values = [cls._get_value(environment), cls._get_value(const.ResourceState.available)]
         result = []
         async with cls._connection_pool.acquire() as con:
             async with con.transaction():
                 async for record in con.cursor(query, *values):
                     resource_id = record["resource_id"]
-                    latest = (await cls.get_list(order_by_column="model", order="DESC", limit=1,
-                                                 environment=environment, resource_id=resource_id, no_obj=True))[0]
-                    if latest["status"] == const.ResourceState.available.name:
-                        (filter_statement, values) = cls._get_composed_filter(environment=environment, resource_id=resource_id)
-                        query = "SELECT * FROM " + cls.table_name() + \
-                                " WHERE " + filter_statement + \
-                                " AND status != $" + str(len(values) + 1) + \
-                                " ORDER BY model DESC LIMIT 1"
-                        values.append(cls._get_value(const.ResourceState.available))
-                        deployed = (await cls._fetch_query(query, *values))
-                        deployed = deployed[0] if deployed else {}
-                    else:
-                        deployed = latest
-
                     parsed_id = Id.parse_id(resource_id)
                     result.append({"resource_id": resource_id,
                                    "resource_type": parsed_id.entity_type,
-                                   "agent": latest["agent"],
-                                   "latest_version": latest["model"],
-                                   "deployed_version": deployed["model"] if "last_deploy" in deployed else None,
-                                   "last_deploy": deployed["last_deploy"] if "last_deploy" in deployed else None})
-
+                                   "agent": record["latest_agent"],
+                                   "latest_version": record["latest_version"],
+                                   "deployed_version": record["deployed_version"] if "deployed_version" in record else None,
+                                   "last_deploy": record["last_deploy"] if "last_deploy" in record else None})
         return result
 
     @classmethod
