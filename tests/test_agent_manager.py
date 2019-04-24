@@ -216,7 +216,7 @@ async def test_api(init_dataclasses_and_load_schema):
                                [{'id': UNKWN, 'name': 'agentx', 'process': UNKWN}],
                                'environment': env3.id}]}
 
-    assert_equal_ish(shouldbe, all_agents, ['hostname', 'name'])
+    assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
     agentid = all_agents['processes'][0]['sid']
 
     code, all_agents = await am.list_agent_processes(env.id, None)
@@ -229,11 +229,11 @@ async def test_api(init_dataclasses_and_load_schema):
                                'environment': env.id},
                               {'first_seen': UNKWN, 'expired': None, 'hostname': 'ts2',
                                'last_seen': UNKWN, 'endpoints':
-                               [{'id': UNKWN, 'name': 'agent3', 'process': UNKWN},
-                                {'id': UNKWN, 'name': 'agent2', 'process': UNKWN}],
+                               [{'id': UNKWN, 'name': 'agent2', 'process': UNKWN},
+                                {'id': UNKWN, 'name': 'agent3', 'process': UNKWN}],
                                'environment': env.id}]}
 
-    assert_equal_ish(shouldbe, all_agents)
+    assert_equal_ish(shouldbe, all_agents, sortby=["hostname", "name"])
 
     code, all_agents = await am.list_agent_processes(env2.id, None)
     assert code == 200
@@ -262,7 +262,7 @@ async def test_api(init_dataclasses_and_load_schema):
                                'primary': UNKWN, 'environment': env.id, "state": "up"},
                            {'name': 'agent4', 'paused': False, 'last_failover': '', 'primary': '',
                             'environment': env2.id, "state": "down"}]}
-    assert_equal_ish(shouldbe, all_agents, ['name'])
+    assert_equal_ish(shouldbe, all_agents, sortby=["name"])
 
     code, all_agents = await am.list_agents(env2)
     assert code == 200
