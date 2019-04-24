@@ -900,9 +900,16 @@ class AgentProcess(BaseDocument):
     @classmethod
     async def get_live(cls, environment=None):
         if environment is not None:
-            result = await cls.get_list(limit=DBLIMIT, expired=None, environment=environment)
+            result = await cls.get_list(limit=DBLIMIT,
+                                        environment=environment,
+                                        expired=None,
+                                        order_by_column="last_seen",
+                                        order="ASC NULLS LAST")
         else:
-            result = await cls.get_list(limit=DBLIMIT, expired=None)
+            result = await cls.get_list(limit=DBLIMIT,
+                                        expired=None,
+                                        order_by_column="last_seen",
+                                        order="ASC NULLS LAST")
         return result
 
     @classmethod
@@ -912,7 +919,9 @@ class AgentProcess(BaseDocument):
 
     @classmethod
     async def get_by_env(cls, env):
-        nodes = await cls.get_list(environment=env)
+        nodes = await cls.get_list(environment=env,
+                                   order_by_column="last_seen",
+                                   order="ASC NULLS LAST")
         return nodes
 
     @classmethod
@@ -1251,15 +1260,6 @@ class ResourceAction(BaseDocument):
                 return [cls(**dict(record), from_postgres=True) async for record in con.cursor(sql_query, *values)]
 
     @classmethod
-    def _get_select_star_statement(cls):
-        ra_table_name = cls.table_name()
-        rvid_table_name = ResourceVersionId.table_name()
-        return "SELECT " + \
-               ','.join(['r.' + x for x in cls._fields.keys() if x != "resource_version_ids"]) + ", i.resource_version_id" + \
-               " FROM " + ra_table_name + " r LEFT OUTER JOIN " + rvid_table_name + " i" + \
-               " ON (r.action_id = i.action_id)"
-
-    @classmethod
     def _create_dict_wrapper(cls, from_postgres, kwargs):
         result = cls._create_dict(from_postgres, kwargs)
         new_messages = []
@@ -1553,18 +1553,6 @@ class Resource(BaseDocument):
         return resources
 
     @classmethod
-    async def get_requires(cls, environment, version, resource_version_id):
-        """
-            Return all resource that have the given resource_version_id as requires
-        """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT * FROM " + cls.table_name() + " WHERE " + filter_statement + \
-                " AND attributes @> $3::jsonb"
-        values.append(cls._get_value({"requires": [resource_version_id]}))
-        resources = await cls.select_query(query, values)
-        return resources
-
-    @classmethod
     async def get_resources_report(cls, environment):
         """
             This method generates a report of all resources in the database, with their latest version, if they are deleted
@@ -1672,17 +1660,6 @@ class Resource(BaseDocument):
         """
         value = await cls.get_one(environment=environment, resource_version_id=resource_version_id)
         return value
-
-    @classmethod
-    async def get_with_state(cls, environment, version):
-        """
-            Get all resources from the given version that have "state_id" defined
-        """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT * FROM " + cls.table_name() + " WHERE " + \
-                filter_statement + " AND attributes::jsonb ? 'state_id'"
-        resources = await cls.select_query(query, values)
-        return resources
 
     @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
@@ -1970,12 +1947,6 @@ class ConfigurationModel(BaseDocument):
         """
             Returns a list of resource ids (NOT resource version ids) of resources with an undeployable state
         """
-        if self.undeployable is None:
-            # Fallback if not cached
-            resources = await Resource.get_undeployable(self.environment, self.version)
-            self.undeployable = [resource.resource_id for resource in resources]
-            await self.update_fields(undeployable=self.undeployable)
-
         return self.undeployable
 
     async def get_skipped_for_undeployable(self):
@@ -1983,26 +1954,6 @@ class ConfigurationModel(BaseDocument):
             Returns a list of resource ids (NOT resource version ids)
             of resources which should get a skipped_for_undeployable state
         """
-
-        if self.skipped_for_undeployable is None:
-            undeployable = await Resource.get_undeployable(self.environment, self.version)
-
-            work = list(undeployable)
-            skipped = set()
-
-            while len(work) > 0:
-                current = work.pop()
-                if current.resource_id in skipped:
-                    continue
-                skipped.add(current.resource_id)
-                others = await Resource.get_requires(self.environment, self.version, current.resource_version_id)
-                work.extend(others)
-
-            # get ids
-            undeployable = set([resource.resource_id for resource in undeployable])
-            self.skipped_for_undeployable = sorted(list(skipped - undeployable))
-
-            await self.update_fields(skipped_for_undeployable=self.skipped_for_undeployable)
         return self.skipped_for_undeployable
 
     async def mark_done(self):
@@ -2040,8 +1991,7 @@ class ConfigurationModel(BaseDocument):
                         WHERE environment=$1 AND version=$2 AND
                               total=(SELECT COUNT(*)
                                      FROM Resource
-                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying'
-                                    )
+                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying')
                     )"""
         values = [cls._get_value(environment),
                   cls._get_value(version),

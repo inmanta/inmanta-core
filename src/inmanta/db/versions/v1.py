@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS public.environment (
     settings JSONB DEFAULT '{}'
 );
 
-CREATE UNIQUE INDEX environment_name_project_index ON environment (name, project);
+CREATE UNIQUE INDEX environment_name_project_index ON environment (project, name);
 
 -- Table: public.configurationmodels
 CREATE TABLE IF NOT EXISTS public.configurationmodel (
@@ -37,10 +37,19 @@ CREATE TABLE IF NOT EXISTS public.configurationmodel (
     total integer DEFAULT 0,
     undeployable varchar[],
     skipped_for_undeployable varchar[],
-    PRIMARY KEY(version, environment)
+    PRIMARY KEY(environment, version)
 );
 
-CREATE UNIQUE INDEX configurationmodel_env_version_index ON configurationmodel (environment, version);
+-- Used in:
+--      * data.mark_done_if_done()
+-- => This query is exected frequently
+CREATE UNIQUE INDEX configurationmodel_env_version_total_index ON configurationmodel (environment, version DESC, total);
+-- Used in:
+--      * data.get_latest_version()
+--      * data.get_version_nr_latest_version()
+--      * data.get_increment()
+-- => Prevent sort operation on column version
+CREATE UNIQUE INDEX configurationmodel_env_released_version_index ON configurationmodel (environment, released, version DESC);
 
 -- Table: public.resources
 CREATE TABLE IF NOT EXISTS public.resource (
@@ -58,9 +67,25 @@ CREATE TABLE IF NOT EXISTS public.resource (
     FOREIGN KEY (environment, model) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
+-- Used in:
+--   * data. get_resources_for_attribute_hash()
+CREATE INDEX resource_env_attr_hash_index ON resource (environment, attribute_hash);
+-- Used in:
+--      * data.get_resources_for_version()
+--      * data.get_deleted_resources()
+-- => Prevent sequential scan through all resources
 CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
-CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model);
-CREATE UNIQUE INDEX resource_env_resourceversionid_index ON resource (environment, resource_version_id);
+-- Used in:
+--      * data.get_resources_report()
+--      * data.get_latest_version()
+--      * data.get_deleted_resources()
+-- => Prevent sequential scan through all resources
+-- => Prevent sort operation on column model
+CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model DESC);
+-- Used in:
+--      * data.get_deleted_resources()
+-- => Prevent costly search through jsonb structures
+CREATE INDEX resource_attributes_index ON resource USING gin (attributes jsonb_path_ops);
 
 -- Table: public.resourceaction
 CREATE TABLE IF NOT EXISTS public.resourceaction (
@@ -75,7 +100,14 @@ CREATE TABLE IF NOT EXISTS public.resourceaction (
     send_event boolean
 );
 
-CREATE INDEX resourceaction_action_id_started_index ON resourceaction (action_id, started DESC);
+-- Used in:
+--      * data.get_log()
+-- => Prevent sort operation on column started
+CREATE UNIQUE INDEX resourceaction_action_id_started_index ON resourceaction (action_id, started DESC);
+-- Used in:
+--      * data.purge_logs()
+-- => Prevent sequential scan through all resource actions
+CREATE INDEX resourceaction_started_index ON resourceaction (started);
 
 -- Table: public.resourceversionid
 -- TODO: FK CONSTRAINT???
@@ -86,9 +118,16 @@ CREATE TABLE IF NOT EXISTS public.resourceversionid (
     PRIMARY KEY(environment, action_id, resource_version_id)
 );
 
-CREATE INDEX resourceversionid_environment_resource_version_id ON resourceversionid (environment, resource_version_id);
-CREATE INDEX resourceversionid_action_id ON resourceversionid (action_id);
-
+-- Used in:
+--      * data.ResourceAction.get_log()
+-- => Prevent sequential scan through all resourceversionids in a certain environment
+CREATE INDEX resourceversionid_environment_resource_version_id_index ON resourceversionid (environment, resource_version_id);
+-- Used in:
+--      * data.ResourceAction.get_by_id()
+--      * data.ResourceAction.get_list
+--      * data.ResourceAction.get_log()
+-- => Prevent sequential scan through all resourceversionids
+CREATE INDEX resourceversionid_action_id_index ON resourceversionid (action_id);
 
 -- Table: public.code
 -- There is no foreign key constraint from code to configurationmodel, since the code is uploaded
@@ -99,10 +138,8 @@ CREATE TABLE IF NOT EXISTS public.code (
     resource varchar NOT NULL,
     version integer NOT NULL,
     source_refs JSONB,
-    PRIMARY KEY(environment, resource, version)
+    PRIMARY KEY(environment, version, resource)
 );
-
-CREATE INDEX code_env_version_resource_index ON code (environment, version, resource);
 
 -- Table: public.unknownparameter
 CREATE TABLE IF NOT EXISTS public.unknownparameter (
@@ -117,7 +154,12 @@ CREATE TABLE IF NOT EXISTS public.unknownparameter (
     FOREIGN KEY (environment, version) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
+-- Used in:
+--      * server.get_version()
 CREATE INDEX unknownparameter_env_version_index ON unknownparameter (environment, version);
+-- Used in:
+--      * server.renew_expired_facts()
+CREATE INDEX unknownparameter_resolved_index ON unknownparameter (resolved);
 
 -- Table: public.agentprocess
 CREATE TABLE IF NOT EXISTS public.agentprocess (
@@ -129,6 +171,16 @@ CREATE TABLE IF NOT EXISTS public.agentprocess (
     sid uuid NOT NULL PRIMARY KEY
 );
 
+-- Used in:
+--      * data.get_live()
+--      * data.get_live_by_env()
+--      * data.get_by_env()
+-- => Speed up search for records which have expired set to NULL
+CREATE UNIQUE INDEX agentprocess_sid_expired_index ON agentprocess (sid, expired);
+-- Used in:
+--      * data.get_by_sid()
+-- => Prevent sequential scan through all agentprocesses
+CREATE INDEX agentprocess_env_expired_index ON agentprocess (environment, expired);
 
 -- Table: public.agentinstance
 CREATE TABLE IF NOT EXISTS public.agentinstance (
@@ -140,18 +192,25 @@ CREATE TABLE IF NOT EXISTS public.agentinstance (
     tid uuid NOT NULL
 );
 
+-- Used in:
+--      * data.active_for()
+-- => Prevent sequential scan through all agentinstances
+CREATE INDEX agentinstance_expired_tid_endpoint_index ON agentinstance (tid, name, expired);
+-- Used in:
+--      * expire_session()
+-- => Prevent sequential scan through all agentinstances
+CREATE INDEX agentinstance_process_index ON agentinstance (process);
+
 -- Table: public.agent
 CREATE TABLE IF NOT EXISTS public.agent (
     environment uuid NOT NULL REFERENCES environment(id) ON DELETE CASCADE,
     name varchar NOT NULL,
     last_failover timestamp,
     paused boolean DEFAULT false,
--- primary is a reserved keyword in postgresql ==> hange to id_primary
+-- primary is a reserved keyword in postgresql ==> change to id_primary
     id_primary uuid REFERENCES agentinstance(id) ON DELETE CASCADE,
     PRIMARY KEY(environment, name)
 );
-
-CREATE UNIQUE INDEX agent_env_name_index ON agent (environment, name);
 
 -- Table: public.parameter
 CREATE TABLE IF NOT EXISTS public.parameter (
@@ -164,6 +223,22 @@ CREATE TABLE IF NOT EXISTS public.parameter (
     updated timestamp,
     metadata JSONB
 );
+
+-- Used in:
+--      * data.get_updated_before()
+-- => Prevent sequential scan through all parameters
+CREATE INDEX parameter_updated_index ON parameter (updated);
+-- Used in:
+--      * data.list_parameters()
+--      * server.get_param()
+--      * server.resource_action_update()
+--      * server.set_param()
+-- => Prevent sequential scan through all parameters
+CREATE INDEX parameter_env_name_resource_id_index ON parameter (environment, name, resource_id);
+-- Used in:
+--      * data.list_parameters()
+-- => Prevent costly search through jsonb structures
+CREATE INDEX parameter_metadata_index ON parameter USING gin (metadata jsonb_path_ops);
 
 -- Table: public.form
 CREATE TABLE IF NOT EXISTS public.form (
@@ -186,6 +261,11 @@ CREATE TABLE IF NOT EXISTS public.formrecord(
     FOREIGN KEY (form) REFERENCES form(form_type) ON DELETE CASCADE
 );
 
+-- Used in:
+--      * server.list_records()
+-- => Prevent sequential scan through all formrecords
+CREATE INDEX formrecord_form_index ON formrecord (form);
+
 -- Table: public.compile
 CREATE TABLE IF NOT EXISTS public.compile(
     id uuid PRIMARY KEY,
@@ -194,7 +274,10 @@ CREATE TABLE IF NOT EXISTS public.compile(
     completed timestamp
 );
 
-CREATE INDEX compile_env_started ON compile (environment, started DESC);
+-- Used in:
+--      * data.get_reports()
+-- => Prevent sort operation on started
+CREATE INDEX compile_env_started_index ON compile (environment, started DESC);
 
 -- Table: public.report
 CREATE TABLE IF NOT EXISTS public.report(
@@ -209,7 +292,10 @@ CREATE TABLE IF NOT EXISTS public.report(
     compile uuid NOT NULL REFERENCES compile(id) ON DELETE CASCADE
 );
 
-CREATE INDEX report_compile ON report (compile);
+-- Used in:
+--      * data.get_report()
+-- => Prevent sequential scan through all reports
+CREATE INDEX report_compile_index ON report (compile);
 
 -- Table: public.dryrun
 CREATE TABLE IF NOT EXISTS public.dryrun(
@@ -223,7 +309,10 @@ CREATE TABLE IF NOT EXISTS public.dryrun(
     FOREIGN KEY (environment, model) REFERENCES configurationmodel (environment, version) ON DELETE CASCADE
 );
 
-CREATE INDEX dryrun_env_model ON dryrun (environment, model DESC);
+-- Used in:
+--      * server.dryrun_list()
+-- => Prevent sequential scan through all dryruns
+CREATE INDEX dryrun_env_model_index ON dryrun (environment, model);
 
 -- Table: public.schemaversion
 CREATE TABLE IF NOT EXISTS public.schemaversion(

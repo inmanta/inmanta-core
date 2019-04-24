@@ -4875,26 +4875,6 @@ async def test_1016_cache_invalidation(
 async def test_agent_lockout(resource_container, environment, server, client):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
-    agent = Agent(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
-
-    agent2 = Agent(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
-    agent2.add_end_point_name("agent1")
-    await agent2.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
-
     version = int(time.time())
 
     resource = {
@@ -4917,6 +4897,26 @@ async def test_agent_lockout(resource_container, environment, server, client):
 
     result = await client.release_version(environment, version, False)
     assert result.code == 200
+
+    agent = Agent(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost"},
+        code_loader=False,
+    )
+    agent.add_end_point_name("agent1")
+    await agent.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
+
+    agent2 = Agent(
+        hostname="node1",
+        environment=environment,
+        agent_map={"agent1": "localhost"},
+        code_loader=False,
+    )
+    agent2.add_end_point_name("agent1")
+    await agent2.start()
+    await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
 
     assert agent._instances["agent1"].is_enabled()
     assert not agent2._instances["agent1"].is_enabled()
