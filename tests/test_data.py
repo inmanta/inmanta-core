@@ -1353,63 +1353,6 @@ async def test_resource_get_requires(init_dataclasses_and_load_schema):
 
 
 @pytest.mark.asyncio
-async def test_resource_get_with_state(init_dataclasses_and_load_schema):
-    project = data.Project(name="test")
-    await project.insert()
-
-    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
-    await env.insert()
-
-    # model 1
-    version = 1
-    cm1 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    await cm1.insert()
-
-    res11 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
-                              attributes={"path": "/etc/file1", "state_id": "test11"})
-    await res11.insert()
-    res12 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file2],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-                              attributes={"path": "/etc/file1"})
-    await res12.insert()
-    res13 = data.Resource.new(environment=env.id,
-                              resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime(2018, 7, 14, 12, 30),
-                              attributes={"path": "/etc/file1", "state_id": "test13"})
-    await res13.insert()
-    version += 1
-    cm2 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    await cm2.insert()
-
-    res21 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
-                              attributes={"path": "/etc/file1", "state_id": "test"})
-    await res21.insert()
-    version += 1
-    cm3 = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
-                                  version_info={}, released=True, deployed=True)
-    await cm3.insert()
-
-    res31 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
-                              status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
-                              attributes={"path": "/etc/file1"})
-    await res31.insert()
-
-    resources = await data.Resource.get_with_state(env.id, 1)
-    assert len(resources) == 2
-    assert sorted([(r.environment, r.resource_version_id) for r in [res11, res13]]) == \
-        sorted([(r.environment, r.resource_version_id) for r in resources])
-    resources = await data.Resource.get_with_state(env.id, 2)
-    assert len(resources) == 1
-    assert (res21.environment, res21.resource_version_id) == (resources[0].environment, resources[0].resource_version_id)
-    resources = await data.Resource.get_with_state(env.id, 3)
-    assert len(resources) == 0
-
-
-@pytest.mark.asyncio
 async def test_resources_delete_cascade(init_dataclasses_and_load_schema):
     project = data.Project(name="test")
     await project.insert()

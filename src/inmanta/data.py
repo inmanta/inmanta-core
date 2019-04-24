@@ -1674,17 +1674,6 @@ class Resource(BaseDocument):
         return value
 
     @classmethod
-    async def get_with_state(cls, environment, version):
-        """
-            Get all resources from the given version that have "state_id" defined
-        """
-        (filter_statement, values) = cls._get_composed_filter(environment=environment, model=version)
-        query = "SELECT * FROM " + cls.table_name() + " WHERE " + \
-                filter_statement + " AND attributes::jsonb ? 'state_id'"
-        resources = await cls.select_query(query, values)
-        return resources
-
-    @classmethod
     def new(cls, environment, resource_version_id, **kwargs):
         vid = Id.parse_id(resource_version_id)
 

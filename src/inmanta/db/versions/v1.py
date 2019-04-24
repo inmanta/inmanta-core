@@ -73,7 +73,6 @@ CREATE INDEX resource_env_attr_hash_index ON resource (environment, attribute_ha
 -- Used in:
 --      * data.get_requires()
 --      * data.get_resources_for_version()
---      * data.get_with_state()
 --      * data.get_deleted_resources()
 -- => Prevent sequential scan through all resources
 CREATE INDEX resource_env_model_agent_index ON resource (environment, model, agent);
@@ -86,7 +85,6 @@ CREATE INDEX resource_env_model_agent_index ON resource (environment, model, age
 CREATE INDEX resource_env_resourceid_index ON resource (environment, resource_id, model DESC);
 -- Used in:
 --      * data.get_requires()
---      * data.get_with_state()
 --      * data.get_deleted_resources()
 -- => Prevent costly search through jsonb structures
 CREATE INDEX resource_attributes_index ON resource USING gin (attributes jsonb_path_ops);
