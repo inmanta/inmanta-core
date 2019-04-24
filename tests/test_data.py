@@ -1289,6 +1289,10 @@ async def test_resources_report(init_dataclasses_and_load_schema):
                               status=const.ResourceState.available,
                               attributes={"path": "/etc/file1"})
     await res21.insert()
+    res22 = data.Resource.new(environment=env.id, resource_version_id="std::File[agent1,path=/etc/file3],v=%s" % version,
+                              status=const.ResourceState.available,
+                              attributes={"path": "/etc/file3"})
+    await res22.insert()
 
     # model 3
     version += 1
@@ -1302,10 +1306,10 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     await res31.insert()
 
     report = await data.Resource.get_resources_report(env.id)
-    assert len(report) == 2
+    assert len(report) == 3
     report_as_map = {x["resource_id"]: x for x in report}
-    assert "std::File[agent1,path=/etc/file1]" in report_as_map
-    assert "std::File[agent1,path=/etc/file2]" in report_as_map
+    for i in range(1, 4):
+        assert f"std::File[agent1,path=/etc/file{i}]" in report_as_map
 
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["deployed_version"] == 1
@@ -1313,11 +1317,17 @@ async def test_resources_report(init_dataclasses_and_load_schema):
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 12, 30)
     assert report_as_map["std::File[agent1,path=/etc/file1]"]["agent"] == "agent1"
 
-    assert report_as_map["std::File[agent1,path=/etc/file1]"]["resource_type"] == "std::File"
+    assert report_as_map["std::File[agent1,path=/etc/file2]"]["resource_type"] == "std::File"
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["deployed_version"] == 3
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["latest_version"] == 3
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["last_deploy"] == datetime.datetime(2018, 7, 14, 14, 30)
     assert report_as_map["std::File[agent1,path=/etc/file2]"]["agent"] == "agent1"
+
+    assert report_as_map["std::File[agent1,path=/etc/file3]"]["resource_type"] == "std::File"
+    assert report_as_map["std::File[agent1,path=/etc/file3]"]["deployed_version"] is None
+    assert report_as_map["std::File[agent1,path=/etc/file3]"]["latest_version"] == 2
+    assert report_as_map["std::File[agent1,path=/etc/file3]"]["last_deploy"] is None
+    assert report_as_map["std::File[agent1,path=/etc/file3]"]["agent"] == "agent1"
 
 
 @pytest.mark.asyncio
