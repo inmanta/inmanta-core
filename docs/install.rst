@@ -209,3 +209,9 @@ Step 7: Connect to the dashboard
 --------------------------------
 
 The server dashboard is now available on port '8888'
+
+Optional Step 8: Setup influxdb for collection of performance metrics
+---------------------------------------------------------------------
+
+Follow the instructions in :ref:`metering-setup` to send performance metrics to influxdb.
+This is only recommended for production deployments.
