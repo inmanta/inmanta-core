@@ -123,6 +123,7 @@ Optional step 1: Setup SSL and authentication
 Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication. It is not mandatory but still highly
 recommended.
 
+.. _install-step-2:
 
 Step 2: Install PostgreSQL 10
 -----------------------------
@@ -130,6 +131,8 @@ Step 2: Install PostgreSQL 10
 PostgreSQL 10 can be installed by following the `installation guide <https://www.postgresql.org/download/>`_ for your
 platform.
 
+
+.. _install-step-3:
 
 Step 3: Setup a PostgreSQL database for the Inmanta server
 ----------------------------------------------------------
@@ -169,6 +172,7 @@ Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` f
 
    sudo systemctl restart postgresql-10
 
+.. _install-step-4:
 
 Step 4: Set the database connection details
 -------------------------------------------
