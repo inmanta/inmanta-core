@@ -168,8 +168,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         else:
             self._env_id = environment_id
 
-    @gen.coroutine
-    def start(self) -> NoneGen:
+    async def start(self) -> NoneGen:
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
@@ -178,21 +177,17 @@ class SessionEndpoint(Endpoint, CallTarget):
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
         ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> NoneGen:
         self._sched.stop()
         self.running = False
 
-    @gen.coroutine
-    def on_reconnect(self) -> NoneGen:
+    async def on_reconnect(self) -> NoneGen:
         pass
 
-    @gen.coroutine
-    def on_disconnect(self) -> NoneGen:
+    async def on_disconnect(self) -> NoneGen:
         pass
 
-    @gen.coroutine
-    def perform_heartbeat(self) -> NoneGen:
+    async def perform_heartbeat(self) -> NoneGen:
         """
             Start a continuous heartbeat call
         """
@@ -202,7 +197,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         connected: bool = False
         while self.running:
             LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-            result = yield self._client.heartbeat(
+            result = await self._client.heartbeat(
                 sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
             )
             LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
@@ -228,8 +223,8 @@ class SessionEndpoint(Endpoint, CallTarget):
                     self.reconnect_delay,
                 )
                 connected = False
-                yield self.on_disconnect()
-                yield gen.sleep(self.reconnect_delay)
+                await self.on_disconnect()
+                await gen.sleep(self.reconnect_delay)
 
     def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
         if self._client is None:
@@ -257,9 +252,11 @@ class SessionEndpoint(Endpoint, CallTarget):
                 body[key] = [v.decode("latin-1") for v in value]
 
         # FIXME: why create a new transport instance on each call? keep-alive?
-        call_result: common.Response = transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
+        call_result: common.Response = transport._execute_call(
+            kwargs, method_call.method, config, body, method_call.headers
+        )
 
-        def submit_result(future: Future) -> None:
+        async def submit_result(future: Future) -> None:
             if future is None:
                 return
 
@@ -279,11 +276,11 @@ class SessionEndpoint(Endpoint, CallTarget):
             if self._client is None:
                 raise Exception("AgentEndpoint not started")
 
-            self._client.heartbeat_reply(
+            await self._client.heartbeat_reply(
                 self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
             )
 
-        ioloop.IOLoop.current().add_future(call_result, submit_result)
+        ioloop.IOLoop.current().add_future(ensure_future(call_result), submit_result)
 
 
 class Client(Endpoint):
@@ -297,12 +294,11 @@ class Client(Endpoint):
         LOGGER.debug("Start transport for client %s", self.name)
         self._transport_instance = client.RESTClient(self, connection_timout=timeout)
 
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
             Execute a call and return the result
         """
-        result = yield self._transport_instance.call(method_properties, args, kwargs)
+        result = await self._transport_instance.call(method_properties, args, kwargs)
         return result
 
     def __getattr__(self, name: str) -> Callable:
@@ -354,13 +350,12 @@ class SessionClient(Client):
         super().__init__(name, timeout)
         self._sid = sid
 
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args: List, kwargs: Dict) -> common.Result:
         """
             Execute the rpc call
         """
         if "sid" not in kwargs:
             kwargs["sid"] = self._sid
 
-        result = yield self._transport_instance.call(method_properties, args, kwargs)
+        result = await self._transport_instance.call(method_properties, args, kwargs)
         return result

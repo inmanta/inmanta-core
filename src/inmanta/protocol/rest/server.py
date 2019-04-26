@@ -23,7 +23,7 @@ from typing import Optional, Dict, List
 
 import tornado
 from pyformance import timer
-from tornado import gen, httpserver, web, routing
+from tornado import httpserver, web, routing
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
@@ -81,8 +81,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
-    @gen.coroutine
-    def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> NoneGen:
+    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> NoneGen:
         """
             An rpc like call
         """
@@ -108,7 +107,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
                 auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
                 if not auth_enabled or auth_token is not None:
-                    result = yield self._transport._execute_call(
+                    result = await self._transport._execute_call(
                         kwargs, http_method, call_config, message, request_headers, auth_token
                     )
                     self.respond(result.body, result.headers, result.status_code)
@@ -124,46 +123,40 @@ class RESTHandler(tornado.web.RequestHandler):
 
             finally:
                 try:
-                    yield self.finish()
+                    await self.finish()
                 except Exception:
                     LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
                 self._transport.end_request()
 
-    @gen.coroutine
-    def head(self, *args: str, **kwargs: str) -> NoneGen:
+    async def head(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+        await self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
 
-    @gen.coroutine
-    def get(self, *args: str, **kwargs: str) -> NoneGen:
+    async def get(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+        await self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
 
-    @gen.coroutine
-    def post(self, *args: str, **kwargs: str) -> NoneGen:
+    async def post(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+        await self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
 
-    @gen.coroutine
-    def delete(self, *args: str, **kwargs: str) -> NoneGen:
+    async def delete(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+        await self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
 
-    @gen.coroutine
-    def patch(self, *args: str, **kwargs: str) -> NoneGen:
+    async def patch(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+        await self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
 
-    @gen.coroutine
-    def put(self, *args: str, **kwargs: str) -> NoneGen:
+    async def put(self, *args: str, **kwargs: str) -> NoneGen:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+        await self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
 
     def options(self, *args: str, **kwargs: str) -> None:
         if args:
@@ -223,8 +216,9 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
-    @gen.coroutine
-    def start(self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:
+    async def start(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+    ) -> NoneGen:
         """
             Start the server on the current ioloop
         """
@@ -271,7 +265,6 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             self._http_server.stop()
 
-    @gen.coroutine
-    def join(self) -> NoneGen:
-        yield self.idle_event.wait()
-        yield self._http_server.close_all_connections()
+    async def join(self) -> NoneGen:
+        await self.idle_event.wait()
+        await self._http_server.close_all_connections()

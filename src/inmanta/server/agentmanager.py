@@ -17,7 +17,6 @@
 """
 
 
-from tornado import gen
 from tornado import locks
 from tornado import process
 
@@ -86,10 +85,9 @@ set_parameters
 """
 
 
-@gen.coroutine
-def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=1.0) -> NoneGen:
+async def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=1.0) -> NoneGen:
     try:
-        yield asyncio.wait_for(
+        await asyncio.wait_for(
             asyncio.gather(
                 *[asyncio.shield(proc.wait_for_exit(raise_error=False)) for proc in procs]
             ),
@@ -126,9 +124,8 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-    @gen.coroutine
-    def prestart(self, server: protocol.Server) -> NoneGen:
-        yield ServerSlice.prestart(self, server)
+    async def prestart(self, server: protocol.Server) -> NoneGen:
+        await ServerSlice.prestart(self, server)
 
         preserver = server.get_slice(SLICE_SERVER)
         assert isinstance(preserver, Server)
@@ -161,73 +158,67 @@ class AgentManager(ServerSlice, SessionListener):
             return self.tid_endpoint_to_session[(tid, endpoint)].get_client()
         return None
 
-    @gen.coroutine
-    def start(self) -> NoneGen:
-        yield super().start()
+    async def start(self) -> NoneGen:
+        await super().start()
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
             self.add_future(self.clean_db())
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
-        yield super().stop()
-        yield self.terminate_agents()
+    async def stop(self) -> NoneGen:
+        await super().stop()
+        await self.terminate_agents()
 
     # Agent Management
-    @gen.coroutine
-    def ensure_agent_registered(self, env: data.Environment, nodename: str) -> Generator[Any, Any, data.Agent]:
+    async def ensure_agent_registered(self, env: data.Environment, nodename: str) -> Generator[Any, Any, data.Agent]:
         """
             Make sure that an agent has been created in the database
         """
-        with (yield self.session_lock.acquire()):
-            agent = yield data.Agent.get(env.id, nodename)
+        with (await self.session_lock.acquire()):
+            agent = await data.Agent.get(env.id, nodename)
             if agent is not None:
                 return agent
             else:
-                agent = yield self.create_default_agent(env, nodename)
+                agent = await self.create_default_agent(env, nodename)
                 return agent
 
-    @gen.coroutine
-    def create_default_agent(self, env: data.Environment, nodename: str) -> Generator[Any, Any, data.Agent]:
+    async def create_default_agent(self, env: data.Environment, nodename: str) -> Generator[Any, Any, data.Agent]:
         saved = data.Agent(environment=env.id, name=nodename, paused=False)
-        yield saved.insert()
-        yield self.verify_reschedule(env, [nodename])
+        await saved.insert()
+        await self.verify_reschedule(env, [nodename])
         return saved
 
-    @gen.coroutine
-    def register_session(self, session: protocol.Session, now: float) -> Generator[Any, Any, data.Agent]:
-        with (yield self.session_lock.acquire()):
+    async def register_session(self, session: protocol.Session, now: float) -> Generator[Any, Any, data.Agent]:
+        with (await self.session_lock.acquire()):
             tid = session.tid
             sid = session.get_id()
             nodename = session.nodename
 
             self.sessions[sid] = session
 
-            env = yield data.Environment.get_by_id(tid)
+            env = await data.Environment.get_by_id(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
-            proc = yield data.AgentProcess.get_one(sid=sid)
+            proc = await data.AgentProcess.get_one(sid=sid)
 
             if proc is None:
                 proc = data.AgentProcess(hostname=nodename, environment=tid, first_seen=now, last_seen=now, sid=sid)
-                yield proc.insert()
+                await proc.insert()
             else:
-                yield proc.update_fields(last_seen=now)
+                await proc.update_fields(last_seen=now)
 
             for nh in session.endpoint_names:
                 LOGGER.debug("New session for agent %s on %s", nh, nodename)
-                yield data.AgentInstance(tid=tid, process=proc.sid, name=nh).insert()
-                # yield session.get_client().set_state(agent=nodename, enabled=False)
+                await data.AgentInstance(tid=tid, process=proc.sid, name=nh).insert()
+                # await session.get_client().set_state(agent=nodename, enabled=False)
 
             if env is not None:
-                yield self.verify_reschedule(env, session.endpoint_names)
+                await self.verify_reschedule(env, session.endpoint_names)
 
-    @gen.coroutine
-    def expire_session(self, session: protocol.Session, now: float) -> NoneGen:
+    async def expire_session(self, session: protocol.Session, now: float) -> NoneGen:
         if not self.running:
             return
-        with (yield self.session_lock.acquire()):
+        with (await self.session_lock.acquire()):
             tid = session.tid
             sid = session.get_id()
 
@@ -235,19 +226,19 @@ class AgentManager(ServerSlice, SessionListener):
 
             del self.sessions[sid]
 
-            env = yield data.Environment.get_by_id(tid)
+            env = await data.Environment.get_by_id(tid)
             if env is None:
                 LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
 
-            aps = yield data.AgentProcess.get_by_sid(sid=sid)
+            aps = await data.AgentProcess.get_by_sid(sid=sid)
             if aps is None:
                 LOGGER.info("expiring session on none existant process sid:%s", sid)
             else:
-                yield aps.update_fields(expired=now)
+                await aps.update_fields(expired=now)
 
-                instances = yield data.AgentInstance.get_list(process=aps.sid)
+                instances = await data.AgentInstance.get_list(process=aps.sid)
                 for ai in instances:
-                    yield ai.update_fields(expired=now)
+                    await ai.update_fields(expired=now)
 
             if env is not None:
                 for endpoint in session.endpoint_names:
@@ -255,14 +246,13 @@ class AgentManager(ServerSlice, SessionListener):
                             and self.tid_endpoint_to_session[(tid, endpoint)] == session):
                         del self.tid_endpoint_to_session[(tid, endpoint)]
 
-                yield self.verify_reschedule(env, session.endpoint_names)
+                await self.verify_reschedule(env, session.endpoint_names)
 
-    @gen.coroutine
-    def get_environment_sessions(self, env_id: uuid.UUID) -> Generator[Any, Any, List[protocol.Session]]:
+    async def get_environment_sessions(self, env_id: uuid.UUID) -> Generator[Any, Any, List[protocol.Session]]:
         """
             Get a list of all sessions for the given environment id
         """
-        sessions = yield data.AgentProcess.get_live_by_env(env_id)
+        sessions = await data.AgentProcess.get_live_by_env(env_id)
 
         session_list = []
         for session in sessions:
@@ -271,25 +261,23 @@ class AgentManager(ServerSlice, SessionListener):
 
         return session_list
 
-    @gen.coroutine
-    def flush_agent_presence(self, session: protocol.Session, now: float) -> NoneGen:
+    async def flush_agent_presence(self, session: protocol.Session, now: float) -> NoneGen:
         tid = session.tid
         sid = session.get_id()
 
-        env = yield data.Environment.get_by_id(tid)
+        env = await data.Environment.get_by_id(tid)
         if env is None:
             LOGGER.warning("The environment id %s, for agent %s does not exist!", tid, sid)
             return
 
-        aps = yield data.AgentProcess.get_by_sid(sid=sid)
+        aps = await data.AgentProcess.get_by_sid(sid=sid)
         if aps is None:
             LOGGER.warning("No process registered for SID %s", sid)
             return
 
-        yield aps.update_fields(last_seen=now)
+        await aps.update_fields(last_seen=now)
 
-    @gen.coroutine
-    def verify_reschedule(self, env: data.Environment, enpoints: str) -> NoneGen:
+    async def verify_reschedule(self, env: data.Environment, enpoints: str) -> NoneGen:
         """
              only call under session lock
         """
@@ -297,40 +285,42 @@ class AgentManager(ServerSlice, SessionListener):
             return
         tid = env.id
         no_primary = [endpoint for endpoint in enpoints if (tid, endpoint) not in self.tid_endpoint_to_session]
-        agents = yield [data.Agent.get(env.id, endpoint) for endpoint in no_primary]
+        agents = await asyncio.gather(
+            *[data.Agent.get(env.id, endpoint) for endpoint in no_primary]
+        )
         needswork = [agent for agent in agents if agent is not None and not agent.paused]
         for agent in needswork:
-            yield self.reschedule(env, agent)
+            await self.reschedule(env, agent)
 
-    @gen.coroutine
-    def reschedule(self, env: data.Environment, agent: data.Agent) -> NoneGen:
+    async def reschedule(self, env: data.Environment, agent: data.Agent) -> NoneGen:
         """
              only call under session lock
         """
         tid = env.id
-        instances = yield data.AgentInstance.active_for(tid, agent.name)
+        instances = await data.AgentInstance.active_for(tid, agent.name)
 
         for instance in instances:
-            agent_proc = yield data.AgentProcess.get_one(sid=instance.process)
+            agent_proc = await data.AgentProcess.get_one(sid=instance.process)
             sid = agent_proc.sid
 
             if sid not in self.sessions:
                 LOGGER.warn("session marked as live in DB, but not found. sid: %s" % sid)
             else:
-                yield self._set_primary(env, agent, instance, self.sessions[sid])
+                await self._set_primary(env, agent, instance, self.sessions[sid])
                 return
 
-        yield agent.update_fields(primary=None, last_failover=datetime.now())
+        await agent.update_fields(primary=None, last_failover=datetime.now())
 
-    @gen.coroutine
-    def _set_primary(self,
-                     env: data.Environment,
-                     agent: data.Agent,
-                     instance: data.AgentInstance,
-                     session: protocol.Session) -> NoneGen:
+    async def _set_primary(
+        self,
+        env: data.Environment,
+        agent: data.Agent,
+        instance: data.AgentInstance,
+        session: protocol.Session
+    ) -> NoneGen:
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
-        yield agent.update_fields(last_failover=datetime.now(), primary=instance.id)
+        await agent.update_fields(last_failover=datetime.now(), primary=instance.id)
         self.add_future(session.get_client().set_state(agent.name, True))
 
     def is_primary(self,
@@ -342,23 +332,22 @@ class AgentManager(ServerSlice, SessionListener):
             return False
         return prim.get_id() == sid
 
-    @gen.coroutine
-    def clean_db(self) -> NoneGen:
-        with (yield self.session_lock.acquire()):
+    async def clean_db(self) -> NoneGen:
+        with (await self.session_lock.acquire()):
             LOGGER.debug("Cleaning server session DB")
 
             # TODO: do as one query
-            procs = yield data.AgentProcess.get_live()
+            procs = await data.AgentProcess.get_live()
             for proc in procs:
-                yield proc.update_fields(expired=datetime.now())
+                await proc.update_fields(expired=datetime.now())
 
-            ais = yield data.AgentInstance.active()
+            ais = await data.AgentInstance.active()
             for ai in ais:
-                yield ai.update_fields(expired=datetime.now())
+                await ai.update_fields(expired=datetime.now())
 
-            agents = yield data.Agent.get_list()
+            agents = await data.Agent.get_list()
             for agent in agents:
-                yield agent.update_fields(primary=None)
+                await agent.update_fields(primary=None)
 
     # utils
     def _fork_inmanta(self,
@@ -389,39 +378,36 @@ class AgentManager(ServerSlice, SessionListener):
 
     # External APIS
     @protocol.handle(methods.get_agent_process, agent_sid="id")
-    @gen.coroutine
-    def get_agent_process(self, agent_sid: str) -> Apireturn:
-        return (yield self.get_agent_process_report(agent_sid))
+    async def get_agent_process(self, agent_sid: str) -> Apireturn:
+        return (await self.get_agent_process_report(agent_sid))
 
     @protocol.handle(methods.trigger_agent, agent_id="id", env="tid")
-    @gen.coroutine
-    def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
+    async def trigger_agent(self, env: UUID, agent_id: str) -> Apireturn:
         raise NotImplementedError()
 
     @protocol.handle(methods.list_agent_processes)
-    @gen.coroutine
-    def list_agent_processes(self, environment: Optional[UUID], expired: bool) -> Apireturn:
+    async def list_agent_processes(self, environment: Optional[UUID], expired: bool) -> Apireturn:
         if environment is not None:
-            env = yield data.Environment.get_by_id(environment)
+            env = await data.Environment.get_by_id(environment)
             if env is None:
                 return 404, {"message": "The given environment id does not exist!"}
 
         tid = environment
         if tid is not None:
             if expired:
-                aps = yield data.AgentProcess.get_by_env(tid)
+                aps = await data.AgentProcess.get_by_env(tid)
             else:
-                aps = yield data.AgentProcess.get_live_by_env(tid)
+                aps = await data.AgentProcess.get_live_by_env(tid)
         else:
             if expired:
-                aps = yield data.AgentProcess.get_list()
+                aps = await data.AgentProcess.get_list()
             else:
-                aps = yield data.AgentProcess.get_live()
+                aps = await data.AgentProcess.get_live()
 
         processes = []
         for p in aps:
             agent_dict = p.to_dict()
-            ais = yield data.AgentInstance.get_list(process=p.sid)
+            ais = await data.AgentInstance.get_list(process=p.sid)
             oais = []
             for ai in ais:
                 a = ai.to_dict()
@@ -432,19 +418,17 @@ class AgentManager(ServerSlice, SessionListener):
         return 200, {"processes": processes}
 
     @protocol.handle(methods.list_agents, env="tid")
-    @gen.coroutine
-    def list_agents(self, env: Optional[data.Environment]) -> Apireturn:
+    async def list_agents(self, env: Optional[data.Environment]) -> Apireturn:
         if env is not None:
             tid = env.id
-            ags = yield data.Agent.get_list(environment=tid)
+            ags = await data.Agent.get_list(environment=tid)
         else:
-            ags = yield data.Agent.get_list()
+            ags = await data.Agent.get_list()
 
         return 200, {"agents": [a.to_dict() for a in ags], "servertime": datetime.now().isoformat(timespec='microseconds')}
 
     @protocol.handle(methods.get_state, env="tid")
-    @gen.coroutine
-    def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
+    async def get_state(self, env: data.Environment, sid: uuid.UUID, agent: str) -> Apireturn:
         tid: UUID = env.id
         if isinstance(tid, str):
             tid = uuid.UUID(tid)
@@ -455,24 +439,21 @@ class AgentManager(ServerSlice, SessionListener):
                 return 200, {"enabled": True}
         return 200, {"enabled": False}
 
-    @gen.coroutine
-    def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
-        ap = yield data.AgentProcess.get_one(sid=agent_sid)
+    async def get_agent_process_report(self, agent_sid: uuid.UUID) -> Apireturn:
+        ap = await data.AgentProcess.get_one(sid=agent_sid)
         if ap is None:
             return 404, {"message": "The given AgentProcess id does not exist!"}
         sid = ap.sid
         if sid not in self.sessions:
             return 404, {"message": "The given AgentProcess is not live!"}
         client = self.sessions[sid].get_client()
-        result = yield client.get_status()
+        result = await client.get_status()
         return result.code, result.get_result()
 
     # Start/stop agents
-    @gen.coroutine
-    def _ensure_agents(self,
-                       env: data.Environment,
-                       agents: List[str],
-                       restart: bool=False) -> Generator[Any, Any, bool]:
+    async def _ensure_agents(
+        self, env: data.Environment, agents: List[str], restart: bool=False
+    ) -> Generator[Any, Any, bool]:
         """
             Ensure that all agents defined in the current environment (model) and that should be autostarted, are started.
 
@@ -481,34 +462,33 @@ class AgentManager(ServerSlice, SessionListener):
             :param restart: Restart all agents even if the list of agents is up to date.
         """
         agent_map: Dict[str, str]
-        agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
+        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
         agents = [agent for agent in agents if agent in agent_map]
         needsstart = restart
         if len(agents) == 0:
             return False
 
-        with (yield agent_lock.acquire()):
+        with (await agent_lock.acquire()):
             LOGGER.info("%s matches agents managed by server, ensuring it is started.", agents)
             for agent in agents:
-                with (yield self.session_lock.acquire()):
+                with (await self.session_lock.acquire()):
                     myagent = self.get_agent_client(env.id, agent)
                     if myagent is None:
                         needsstart = True
 
             if needsstart:
-                res = yield self.__do_start_agent(agents, env)
+                res = await self.__do_start_agent(agents, env)
                 return res
         return False
 
-    @gen.coroutine
-    def __do_start_agent(self, agents: List[str], env: data.Environment) -> Generator[Any, Any, bool]:
+    async def __do_start_agent(self, agents: List[str], env: data.Environment) -> Generator[Any, Any, bool]:
         """
             Start an agent process for the given agents in the given environment
         """
         agent_map: Dict[str, str]
-        agent_map = yield env.get(data.AUTOSTART_AGENT_MAP)
+        agent_map = await env.get(data.AUTOSTART_AGENT_MAP)
         config: str
-        config = yield self._make_agent_config(env, agents, agent_map)
+        config = await self._make_agent_config(env, agents, agent_map)
 
         config_dir = os.path.join(self._server_storage["agents"], str(env.id))
         if not os.path.exists(config_dir):
@@ -532,28 +512,25 @@ class AgentManager(ServerSlice, SessionListener):
         if env.id in self._agent_procs and self._agent_procs[env.id] is not None:
             LOGGER.debug("Terminating old agent with PID %s", self._agent_procs[env.id].proc.pid)
             self._agent_procs[env.id].proc.terminate()
-            yield wait_for_proc_bounded([self._agent_procs[env.id]])
+            await wait_for_proc_bounded([self._agent_procs[env.id]])
 
         self._agent_procs[env.id] = proc
 
         # Wait for an agent to start
-        yield retry_limited(lambda: self.get_agent_client(env.id, agents[0]) is not None, 5)
-        # yield sleep(2)
+        await retry_limited(lambda: self.get_agent_client(env.id, agents[0]) is not None, 5)
+        # await sleep(2)
 
         LOGGER.debug("Started new agent with PID %s", proc.proc.pid)
         return True
 
-    @gen.coroutine
-    def terminate_agents(self) -> NoneGen:
+    async def terminate_agents(self) -> NoneGen:
         for proc in self._agent_procs.values():
             proc.proc.terminate()
-        yield wait_for_proc_bounded(self._agent_procs.values())
+        await wait_for_proc_bounded(self._agent_procs.values())
 
-    @gen.coroutine
-    def _make_agent_config(self,
-                           env: data.Environment,
-                           agent_names: List[str],
-                           agent_map: Dict[str, str]) -> Generator[Any, Any, str]:
+    async def _make_agent_config(
+        self, env: data.Environment, agent_names: List[str], agent_map: Dict[str, str]
+    ) -> Generator[Any, Any, str]:
         """
             Generate the config file for the process that hosts the autostarted agents
 
@@ -568,14 +545,14 @@ class AgentManager(ServerSlice, SessionListener):
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
         agent_deploy_splay: int
-        agent_deploy_splay = yield env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
+        agent_deploy_splay = await env.get(data.AUTOSTART_AGENT_DEPLOY_SPLAY_TIME)
         agent_deploy_interval: int
-        agent_deploy_interval = yield env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
+        agent_deploy_interval = await env.get(data.AUTOSTART_AGENT_DEPLOY_INTERVAL)
 
         agent_repair_splay: int
-        agent_repair_splay = yield env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
+        agent_repair_splay = await env.get(data.AUTOSTART_AGENT_REPAIR_SPLAY_TIME)
         agent_repair_interval: int
-        agent_repair_interval = yield env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
+        agent_repair_interval = await env.get(data.AUTOSTART_AGENT_REPAIR_INTERVAL)
 
         # generate config file
         config = """[config]
@@ -624,16 +601,15 @@ ssl=True
 
     # Parameters
 
-    @gen.coroutine
-    def _request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
+    async def _request_parameter(self, env_id: uuid.UUID, resource_id: str) -> Apireturn:
         """
             Request the value of a parameter from an agent
         """
         if resource_id is not None and resource_id != "":
-            env = yield data.Environment.get_by_id(env_id)
+            env = await data.Environment.get_by_id(env_id)
 
             # get a resource version
-            res = yield data.Resource.get_latest_version(env_id, resource_id)
+            res = await data.Resource.get_latest_version(env_id, resource_id)
 
             if res is None:
                 return 404, {"message": "The resource has no recent version."}
@@ -646,8 +622,8 @@ ssl=True
             if (resource_id not in self._fact_resource_block_set
                     or (self._fact_resource_block_set[resource_id] + self._fact_resource_block) < now):
 
-                agents = yield data.ConfigurationModel.get_agents(env.id, version)
-                yield self._ensure_agents(env, agents)
+                agents = await data.ConfigurationModel.get_agents(env.id, version)
+                await self._ensure_agents(env, agents)
 
                 client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
@@ -664,30 +640,27 @@ ssl=True
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-    @gen.coroutine
-    def start_agents(self) -> NoneGen:
+    async def start_agents(self) -> NoneGen:
         """
             Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
             is called on server start.
         """
-        environments = yield data.Environment.get_list()
+        environments = await data.Environment.get_list()
         for env in environments:
-            agents = yield data.Agent.get_list(environment=env.id)
-            autostart = yield env.get(data.AUTOSTART_ON_START)
+            agents = await data.Agent.get_list(environment=env.id)
+            autostart = await env.get(data.AUTOSTART_ON_START)
             if autostart:
                 agent_list = [a.name for a in agents]
-                yield self._ensure_agents(env, agent_list)
+                await self._ensure_agents(env, agent_list)
 
-    @gen.coroutine
-    def restart_agents(self, env: data.Environment) -> NoneGen:
-        agents = yield data.Agent.get_list(environment=env.id)
-        autostart = yield env.get(data.AUTOSTART_ON_START)
+    async def restart_agents(self, env: data.Environment) -> NoneGen:
+        agents = await data.Agent.get_list(environment=env.id)
+        autostart = await env.get(data.AUTOSTART_ON_START)
         if autostart:
             agent_list = [a.name for a in agents]
-            yield self._ensure_agents(env, agent_list, True)
+            await self._ensure_agents(env, agent_list, True)
 
-    @gen.coroutine
-    def stop_agents(self, env: data.Environment) -> NoneGen:
+    async def stop_agents(self, env: data.Environment) -> NoneGen:
         """
             Stop all agents for this environment and close sessions
         """
@@ -695,11 +668,11 @@ ssl=True
         if env.id in self._agent_procs:
             subproc = self._agent_procs[env.id]
             subproc.proc.terminate()
-            yield wait_for_proc_bounded([subproc])
+            await wait_for_proc_bounded([subproc])
             del self._agent_procs[env.id]
 
         LOGGER.debug("Expiring all sessions for %s", env.id)
         sessions: List[protocol.Session]
-        sessions = yield self.get_environment_sessions(env.id)
+        sessions = await self.get_environment_sessions(env.id)
         for session in sessions:
             session.expire(0)

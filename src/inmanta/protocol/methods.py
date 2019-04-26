@@ -23,28 +23,24 @@ from inmanta import data, const
 from .common import ArgOption
 from .decorators import method
 from . import exceptions
-from tornado import gen
 
 from typing import Any
 
 
-@gen.coroutine
-def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
+async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     metadata[const.INMANTA_URN + "env"] = str(env)
-    env = yield data.Environment.get_by_id(env)
+    env = await data.Environment.get_by_id(env)
     if env is None:
         raise exceptions.NotFound("the given environment id does not exist!")
     return env
 
 
-@gen.coroutine
-def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
+async def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
     metadata[const.INMANTA_URN + "env"] = str(env)
     return env
 
 
-@gen.coroutine
-def ignore_env(obj: Any, metadata: dict) -> Any:
+async def ignore_env(obj: Any, metadata: dict) -> Any:
     """
         This mapper only adds an env all for authz
     """

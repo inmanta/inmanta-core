@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import asyncio
 import base64
 from collections import defaultdict
 import datetime
@@ -113,12 +113,10 @@ class Server(protocol.ServerSlice):
         self._increment_cache_locks = defaultdict(lambda: locks.Lock())
         self._influx_db_reporter = None
 
-    @gen.coroutine
-    def prestart(self, server):
+    async def prestart(self, server):
         self.agentmanager: "AgentManager" = server.get_slice("agentmanager")
 
-    @gen.coroutine
-    def start(self):
+    async def start(self):
         if self._database_host is None:
             self._database_host = opt.db_host.get()
 
@@ -127,7 +125,7 @@ class Server(protocol.ServerSlice):
 
         database_username = opt.db_username.get()
         database_password = opt.db_password.get()
-        yield data.connect(self._database_host, self._database_port, opt.db_name.get(), database_username, database_password)
+        await data.connect(self._database_host, self._database_port, opt.db_name.get(), database_username, database_password)
         LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), self._database_host, self._database_port)
 
         self.schedule(self.renew_expired_facts, self._fact_renew)
@@ -138,13 +136,12 @@ class Server(protocol.ServerSlice):
 
         self.start_metric_reporters()
 
-        yield super().start()
+        await super().start()
 
-    @gen.coroutine
-    def stop(self):
-        yield super().stop()
+    async def stop(self):
+        await super().stop()
         self._close_resource_action_loggers()
-        yield data.disconnect()
+        await data.disconnect()
         self.stop_metric_reporters()
 
     def stop_metric_reporters(self) -> None:
@@ -283,17 +280,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         LOGGER.log(const.LOG_LEVEL_TRACE, "Clearing cache for %s", env.id)
         self._increment_cache[env.id] = None
 
-    @gen.coroutine
-    def _purge_versions(self):
+    async def _purge_versions(self):
         """
             Purge versions from the database
         """
         # TODO: move to data and use queries for delete
-        envs = yield data.Environment.get_list()
+        envs = await data.Environment.get_list()
         for env_item in envs:
             # get available versions
             n_versions = opt.server_version_to_keep.get()
-            versions = yield data.ConfigurationModel.get_list(environment=env_item.id)
+            versions = await data.ConfigurationModel.get_list(environment=env_item.id)
             if len(versions) > n_versions:
                 LOGGER.info("Removing %s available versions from environment %s", len(versions) - n_versions, env_item.id)
                 version_dict = {x.version: x for x in versions}
@@ -301,7 +297,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 delete_list = delete_list[:-n_versions]
 
                 for v in delete_list:
-                    yield version_dict[v].delete_cascade()
+                    await version_dict[v].delete_cascade()
 
     def check_storage(self):
         """
@@ -322,15 +318,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         dir_map["logs"] = _ensure_directory_exist(opt.log_dir.get())
         return dir_map
 
-    @gen.coroutine
-    def renew_expired_facts(self):
+    async def renew_expired_facts(self):
         """
             Send out requests to renew expired facts
         """
         LOGGER.info("Renewing expired parameters")
 
         updated_before = datetime.datetime.now() - datetime.timedelta(0, (self._fact_expire - self._fact_renew))
-        expired_params = yield data.Parameter.get_updated_before(updated_before)
+        expired_params = await data.Parameter.get_updated_before(updated_before)
 
         LOGGER.debug("Renewing %d expired parameters" % len(expired_params))
 
@@ -338,35 +333,34 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if param.environment is None:
                 LOGGER.warning("Found parameter without environment (%s for resource %s). Deleting it.",
                                param.name, param.resource_id)
-                yield param.delete()
+                await param.delete()
             else:
                 LOGGER.debug("Requesting new parameter value for %s of resource %s in env %s", param.name, param.resource_id,
                              param.environment)
-                yield self.agentmanager._request_parameter(param.environment, param.resource_id)
+                await self.agentmanager._request_parameter(param.environment, param.resource_id)
 
-        unknown_parameters = yield data.UnknownParameter.get_list(resolved=False)
+        unknown_parameters = await data.UnknownParameter.get_list(resolved=False)
         for u in unknown_parameters:
             if u.environment is None:
                 LOGGER.warning("Found unknown parameter without environment (%s for resource %s). Deleting it.",
                                u.name, u.resource_id)
-                yield u.delete()
+                await u.delete()
             else:
                 LOGGER.debug("Requesting value for unknown parameter %s of resource %s in env %s", u.name, u.resource_id, u.id)
-                yield self.agentmanager._request_parameter(u.environment, u.resource_id)
+                await self.agentmanager._request_parameter(u.environment, u.resource_id)
 
         LOGGER.info("Done renewing expired parameters")
 
     @protocol.handle(methods.get_param, param_id="id", env="tid")
-    @gen.coroutine
-    def get_param(self, env, param_id, resource_id=None):
+    async def get_param(self, env, param_id, resource_id=None):
         if resource_id is None:
-            params = yield data.Parameter.get_list(environment=env.id, name=param_id)
+            params = await data.Parameter.get_list(environment=env.id, name=param_id)
         else:
-            params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
+            params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
         if len(params) == 0:
             if resource_id is not None:
-                out = yield self.agentmanager._request_parameter(env.id, resource_id)
+                out = await self.agentmanager._request_parameter(env.id, resource_id)
                 return out
             return 404
 
@@ -378,11 +372,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 200, {"parameter": params[0]}
 
         LOGGER.info("Parameter %s of resource %s expired.", param_id, resource_id)
-        out = yield self.agentmanager._request_parameter(env.id, resource_id)
+        out = await self.agentmanager._request_parameter(env.id, resource_id)
         return out
 
-    @gen.coroutine
-    def _update_param(self, env, name, value, source, resource_id, metadata, recompile=False):
+    async def _update_param(self, env, name, value, source, resource_id, metadata, recompile=False):
         """
             Update or set a parameter.
 
@@ -397,52 +390,50 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if resource_id is None:
             resource_id = ""
 
-        params = yield data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
+        params = await data.Parameter.get_list(environment=env.id, name=name, resource_id=resource_id)
 
         value_updated = True
         if len(params) == 0:
             param = data.Parameter(environment=env.id, name=name, resource_id=resource_id, value=value, source=source,
                                    updated=datetime.datetime.now(), metadata=metadata)
-            yield param.insert()
+            await param.insert()
         else:
             param = params[0]
             value_updated = param.value != value
-            yield param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
+            await param.update(source=source, value=value, updated=datetime.datetime.now(), metadata=metadata)
 
         # check if the parameter is an unknown
-        params = yield data.UnknownParameter.get_list(environment=env.id, name=name, resource_id=resource_id, resolved=False)
+        params = await data.UnknownParameter.get_list(environment=env.id, name=name, resource_id=resource_id, resolved=False)
         if len(params) > 0:
             LOGGER.info("Received values for unknown parameters %s, triggering a recompile",
                         ", ".join([x.name for x in params]))
             for p in params:
-                yield p.update_fields(resolved=True)
+                await p.update_fields(resolved=True)
 
             return True
 
         return (recompile and value_updated)
 
     @protocol.handle(methods.set_param, param_id="id", env="tid")
-    @gen.coroutine
-    def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
-        result = yield self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
+    async def set_param(self, env, param_id, source, value, resource_id, metadata, recompile):
+        result = await self._update_param(env, param_id, value, source, resource_id, metadata, recompile)
         if result:
             compile_metadata = {
                 "message": "Recompile model because one or more parameters were updated",
                 "type": "param",
                 "params": [(param_id, resource_id)],
             }
-            yield self._async_recompile(env, False, metadata=compile_metadata)
+            await self._async_recompile(env, False, metadata=compile_metadata)
 
         if resource_id is None:
             resource_id = ""
 
-        params = yield data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
+        params = await data.Parameter.get_list(environment=env.id, name=param_id, resource_id=resource_id)
 
         return 200, {"parameter": params[0]}
 
     @protocol.handle(methods.set_parameters, env="tid")
-    @gen.coroutine
-    def set_parameters(self, env, parameters):
+    async def set_parameters(self, env, parameters):
         recompile = False
         compile_metadata = {
             "message": "Recompile model because one or more parameters were updated",
@@ -456,51 +447,48 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             resource_id = param["resource_id"] if "resource_id" in param else None
             metadata = param["metadata"] if "metadata" in param else None
 
-            result = yield self._update_param(env, name, value, source, resource_id, metadata)
+            result = await self._update_param(env, name, value, source, resource_id, metadata)
             if result:
                 recompile = True
                 compile_metadata["params"].append((name, resource_id))
 
         if recompile:
-            yield self._async_recompile(env, False, metadata=compile_metadata)
+            await self._async_recompile(env, False, metadata=compile_metadata)
 
         return 200
 
     @protocol.handle(methods.delete_param, env="tid", parameter_name="id")
-    @gen.coroutine
-    def delete_param(self, env, parameter_name, resource_id):
+    async def delete_param(self, env, parameter_name, resource_id):
         if resource_id is None:
-            params = yield data.Parameter.get_list(environment=env.id, name=parameter_name)
+            params = await data.Parameter.get_list(environment=env.id, name=parameter_name)
         else:
-            params = yield data.Parameter.get_list(environment=env.id, name=parameter_name, resource_id=resource_id)
+            params = await data.Parameter.get_list(environment=env.id, name=parameter_name, resource_id=resource_id)
 
         if len(params) == 0:
             return 404
 
         param = params[0]
-        yield param.delete()
+        await param.delete()
         metadata = {
             "message": "Recompile model because one or more parameters were deleted",
             "type": "param",
             "params": [(param.name, param.resource_id)]
         }
-        yield self._async_recompile(env, False, metadata=metadata)
+        await self._async_recompile(env, False, metadata=metadata)
 
         return 200
 
     @protocol.handle(methods.list_params, env="tid")
-    @gen.coroutine
-    def list_param(self, env, query):
-        params = yield data.Parameter.list_parameters(env.id, **query)
+    async def list_param(self, env, query):
+        params = await data.Parameter.list_parameters(env.id, **query)
         return 200, {"parameters": params,
                      "expire": self._fact_expire,
                      "now": datetime.datetime.now().isoformat(timespec='microseconds')
                      }
 
     @protocol.handle(methods.put_form, form_id="id", env="tid")
-    @gen.coroutine
-    def put_form(self, env: data.Environment, form_id: str, form: dict):
-        form_doc = yield data.Form.get_form(environment=env.id, form_type=form_id)
+    async def put_form(self, env: data.Environment, form_id: str, form: dict):
+        form_doc = await data.Form.get_form(environment=env.id, form_type=form_id)
         fields = {k: v["type"] for k, v in form["attributes"].items()}
         defaults = {k: v["default"] for k, v in form["attributes"].items() if "default" in v}
         field_options = {k: v["options"] for k, v in form["attributes"].items() if "options" in v}
@@ -509,7 +497,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             form_doc = data.Form(environment=env.id, form_type=form_id, fields=fields,
                                  defaults=defaults, options=form["options"],
                                  field_options=field_options)
-            yield form_doc.insert()
+            await form_doc.insert()
 
         else:
             # update the definition
@@ -518,14 +506,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             form_doc.options = form["options"]
             form_doc.field_options = field_options
 
-            yield form_doc.update()
+            await form_doc.update()
 
         return 200, {"form": {"id": form_doc.form_type}}
 
     @protocol.handle(methods.get_form, form_id="id", env="tid")
-    @gen.coroutine
-    def get_form(self, env, form_id):
-        form = yield data.Form.get_form(environment=env.id, form_type=form_id)
+    async def get_form(self, env, form_id):
+        form = await data.Form.get_form(environment=env.id, form_type=form_id)
 
         if form is None:
             return 404
@@ -533,19 +520,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"form": form}
 
     @protocol.handle(methods.list_forms, env="tid")
-    @gen.coroutine
-    def list_forms(self, env):
-        forms = yield data.Form.get_list(environment=env.id)
+    async def list_forms(self, env):
+        forms = await data.Form.get_list(environment=env.id)
         return 200, {"forms": [{"form_id": x.form_type, "form_type": x.form_type} for x in forms]}
 
     @protocol.handle(methods.list_records, env="tid")
-    @gen.coroutine
-    def list_records(self, env, form_type, include_record):
-        form_type = yield data.Form.get_form(environment=env.id, form_type=form_type)
+    async def list_records(self, env, form_type, include_record):
+        form_type = await data.Form.get_form(environment=env.id, form_type=form_type)
         if form_type is None:
             return 404, {"message": "No form is defined with id %s" % form_type}
 
-        records = yield data.FormRecord.get_list(form=form_type.form_type)
+        records = await data.FormRecord.get_list(form=form_type.form_type)
 
         if not include_record:
             return 200, {"records": [{"id": r.id, "changed": r.changed} for r in records]}
@@ -554,24 +539,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 200, {"records": records}
 
     @protocol.handle(methods.get_record, record_id="id", env="tid")
-    @gen.coroutine
-    def get_record(self, env, record_id):
-        record = yield data.FormRecord.get_by_id(record_id)
+    async def get_record(self, env, record_id):
+        record = await data.FormRecord.get_by_id(record_id)
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % record_id}
 
         return 200, {"record": record}
 
     @protocol.handle(methods.update_record, record_id="id", env="tid")
-    @gen.coroutine
-    def update_record(self, env, record_id, form):
-        record = yield data.FormRecord.get_by_id(record_id)
+    async def update_record(self, env, record_id, form):
+        record = await data.FormRecord.get_by_id(record_id)
         if record is None:
             return 404, {"message": "The record with id %s does not exist" % record_id}
         if record.environment != env.id:
             return 404, {"message": "The record with id %s does not exist" % record_id}
 
-        form_def = yield data.Form.get_one(environment=env.id, form_type=record.form)
+        form_def = await data.Form.get_one(environment=env.id, form_type=record.form)
 
         record.changed = datetime.datetime.now()
 
@@ -585,7 +568,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 else:
                     LOGGER.warning("Field %s in record %s of form %s has an invalid type." % (k, record_id, form))
 
-        yield record.update()
+        await record.update()
 
         metadata = {
             "message": "Recompile model because a form record was updated",
@@ -594,13 +577,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "form": form
         }
 
-        yield self._async_recompile(env, False, metadata=metadata)
+        await self._async_recompile(env, False, metadata=metadata)
         return 200, {"record": record}
 
     @protocol.handle(methods.create_record, env="tid")
-    @gen.coroutine
-    def create_record(self, env, form_type, form):
-        form_obj = yield data.Form.get_form(environment=env.id, form_type=form_type)
+    async def create_record(self, env, form_type, form):
+        form_obj = await data.Form.get_form(environment=env.id, form_type=form_type)
 
         if form_obj is None:
             return 404, {"message": "The form %s does not exist in env %s" % (env.id, form_type)}
@@ -618,22 +600,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 else:
                     LOGGER.warning("Field %s in form %s has an invalid type." % (k, form_type))
 
-        yield record.insert()
+        await record.insert()
         metadata = {
             "message": "Recompile model because a form record was inserted",
             "type": "form",
             "records": [str(record.id)],
             "form": form
         }
-        yield self._async_recompile(env, False, metadata=metadata)
+        await self._async_recompile(env, False, metadata=metadata)
 
         return 200, {"record": record}
 
     @protocol.handle(methods.delete_record, record_id="id", env="tid")
-    @gen.coroutine
-    def delete_record(self, env, record_id):
-        record = yield data.FormRecord.get_by_id(record_id)
-        yield record.delete()
+    async def delete_record(self, env, record_id):
+        record = await data.FormRecord.get_by_id(record_id)
+        await record.delete()
 
         metadata = {
             "message": "Recompile model because a form record was removed",
@@ -641,13 +622,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "records": [str(record.id)],
             "form": record.form
         }
-        yield self._async_recompile(env, False, metadata=metadata)
+        await self._async_recompile(env, False, metadata=metadata)
 
         return 200
 
     @protocol.handle(methods.upload_file, file_hash="id")
-    @gen.coroutine
-    def upload_file(self, file_hash, content):
+    async def upload_file(self, file_hash, content):
         content = base64.b64decode(content)
         return self.upload_file_internal(file_hash, content)
 
@@ -666,8 +646,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200
 
     @protocol.handle(methods.stat_file, file_hash="id")
-    @gen.coroutine
-    def stat_file(self, file_hash):
+    async def stat_file(self, file_hash):
         file_name = os.path.join(self._server_storage["files"], file_hash)
 
         if os.path.exists(file_name):
@@ -676,8 +655,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 404
 
     @protocol.handle(methods.get_file, file_hash="id")
-    @gen.coroutine
-    def get_file(self, file_hash):
+    async def get_file(self, file_hash):
         ret, c = self.get_file_internal(file_hash)
         if ret == 200:
             return 200, {"content": base64.b64encode(c).decode("ascii")}
@@ -717,8 +695,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 return 200, content
 
     @protocol.handle(methods.stat_files)
-    @gen.coroutine
-    def stat_files(self, files):
+    async def stat_files(self, files):
         """
             Return which files in the list exist on the server
         """
@@ -731,8 +708,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"files": response}
 
     @protocol.handle(methods.diff)
-    @gen.coroutine
-    def file_diff(self, a, b):
+    async def file_diff(self, a, b):
         """
             Diff the two files identified with the two hashes
         """
@@ -764,9 +740,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"diff": list(diff)}
 
     @protocol.handle(methods.get_resource, resource_id="id", env="tid")
-    @gen.coroutine
-    def get_resource(self, env, resource_id, logs, status, log_action, log_limit):
-        resv = yield data.Resource.get(env.id, resource_id)
+    async def get_resource(self, env, resource_id, logs, status, log_action, log_limit):
+        resv = await data.Resource.get(env.id, resource_id)
         if resv is None:
             return 404, {"message": "The resource with the given id does not exist in the given environment"}
 
@@ -779,7 +754,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             if log_action is not None:
                 action_name = log_action.name
 
-            actions = yield data.ResourceAction.get_log(
+            actions = await data.ResourceAction.get_log(
                 environment=env.id,
                 resource_version_id=resource_id,
                 action=action_name,
@@ -788,40 +763,36 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"resource": resv, "logs": actions}
 
     @protocol.handle(methods.get_resources_for_agent, env="tid")
-    @gen.coroutine
-    def get_resources_for_agent(self,
-                                env: data.Environment,
-                                agent: str,
-                                version: str,
-                                sid: uuid.UUID,
-                                incremental_deploy: bool) -> Generator[Any, Any, JsonType]:
-
+    async def get_resources_for_agent(
+        self, env: data.Environment, agent: str, version: str, sid: uuid.UUID, incremental_deploy: bool
+    ) -> Generator[Any, Any, JsonType]:
         if not self.agentmanager.is_primary(env, sid, agent):
             return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
         if incremental_deploy:
             if version is not None:
                 return 500, {"message": "Cannot request increment for a specific version"}
-            result = yield self.get_resource_increment_for_agent(env, agent)
+            result = await self.get_resource_increment_for_agent(env, agent)
         else:
-            result = yield self.get_all_resources_for_agent(env, agent, version)
+            result = await self.get_all_resources_for_agent(env, agent, version)
         return result
 
-    @gen.coroutine
-    def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: str) -> Generator[Any, Any, JsonType]:
+    async def get_all_resources_for_agent(
+        self, env: data.Environment, agent: str, version: str
+    ) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
         if version is None:
-            version = yield data.ConfigurationModel.get_version_nr_latest_version(env.id)
+            version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
             if version is None:
                 return 404, {"message": "No version available"}
 
         else:
-            exists = yield data.ConfigurationModel.version_exists(environment=env.id, version=version)
+            exists = await data.ConfigurationModel.version_exists(environment=env.id, version=version)
             if not exists:
                 return 404, {"message": "The given version does not exist"}
 
         deploy_model = []
 
-        resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
+        resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
         resource_ids = []
         for rv in resources:
@@ -834,24 +805,23 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         self.log_resource_action(env.id, resource_ids, logging.INFO, now, log_line.msg)
         ra = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids, action=const.ResourceAction.pull,
                                  action_id=uuid.uuid4(), started=started, finished=now, messages=[log_line])
-        yield ra.insert()
+        await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    @gen.coroutine
-    def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Generator[Any, Any, JsonType]:
+    async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Generator[Any, Any, JsonType]:
         started = datetime.datetime.now()
 
-        version = yield data.ConfigurationModel.get_version_nr_latest_version(env.id)
+        version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
         if version is None:
             return 404, {"message": "No version available"}
 
         increment = self._increment_cache.get(env.id, None)
         if increment is None:
-            with (yield self._increment_cache_locks[env.id].acquire()):
+            with (await self._increment_cache_locks[env.id].acquire()):
                 increment = self._increment_cache.get(env.id, None)
                 if increment is None:
-                    increment = yield data.ConfigurationModel.get_increment(env.id, version)
+                    increment = await data.ConfigurationModel.get_increment(env.id, version)
                     self._increment_cache[env.id] = increment
 
         increment_ids, neg_increment = increment
@@ -877,7 +847,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                                     action=const.ResourceAction.deploy, changes={}, messages=[logline],
                                                     change=const.Change.nochange, send_events=False, keep_increment_cache=True))
 
-        resources = yield data.Resource.get_resources_for_version(env.id, version, agent)
+        resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
         deploy_model = []
         resource_ids = []
@@ -901,13 +871,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                  messages=[data.LogLine.log(logging.INFO,
                                                             "Resource version pulled by client for agent %(agent)s state",
                                                             agent=agent)])
-        yield ra.insert()
+        await ra.insert()
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     @protocol.handle(methods.list_versions, env="tid")
-    @gen.coroutine
-    def list_version(self, env, start=None, limit=None):
+    async def list_version(self, env, start=None, limit=None):
         if (start is None and limit is not None) or (limit is None and start is not None):
             return 500, {"message": "Start and limit should always be set together."}
 
@@ -915,7 +884,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             start = 0
             limit = data.DBLIMIT
 
-        models = yield data.ConfigurationModel.get_versions(env.id, start, limit)
+        models = await data.ConfigurationModel.get_versions(env.id, start, limit)
         count = len(models)
 
         d = {"versions": models}
@@ -929,13 +898,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, d
 
     @protocol.handle(methods.get_version, version_id="id", env="tid")
-    @gen.coroutine
-    def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=0):
-        version = yield data.ConfigurationModel.get_version(env.id, version_id)
+    async def get_version(self, env, version_id, include_logs=None, log_filter=None, limit=0):
+        version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        resources = yield data.Resource.get_resources_for_version(env.id, version_id, no_obj=True)
+        resources = await data.Resource.get_resources_for_version(env.id, version_id, no_obj=True)
         if resources is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
@@ -945,7 +913,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         d["resources"] = []
         for res_dict in resources:
             if bool(include_logs):
-                res_dict["actions"] = yield data.ResourceAction.get_log(
+                res_dict["actions"] = await data.ResourceAction.get_log(
                     env.id,
                     res_dict["resource_version_id"],
                     log_filter,
@@ -953,23 +921,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             d["resources"].append(res_dict)
 
-        d["unknowns"] = yield data.UnknownParameter.get_list(environment=env.id, version=version_id)
+        d["unknowns"] = await data.UnknownParameter.get_list(environment=env.id, version=version_id)
 
         return 200, d
 
     @protocol.handle(methods.delete_version, version_id="id", env="tid")
-    @gen.coroutine
-    def delete_version(self, env, version_id):
-        version = yield data.ConfigurationModel.get_version(env.id, version_id)
+    async def delete_version(self, env, version_id):
+        version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
             return 404, {"message": "The given configuration model does not exist yet."}
 
-        yield version.delete_cascade()
+        await version.delete_cascade()
         return 200
 
     @protocol.handle(methods.put_version, env="tid")
-    @gen.coroutine
-    def put_version(self, env, version, resources, resource_state, unknowns, version_info):
+    async def put_version(self, env, version, resources, resource_state, unknowns, version_info):
         started = datetime.datetime.now()
 
         agents = set()
@@ -1037,7 +1003,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         resources_to_purge = []
         if not failed:
             # search for deleted resources
-            resources_to_purge = yield data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
+            resources_to_purge = await data.Resource.get_deleted_resources(env.id, version, set(rv_dict.keys()))
 
             previous_requires = {}
             for res in resources_to_purge:
@@ -1084,12 +1050,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(),
                                          total=len(resources), version_info=version_info, undeployable=undeployable,
                                          skipped_for_undeployable=skippeable)
-            yield cm.insert()
+            await cm.insert()
         except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "The given version is already defined. Versions should be unique."}
 
-        yield data.Resource.insert_many(resource_objects)
-        yield cm.update_fields(total=cm.total + len(resources_to_purge))
+        await data.Resource.insert_many(resource_objects)
+        await cm.update_fields(total=cm.total + len(resources_to_purge))
 
         for uk in unknowns:
             if "resource" not in uk:
@@ -1101,10 +1067,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             up = data.UnknownParameter(resource_id=uk["resource"], name=uk["parameter"],
                                        source=uk["source"], environment=env.id,
                                        version=version, metadata=uk["metadata"])
-            yield up.insert()
+            await up.insert()
 
         for agent in agents:
-            yield self.agentmanager.ensure_agent_registered(env, agent)
+            await self.agentmanager.ensure_agent_registered(env, agent)
 
         now = datetime.datetime.now()
         log_line = data.LogLine.log(logging.INFO, "Successfully stored version %(version)d", version=version)
@@ -1118,58 +1084,57 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             finished=now,
             messages=[log_line]
         )
-        yield ra.insert()
+        await ra.insert()
         LOGGER.debug("Successfully stored version %d", version)
 
         self.clear_env_cache(env)
 
-        auto_deploy = yield env.get(data.AUTO_DEPLOY)
+        auto_deploy = await env.get(data.AUTO_DEPLOY)
         if auto_deploy:
             LOGGER.debug("Auto deploying version %d", version)
-            push_on_auto_deploy = yield env.get(data.PUSH_ON_AUTO_DEPLOY)
-            agent_trigger_method_on_autodeploy = yield env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
+            push_on_auto_deploy = await env.get(data.PUSH_ON_AUTO_DEPLOY)
+            agent_trigger_method_on_autodeploy = await env.get(data.AGENT_TRIGGER_METHOD_ON_AUTO_DEPLOY)
             agent_trigger_method_on_autodeploy = const.AgentTriggerMethod[agent_trigger_method_on_autodeploy]
-            yield self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
+            await self.release_version(env, version, push_on_auto_deploy, agent_trigger_method_on_autodeploy)
 
         return 200
 
     @protocol.handle(methods.release_version, version_id="id", env="tid")
-    @gen.coroutine
-    def release_version(self, env, version_id, push, agent_trigger_method=None):
-        model = yield data.ConfigurationModel.get_version(env.id, version_id)
+    async def release_version(self, env, version_id, push, agent_trigger_method=None):
+        model = await data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
-        yield model.update_fields(released=True, result=const.VersionState.deploying)
+        await model.update_fields(released=True, result=const.VersionState.deploying)
 
         if model.total == 0:
-            yield model.mark_done()
+            await model.mark_done()
             return 200, {"model": model}
 
         # Already mark undeployable resources as deployed to create a better UX (change the version counters)
-        undep = yield model.get_undeployable()
+        undep = await model.get_undeployable()
         undep = [rid + ",v=%s" % version_id for rid in undep]
 
         now = datetime.datetime.now()
 
         # not checking error conditions
-        yield self.resource_action_update(env, undep, action_id=uuid.uuid4(), started=now,
+        await self.resource_action_update(env, undep, action_id=uuid.uuid4(), started=now,
                                           finished=now, status=const.ResourceState.undefined,
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
                                           change=const.Change.nochange, send_events=False)
 
-        skippable = yield model.get_skipped_for_undeployable()
+        skippable = await model.get_skipped_for_undeployable()
         skippable = [rid + ",v=%s" % version_id for rid in skippable]
         # not checking error conditions
-        yield self.resource_action_update(env, skippable, action_id=uuid.uuid4(),
+        await self.resource_action_update(env, skippable, action_id=uuid.uuid4(),
                                           started=now, finished=now, status=const.ResourceState.skipped_for_undefined,
                                           action=const.ResourceAction.deploy, changes={}, messages=[],
                                           change=const.Change.nochange, send_events=False)
 
         if push:
             # fetch all resource in this cm and create a list of distinct agents
-            agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
-            yield self.agentmanager._ensure_agents(env, agents)
+            agents = await data.ConfigurationModel.get_agents(env.id, version_id)
+            await self.agentmanager._ensure_agents(env, agents)
 
             for agent in agents:
                 client = self.get_agent_client(env.id, agent)
@@ -1187,20 +1152,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"model": model}
 
     @protocol.handle(methods.deploy, env="tid")
-    @gen.coroutine
-    def deploy(self,
-               env: data.Environment,
-               agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-               agents: List[str] = None) -> Apireturn:
+    async def deploy(
+        self,
+        env: data.Environment,
+        agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+        agents: List[str] = None
+    ) -> Apireturn:
         warnings = []
 
         # get latest version
-        version_id = yield data.ConfigurationModel.get_version_nr_latest_version(env.id)
+        version_id = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
         if version_id is None:
             return 404, {"message": "No version available"}
 
         # filter agents
-        allagents = yield data.ConfigurationModel.get_agents(env.id, version_id)
+        allagents = await data.ConfigurationModel.get_agents(env.id, version_id)
         if agents is not None:
             required = set(agents)
             present = set(allagents)
@@ -1220,7 +1186,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         present = set()
         absent = set()
 
-        yield self.agentmanager._ensure_agents(env, allagents)
+        await self.agentmanager._ensure_agents(env, allagents)
 
         for agent in allagents:
             client = self.get_agent_client(env.id, agent)
@@ -1241,20 +1207,19 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return attach_warnings(200, {"agents": sorted(list(present))}, warnings)
 
     @protocol.handle(methods.dryrun_request, version_id="id", env="tid")
-    @gen.coroutine
-    def dryrun_request(self, env, version_id):
-        model = yield data.ConfigurationModel.get_version(environment=env.id, version=version_id)
+    async def dryrun_request(self, env, version_id):
+        model = await data.ConfigurationModel.get_version(environment=env.id, version=version_id)
         if model is None:
             return 404, {"message": "The request version does not exist."}
 
         # fetch all resource in this cm and create a list of distinct agents
-        rvs = yield data.Resource.get_list(model=version_id, environment=env.id)
+        rvs = await data.Resource.get_list(model=version_id, environment=env.id)
 
         # Create a dryrun document
-        dryrun = yield data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
+        dryrun = await data.DryRun.create(environment=env.id, model=version_id, todo=len(rvs), total=len(rvs))
 
-        agents = yield data.ConfigurationModel.get_agents(env.id, version_id)
-        yield self.agentmanager._ensure_agents(env, agents)
+        agents = await data.ConfigurationModel.get_agents(env.id, version_id)
+        await self.agentmanager._ensure_agents(env, agents)
 
         for agent in agents:
             client = self.get_agent_client(env.id, agent)
@@ -1265,10 +1230,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
 
         # Mark the resources in an undeployable state as done
-        with (yield self.dryrun_lock.acquire()):
-            undeployableids = yield model.get_undeployable()
+        with (await self.dryrun_lock.acquire()):
+            undeployableids = await model.get_undeployable()
             undeployableids = [rid + ",v=%s" % version_id for rid in undeployableids]
-            undeployable = yield data.Resource.get_resources(environment=env.id,
+            undeployable = await data.Resource.get_resources(environment=env.id,
                                                              resource_version_ids=undeployableids)
             for res in undeployable:
                 parsed_id = Id.parse_id(res.resource_version_id)
@@ -1276,60 +1241,56 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                                         "attribute": parsed_id.attribute,
                                                         "attribute_value": parsed_id.attribute_value,
                                                         "version": res.model}, "id": res.resource_version_id}
-                yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
+                await data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
-            skipundeployableids = yield model.get_skipped_for_undeployable()
+            skipundeployableids = await model.get_skipped_for_undeployable()
             skipundeployableids = [rid + ",v=%s" % version_id for rid in skipundeployableids]
-            skipundeployable = yield data.Resource.get_resources(environment=env.id, resource_version_ids=skipundeployableids)
+            skipundeployable = await data.Resource.get_resources(environment=env.id, resource_version_ids=skipundeployableids)
             for res in skipundeployable:
                 parsed_id = Id.parse_id(res.resource_version_id)
                 payload = {"changes": {}, "id_fields": {"entity_type": res.resource_type, "agent_name": res.agent,
                                                         "attribute": parsed_id.attribute,
                                                         "attribute_value": parsed_id.attribute_value,
                                                         "version": res.model}, "id": res.resource_version_id}
-                yield data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
+                await data.DryRun.update_resource(dryrun.id, res.resource_version_id, payload)
 
         return 200, {"dryrun": dryrun}
 
     @protocol.handle(methods.dryrun_list, env="tid")
-    @gen.coroutine
-    def dryrun_list(self, env, version=None):
+    async def dryrun_list(self, env, version=None):
         query_args = {}
         query_args["environment"] = env.id
         if version is not None:
-            model = yield data.ConfigurationModel.get_version(environment=env.id, version=version)
+            model = await data.ConfigurationModel.get_version(environment=env.id, version=version)
             if model is None:
                 return 404, {"message": "The request version does not exist."}
 
             query_args["model"] = version
 
-        dryruns = yield data.DryRun.get_list(**query_args)
+        dryruns = await data.DryRun.get_list(**query_args)
 
         return 200, {"dryruns": [{"id": x.id, "version": x.model, "date": x.date, "total": x.total, "todo": x.todo}
                                  for x in dryruns]}
 
     @protocol.handle(methods.dryrun_report, dryrun_id="id", env="tid")
-    @gen.coroutine
-    def dryrun_report(self, env, dryrun_id):
-        dryrun = yield data.DryRun.get_by_id(dryrun_id)
+    async def dryrun_report(self, env, dryrun_id):
+        dryrun = await data.DryRun.get_by_id(dryrun_id)
         if dryrun is None:
             return 404, {"message": "The given dryrun does not exist!"}
 
         return 200, {"dryrun": dryrun}
 
     @protocol.handle(methods.dryrun_update, dryrun_id="id", env="tid")
-    @gen.coroutine
-    def dryrun_update(self, env, dryrun_id, resource, changes):
-        with (yield self.dryrun_lock.acquire()):
+    async def dryrun_update(self, env, dryrun_id, resource, changes):
+        with (await self.dryrun_lock.acquire()):
             payload = {"changes": changes, "id_fields": Id.parse_id(resource).to_dict(), "id": resource}
-            yield data.DryRun.update_resource(dryrun_id, resource, payload)
+            await data.DryRun.update_resource(dryrun_id, resource, payload)
 
         return 200
 
     @protocol.handle(methods.upload_code, code_id="id", env="tid")
-    @gen.coroutine
-    def upload_code(self, env, code_id, resource, sources):
-        code = yield data.Code.get_version(environment=env.id, version=code_id, resource=resource)
+    async def upload_code(self, env, code_id, resource, sources):
+        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is not None:
             return 500, {"message": "Code for this version has already been uploaded."}
 
@@ -1337,7 +1298,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if hasherrors:
             return 400, {"message": "Hashes in source map do not match to source_code"}
 
-        ret, to_upload = yield self.stat_files(sources.keys())
+        ret, to_upload = await self.stat_files(sources.keys())
 
         if ret != 200:
             return ret, to_upload
@@ -1350,13 +1311,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         compact = {code_hash: (file_name, module, req) for code_hash, (file_name, module, _, req) in sources.items()}
 
         code = data.Code(environment=env.id, version=code_id, resource=resource, source_refs=compact)
-        yield code.insert()
+        await code.insert()
 
         return 200
 
     @protocol.handle(methods.upload_code_batched, code_id="id", env="tid")
-    @gen.coroutine
-    def upload_code_batched(self, env, code_id, resources):
+    async def upload_code_batched(self, env, code_id, resources):
         # validate
         for rtype, sources in resources.items():
             if not isinstance(rtype, str):
@@ -1377,7 +1337,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         allrefs = [ref for sourcemap in resources.values() for ref in sourcemap.keys()]
 
-        ret, val = yield self.stat_files(allrefs)
+        ret, val = await self.stat_files(allrefs)
 
         if ret != 200:
             return ret, val
@@ -1385,7 +1345,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if len(val["files"]) != 0:
             return 400, {"message": "Not all file references provided are valid", "references": val["files"]}
 
-        code = yield data.Code.get_versions(environment=env.id, version=code_id)
+        code = await data.Code.get_versions(environment=env.id, version=code_id)
         oldmap = {c.resource: c for c in code}
 
         new = {k: v for k, v in resources.items() if k not in oldmap}
@@ -1398,14 +1358,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         newcodes = [data.Code(environment=env.id, version=code_id, resource=resource, source_refs=hashes)
                     for resource, hashes in new.items()]
 
-        yield data.Code.insert_many(newcodes)
+        await data.Code.insert_many(newcodes)
 
         return 200
 
     @protocol.handle(methods.get_code, code_id="id", env="tid")
-    @gen.coroutine
-    def get_code(self, env, code_id, resource):
-        code = yield data.Code.get_version(environment=env.id, version=code_id, resource=resource)
+    async def get_code(self, env, code_id, resource):
+        code = await data.Code.get_version(environment=env.id, version=code_id, resource=resource)
         if code is None:
             return 404, {"message": "The version of the code does not exist."}
 
@@ -1420,10 +1379,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"version": code_id, "environment": env.id, "resource": resource, "sources": sources}
 
     @protocol.handle(methods.resource_action_update, env="tid")
-    @gen.coroutine
-    def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
-                               change, send_events, keep_increment_cache=False):
-        resources = yield data.Resource.get_resources(env.id, resource_ids)
+    async def resource_action_update(
+        self,
+        env,
+        resource_ids,
+        action_id,
+        action,
+        started,
+        finished,
+        status,
+        messages,
+        changes,
+        change,
+        send_events,
+        keep_increment_cache=False
+    ):
+        resources = await data.Resource.get_resources(env.id, resource_ids)
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
                          "Only %s of %s resources found." % (len(resources), len(resource_ids))}
@@ -1434,14 +1405,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     LOGGER.error("Attempting to set undeployable resource to deployable state")
                     raise AssertionError("Attempting to set undeployable resource to deployable state")
 
-        resource_action = yield data.ResourceAction.get(action_id=action_id)
+        resource_action = await data.ResourceAction.get(action_id=action_id)
         if resource_action is None:
             if started is None:
                 return 500, {"message": "A resource action can only be created with a start datetime."}
 
             resource_action = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids,
                                                   action_id=action_id, action=action, started=started)
-            yield resource_action.insert()
+            await resource_action.insert()
 
         if resource_action.finished is not None:
             return 500, {"message": "An resource action can only be updated when it has not been finished yet. This action "
@@ -1479,13 +1450,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             resource_action.set_field("finished", finished)
             done = True
 
-        yield resource_action.save()
+        await resource_action.save()
 
         if action in const.STATE_UPDATE and not done:
             if status is None:
                 return 500, {"message": "Cannot perform state update without a status."}
             for res in resources:
-                yield res.update_fields(status=status)
+                await res.update_fields(status=status)
             if not keep_increment_cache:
                 self.clear_env_cache(env)
         elif action in const.STATE_UPDATE and done:
@@ -1493,13 +1464,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 self.clear_env_cache(env)
             model_version = None
             for res in resources:
-                yield res.update_fields(last_deploy=finished, status=status)
+                await res.update_fields(last_deploy=finished, status=status)
                 model_version = res.model
 
                 if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:
-                    yield data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
+                    await data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
 
-            yield data.ConfigurationModel.mark_done_if_done(env.id, model_version)
+            await data.ConfigurationModel.mark_done_if_done(env.id, model_version)
 
             waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
                                   for res in resources for prov in res.provides])
@@ -1507,49 +1478,46 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for agent, resource_id in waiting_agents:
                 aclient = self.get_agent_client(env.id, agent)
                 if aclient is not None:
-                    yield aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+                    await aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
 
     # Project handlers
     @protocol.handle(methods.create_project)
-    @gen.coroutine
-    def create_project(self, name, project_id):
+    async def create_project(self, name, project_id):
         if project_id is None:
             project_id = uuid.uuid4()
         try:
             project = data.Project(id=project_id, name=name)
-            yield project.insert()
+            await project.insert()
         except asyncpg.exceptions.UniqueViolationError:
             return 500, {"message": "A project with name %s already exists." % name}
 
         return 200, {"project": project}
 
     @protocol.handle(methods.delete_project, project_id="id")
-    @gen.coroutine
-    def delete_project(self, project_id):
-        project = yield data.Project.get_by_id(project_id)
+    async def delete_project(self, project_id):
+        project = await data.Project.get_by_id(project_id)
         if project is None:
             return 404, {"message": "The project with given id does not exist."}
 
-        environments = yield data.Environment.get_list(project=project.id)
+        environments = await data.Environment.get_list(project=project.id)
         for env in environments:
-            yield [self.agentmanager.stop_agents(env), env.delete_cascade()]
+            await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
             self._close_resource_action_logger(env)
 
-        yield project.delete()
+        await project.delete()
 
         return 200, {}
 
     @protocol.handle(methods.modify_project, project_id="id")
-    @gen.coroutine
-    def modify_project(self, project_id, name):
+    async def modify_project(self, project_id, name):
         try:
-            project = yield data.Project.get_by_id(project_id)
+            project = await data.Project.get_by_id(project_id)
             if project is None:
                 return 404, {"message": "The project with given id does not exist."}
 
-            yield project.update_fields(name=name)
+            await project.update_fields(name=name)
 
             return 200, {"project": project}
 
@@ -1557,17 +1525,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 500, {"message": "A project with name %s already exists." % name}
 
     @protocol.handle(methods.list_projects)
-    @gen.coroutine
-    def list_projects(self):
-        projects = yield data.Project.get_list()
+    async def list_projects(self):
+        projects = await data.Project.get_list()
         return 200, {"projects": projects}
 
     @protocol.handle(methods.get_project, project_id="id")
-    @gen.coroutine
-    def get_project(self, project_id):
+    async def get_project(self, project_id):
         try:
-            project = yield data.Project.get_by_id(project_id)
-            environments = yield data.Environment.get_list(project=project_id)
+            project = await data.Project.get_by_id(project_id)
+            environments = await data.Environment.get_list(project=project_id)
 
             if project is None:
                 return 404, {"message": "The project with given id does not exist."}
@@ -1583,8 +1549,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     # Environment handlers
     @protocol.handle(methods.create_environment)
-    @gen.coroutine
-    def create_environment(self, project_id, name, repository, branch, environment_id):
+    async def create_environment(self, project_id, name, repository, branch, environment_id):
         if environment_id is None:
             environment_id = uuid.uuid4()
 
@@ -1592,12 +1557,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 500, {"message": "Repository and branch should be set together."}
 
         # fetch the project first
-        project = yield data.Project.get_by_id(project_id)
+        project = await data.Project.get_by_id(project_id)
         if project is None:
             return 500, {"message": "The project id for the environment does not exist."}
 
         # check if an environment with this name is already defined in this project
-        envs = yield data.Environment.get_list(project=project_id, name=name)
+        envs = await data.Environment.get_list(project=project_id, name=name)
         if len(envs) > 0:
             return 500, {"message": "Project %s (id=%s) already has an environment with name %s" %
                          (project.name, project.id, name)}
@@ -1605,18 +1570,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         env = data.Environment(
             id=environment_id, name=name, project=project_id, repo_url=repository, repo_branch=branch
         )
-        yield env.insert()
+        await env.insert()
         return 200, {"environment": env}
 
     @protocol.handle(methods.modify_environment, environment_id="id")
-    @gen.coroutine
-    def modify_environment(self, environment_id, name, repository, branch):
-        env = yield data.Environment.get_by_id(environment_id)
+    async def modify_environment(self, environment_id, name, repository, branch):
+        env = await data.Environment.get_by_id(environment_id)
         if env is None:
             return 404, {"message": "The environment id does not exist."}
 
         # check if an environment with this name is already defined in this project
-        envs = yield data.Environment.get_list(project=env.project, name=name)
+        envs = await data.Environment.get_list(project=env.project, name=name)
         if len(envs) > 0 and envs[0].id != environment_id:
             return 500, {"message": "Project with id=%s already has an environment with name %s" % (env.project_id, name)}
 
@@ -1627,16 +1591,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if branch is not None:
             fields["repo_branch"] = branch
 
-        yield env.update_fields(**fields)
+        await env.update_fields(**fields)
         return 200, {"environment": env}
 
     @protocol.handle(methods.get_environment, environment_id="id")
-    @gen.coroutine
-    def get_environment(self, environment_id, versions=None, resources=None):
+    async def get_environment(self, environment_id, versions=None, resources=None):
         versions = 0 if versions is None else int(versions)
         resources = 0 if resources is None else int(resources)
 
-        env = yield data.Environment.get_by_id(environment_id)
+        env = await data.Environment.get_by_id(environment_id)
 
         if env is None:
             return 404, {"message": "The environment id does not exist."}
@@ -1644,17 +1607,16 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         env_dict = env.to_dict()
 
         if versions > 0:
-            env_dict["versions"] = yield data.ConfigurationModel.get_versions(environment_id, limit=versions)
+            env_dict["versions"] = await data.ConfigurationModel.get_versions(environment_id, limit=versions)
 
         if resources > 0:
-            env_dict["resources"] = yield data.Resource.get_resources_report(environment=environment_id)
+            env_dict["resources"] = await data.Resource.get_resources_report(environment=environment_id)
 
         return 200, {"environment": env_dict}
 
     @protocol.handle(methods.list_environments)
-    @gen.coroutine
-    def list_environments(self):
-        environments = yield data.Environment.get_list()
+    async def list_environments(self):
+        environments = await data.Environment.get_list()
         dicts = []
         for env in environments:
             env_dict = env.to_dict()
@@ -1663,25 +1625,22 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environments": dicts}  # @UndefinedVariable
 
     @protocol.handle(methods.delete_environment, environment_id="id")
-    @gen.coroutine
-    def delete_environment(self, environment_id):
-        env = yield data.Environment.get_by_id(environment_id)
+    async def delete_environment(self, environment_id):
+        env = await data.Environment.get_by_id(environment_id)
         if env is None:
             return 404, {"message": "The environment with given id does not exist."}
 
-        yield [self.agentmanager.stop_agents(env), env.delete_cascade()]
+        await asyncio.gather(self.agentmanager.stop_agents(env), env.delete_cascade())
 
         self._close_resource_action_logger(environment_id)
 
         return 200
 
     @protocol.handle(methods.list_settings, env="tid")
-    @gen.coroutine
-    def list_settings(self, env: data.Environment):
+    async def list_settings(self, env: data.Environment):
         return 200, {"settings": env.settings, "metadata": data.Environment._settings}
 
-    @gen.coroutine
-    def _setting_change(self, env, key):
+    async def _setting_change(self, env, key):
         setting = env._settings[key]
         if setting.recompile:
             LOGGER.info("Environment setting %s changed. Recompiling with update = %s", key, setting.update)
@@ -1690,18 +1649,17 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 "type": "setting",
                 "setting": key
             }
-            yield self._async_recompile(env, setting.update, metadata=metadata)
+            await self._async_recompile(env, setting.update, metadata=metadata)
 
         if setting.agent_restart:
             LOGGER.info("Environment setting %s changed. Restarting agents.", key)
-            yield self.agentmanager.restart_agents(env)
+            await self.agentmanager.restart_agents(env)
 
     @protocol.handle(methods.set_setting, env="tid", key="id")
-    @gen.coroutine
-    def set_setting(self, env: data.Environment, key: str, value: str):
+    async def set_setting(self, env: data.Environment, key: str, value: str):
         try:
-            yield env.set(key, value)
-            yield self._setting_change(env, key)
+            await env.set(key, value)
+            await self._setting_change(env, key)
             return 200
         except KeyError:
             return 404
@@ -1709,41 +1667,36 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             return 500, {"message": "Invalid value"}
 
     @protocol.handle(methods.get_setting, env="tid", key="id")
-    @gen.coroutine
-    def get_setting(self, env: data.Environment, key: str):
+    async def get_setting(self, env: data.Environment, key: str):
         try:
-            value = yield env.get(key)
+            value = await env.get(key)
             return 200, {"value": value, "metadata": data.Environment._settings}
         except KeyError:
             return 404
 
     @protocol.handle(methods.delete_setting, env="tid", key="id")
-    @gen.coroutine
-    def delete_setting(self, env: data.Environment, key: str):
+    async def delete_setting(self, env: data.Environment, key: str):
         try:
-            yield env.unset(key)
-            yield self._setting_change(env, key)
+            await env.unset(key)
+            await self._setting_change(env, key)
             return 200
         except KeyError:
             return 404
 
     @protocol.handle(methods.is_compiling, environment_id="id")
-    @gen.coroutine
-    def is_compiling(self, environment_id):
+    async def is_compiling(self, environment_id):
         if self._recompiles[environment_id] is self:
             return 200
 
         return 204
 
     @protocol.handle(methods.notify_change_get, env="id")
-    @gen.coroutine
-    def notify_change_get(self, env, update):
-        result = yield self.notify_change(env, update, {})
+    async def notify_change_get(self, env, update):
+        result = await self.notify_change(env, update, {})
         return result
 
     @protocol.handle(methods.notify_change, env="id")
-    @gen.coroutine
-    def notify_change(self, env, update, metadata):
+    async def notify_change(self, env, update, metadata):
         LOGGER.info("Received change notification for environment %s", env.id)
         if "type" not in metadata:
             metadata["type"] = "api"
@@ -1751,16 +1704,15 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if "message" not in metadata:
             metadata["message"] = "Recompile trigger through API call"
 
-        yield self._async_recompile(env, update, metadata=metadata)
+        await self._async_recompile(env, update, metadata=metadata)
 
         return 200
 
-    @gen.coroutine
-    def _async_recompile(self, env, update_repo, metadata={}):
+    async def _async_recompile(self, env, update_repo, metadata={}):
         """
             Recompile an environment in a different thread and taking wait time into account.
         """
-        server_compile = yield env.get(data.SERVER_COMPILE)
+        server_compile = await env.get(data.SERVER_COMPILE)
         if not server_compile:
             LOGGER.info("Skipping compile because server compile not enabled for this environment.")
             return
@@ -1781,8 +1733,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         self._recompiles[env.id] = self
         ioloop.IOLoop.current().add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
 
-    @gen.coroutine
-    def _run_compile_stage(self, name, cmd, cwd, **kwargs):
+    async def _run_compile_stage(self, name, cmd, cwd, **kwargs):
         start = datetime.datetime.now()
 
         try:
@@ -1790,7 +1741,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             err = tempfile.NamedTemporaryFile()
             sub_process = process.Subprocess(cmd, stdout=out, stderr=err, cwd=cwd, **kwargs)
 
-            returncode = yield sub_process.wait_for_exit(raise_error=False)
+            returncode = await sub_process.wait_for_exit(raise_error=False)
 
             out.seek(0)
             err.seek(0)
@@ -1803,15 +1754,14 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             out.close()
             err.close()
 
-    @gen.coroutine
-    def _recompile_environment(self, environment_id, update_repo=False, wait=0, metadata={}):
+    async def _recompile_environment(self, environment_id, update_repo=False, wait=0, metadata={}):
         """
             Recompile an environment
         """
         if wait > 0:
-            yield gen.sleep(wait)
+            await gen.sleep(wait)
 
-        env = yield data.Environment.get_by_id(environment_id)
+        env = await data.Environment.get_by_id(environment_id)
         if env is None:
             LOGGER.error("Environment %s does not exist.", environment_id)
             return
@@ -1834,7 +1784,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 # checkout repo
                 if not os.path.exists(os.path.join(project_dir, ".git")):
                     LOGGER.info("Cloning repository into environment directory %s", project_dir)
-                    result = yield self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."],
+                    result = await self._run_compile_stage("Cloning repository", ["git", "clone", env.repo_url, "."],
                                                            project_dir)
                     stages.append(result)
                     if result.returncode > 0:
@@ -1842,7 +1792,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
                 elif update_repo:
                     LOGGER.info("Fetching changes from repo %s", env.repo_url)
-                    result = yield self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url],
+                    result = await self._run_compile_stage("Fetching changes", ["git", "fetch", env.repo_url],
                                                            project_dir)
                     stages.append(result)
                 if env.repo_branch:
@@ -1853,26 +1803,28 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                                                      stderr=process.Subprocess.STREAM,
                                                      cwd=project_dir)
 
-                    out, _, _ = yield [sub_process.stdout.read_until_close(),
-                                       sub_process.stderr.read_until_close(),
-                                       sub_process.wait_for_exit(raise_error=False)]
+                    out, _, _ = await asyncio.gather(
+                        sub_process.stdout.read_until_close(),
+                        sub_process.stderr.read_until_close(),
+                        sub_process.wait_for_exit(raise_error=False)
+                    )
 
                     o = re.search(r"\* ([^\s]+)$", out.decode(), re.MULTILINE)
                     if o is not None and env.repo_branch != o.group(1):
                         LOGGER.info("Repository is at %s branch, switching to %s", o.group(1), env.repo_branch)
-                        result = yield self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch],
+                        result = await self._run_compile_stage("switching branch", ["git", "checkout", env.repo_branch],
                                                                project_dir)
                         stages.append(result)
 
                 if update_repo:
-                    result = yield self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
+                    result = await self._run_compile_stage("Pulling updates", ["git", "pull"], project_dir)
                     stages.append(result)
                     LOGGER.info("Installing and updating modules")
-                    result = yield self._run_compile_stage("Installing modules", inmanta_path + ["modules", "install"],
+                    result = await self._run_compile_stage("Installing modules", inmanta_path + ["modules", "install"],
                                                            project_dir,
                                                            env=os.environ.copy())
                     stages.append(result)
-                    result = yield self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"],
+                    result = await self._run_compile_stage("Updating modules", inmanta_path + ["modules", "update"],
                                                            project_dir,
                                                            env=os.environ.copy())
                     stages.append(result)
@@ -1893,7 +1845,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 cmd.append("--ssl-ca-cert")
                 cmd.append(opt.server_ssl_ca_cert.get())
 
-            result = yield self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
+            result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 
             stages.append(result)
         except Exception:
@@ -1907,12 +1859,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             for stage in stages:
                 stage.compile = comp.id
 
-            yield comp.insert()
-            yield data.Report.insert_many(stages)
+            await comp.insert()
+            await data.Report.insert_many(stages)
 
     @protocol.handle(methods.get_reports, env="tid")
-    @gen.coroutine
-    def get_reports(self, env, start=None, end=None, limit=None):
+    async def get_reports(self, env, start=None, end=None, limit=None):
         argscount = len([x for x in [start, end, limit] if x is not None])
         if argscount == 3:
             return 500, {"message": "Limit, start and end can not be set together"}
@@ -1923,14 +1874,13 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             start = dateutil.parser.parse(start)
         if end is not None:
             end = dateutil.parser.parse(end)
-        models = yield data.Compile.get_reports(env.id, limit, start, end)
+        models = await data.Compile.get_reports(env.id, limit, start, end)
 
         return 200, {"reports": models}
 
     @protocol.handle(methods.get_report, compile_id="id")
-    @gen.coroutine
-    def get_report(self, compile_id):
-        report = yield data.Compile.get_report(compile_id)
+    async def get_report(self, compile_id):
+        report = await data.Compile.get_report(compile_id)
 
         if report is None:
             return 404
@@ -1938,25 +1888,23 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"report": report}
 
     @protocol.handle(methods.decomission_environment, env="id")
-    @gen.coroutine
-    def decomission_environment(self, env, metadata):
+    async def decomission_environment(self, env, metadata):
         version = int(time.time())
         if metadata is None:
             metadata = {
                 "message": "Decommission of environment",
                 "type": "api"
             }
-        result = yield self.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
+        result = await self.put_version(env, version, [], {}, [], {const.EXPORT_META_DATA: metadata})
         return result, {"version": version}
 
     @protocol.handle(methods.clear_environment, env="id")
-    @gen.coroutine
-    def clear_environment(self, env: data.Environment):
+    async def clear_environment(self, env: data.Environment):
         """
             Clear the environment
         """
-        yield self.agentmanager.stop_agents(env)
-        yield env.delete_cascade(only_content=True)
+        await self.agentmanager.stop_agents(env)
+        await env.delete_cascade(only_content=True)
 
         project_dir = os.path.join(self._server_storage["environments"], str(env.id))
         if os.path.exists(project_dir):
@@ -1965,8 +1913,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200
 
     @protocol.handle(methods.create_token, env="tid")
-    @gen.coroutine
-    def create_token(self, env, client_types, idempotent):
+    async def create_token(self, env, client_types, idempotent):
         """
             Create a new auth token for this environment
         """

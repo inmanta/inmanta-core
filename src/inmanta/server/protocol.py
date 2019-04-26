@@ -51,11 +51,10 @@ class ReturnClient(Client):
         super().__init__(name)
         self.session = session
 
-    @gen.coroutine
-    def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
+    async def _call(self, method_properties: common.MethodProperties, args, kwargs) -> common.Result:
         call_spec = method_properties.build_call(args, kwargs)
         try:
-            return_value = yield self.session.put_call(call_spec, timeout=method_properties.timeout)
+            return_value = await self.session.put_call(call_spec, timeout=method_properties.timeout)
         except gen.TimeoutError:
             return common.Result(code=500, result={"message": "Call timed out"})
 
@@ -97,8 +96,7 @@ class Server(endpoints.Endpoint):
 
     id = property(get_id)
 
-    @gen.coroutine
-    def start(self) -> NoneGen:
+    async def start(self) -> NoneGen:
         """
             Start the transport.
 
@@ -112,16 +110,15 @@ class Server(endpoints.Endpoint):
         self.running = True
 
         for slice in self.get_slices().values():
-            yield slice.prestart(self)
+            await slice.prestart(self)
 
         for slice in self.get_slices().values():
-            yield slice.start()
+            await slice.start()
             self._handlers.extend(slice.get_handlers())
 
-        yield self._transport.start(self.get_slices().values(), self._handlers)
+        await self._transport.start(self.get_slices().values(), self._handlers)
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> NoneGen:
         """
             Stop the transport.
 
@@ -133,10 +130,10 @@ class Server(endpoints.Endpoint):
             return
         self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
-        yield self._transport.stop()
+        await self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
-            yield endpoint.stop()
-        yield self._transport.join()
+            await endpoint.stop()
+        await self._transport.join()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget):
@@ -153,20 +150,17 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self.running: bool = False  # for debugging
 
     @abc.abstractmethod
-    @gen.coroutine
-    def prestart(self, server: Server) -> NoneGen:
+    async def prestart(self, server: Server) -> NoneGen:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
-    @gen.coroutine
     @abc.abstractmethod
-    def start(self) -> NoneGen:
+    async def start(self) -> NoneGen:
         """
             Start the server slice.
         """
         self.running = True
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> NoneGen:
         self.running = False
         self._sched.stop()
 
@@ -302,21 +296,20 @@ class Session(object):
 
         return future
 
-    @gen.coroutine
-    def get_calls(self) -> Optional[List[common.Request]]:
+    async def get_calls(self) -> Optional[List[common.Request]]:
         """
             Get all calls queued for a node. If no work is available, wait until timeout. This method returns none if a call
             fails.
         """
         try:
             call_list: List[common.Request] = []
-            call = yield self._queue.get(timeout=IOLoop.current().time() + self._interval)
+            call = await self._queue.get(timeout=IOLoop.current().time() + self._interval)
             if call is None:
                 # aborting session
                 return None
             call_list.append(call)
             while self._queue.qsize() > 0:
-                call = yield self._queue.get()
+                call = await self._queue.get()
                 if call is None:
                     # aborting session
                     return None
@@ -386,23 +379,20 @@ class SessionManager(ServerSlice):
     def add_listener(self, listener: SessionListener) -> None:
         self.listeners.append(listener)
 
-    @gen.coroutine
-    def prestart(self, server: Server) -> None:
+    async def prestart(self, server: Server) -> None:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
-    @gen.coroutine
-    def start(self) -> None:
+    async def start(self) -> None:
         """
             Start the server slice.
         """
-        yield super().start()
+        await super().start()
 
-    @gen.coroutine
-    def stop(self) -> None:
+    async def stop(self) -> None:
         """
             Stop the end-point and all of its transports
         """
-        yield super().stop()
+        await super().stop()
         # terminate all sessions cleanly
         for session in self._sessions.copy().values():
             session.expire(0)
@@ -445,8 +435,7 @@ class SessionManager(ServerSlice):
         session.seen()
 
     @handle(methods.heartbeat, env="tid")
-    @gen.coroutine
-    def heartbeat(
+    async def heartbeat(
         self, sid: uuid.UUID, env: "inmanta.data.Environment", endpoint_names, nodename
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         LOGGER.debug("Received heartbeat from %s for agents %s in %s", nodename, ",".join(endpoint_names), env.id)
@@ -454,7 +443,7 @@ class SessionManager(ServerSlice):
         session: Session = self.get_or_create_session(sid, env.id, endpoint_names, nodename)
 
         LOGGER.debug("Let node %s wait for method calls to become available. (long poll)", nodename)
-        call_list = yield session.get_calls()
+        call_list = await session.get_calls()
         if call_list is not None:
             LOGGER.debug("Pushing %d method calls to node %s", len(call_list), nodename)
             return 200, {"method_calls": call_list}
@@ -464,8 +453,7 @@ class SessionManager(ServerSlice):
         return 200
 
     @handle(methods.heartbeat_reply)
-    @gen.coroutine
-    def heartbeat_reply(
+    async def heartbeat_reply(
         self, sid: uuid.UUID, reply_id: uuid.UUID, data: JsonType
     ) -> Union[int, Tuple[int, Dict[str, str]]]:
         try:

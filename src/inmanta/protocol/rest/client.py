@@ -19,7 +19,6 @@
 import re
 from typing import Set, Dict, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, Generator
 
-from tornado import gen
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 
 from inmanta import config as inmanta_config
@@ -87,8 +86,7 @@ class RESTClient(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    @gen.coroutine
-    def call(
+    async def call(
         self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None
     ) -> Generator[Any, Any, common.Result]:
         if kwargs is None:
@@ -124,7 +122,7 @@ class RESTClient(RESTBase):
                 decompress_response=True,
             )
             client = AsyncHTTPClient()
-            response = yield client.fetch(request)
+            response = await client.fetch(request)
         except HTTPError as e:
             if e.response is not None and e.response.body is not None and len(e.response.body) > 0:
                 try:
