@@ -579,7 +579,6 @@ class AgentManager(ServerSlice, SessionListener):
 
         # generate config file
         config = """[config]
-heartbeat-interval = 60
 state-dir=%(statedir)s
 
 agent-names = %(agents)s

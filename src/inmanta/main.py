@@ -293,7 +293,6 @@ def environment_create(client: Client, name: str, project: str, repo_url: str, b
     if save:
         cfg = """
 [config]
-heartbeat-interval = 60
 fact-expire = 1800
 environment=%(env)s
 
