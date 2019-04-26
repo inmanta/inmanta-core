@@ -33,5 +33,5 @@ pytest-env==0.6.2
 jinja2==2.10.1
 pep8-naming==0.8.2
 flake8==3.7.7
-psutil==5.6.1
+psutil==5.6.2
 pyformance==0.4
