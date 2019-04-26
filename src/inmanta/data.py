@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from typing import Set, Dict, List, Optional
+from typing import Set, Dict, List, Optional, Tuple, Any
 from configparser import RawConfigParser
 
 from inmanta.const import ResourceState
@@ -33,8 +33,12 @@ import pkgutil
 import inmanta.db.versions
 
 from inmanta.resources import Id
-from inmanta import const
+from inmanta import const, util
 import asyncpg
+
+from inmanta.types import JsonType
+from typing import Dict, List, Any, Union
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +46,11 @@ DBLIMIT = 100000
 
 # TODO: disconnect
 # TODO: difference between None and not set
+
+
+def json_encode(value: JsonType) -> str:
+    # see json_encode in tornado.escape
+    return json.dumps(value, default=util.custom_json_encoder)
 
 
 class Field(object):
@@ -67,32 +76,32 @@ class Field(object):
 
     field_type = property(get_field_type)
 
-    def is_required(self):
+    def is_required(self) -> bool:
         return self._required
 
     required = property(is_required)
 
-    def get_default(self):
+    def get_default(self) -> bool:
         return self._default
 
     default = property(get_default)
 
-    def get_default_value(self):
+    def get_default_value(self) -> Any:
         return copy.copy(self._default_value)
 
     default_value = property(get_default_value)
 
-    def is_unique(self):
+    def is_unique(self) -> bool:
         return self._unique
 
     unique = property(is_unique)
 
-    def is_reference(self):
+    def is_reference(self) -> bool:
         return self._reference
 
     reference = property(is_reference)
 
-    def is_part_of_primary_key(self):
+    def is_part_of_primary_key(self) -> bool:
         return self._part_of_primary_key
 
     part_of_primary_key = property(is_part_of_primary_key)
@@ -110,7 +119,7 @@ class DataDocument(object):
     def __init__(self, **kwargs):
         self._data = kwargs
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
             Return a dict representation of this object.
         """
@@ -140,17 +149,17 @@ class BaseDocument(object, metaclass=DocumentMeta):
     _connection_pool = None
 
     @classmethod
-    def table_name(cls):
+    def table_name(cls) -> str:
         """
             Return the name of the collection
         """
         return cls.__name__.lower()
 
-    def __init__(self, from_postgres=False, **kwargs):
+    def __init__(self, from_postgres: bool=False, **kwargs: Any) -> None:
         self.__fields = self._create_dict_wrapper(from_postgres, kwargs)
 
     @classmethod
-    def _create_dict(cls, from_postgres, kwargs):
+    def _create_dict(cls, from_postgres: bool, kwargs: Dict[str, Any]) -> JsonType:
         result = {}
         fields = cls._fields.copy()
 
@@ -198,11 +207,11 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return result
 
     @classmethod
-    def _get_names_of_primary_key_fields(cls):
+    def _get_names_of_primary_key_fields(cls) -> List[str]:
         fields = cls._fields.copy()
         return [name for name, value in fields.items() if value.is_part_of_primary_key()]
 
-    def _get_filter_on_primary_key_fields(self, offset=1):
+    def _get_filter_on_primary_key_fields(self, offset: int=1) -> Tuple[str, List[Any]]:
         names_primary_key_fields = self._get_names_of_primary_key_fields()
         query = {field_name: self.__getattribute__(field_name) for field_name in names_primary_key_fields}
         return self._get_composed_filter(offset=offset, **query)
@@ -268,12 +277,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
         raise AttributeError(name)
 
     @classmethod
-    def _convert_field_names_to_db_column_names(cls, field_dict):
+    def _convert_field_names_to_db_column_names(cls, field_dict: Dict[str, str]) -> Dict[str, str]:
         return field_dict
 
-    def _get_column_names_and_values(self):
-        column_names = []
-        values = []
+    def _get_column_names_and_values(self) -> Tuple[List[str], List[str]]:
+        column_names: List[str] = []
+        values: List[str] = []
         for name, typing in self._fields.items():
             if self._fields[name].reference:
                 continue
@@ -399,7 +408,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         await self._execute_query(query, *values)
 
     @classmethod
-    async def get_by_id(cls, doc_id: uuid.UUID):
+    async def get_by_id(cls, doc_id: uuid.UUID) -> Optional["BaseDocument"]:
         """
             Get a specific document based on its ID
 
@@ -408,6 +417,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         result = await cls.get_list(id=doc_id)
         if len(result) > 0:
             return result[0]
+        return None
 
     @classmethod
     async def get_one(cls, **query):
@@ -449,7 +459,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return record_count
 
     @classmethod
-    def _get_composed_filter(cls, offset=1, col_name_prefix=None, **query):
+    def _get_composed_filter(cls, offset: int=1, col_name_prefix: str=None, **query: Any) -> Tuple[str, List[Any]]:
         filter_statements = []
         values = []
         index_count = max(1, offset)
@@ -463,7 +473,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_as_string, values)
 
     @classmethod
-    def _get_filter(cls, name, value, index, col_name_prefix=None):
+    def _get_filter(cls, name: str, value: Any, index: int, col_name_prefix: str=None) -> Tuple[str, Any]:
         if value is None:
             return (name + " IS NULL", None)
         filter_statement = name + "=$" + str(index)
@@ -473,12 +483,12 @@ class BaseDocument(object, metaclass=DocumentMeta):
         return (filter_statement, value)
 
     @classmethod
-    def _get_value(cls, value):
+    def _get_value(cls, value: Any) -> Any:
         if isinstance(value, dict):
-            return json.dumps(cls._get_value_of_dict(value))
+            return json_encode(value)
 
         if isinstance(value, DataDocument) or issubclass(value.__class__, DataDocument):
-            return json.dumps(cls._get_value_of_dict(value.to_dict()))
+            return json_encode(value)
 
         if isinstance(value, list):
             return [cls._get_value(x) for x in value]
@@ -488,19 +498,8 @@ class BaseDocument(object, metaclass=DocumentMeta):
 
         if isinstance(value, uuid.UUID):
             return str(value)
-        return value
 
-    @classmethod
-    def _get_value_of_dict(cls, dct):
-        result = {}
-        for key, value in dct.items():
-            if isinstance(value, datetime.datetime):
-                result[key] = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
-            elif isinstance(value, dict):
-                result[key] = cls._get_value_of_dict(value)
-            else:
-                result[key] = cls._get_value(value)
-        return result
+        return value
 
     async def delete(self, connection=None):
         """
@@ -525,7 +524,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
                         result.append(cls(from_postgres=True, **record))
                 return result
 
-    def to_dict(self):
+    def to_dict(self) -> JsonType:
         """
             Return a dict representing the document
         """
@@ -560,7 +559,7 @@ class Project(BaseDocument):
     name = Field(field_type=str, required=True, unique=True)
 
 
-def convert_boolean(value):
+def convert_boolean(value: Any) -> bool:
     if isinstance(value, bool):
         return value
 
@@ -569,7 +568,7 @@ def convert_boolean(value):
     return RawConfigParser.BOOLEAN_STATES[value.lower()]
 
 
-def convert_int(value):
+def convert_int(value: Any) -> Union[int, float]:
     if isinstance(value, (int, float)):
         return value
 
@@ -581,7 +580,7 @@ def convert_int(value):
     return f_value
 
 
-def convert_agent_map(value):
+def convert_agent_map(value: Dict[str, str]) -> Dict[str, str]:
     if not isinstance(value, dict):
         raise ValueError("Agent map should be a dict")
 

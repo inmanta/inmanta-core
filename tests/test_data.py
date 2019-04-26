@@ -1863,3 +1863,26 @@ async def test_insert_many(init_dataclasses_and_load_schema, postgresql_client):
 
     assert len(project_names_in_result) == 2
     assert sorted(["proj1", "proj2"]) == sorted(project_names_in_result)
+
+
+@pytest.mark.asyncio
+async def test_resources_json(init_dataclasses_and_load_schema):
+    project = data.Project(name="test")
+    await project.insert()
+    env = data.Environment(name="dev", project=project.id, repo_url="", repo_branch="")
+    await env.insert()
+
+    version = 1
+    cm = data.ConfigurationModel(environment=env.id, version=version, date=datetime.datetime.now(), total=1,
+                                 version_info={}, released=True, deployed=True)
+    await cm.insert()
+
+    res1 = data.Resource.new(environment=env.id,
+                             resource_version_id="std::File[agent1,path=/etc/file1],v=%s" % version,
+                             status=const.ResourceState.deployed, last_deploy=datetime.datetime.now(),
+                             attributes={"attr": [{"a": 1, "b": "c"}]})
+    await res1.insert()
+
+    res = await data.Resource.get_one(environment=res1.environment, resource_version_id=res1.resource_version_id)
+
+    assert res1.attributes == res.attributes

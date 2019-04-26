@@ -22,11 +22,14 @@ import itertools
 import logging
 import socket
 import warnings
+import uuid
+import datetime
+import enum
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple
+from typing import Callable, Dict, Union, Tuple, List
 
 from inmanta.types import JsonType
 
@@ -155,3 +158,27 @@ def get_free_tcp_port() -> str:
     _addr, port = tcp.getsockname()
     tcp.close()
     return str(port)
+
+
+def custom_json_encoder(o: object) -> Union[Dict, str, List]:
+    """
+        A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
+    """
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime.datetime):
+        return o.isoformat(timespec='microseconds')
+
+    if hasattr(o, "to_dict"):
+        return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
+
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    LOGGER.error("Unable to serialize %s", o)
+    raise TypeError(repr(o) + " is not JSON serializable")
