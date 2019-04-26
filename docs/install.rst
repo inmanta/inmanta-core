@@ -187,7 +187,7 @@ database section of that file in the following way:
   username=inmanta
   password=<password>
 
-Replace <password> in the above-mentioned snipped with the password of the inmanta database. By default Inmanta tries to
+Replace <password> in the above-mentioned snippet with the password of the inmanta database. By default Inmanta tries to
 connect to the local server and uses the database inmanta. See the :inmanta.config:group:`database` section in the
 configfile for other options.
 

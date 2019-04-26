@@ -4,9 +4,9 @@ Migrate from MongoDB to PostgreSQL
 Since release 2019.2, PostgreSQL is used as the backend database system of the Inmanta server instead of MongoDB. This page
 describes how to migrate an Inmanta server running on MongoDB to PostgreSQL.
 
-Note: This procedure doesn't perform a full database migration. Existing version of a configurationmodel will not be migrated
-to the PostgreSQL database. As such, it is required to create a new version of the configuration model after the migration.
-The following things will be migrated:
+Note: This procedure doesn't perform a full database migration. Existing versions of a configurationmodel will not be migrated
+to the PostgreSQL database. As such, it is required to create a new version of the configuration model after the migration by
+recompiling the model. The following things will be migrated:
 
 * Projects
 * Environments (including environment settings)
