@@ -10,8 +10,8 @@ The Inmanta orchestrator consists of several components:
    :alt: Overview of the Inmanta platform
 
 * The Inmanta **server**: This server manages the deployment process, it keeps track of all agents and the current state of all
-  projects. The server stores it state in mongodb. All other state can be recovered after a server restart or failover.
-* A mongodb database: The Inmanta server stores it state in a mongo database.
+  projects. The server stores it state in PostgreSQL. All other state can be recovered after a server restart or failover.
+* A PostgreSQL database: The Inmanta server stores its state in a PostgreSQL database.
 * The git server: The source code of the configuration models is stored in (one or more) git repositories.
 * The **compiler**: The compiler converts the source code into deployable resources and exports it to the server.
 * CLI and Dashboard: To control the server, you can use either the web dashboard or the command line tools. Both communicate
@@ -20,7 +20,7 @@ The Inmanta orchestrator consists of several components:
   or cloud service. An agent can manage local and remote resources. This provides the flexibility to work in an agent based or
   agent-less architecture, depending on the requirements.
 
-  
+
 Usage modes
 -----------
 
@@ -137,4 +137,4 @@ For very interactive changes the server pushes changes to the agent. The server 
  * **incremental** only deploys resource for which the orchestrator knows there are changes, based on the last known deploy status of the resource.
  * **full** always deploys all resources even if the last know status of the resource already matches desired state.
 
-    
+

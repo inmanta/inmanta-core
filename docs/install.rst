@@ -23,7 +23,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
           EOF
 
           sudo yum install -y epel-release
-          sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
+          sudo yum install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
 
         The first package (python3-inmanta) contains all the code and the commands. The server and the agent packages install config
         files and systemd unit files. The dashboard is installed with the server package.
@@ -44,7 +44,7 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
           enabled=1
           enabled_metadata=1
           EOF
-          sudo dnf install -y python3-inmanta python3-inmanta-server python3-inmanta-agent mongodb-server
+          sudo dnf install -y python3-inmanta python3-inmanta-server python3-inmanta-agent
 
         The first package (python3-inmanta) contains all the code and the commands. The server and the agent
         packages install config files and systemd unit files. The dashboard is installed with the server
@@ -114,41 +114,102 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
 Configure server
 ################
-This guide goes through the steps to setup an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7 
+This guide goes through the steps to setup an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
 server. The rpm packages install the server configuration file in /etc/inmanta/server.cfg
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
 
-Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication. It is not mandatory but still highly 
+Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication. It is not mandatory but still highly
 recommended.
 
+.. _install-step-2:
 
-Step 2: Setup mongodb
----------------------
+Step 2: Install PostgreSQL 10
+-----------------------------
 
-Make sure mongodb is started and reachable by the Inmanta server. By default Inmanta tries to connect to the local server
-and uses the database inmanta. See the :inmanta.config:group:`database` section in the configfile for other options.
+PostgreSQL 10 can be installed by following the `installation guide <https://www.postgresql.org/download/>`_ for your
+platform.
 
 
-Step 3: Set the server address
+.. _install-step-3:
+
+Step 3: Setup a PostgreSQL database for the Inmanta server
+----------------------------------------------------------
+
+Initialize the PostgreSQL server:
+
+.. code-block:: sh
+
+  sudo /usr/pgsql-10/bin/postgresql-10-setup initdb
+
+Start the PostgreSQL database
+
+.. code-block:: sh
+
+   sudo systemctl start postgresql-10
+
+Create a inmanta user and an inmanta database by executing the following command. This command will request you to choose a
+password for the inmanta database.
+
+.. code-block:: sh
+
+  sudo -u postgres -i sh -c "createuser --pwprompt inmanta; createdb -O inmanta inmanta"
+
+Change the authentication method for local connections to md5 by changing the following lines in the
+``/var/lib/pgsql/10/data/pg_hba.conf`` file.
+
+.. code-block:: text
+
+  # IPv4 local connections:
+  host    all             all             127.0.0.1/32            md5
+  # IPv6 local connections:
+  host    all             all             ::1/128                 md5
+
+Restart the PostgreSQL server to apply the changes made in the ``pg_hba.conf`` file:
+
+.. code-block:: sh
+
+   sudo systemctl restart postgresql-10
+
+.. _install-step-4:
+
+Step 4: Set the database connection details
+-------------------------------------------
+
+Adjust the ``/etc/inmanta/server.cfg`` file as such that it contains the correct database connection details. Add/Change the
+database section of that file in the following way:
+
+.. code-block:: text
+
+  [database]
+  name=inmanta
+  username=inmanta
+  password=<password>
+
+Replace <password> in the above-mentioned snippet with the password of the inmanta database. By default Inmanta tries to
+connect to the local server and uses the database inmanta. See the :inmanta.config:group:`database` section in the
+configfile for other options.
+
+
+Step 5: Set the server address
 ------------------------------
 
-When virtual machines are started by this server that install the inmanta agent, the correct 
-:inmanta.config:option:`server.server-address` needs to be 
+When virtual machines are started by this server that install the inmanta agent, the correct
+:inmanta.config:option:`server.server-address` needs to be
 configured. This address is used to create the correct boot script for the virtual machine.
 
 Set this value to the hostname or IP address that others systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/server.cfg``. 
+in the configuration file stored at ``/etc/inmanta/server.cfg``.
 
 .. note:: If you deploy configuration models that modify resolver configuration it is recommended to use the IP address instead
   of the hostname.
 
 
-Step 4: Configure ssh of the inmanta user
+Step 6: Configure ssh of the inmanta user
 -----------------------------------------
 
-The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over 
+The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over
 ssh and if the remote agent is used.
 
 1. Provide the inmanta user with one or more private keys:
@@ -184,28 +245,17 @@ ssh and if the remote agent is used.
    the host key.
 
 
-Step 5: Start mongodb
-------------------------
+Step 7: Start the Inmanta server
+--------------------------------
 
-Start the server and make sure it is started at boot.
-
-.. code-block:: sh
-
-  sudo systemctl enable mongod
-  sudo systemctl start mongod
-
-
-Step 6: Start the server
-------------------------
-
-Start the server and make sure it is started at boot.
+Start the Inmanta server and make sure it is started at boot.
 
 .. code-block:: sh
 
   sudo systemctl enable inmanta-server
   sudo systemctl start inmanta-server
 
-Step 7: Connect to the dashboard
+Step 8: Connect to the dashboard
 --------------------------------
 
 The server dashboard is now available on port '8888'

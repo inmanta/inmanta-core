@@ -14,7 +14,7 @@
    viewBox="0 0 640.13051 168.55331"
    id="svg2"
    version="1.1"
-   inkscape:version="0.91 r13725"
+   inkscape:version="0.92.4 (unknown)"
    sodipodi:docname="embedded.svg">
   <defs
      id="defs4">
@@ -132,16 +132,16 @@
      borderopacity="1.0"
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
-     inkscape:zoom="0.7"
-     inkscape:cx="179.24886"
-     inkscape:cy="84.041522"
+     inkscape:zoom="2.8"
+     inkscape:cx="207.41206"
+     inkscape:cy="114.2592"
      inkscape:document-units="px"
-     inkscape:current-layer="layer1"
+     inkscape:current-layer="g4215"
      showgrid="false"
-     inkscape:window-width="1280"
-     inkscape:window-height="987"
-     inkscape:window-x="4480"
-     inkscape:window-y="0"
+     inkscape:window-width="1920"
+     inkscape:window-height="1016"
+     inkscape:window-x="0"
+     inkscape:window-y="27"
      inkscape:window-maximized="1"
      fit-margin-top="0"
      fit-margin-left="0"
@@ -155,7 +155,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -175,16 +175,16 @@
          id="rect4136-8"
          style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
       <text
-         sodipodi:linespacing="125%"
          id="text4138-85"
          y="408.51141"
          x="75.57914"
-         style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+         style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
          xml:space="preserve"><tspan
            y="408.51141"
            x="75.57914"
            id="tspan4140-3"
-           sodipodi:role="line">Dev Machine</tspan></text>
+           sodipodi:role="line"
+           style="font-size:15px;line-height:1.25">Dev Machine</tspan></text>
       <g
          transform="translate(-324.28571,174.64287)"
          id="g4215-6-06">
@@ -197,15 +197,15 @@
            y="283.79077" />
         <text
            xml:space="preserve"
-           style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
            x="413.71216"
            y="300.91254"
-           id="text4171-0-0"
-           sodipodi:linespacing="125%"><tspan
+           id="text4171-0-0"><tspan
              sodipodi:role="line"
              id="tspan4173-6-2"
              x="413.71216"
-             y="300.91254">Compiler</tspan></text>
+             y="300.91254"
+             style="font-size:15px;line-height:1.25">Compiler</tspan></text>
       </g>
       <g
          transform="translate(-324.28571,140.35715)"
@@ -219,15 +219,15 @@
            y="283.79077" />
         <text
            xml:space="preserve"
-           style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
            x="438.68408"
            y="300.91254"
-           id="text4171-0-0-5"
-           sodipodi:linespacing="125%"><tspan
+           id="text4171-0-0-5"><tspan
              sodipodi:role="line"
              id="tspan4173-6-2-3"
              x="438.68408"
-             y="300.91254">CLI</tspan></text>
+             y="300.91254"
+             style="font-size:15px;line-height:1.25">CLI</tspan></text>
       </g>
       <g
          transform="translate(-188.57141,140.35715)"
@@ -241,15 +241,15 @@
            y="283.79077" />
         <text
            xml:space="preserve"
-           style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
            x="409.23706"
            y="300.91254"
-           id="text4171-0-0-5-9"
-           sodipodi:linespacing="125%"><tspan
+           id="text4171-0-0-5-9"><tspan
              sodipodi:role="line"
              id="tspan4173-6-2-3-3"
              x="409.23706"
-             y="300.91254">Dashboard</tspan></text>
+             y="300.91254"
+             style="font-size:15px;line-height:1.25">Dashboard</tspan></text>
       </g>
     </g>
     <g
@@ -261,18 +261,18 @@
          height="26.428568"
          width="125.71428"
          id="rect4169"
-         style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
+         style="fill:#e6e6e6;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
       <text
-         sodipodi:linespacing="125%"
          id="text4171"
          y="300.91254"
          x="413.71216"
-         style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+         style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
          xml:space="preserve"><tspan
            y="300.91254"
            x="413.71216"
            id="tspan4173"
-           sodipodi:role="line">MongoDB</tspan></text>
+           sodipodi:role="line"
+           style="font-size:15px;line-height:1.25">PostgreSQL</tspan></text>
     </g>
     <g
        id="g4215-6-0"
@@ -285,16 +285,16 @@
          id="rect4169-20-5"
          style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
       <text
-         sodipodi:linespacing="125%"
          id="text4171-0-6"
          y="300.91254"
          x="427.91748"
-         style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+         style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
          xml:space="preserve"><tspan
            y="300.91254"
            x="427.91748"
            id="tspan4173-6-1"
-           sodipodi:role="line">Agent</tspan></text>
+           sodipodi:role="line"
+           style="font-size:15px;line-height:1.25">Agent</tspan></text>
     </g>
     <path
        style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:1;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2, 1;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#marker8006)"
@@ -303,15 +303,15 @@
        inkscape:connector-curvature="0" />
     <text
        xml:space="preserve"
-       style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+       style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        x="411.2858"
        y="616.43365"
-       id="text8176"
-       sodipodi:linespacing="125%"><tspan
+       id="text8176"><tspan
          sodipodi:role="line"
          id="tspan8178"
          x="411.2858"
-         y="616.43365">To target</tspan></text>
+         y="616.43365"
+         style="font-size:15px;line-height:1.25">To target</tspan></text>
     <g
        id="g4210"
        transform="translate(-339.28572,475.71428)">
@@ -323,16 +323,16 @@
          id="rect4169-2"
          style="fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:1.09862697;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1" />
       <text
-         sodipodi:linespacing="125%"
          id="text4206"
          y="191.6479"
          x="472.49042"
-         style="font-style:normal;font-weight:normal;font-size:15px;line-height:125%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+         style="font-style:normal;font-weight:normal;line-height:0%;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
          xml:space="preserve"><tspan
            y="191.6479"
            x="472.49042"
            id="tspan4208"
-           sodipodi:role="line">inmanta-server</tspan></text>
+           sodipodi:role="line"
+           style="font-size:15px;line-height:1.25">inmanta-server</tspan></text>
     </g>
   </g>
 </svg>
