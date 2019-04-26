@@ -83,7 +83,7 @@ async def do_migration(mongo_connection):
                     # Form instead.
                     if cls == data.FormRecord and record_name == "form":
                         record_value = mongo_connection[data.Form.__name__].find_one({"_id": record["form"]},
-                                                                                 {"form_type": True})["form_type"]
+                                                                                     {"form_type": True})["form_type"]
                     else:
                         record_value = record[record_name]
                     args[field_name] = record_value
