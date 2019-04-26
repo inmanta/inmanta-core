@@ -183,9 +183,13 @@ class ResourceAction(object):
             if not event_only:
                 await self.send_in_progress(ctx.action_id, start, status=const.ResourceState.processing_events)
             try:
-                ctx.info("Sending events to %(resource_id)s because of modified dependencies",
-                         resource_id=str(self.resource.id))
-                await self.scheduler.agent.thread_pool.submit(provider.process_events, ctx, self.resource, events)
+                ctx.info(
+                    "Sending events to %(resource_id)s because of modified dependencies",
+                    resource_id=str(self.resource.id)
+                )
+                await asyncio.get_running_loop().run_in_executor(
+                    self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
+                )
             except Exception:
                 ctx.exception("Could not send events for %(resource_id)s",
                               resource_id=str(self.resource.id),
