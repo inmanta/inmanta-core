@@ -19,7 +19,6 @@
 import inspect
 import enum
 import uuid
-import datetime
 import logging
 import json
 import gzip
@@ -32,7 +31,7 @@ from tornado import web
 from urllib import parse
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, cast, TYPE_CHECKING  # noqa: F401
 
-from inmanta import execute, const
+from inmanta import execute, const, util
 from inmanta import config as inmanta_config
 from inmanta.types import JsonType
 from . import exceptions
@@ -375,27 +374,11 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
     """
         A custom json encoder that knows how to encode other types commonly used by Inmanta
     """
-    if isinstance(o, uuid.UUID):
-        return str(o)
-
-    if isinstance(o, datetime.datetime):
-        return o.isoformat(timespec='microseconds')
-
-    if hasattr(o, "to_dict"):
-        return o.to_dict()
-
-    if isinstance(o, enum.Enum):
-        return o.name
-
-    if isinstance(o, Exception):
-        # Logs can push exceptions through RPC. Return a string representation.
-        return str(o)
-
     if isinstance(o, execute.util.Unknown):
         return const.UNKNOWN_STRING
 
-    LOGGER.error("Unable to serialize %s", o)
-    raise TypeError(repr(o) + " is not JSON serializable")
+    # handle common python types
+    return util.custom_json_encoder(o)
 
 
 def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -> Tuple[int, JsonType]:
@@ -406,12 +389,12 @@ def attach_warnings(code: int, value: JsonType, warnings: Optional[List[str]]) -
     return code, value
 
 
-def json_encode(value: Dict[str, Any]) -> str:
+def json_encode(value: JsonType) -> str:
     # see json_encode in tornado.escape
     return json.dumps(value, default=custom_json_encoder).replace("</", "<\\/")
 
 
-def gzipped_json(value: Dict[str, Any]) -> Tuple[bool, Union[bytes, str]]:
+def gzipped_json(value: JsonType) -> Tuple[bool, Union[bytes, str]]:
     json_string = json_encode(value)
     if len(json_string) < web.GZipContentEncoding.MIN_LENGTH:
         return False, json_string
