@@ -23,7 +23,8 @@ TABLES_TO_MIGRATE = [data.Project,
 @click.option("--pg-port", help="The port on which the PostgreSQL database is listening.", default=5432, type=int)
 @click.option("--pg-database", help="The name of the PostgreSQL database.", default="inmanta")
 @click.option("--pg-username", help="The username to use to login on the PostgreSQL database", default="inmanta")
-@click.option("--pg-password", help="The password that belongs to user specified with --pg-username", required=True)
+@click.option("--pg-password", help="The password that belongs to user specified with --pg-username", prompt=True,
+              hide_input=True)
 def main(mongo_host, mongo_port, mongo_database, pg_host, pg_port, pg_database, pg_username, pg_password):
     """
         Migrate the database of the Inmanta server from MongoDB to PostgreSQL.
@@ -71,7 +72,7 @@ async def do_migration(mongo_connection):
         records = mongo_connection[cls.__name__].find()
         for record in records:
             # Don't migrate parameters which have a resource_id associated
-            if cls == data.Parameter and ("resource_id" not in record or record["resource_id"] == ""):
+            if cls == data.Parameter and "resource_id" in record and record["resource_id"]:
                 continue
             args = {}
             for field_name in cls._fields.copy().keys():

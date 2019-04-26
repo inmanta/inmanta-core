@@ -2,14 +2,15 @@ Migrate from MongoDB to PostgreSQL
 **********************************
 
 Since release 2019.2, PostgreSQL is used as the backend database system of the Inmanta server instead of MongoDB. This page
-describes how an Inmanta server running on MongoDB can be migrated to PostgreSQL.
+describes how to migrate an Inmanta server running on MongoDB to PostgreSQL.
 
-Note: This procedure doesn't perform a full database migration. Existing version of a configurationmodel are not migrated to the PostgreSQL database. As such, it is requires
-to create a new version of the configuration model after the migration. The following things are part of the migration:
+Note: This procedure doesn't perform a full database migration. Existing version of a configurationmodel will not be migrated
+to the PostgreSQL database. As such, it is required to create a new version of the configuration model after the migration.
+The following things will be migrated:
 
 * Projects
-* Environments (including the settings of an environment)
-* Forms
+* Environments (including environment settings)
+* Forms + Records
 * Parameters
 
 Migration procedure
@@ -29,8 +30,6 @@ Step 2: Stop and update the Inmanta server
   sudo systemctl stop inmanta-server
   sudo yum update -y python3-inmanta python3-inmanta-server python3-inmanta-agent
 
-# TODO: Set exact version
-
 Step 3: Migrate the database
 ----------------------------
 
@@ -38,9 +37,7 @@ The database migration tool can be executed with the ``inmanta-migrate-db`` comm
 
 .. code-block:: sh
 
-  inmanta-migrate-db --mongo-database inmanta --pg-database inmanta --pg-username inmanta --pg-password <password>
-
-Replace <password> with the password of the Inmanta database on PostgreSQL.
+  inmanta-migrate-db --mongo-database inmanta --pg-database inmanta --pg-username inmanta
 
 The full listing of all options of the ``inmanta-migrate-db`` command can be obtained via the ``--help`` option:
 
@@ -87,4 +84,5 @@ Start the Inmanta server with the following command:
 Step 6: Create a new version of the configurationmodel
 ------------------------------------------------------
 
-# TODO
+Create a new version of each configuration model by clicking on the "Recompile" button in the dashboard or via de CLI with the
+``inmanta export`` command.
