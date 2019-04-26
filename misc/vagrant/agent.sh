@@ -25,7 +25,6 @@ sudo chmod +x /opt/inmanta/agent.sh
 
 cat > /opt/inmanta/agent.cfg <<EOF
 [config]
-heartbeat-interval = 60
 fact-expire = 60
 state-dir=/var/lib/inmanta
 
@@ -34,7 +33,7 @@ environment=1cc5c6ad-7b90-4547-b45f-2ccee1dac50b
 agent-names=\$node-name
 
 [agent_rest_transport]
-port = 8888 
+port = 8888
 host = 172.20.20.10
 EOF
 

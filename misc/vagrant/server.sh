@@ -34,7 +34,6 @@ sudo chmod +x /opt/inmanta/server.sh
 
 sudo cat >/opt/inmanta/server.cfg <<EOF
 [config]
-heartbeat-interval = 60
 state-dir=/var/lib/inmanta
 
 [database]
