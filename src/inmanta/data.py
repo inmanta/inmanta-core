@@ -15,7 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from typing import Set, Dict, List, Optional, Tuple, Any
 from configparser import RawConfigParser
 
 from inmanta.const import ResourceState
@@ -37,7 +36,7 @@ from inmanta import const, util
 import asyncpg
 
 from inmanta.types import JsonType
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Union, Set, Optional, Any, Tuple
 
 
 LOGGER = logging.getLogger(__name__)
