@@ -113,7 +113,7 @@ class Scheduler(object):
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
-                    action()
+                    IOLoop.current().add_callback(action)
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
 
