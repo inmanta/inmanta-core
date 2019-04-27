@@ -214,7 +214,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                         transport = self._transport(self)
 
                         for method_call in method_calls:
-                            self.dispatch_method(transport, method_call)
+                            await self.dispatch_method(transport, method_call)
             else:
                 LOGGER.warning(
                     "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
@@ -226,7 +226,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 await self.on_disconnect()
                 await gen.sleep(self.reconnect_delay)
 
-    def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
+    async def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
         if self._client is None:
             raise Exception("AgentEndpoint not started")
 
@@ -252,35 +252,28 @@ class SessionEndpoint(Endpoint, CallTarget):
                 body[key] = [v.decode("latin-1") for v in value]
 
         # FIXME: why create a new transport instance on each call? keep-alive?
-        call_result: common.Response = transport._execute_call(
+        response: common.Response = await transport._execute_call(
             kwargs, method_call.method, config, body, method_call.headers
         )
 
-        async def submit_result(future: Future) -> None:
-            if future is None:
-                return
-
-            response: common.Response = future.result()
-            if response.status_code == 500:
-                msg = ""
-                if response.body is not None and "message" in response.body:
-                    msg = response.body["message"]
-                LOGGER.error(
-                    "An error occurred during heartbeat method call (%s %s %s): %s",
-                    method_call.reply_id,
-                    method_call.method,
-                    method_call.url,
-                    msg,
-                )
-
-            if self._client is None:
-                raise Exception("AgentEndpoint not started")
-
-            await self._client.heartbeat_reply(
-                self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+        if response.status_code == 500:
+            msg = ""
+            if response.body is not None and "message" in response.body:
+                msg = response.body["message"]
+            LOGGER.error(
+                "An error occurred during heartbeat method call (%s %s %s): %s",
+                method_call.reply_id,
+                method_call.method,
+                method_call.url,
+                msg,
             )
 
-        ioloop.IOLoop.current().add_future(ensure_future(call_result), submit_result)
+        if self._client is None:
+            raise Exception("AgentEndpoint not started")
+
+        await self._client.heartbeat_reply(
+            self.sessionid, method_call.reply_id, {"result": response.body, "code": response.status_code}
+        )
 
 
 class Client(Endpoint):
