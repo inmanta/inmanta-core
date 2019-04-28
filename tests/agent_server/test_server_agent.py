@@ -4399,7 +4399,7 @@ async def test_inprogress(resource_container, client, server, environment):
 
 
 @pytest.mark.asyncio
-async def test_eventprocessing(resource_container, client, server, environment):
+async def test_eventprocessing(resource_container, client, server, environment, async_finalizer):
     """
         Test retrieving facts from the agent
     """
@@ -4411,6 +4411,7 @@ async def test_eventprocessing(resource_container, client, server, environment):
         agent_map={"agent1": "localhost"},
         code_loader=False,
     )
+    async_finalizer.add(agent.stop)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
@@ -4464,8 +4465,6 @@ async def test_eventprocessing(resource_container, client, server, environment):
     await retry_limited(in_progress, 30)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
-
-    await agent.stop()
 
 
 @pytest.mark.asyncio

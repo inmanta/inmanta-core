@@ -73,6 +73,7 @@ class ResourceAction(object):
     resource: Resource
     resource_id: Id
     future: ResourceActionResultFuture
+    _exec_waiter: Optional[asyncio.Task]
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """
@@ -92,6 +93,7 @@ class ResourceAction(object):
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
+        self._exec_waiter = None
 
     def is_running(self) -> bool:
         return self.running
@@ -103,6 +105,13 @@ class ResourceAction(object):
         if not self.is_running() and not self.is_done():
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
+
+    def kill(self) -> None:
+        """ Try to end as fast as possible
+        """
+        self.future.cancel()
+        if self._exec_waiter is not None:
+            self._exec_waiter.cancel()
 
     async def send_in_progress(
         self,
@@ -166,9 +175,11 @@ class ResourceAction(object):
             send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
 
             try:
-                await asyncio.get_running_loop().run_in_executor(
+                self._exec_waiter = asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
                 )
+                await self._exec_waiter
+                self._exec_waiter = None
 
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
@@ -187,9 +198,11 @@ class ResourceAction(object):
                     "Sending events to %(resource_id)s because of modified dependencies",
                     resource_id=str(self.resource.id)
                 )
-                await asyncio.get_running_loop().run_in_executor(
+                self._exec_waiter = asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
                 )
+                await self._exec_waiter
+                self._exec_waiter = None
             except Exception:
                 ctx.exception("Could not send events for %(resource_id)s",
                               resource_id=str(self.resource.id),
@@ -495,8 +508,11 @@ class ResourceScheduler(object):
                 return
             if self._resume_reason is not None:
                 self.logger.info("Resuming run '%s'", self._resume_reason)
-                self.agent.add_future(self.agent.get_latest_version_for_agent(reason=self._resume_reason,
-                                                                              incremental_deploy=False, is_repair_run=True))
+                self.agent.add_future(
+                    self.agent.get_latest_version_for_agent(
+                        reason=self._resume_reason, incremental_deploy=False, is_repair_run=True
+                    )
+                )
                 self._resume_reason = None
 
     def notify_ready(self, resourceid, send_events, state, change, changes):
@@ -515,6 +531,12 @@ class ResourceScheduler(object):
 
     def get_client(self):
         return self.agent.get_client()
+
+    async def stop(self):
+        """ Stop and cancel all resources
+        """
+        for ra in self.generation.values():
+            ra.kill()
 
 
 class AgentInstance(object):
@@ -564,6 +586,7 @@ class AgentInstance(object):
     async def stop(self):
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
+        await self._nq.stop()
 
     @property
     def environment(self):
