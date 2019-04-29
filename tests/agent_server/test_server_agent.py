@@ -4871,7 +4871,7 @@ async def test_1016_cache_invalidation(
 
 
 @pytest.mark.asyncio
-async def test_agent_lockout(resource_container, environment, server, client):
+async def test_agent_lockout(resource_container, environment, server, client, async_finalizer):
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     version = int(time.time())
@@ -4903,6 +4903,7 @@ async def test_agent_lockout(resource_container, environment, server, client):
         agent_map={"agent1": "localhost"},
         code_loader=False,
     )
+    async_finalizer.add(agent.stop)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -4913,6 +4914,7 @@ async def test_agent_lockout(resource_container, environment, server, client):
         agent_map={"agent1": "localhost"},
         code_loader=False,
     )
+    async_finalizer.add(agent2.stop)
     agent2.add_end_point_name("agent1")
     await agent2.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 2, 10)
@@ -4926,6 +4928,3 @@ async def test_agent_lockout(resource_container, environment, server, client):
         .get_resources_for_agent(tid=environment, agent="agent1")
     )
     assert result.code == 409
-
-    await agent.stop()
-    await agent2.stop()

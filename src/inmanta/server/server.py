@@ -1739,9 +1739,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         try:
             out = tempfile.NamedTemporaryFile()
             err = tempfile.NamedTemporaryFile()
-            sub_process = process.Subprocess(cmd, stdout=out, stderr=err, cwd=cwd, **kwargs)
+            sub_process = await asyncio.create_subprocess_exec(cmd[0], *cmd[1:], stdout=out, stderr=err, cwd=cwd, **kwargs)
 
-            returncode = await sub_process.wait_for_exit(raise_error=False)
+            returncode = await sub_process.wait()
 
             out.seek(0)
             err.seek(0)
