@@ -26,7 +26,7 @@ import warnings
 import uuid
 import datetime
 import enum
-from asyncio import ensure_future, CancelledError, coroutines, futures
+from asyncio import ensure_future, CancelledError
 from logging import Logger
 
 import pkg_resources

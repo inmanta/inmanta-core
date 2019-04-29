@@ -58,7 +58,6 @@ import pyformance
 from pyformance.registry import MetricsRegistry
 
 from inmanta.util import get_free_tcp_port
-from utils import no_error_in_logs
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
 
@@ -171,6 +170,7 @@ def no_agent_backoff():
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = 0
     yield
     inmanta.agent.agent.GET_RESOURCE_BACKOFF = backoff
+
 
 @pytest.fixture()
 def free_socket():

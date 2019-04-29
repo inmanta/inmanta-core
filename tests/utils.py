@@ -133,7 +133,7 @@ def log_index(caplog, loggerpart, level, msg, after=0):
 
 class LogSequence(object):
 
-    def __init__(self, caplog, index = 0):
+    def __init__(self, caplog, index=0):
         self.caplog = caplog
         self.index = index
 

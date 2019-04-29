@@ -22,7 +22,7 @@ import pytest
 
 from inmanta import util
 from inmanta.util import ensure_future_and_handle_exception
-from utils import log_index, LogSequence, log_contains, no_error_in_logs
+from utils import LogSequence, log_contains, no_error_in_logs
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +46,6 @@ async def test_scheduler_remove(caplog):
     await asyncio.sleep(0.1)
     assert len(i) == length
     no_error_in_logs(caplog)
-
 
 
 @pytest.mark.asyncio
@@ -96,7 +95,12 @@ async def test_scheduler_async_run_fail(caplog):
 
     print(caplog.messages)
 
-    log_contains(caplog, "inmanta.util", logging.ERROR, "Uncaught exception while executing scheduled action")
+    log_contains(
+        caplog,
+        "inmanta.util",
+        logging.ERROR,
+        "Uncaught exception while executing scheduled action",
+    )
 
 
 @pytest.mark.asyncio
@@ -138,8 +142,11 @@ async def test_ensure_future_and_handle_exception(caplog):
     await asyncio.sleep(0.2)
 
     LogSequence(caplog).log_contains("test_util", logging.INFO, "Success")
-    final = LogSequence(caplog).\
-                log_contains("test_util", logging.INFO, "Fail").\
-                log_contains("test_util", logging.ERROR, "marker 2").index
+    final = (
+        LogSequence(caplog)
+        .log_contains("test_util", logging.INFO, "Fail")
+        .log_contains("test_util", logging.ERROR, "marker 2")
+        .index
+    )
     exception = caplog.get_records("call")[final].exc_info[1]
     assert str(exception) == "message F"
