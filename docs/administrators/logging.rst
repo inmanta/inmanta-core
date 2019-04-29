@@ -1,3 +1,6 @@
+.. _administrators_doc_logging:
+
+
 *******
 Logging
 *******
@@ -54,8 +57,6 @@ One agent produces the following three log files:
 
 Configure logging
 =================
-
-.. _logging_configure_logging:
 
 Configuration options in Inmanta config file
 --------------------------------------------

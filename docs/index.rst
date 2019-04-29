@@ -42,9 +42,10 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     install
     architecture
     language
-    guides
     moduleguides
     developers
+    platform_developers
+    administrators
     faq
     glossary
     reference/index

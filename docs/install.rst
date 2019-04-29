@@ -114,13 +114,13 @@ Inmanta requires at least the latest Python 3.6 or 3.7 and git.
 
 Configure server
 ################
-This guide goes through the steps to setup an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7 
+This guide goes through the steps to setup an Inmanta service orchestrator server. This guide assumes a RHEL 7 or CentOS 7
 server. The rpm packages install the server configuration file in /etc/inmanta/server.cfg
 
 Optional step 1: Setup SSL and authentication
 ---------------------------------------------
 
-Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication. It is not mandatory but still highly 
+Follow the instructions in :ref:`auth-setup` to configure both SSL and authentication. It is not mandatory but still highly
 recommended.
 
 
@@ -134,12 +134,12 @@ and uses the database inmanta. See the :inmanta.config:group:`database` section 
 Step 3: Set the server address
 ------------------------------
 
-When virtual machines are started by this server that install the inmanta agent, the correct 
-:inmanta.config:option:`server.server-address` needs to be 
+When virtual machines are started by this server that install the inmanta agent, the correct
+:inmanta.config:option:`server.server-address` needs to be
 configured. This address is used to create the correct boot script for the virtual machine.
 
 Set this value to the hostname or IP address that others systems use to connect to the server
-in the configuration file stored at ``/etc/inmanta/server.cfg``. 
+in the configuration file stored at ``/etc/inmanta/server.cfg``.
 
 .. note:: If you deploy configuration models that modify resolver configuration it is recommended to use the IP address instead
   of the hostname.
@@ -148,7 +148,7 @@ in the configuration file stored at ``/etc/inmanta/server.cfg``.
 Step 4: Configure ssh of the inmanta user
 -----------------------------------------
 
-The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over 
+The inmanta user that runs the server needs a working ssh client. This client is required to checkout git repositories over
 ssh and if the remote agent is used.
 
 1. Provide the inmanta user with one or more private keys:
@@ -215,3 +215,8 @@ Optional Step 8: Setup influxdb for collection of performance metrics
 
 Follow the instructions in :ref:`metering-setup` to send performance metrics to influxdb.
 This is only recommended for production deployments.
+
+Optional Step 9: Configure logging
+----------------------------------
+
+Logging can be configured by following the instructions in :ref:`administrators_doc_logging`.

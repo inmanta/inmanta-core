@@ -72,7 +72,7 @@ token is configured with the ``token`` option in the groups :inmanta.config:grou
 
 A token can be retrieved either with ``inmanta-cli token create`` or under Settings of the environment in the dashboard.
 
-.. figure:: /guides/images/dashboard_token.png
+.. figure:: /administrators/images/dashboard_token.png
    :width: 100%
    :align: center
    :alt: Generating a new token in the dashboard.
@@ -159,14 +159,14 @@ reason to create a new realm (or not) is that the master realm also provides the
 
 For example call the realm inmanta
 
-.. figure:: /guides/images/kc_realm.png
+.. figure:: /administrators/images/kc_realm.png
    :width: 100%
    :align: center
 
    Create a new realm
 
 
-.. figure:: /guides/images/kc_add_realm.png
+.. figure:: /administrators/images/kc_add_realm.png
    :width: 100%
    :align: center
 
@@ -178,7 +178,7 @@ Step 2: Add a new client to keycloak
 
 Make sure the correct realm is active (the name is shown in the title of the left sidebar) to which you want to add a new client.
 
-.. figure:: /guides/images/kc_start.png
+.. figure:: /administrators/images/kc_start.png
    :width: 100%
    :align: center
 
@@ -187,7 +187,7 @@ Make sure the correct realm is active (the name is shown in the title of the lef
 
 Go to client and click create on the right hand side of the screen.
 
-.. figure:: /guides/images/kc_clients.png
+.. figure:: /administrators/images/kc_clients.png
    :width: 100%
    :align: center
 
@@ -195,7 +195,7 @@ Go to client and click create on the right hand side of the screen.
 
 Provide an id for the client and make sure that the client protocol is ``openid-connect`` and click save.
 
-.. figure:: /guides/images/kc_new_client.png
+.. figure:: /administrators/images/kc_new_client.png
    :width: 100%
    :align: center
 
@@ -204,7 +204,7 @@ Provide an id for the client and make sure that the client protocol is ``openid-
 After clicking save, keycloak opens the configuration of the client. Modify the client to allow implicit flows and add
 vallid callback URLs. As a best practice, also add the allowed origins. See the screenshot below as an example.
 
-.. figure:: /guides/images/kc_client_details.png
+.. figure:: /administrators/images/kc_client_details.png
    :width: 100%
    :align: center
 
@@ -213,7 +213,7 @@ vallid callback URLs. As a best practice, also add the allowed origins. See the 
 Add a mapper to add custom claims to the issued tokens for the API client type. Open de mappers tab of your new client and click
 `add`.
 
-.. figure:: /guides/images/kc_mappers.png
+.. figure:: /administrators/images/kc_mappers.png
    :width: 100%
    :align: center
 
@@ -222,7 +222,7 @@ Add a mapper to add custom claims to the issued tokens for the API client type. 
 Select hardcoded claim, enter `:urn:inmanta:ct` as claim name and `api` as claim value and string as type. It should only be
 added to the access token.
 
-.. figure:: /guides/images/kc_ct_mapper.png
+.. figure:: /administrators/images/kc_ct_mapper.png
    :width: 100%
    :align: center
 
@@ -235,7 +235,7 @@ Go to the installation tab and select JSON format in the select box. This JSON s
 configure the server correctly to redirect dashboard users to this keycloak instance and to valide the tokens
 issued by keycloak.
 
-.. figure:: /guides/images/kc_install.png
+.. figure:: /administrators/images/kc_install.png
    :width: 100%
    :align: center
 
