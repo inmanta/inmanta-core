@@ -32,9 +32,24 @@ class ResourceState(Enum):
     skipped_for_undefined = 10  # This resource depends on an undefined resource
     processing_events = 11
 
-
+# undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
-TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
+# not deployed yet
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceState.processing_events]
+# not counting as done
+NOT_DONE_STATES = [ResourceState.cancelled] + TRANSIENT_STATES
+# counts as done
+DONE_STATES = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed, ResourceState.failed] + \
+              UNDEPLOYABLE_STATES
+
+# starting states
+INITIAL_STATES = [ResourceState.available]
+# states one can't transition out off
+TERMINAL_STATES = UNDEPLOYABLE_STATES
+# states on can transition to
+VALID_STATES_ON_STATE_UPDATE = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed,
+                                ResourceState.failed, ResourceState.deploying, ResourceState.cancelled, ResourceState.undefined,
+                                ResourceState.skipped_for_undefined, ResourceState.processing_events]
 
 UNKNOWN_STRING = "<<undefined>>"
 

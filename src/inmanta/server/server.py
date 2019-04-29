@@ -34,7 +34,7 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import gen, locks, process, ioloop
-from typing import Dict, Any, Generator
+from typing import Dict, Any, Generator, Tuple
 
 from inmanta import const
 from inmanta import data, config
@@ -46,7 +46,8 @@ from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.types import JsonType, Apireturn
 from inmanta.util import hash_file
-from inmanta.const import UNDEPLOYABLE_STATES
+from inmanta.const import UNDEPLOYABLE_STATES, STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, \
+    TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
 
 from typing import List, TYPE_CHECKING
@@ -59,6 +60,15 @@ if TYPE_CHECKING:
 
 DBLIMIT = 100000
 
+
+def error_and_log(message:str, **context) -> Tuple[int, JsonType]:
+    """
+    :param message: message to return both to logger and to remote caller
+    :param context: additional context to attach to log
+    """
+    ctx =  ",".join([f"{k}: {v}" for k, v in context.items()])
+    LOGGER.error("%s %s",message, ctx)
+    return 500, {"message": message}
 
 class ResourceActionLogLine(logging.LogRecord):
     """ A special log record that is used to report log lines that come from the agent
@@ -1423,29 +1433,81 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @gen.coroutine
     def resource_action_update(self, env, resource_ids, action_id, action, started, finished, status, messages, changes,
                                change, send_events, keep_increment_cache=False):
+        # can update resource state
+        is_resource_state_update = action in STATE_UPDATE
+        # this ra is finishing
+        is_resource_action_finished = finished is not None
+
+        if is_resource_action_finished:
+            # this resource action is finished
+            if status is None:
+                return error_and_log(
+                    "Cannot finish an action without a status.",
+                    resource_ids=resource_ids,
+                    action=action,
+                    action_id=action_id)
+
+        if is_resource_state_update:
+            # if status update, status is required
+            if status is None:
+                return error_and_log("Cannot perform state update without a status.",
+                                     resource_ids=resource_ids,
+                                     action=action,
+                                     action_id=action_id)
+            # and needs to be valid
+            if status not in VALID_STATES_ON_STATE_UPDATE:
+                return error_and_log("Status %s is not valid on action %s" % (status, action),
+                                     resource_ids=resource_ids,
+                                     action=action,
+                                     action_id=action_id
+                                     )
+            if status in TRANSIENT_STATES:
+                if not is_resource_action_finished:
+                    pass
+                else:
+                    return error_and_log("The finished field must not be set for transient states",
+                                         status=status,
+                                         resource_ids=resource_ids,
+                                         action=action,
+                                         action_id=action_id)
+            else:
+                if is_resource_action_finished:
+                    pass
+                else:
+                    return error_and_log("The finished field must be set for none transient states",
+                                     status=status,
+                                     resource_ids=resource_ids,
+                                     action=action,
+                                     action_id=action_id)
+
+        # validate resources
         resources = yield data.Resource.get_resources(env.id, resource_ids)
         if len(resources) == 0 or (len(resources) != len(resource_ids)):
             return 404, {"message": "The resources with the given ids do not exist in the given environment. "
                          "Only %s of %s resources found." % (len(resources), len(resource_ids))}
 
-        if status is not None:
-            if status not in UNDEPLOYABLE_STATES:
-                if any([resource.status in UNDEPLOYABLE_STATES for resource in resources]):
-                    LOGGER.error("Attempting to set undeployable resource to deployable state")
-                    raise AssertionError("Attempting to set undeployable resource to deployable state")
+        # validate transitions
+        if is_resource_state_update:
+            # no escape from terminal
+            if any([resource.status != status and resource.status in TERMINAL_STATES for resource in resources]):
+                LOGGER.error("Attempting to set undeployable resource to deployable state")
+                raise AssertionError("Attempting to set undeployable resource to deployable state")
 
+        # get instance
         resource_action = yield data.ResourceAction.get(action_id=action_id)
         if resource_action is None:
+            # new
             if started is None:
                 return 500, {"message": "A resource action can only be created with a start datetime."}
 
             resource_action = data.ResourceAction(environment=env.id, resource_version_ids=resource_ids,
                                                   action_id=action_id, action=action, started=started)
             yield resource_action.insert()
-
-        if resource_action.finished is not None:
-            return 500, {"message": "An resource action can only be updated when it has not been finished yet. This action "
-                                    "finished at %s" % resource_action.finished}
+        else:
+            # existing
+            if resource_action.finished is not None:
+                return 500, {"message": "An resource action can only be updated when it has not been finished yet. This action "
+                                        "finished at %s" % resource_action.finished}
 
         if len(messages) > 0:
             resource_action.add_logs(messages)
@@ -1470,44 +1532,42 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         resource_action.set_field("send_event", send_events)
 
-        done = False
         if finished is not None:
-            # this resource has finished
-            if status is None:
-                return 500, {"message": "Cannot finish an action without a status."}
-
             resource_action.set_field("finished", finished)
-            done = True
 
         yield resource_action.save()
 
-        if action in const.STATE_UPDATE and not done:
-            if status is None:
-                return 500, {"message": "Cannot perform state update without a status."}
-            for res in resources:
-                yield res.update_fields(status=status)
-            if not keep_increment_cache:
-                self.clear_env_cache(env)
-        elif action in const.STATE_UPDATE and done:
-            if not keep_increment_cache:
-                self.clear_env_cache(env)
-            model_version = None
-            for res in resources:
-                yield res.update_fields(last_deploy=finished, status=status)
-                model_version = res.model
+        if is_resource_state_update:
+            # transient resource update
+            if not is_resource_action_finished:
+                for res in resources:
+                    yield res.update_fields(status=status)
+                if not keep_increment_cache:
+                    self.clear_env_cache(env)
+                return 200
 
-                if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:
-                    yield data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
+            else:
+                # final resource update
+                if not keep_increment_cache:
+                    self.clear_env_cache(env)
 
-            yield data.ConfigurationModel.mark_done_if_done(env.id, model_version)
+                model_version = None
+                for res in resources:
+                    yield res.update_fields(last_deploy=finished, status=status)
+                    model_version = res.model
 
-            waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
-                                  for res in resources for prov in res.provides])
+                    if "purged" in res.attributes and res.attributes["purged"] and status == const.ResourceState.deployed:
+                        yield data.Parameter.delete_all(environment=env.id, resource_id=res.resource_id)
 
-            for agent, resource_id in waiting_agents:
-                aclient = self.get_agent_client(env.id, agent)
-                if aclient is not None:
-                    yield aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
+                yield data.ConfigurationModel.mark_done_if_done(env.id, model_version)
+
+                waiting_agents = set([(Id.parse_id(prov).get_agent_name(), res.resource_version_id)
+                                      for res in resources for prov in res.provides])
+
+                for agent, resource_id in waiting_agents:
+                    aclient = self.get_agent_client(env.id, agent)
+                    if aclient is not None:
+                        yield aclient.resource_event(env.id, agent, resource_id, send_events, status, change, changes)
 
         return 200
 

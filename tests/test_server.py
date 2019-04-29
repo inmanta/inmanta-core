@@ -349,7 +349,7 @@ async def test_resource_update(postgresql_client, client, server, environment):
     action_id = uuid.uuid4()
     now = datetime.now()
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", now,
-                                                  status=const.ResourceState.deployed)
+                                                  status=const.ResourceState.deploying)
     assert(result.code == 200)
 
     # Get the status from a resource
@@ -364,7 +364,7 @@ async def test_resource_update(postgresql_client, client, server, environment):
 
     # Send some logs
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
-                                                  status=const.ResourceState.deployed,
+                                                  status=const.ResourceState.deploying,
                                                   messages=[data.LogLine.log(const.LogLevel.INFO,
                                                                              "Test log %(a)s %(b)s", a="a", b="b")])
     assert(result.code == 200)
@@ -387,7 +387,7 @@ async def test_resource_update(postgresql_client, client, server, environment):
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", finished=now, changes=changes)
     assert(result.code == 500)
 
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", status="deployed",
+    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", status=const.ResourceState.deployed,
                                                   finished=now, changes=changes)
     assert(result.code == 200)
 
