@@ -5,11 +5,9 @@ import pytest
 from agent_server.conftest import (
     get_resource,
     _deploy_resources,
-    log_contains,
-    log_doesnt_contain,
     get_agent,
 )
-from utils import retry_limited, AsyncClosing
+from utils import retry_limited, AsyncClosing, log_contains, log_doesnt_contain
 
 
 @pytest.mark.asyncio(timeout=150)

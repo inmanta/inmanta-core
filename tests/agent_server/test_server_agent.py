@@ -35,8 +35,6 @@ from agent_server.conftest import (
     ResourceContainer,
     _wait_until_deployment_finishes,
     _deploy_resources,
-    log_contains,
-    log_index,
     get_agent,
     _wait_for_n_deploying,
 )
@@ -46,7 +44,7 @@ from inmanta.ast import CompilerException
 from inmanta.config import Config
 from inmanta.server import SLICE_AGENT_MANAGER, config as server_config
 from inmanta.server.bootloader import InmantaBootloader
-from utils import retry_limited, assert_equal_ish, UNKWN
+from utils import retry_limited, assert_equal_ish, UNKWN, log_contains, log_index
 
 logger = logging.getLogger("inmanta.test.server_agent")
 
