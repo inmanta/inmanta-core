@@ -1489,7 +1489,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         # validate transitions
         if is_resource_state_update:
             # no escape from terminal
-            if any([resource.status != status and resource.status in TERMINAL_STATES for resource in resources]):
+            if any(resource.status != status and resource.status in TERMINAL_STATES for resource in resources):
                 LOGGER.error("Attempting to set undeployable resource to deployable state")
                 raise AssertionError("Attempting to set undeployable resource to deployable state")
 

@@ -32,14 +32,15 @@ class ResourceState(Enum):
     skipped_for_undefined = 10  # This resource depends on an undefined resource
     processing_events = 11
 
+
 # undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
-# not deployed yet
+# this resource action is not complete, resource is in transient state
 TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceState.processing_events]
 # not counting as done
-NOT_DONE_STATES = [ResourceState.cancelled] + TRANSIENT_STATES
+NOT_DONE_STATES = TRANSIENT_STATES
 # counts as done
-DONE_STATES = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed, ResourceState.failed] + \
+DONE_STATES = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed, ResourceState.failed, ResourceState.cancelled] + \
               UNDEPLOYABLE_STATES
 
 # starting states

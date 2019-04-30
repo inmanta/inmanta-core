@@ -4461,7 +4461,7 @@ async def test_eventprocessing(resource_container, client, server, environment):
         status = sorted([res["status"] for res in result.result["resources"]])
         return status == ["deployed", "processing_events"]
 
-    await retry_limited(in_progress, 30)
+    await retry_limited(in_progress, 1)
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
 
