@@ -40,6 +40,7 @@ import socket
 import signal
 
 import colorlog
+
 from inmanta.command import command, Commander, CLIException
 from inmanta.compiler import do_compile
 from inmanta.config import Config
@@ -49,6 +50,7 @@ from tornado import gen
 from inmanta import protocol, module, moduletool, const
 from inmanta.export import cfg_env, ModelExporter
 import yaml
+
 from inmanta.server.bootloader import InmantaBootloader
 from inmanta.ast import CompilerException
 import asyncio
@@ -246,16 +248,16 @@ def project(options):
 
 
 def deploy_parser_config(parser):
-    parser.add_argument("-p", dest="project", help="The project name")
-    parser.add_argument("-a", dest="agent", help="Deploy the resources of this agent. Multiple agents are comma separated "
-                        "and wildcards are supported")
-    parser.add_argument("-m", help="Agent mapping in the format: agentname=mappedname,agentname2=other", dest="map",
-                        default=""),
     parser.add_argument("--dry-run", help="Only report changes", action="store_true", dest="dryrun")
-    parser.add_argument("-l", help="List the deployment agents in the model", action="store_true", dest="list_agents")
-    parser.add_argument("--no-agent-log", help="Do not capture agents logs, print them to stdout", action="store_true",
-                        dest="no_agent_log")
     parser.add_argument("-f", dest="main_file", help="Main file", default="main.cf")
+    parser.add_argument(
+        "--dashboard",
+        dest="dashboard",
+        help="Start the dashboard and keep the server running. "
+             "The server uses the current project as the source for server recompiles",
+        action="store_true",
+        default=False
+    )
 
 
 @command("deploy", help_msg="Deploy with a inmanta all-in-one setup", parser_config=deploy_parser_config, require_project=True)
@@ -263,10 +265,10 @@ def deploy(options):
     module.Project.get(options.main_file)
     from inmanta import deploy
 
-    run = deploy.Deploy()
+    run = deploy.Deploy(options)
     try:
         run.setup()
-        run.run(options)
+        run.run()
     finally:
         run.stop()
 
@@ -356,11 +358,7 @@ def export(options):
     version, _ = export.run(types, scopes, metadata=metadata, model_export=options.model_export)
 
     if exp is not None:
-        if not options.errors:
-            print(exp, file=sys.stderr)
-            sys.exit(1)
-        else:
-            raise exp
+        raise exp
 
     if options.model:
         modelexporter = ModelExporter(types)

@@ -115,11 +115,7 @@ install -p -m 644 misc/inmanta-server.service $RPM_BUILD_ROOT%{_unitdir}/inmanta
 
 # Install the dashboard
 cp -a dist %{venv}/dashboard
-cat > %{buildroot}/etc/inmanta/server.cfg <<EOF
-[dashboard]
-enabled=true
-path=/opt/inmanta/dashboard
-EOF
+install -p -m 644 misc/server.cfg %{buildroot}/etc/inmanta/server.cfg
 
 %clean
 rm -rf %{buildroot}

@@ -94,9 +94,8 @@ class BashIO(IOBase):
             return list(args)
 
         else:
-            arg_str = subprocess.list2cmdline(args)
             sudo_cmd = ["sudo", "-E"]
-            ret = sudo_cmd + ["-u", self.run_as, "sh", "-c", arg_str]
+            ret = sudo_cmd + ["-u", self.run_as] + list(args)
             return ret
 
     def is_remote(self):
@@ -398,9 +397,11 @@ class LocalIO(IOBase):
         if env is not None:
             current_env.update(env)
         if sys.version_info < (3, 0, 0):
-            current_env = {}
+            # python < 2.7 does not support dict comprehensions
+            new_env = {}
             for k, v in current_env.items():
-                current_env[k.encode()] = str(v).encode()
+                new_env[k.encode()] = str(v).encode()
+            current_env = new_env
 
         cmds = [command] + arguments
         result = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=current_env, cwd=cwd)

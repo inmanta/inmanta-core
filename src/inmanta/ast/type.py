@@ -182,7 +182,7 @@ class Number(Type):
             return True
 
         if not isinstance(value, numbers.Number):
-            raise RuntimeException(None, "Invalid value '%s'expected Number" % value)
+            raise RuntimeException(None, "Invalid value '%s', expected Number" % value)
 
         return True  # allow this function to be called from a lambda function
 
@@ -522,6 +522,10 @@ class ConstraintType(NamedType):
 
     def get_namespace(self) -> "Namespace":
         return self.namespace
+
+    def get_double_defined_exception(self, other: "NamedType") -> DuplicateException:
+        return DuplicateException(
+            self, other, "TypeConstraint %s is already defined" % (self.get_full_name()))
 
 
 def create_function(expression):

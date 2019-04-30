@@ -33,8 +33,24 @@ class ResourceState(Enum):
     processing_events = 11
 
 
+# undeployable
 UNDEPLOYABLE_STATES = [ResourceState.undefined, ResourceState.skipped_for_undefined]
-TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying]
+# this resource action is not complete, resource is in transient state
+TRANSIENT_STATES = [ResourceState.available, ResourceState.deploying, ResourceState.processing_events]
+# not counting as done
+NOT_DONE_STATES = TRANSIENT_STATES
+# counts as done
+DONE_STATES = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed, ResourceState.failed,
+               ResourceState.cancelled] + UNDEPLOYABLE_STATES
+
+# starting states
+INITIAL_STATES = [ResourceState.available]
+# states one can't transition out off
+TERMINAL_STATES = UNDEPLOYABLE_STATES
+# states on can transition to
+VALID_STATES_ON_STATE_UPDATE = [ResourceState.unavailable, ResourceState.skipped, ResourceState.deployed,
+                                ResourceState.failed, ResourceState.deploying, ResourceState.cancelled, ResourceState.undefined,
+                                ResourceState.skipped_for_undefined, ResourceState.processing_events]
 
 UNKNOWN_STRING = "<<undefined>>"
 
@@ -163,6 +179,7 @@ SHUTDOWN_GRACE_HARD = 15
 # Hard shutdown exit code
 EXIT_HARD = 3
 
-
 TIME_ISOFMT = "%Y-%m-%dT%H:%M:%S.%f"
 TIME_LOGFMT = "%Y-%m-%d %H:%M:%S"
+
+PLUGINS_PACKAGE = "inmanta_plugins"

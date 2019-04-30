@@ -25,7 +25,7 @@ from inmanta.execute.util import Unknown
 from inmanta.ast import Namespace, CompilerException, TypeNotFoundException, RuntimeException
 from inmanta.execute.runtime import ExecutionUnit, Resolver, QueueScheduler, ResultVariable
 from inmanta.ast.type import TypedList
-from inmanta import protocol
+from inmanta import protocol, const
 
 from typing import Optional, Callable, List, TYPE_CHECKING, TypeVar, Any, Type
 
@@ -140,9 +140,9 @@ class PluginMeta(type):
         name = plugin_class.__function_name__
         ns_parts = str(plugin_class.__module__).split(".")
         ns_parts.append(name)
-        if ns_parts[0] != "inmanta_plugins":
+        if ns_parts[0] != const.PLUGINS_PACKAGE:
             raise Exception(
-                "All plugin modules should be loaded in the inmanta_plugins package")
+                "All plugin modules should be loaded in the %s package" % const.PLUGINS_PACKAGE)
 
         name = "::".join(ns_parts[1:])
         cls.__functions[name] = plugin_class

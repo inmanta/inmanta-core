@@ -18,14 +18,24 @@
 
 import functools
 import hashlib
+import inspect
 import itertools
 import logging
+import socket
 import warnings
+import uuid
+import datetime
+import enum
+from asyncio import ensure_future, CancelledError
+from logging import Logger
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, Any
+from typing import Callable, Dict, Union, Tuple, List, Coroutine
+from tornado import gen
+
+from inmanta.types import JsonType
 
 LOGGER = logging.getLogger(__name__)
 SALT_SIZE = 16
@@ -69,7 +79,7 @@ def hash_file(content: str) -> str:
     return sha1sum.hexdigest()
 
 
-def is_call_ok(result: Union[int, Tuple[int, Dict[str, Any]]]) -> bool:
+def is_call_ok(result: Union[int, Tuple[int, JsonType]]) -> bool:
     if isinstance(result, tuple):
         if len(result) == 2:
             code, reply = result
@@ -82,6 +92,21 @@ def is_call_ok(result: Union[int, Tuple[int, Dict[str, Any]]]) -> bool:
     return code == 200
 
 
+def ensure_future_and_handle_exception(logger: Logger, msg: str, action: Union[Coroutine]) -> None:
+    """ Fire off a coroutine from the ioloop thread and log exceptions to the logger with the message """
+    future = ensure_future(action)
+
+    def handler(future):
+        try:
+            exc = future.exception()
+            if exc is not None:
+                logger.exception(msg, exc_info=exc)
+        except CancelledError:
+            pass
+
+    future.add_done_callback(handler)
+
+
 class Scheduler(object):
     """
         An event scheduler class
@@ -90,7 +115,7 @@ class Scheduler(object):
         self.name = name
         self._scheduled: Dict[Callable, object] = {}
 
-    def add_action(self, action: Callable, interval: float, initial_delay: float = None) -> None:
+    def add_action(self, action: Union[Callable, Coroutine], interval: float, initial_delay: float = None) -> None:
         """
             Add a new action
 
@@ -98,6 +123,8 @@ class Scheduler(object):
             :param interval: The interval between execution of actions
             :param initial_delay: Delay to the first execution, defaults to interval
         """
+        assert inspect.iscoroutinefunction(action) or gen.is_coroutine_function(action)
+
         if initial_delay is None:
             initial_delay = interval
 
@@ -107,13 +134,17 @@ class Scheduler(object):
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
-                    action()
+                    ensure_future_and_handle_exception(
+                        LOGGER,
+                        "Uncaught exception while executing scheduled action",
+                        action()
+                    )
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
-
                 finally:
-                    handle = IOLoop.current().call_later(interval, action_function)
-                    self._scheduled[action] = handle
+                    # next iteration
+                    ihandle = IOLoop.current().call_later(interval, action_function)
+                    self._scheduled[action] = ihandle
 
         handle = IOLoop.current().call_later(initial_delay, action_function)
         self._scheduled[action] = handle
@@ -141,3 +172,38 @@ class Scheduler(object):
     def __del__(self) -> None:
         if len(self._scheduled) > 0:
             warnings.warn("Deleting scheduler '%s' that has not been stopped properly." % self.name)
+
+
+def get_free_tcp_port() -> str:
+    """
+        Semi safe method for getting a random port. This may contain a race condition.
+    """
+    tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tcp.bind(('', 0))
+    _addr, port = tcp.getsockname()
+    tcp.close()
+    return str(port)
+
+
+def custom_json_encoder(o: object) -> Union[Dict, str, List]:
+    """
+        A custom json encoder that knows how to encode other types commonly used by Inmanta from standard python libraries
+    """
+    if isinstance(o, uuid.UUID):
+        return str(o)
+
+    if isinstance(o, datetime.datetime):
+        return o.isoformat(timespec='microseconds')
+
+    if hasattr(o, "to_dict"):
+        return o.to_dict()
+
+    if isinstance(o, enum.Enum):
+        return o.name
+
+    if isinstance(o, Exception):
+        # Logs can push exceptions through RPC. Return a string representation.
+        return str(o)
+
+    LOGGER.error("Unable to serialize %s", o)
+    raise TypeError(repr(o) + " is not JSON serializable")

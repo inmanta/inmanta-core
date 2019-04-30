@@ -31,9 +31,10 @@ from inmanta.agent.io.local import LocalIO
 
 
 io_list = [LocalIO("local:", {}), BashIO("local:", {}), BashIO("local:", {}, run_as="root")]
+io_names = ["local", "bash", "bash_root"]
 
 
-@pytest.yield_fixture(scope="module")
+@pytest.yield_fixture
 def testdir():
     testdir = tempfile.mkdtemp()
     yield testdir
@@ -70,6 +71,16 @@ def test_check_read_binary(io, testdir):
 
     assert isinstance(result, bytes)
     assert result == test_str
+
+
+@pytest.mark.parametrize("io", io_list, ids=io_names)
+def test_check_run_pipe_actual(io, testdir):
+    filename = os.path.join(testdir, "testfile")
+    result = io.run('sh', ['-c', 'export PATH=$PATH:/usr/lib/jvm/jre-1.7.0-openjdk/bin; env >' + filename + ' 2>&1'])
+    print(result)
+    assert "/usr/lib/jvm/jre-1.7.0-openjdk/bin" not in result[0]
+    assert result[2] == 0
+    assert os.path.exists(filename)
 
 
 @pytest.mark.parametrize("io", io_list)

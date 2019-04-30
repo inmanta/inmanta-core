@@ -15,21 +15,21 @@
 
     Contact: code@inmanta.com
 """
+import asyncio
 import ssl
 import uuid
 
-from typing import Optional, Dict, Any, List, Generator, NoReturn
+from typing import Optional, Dict, List
 
 import tornado
+from pyformance import timer
 from tornado import gen, httpserver, web, routing
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
-
-
-NoneGen = Generator[Any, Any, NoReturn]
+from inmanta.types import NoneGen, JsonType
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -67,7 +67,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         return common.decode_token(parts[1])
 
-    def respond(self, body: Optional[Dict[str, Any]], headers: Dict[str, str], status: int) -> None:
+    def respond(self, body: Optional[JsonType], headers: Dict[str, str], status: int) -> None:
         if CONTENT_TYPE not in headers:
             headers[CONTENT_TYPE] = JSON_CONTENT
         elif headers[CONTENT_TYPE] != JSON_CONTENT:
@@ -89,39 +89,45 @@ class RESTHandler(tornado.web.RequestHandler):
         if call_config is None:
             raise exceptions.NotFound("This method does not exist")
 
-        self.set_header("Access-Control-Allow-Origin", "*")
-        try:
-            message = self._transport._decode(self.request.body)
-            if message is None:
-                message = {}
+        with timer("rpc." + call_config.method_name).time():
+            self._transport.start_request()
+            self.set_header("Access-Control-Allow-Origin", "*")
+            try:
+                message = self._transport._decode(self.request.body)
+                if message is None:
+                    message = {}
 
-            for key, value in self.request.query_arguments.items():
-                if len(value) == 1:
-                    message[key] = value[0].decode("latin-1")
+                for key, value in self.request.query_arguments.items():
+                    if len(value) == 1:
+                        message[key] = value[0].decode("latin-1")
+                    else:
+                        message[key] = [v.decode("latin-1") for v in value]
+
+                request_headers = self.request.headers
+                auth_token = self.get_auth_token(request_headers)
+
+                auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
+                if not auth_enabled or auth_token is not None:
+                    result = yield self._transport._execute_call(
+                        kwargs, http_method, call_config, message, request_headers, auth_token
+                    )
+                    self.respond(result.body, result.headers, result.status_code)
                 else:
-                    message[key] = [v.decode("latin-1") for v in value]
+                    raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
 
-            request_headers = self.request.headers
-            auth_token = self.get_auth_token(request_headers)
+            except ValueError:
+                LOGGER.exception("An exception occured")
+                self.respond({"message": "Unable to decode request body"}, {}, 400)
 
-            auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
-            if not auth_enabled or auth_token is not None:
-                result = yield self._transport._execute_call(
-                    kwargs, http_method, call_config, message, request_headers, auth_token
-                )
-                self.respond(result.body, result.headers, result.status_code)
-            else:
-                raise exceptions.UnauthorizedException("Access to this resource is unauthorized.")
+            except exceptions.BaseException as e:
+                self.respond(e.to_body(), {}, e.to_status())
 
-        except ValueError:
-            LOGGER.exception("An exception occured")
-            self.respond({"message": "Unable to decode request body"}, {}, 400)
-
-        except exceptions.BaseException as e:
-            self.respond(e.to_body(), {}, e.to_status())
-
-        finally:
-            self.finish()
+            finally:
+                try:
+                    yield self.finish()
+                except Exception:
+                    LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
+                self._transport.end_request()
 
     @gen.coroutine
     def head(self, *args: str, **kwargs: str) -> NoneGen:
@@ -199,6 +205,20 @@ class RESTServer(RESTBase):
         self._id = id
         self.headers: Dict[str, str] = {}
         self.session_manager = session_manager
+        # number of ongoing requests
+        self.inflight_counter = 0
+        # event indicating no more in flight requests
+        self.idle_event = asyncio.Event()
+        self.idle_event.set()
+
+    def start_request(self):
+        self.idle_event.clear()
+        self.inflight_counter += 1
+
+    def end_request(self):
+        self.inflight_counter -= 1
+        if self.inflight_counter == 0:
+            self.idle_event.set()
 
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
@@ -243,8 +263,7 @@ class RESTServer(RESTBase):
 
         LOGGER.debug("Start REST transport")
 
-    @gen.coroutine
-    def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         """
             Stop the current server
         """
@@ -252,4 +271,7 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             self._http_server.stop()
 
+    @gen.coroutine
+    def join(self) -> NoneGen:
+        yield self.idle_event.wait()
         yield self._http_server.close_all_connections()
