@@ -17,6 +17,7 @@
 """
 import asyncio
 import base64
+import subprocess
 from collections import defaultdict
 import datetime
 import difflib
@@ -33,7 +34,7 @@ import json
 
 import dateutil.parser
 import asyncpg
-from tornado import gen, locks, process, ioloop
+from tornado import locks, ioloop
 from typing import Dict, Any, Generator
 
 from inmanta import const
@@ -1820,7 +1821,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             Recompile an environment
         """
         if wait > 0:
-            await gen.sleep(wait)
+            await asyncio.sleep(wait)
 
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
@@ -1859,10 +1860,10 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 if env.repo_branch:
                     # verify if branch is correct
                     LOGGER.debug("Verifying correct branch")
-                    sub_process = process.Subprocess(["git", "branch"],
-                                                     stdout=process.Subprocess.STREAM,
-                                                     stderr=process.Subprocess.STREAM,
-                                                     cwd=project_dir)
+
+                    sub_process = await asyncio.create_subprocess_exec(
+                        "git", ["branch"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=project_dir
+                    )
 
                     out, _, _ = await asyncio.gather(
                         sub_process.stdout.read_until_close(),
