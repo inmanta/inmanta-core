@@ -265,3 +265,8 @@ Optional Step 8: Setup influxdb for collection of performance metrics
 
 Follow the instructions in :ref:`metering-setup` to send performance metrics to influxdb.
 This is only recommended for production deployments.
+
+Optional Step 9: Configure logging
+----------------------------------
+
+Logging can be configured by following the instructions in :ref:`administrators_doc_logging`.

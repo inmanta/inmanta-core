@@ -578,7 +578,6 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
 @pytest.mark.parametrize("resource_state, should_be_deployed", [
     (const.ResourceState.unavailable, True),
     (const.ResourceState.skipped, True),
-    (const.ResourceState.dry, True),
     (const.ResourceState.deployed, True),
     (const.ResourceState.failed, True),
     (const.ResourceState.deploying, False),
@@ -586,7 +585,7 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     (const.ResourceState.cancelled, True),
     (const.ResourceState.undefined, True),
     (const.ResourceState.skipped_for_undefined, True),
-    (const.ResourceState.processing_events, True),
+    (const.ResourceState.processing_events, False),
 ])
 @pytest.mark.asyncio
 async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
@@ -612,11 +611,19 @@ async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resourc
     await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert not cm.deployed
+    assert cm.done == 0
 
     await resource.update_fields(status=resource_state)
     await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert cm.deployed == should_be_deployed
+    assert cm.done == (1 if should_be_deployed else 0)
+
+    # Make sure that a done resource stays in done even when a repair is running
+    await resource.update_fields(status=const.ResourceState.deploying)
+    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
+    assert cm.deployed == should_be_deployed
+    assert cm.done == (1 if should_be_deployed else 0)
 
 
 @pytest.mark.asyncio

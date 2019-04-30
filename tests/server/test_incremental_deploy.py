@@ -173,13 +173,20 @@ class MultiVersionSetup(object):
             # Start the deploy
             action_id = uuid.uuid4()
             now = datetime.now()
+            if state == const.ResourceState.available:
+                # initial state can not be set
+                continue
+            if state not in const.TRANSIENT_STATES:
+                finished = now
+            else:
+                finished = None
             result = await serverdirect.resource_action_update(
                 env,
                 [rid],
                 action_id,
                 ResourceAction.deploy,
                 now,
-                now,
+                finished,
                 status=state,
                 messages=[],
                 changes={},

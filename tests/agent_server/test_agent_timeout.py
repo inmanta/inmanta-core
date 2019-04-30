@@ -1,11 +1,11 @@
 import logging
 import time
 
-from agent_server.conftest import get_resource, get_agent, log_index
+from agent_server.conftest import get_resource, get_agent
 from inmanta import config
 import pytest
 
-from utils import retry_limited
+from utils import retry_limited, log_index
 
 
 @pytest.mark.asyncio

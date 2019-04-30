@@ -17,7 +17,7 @@
 """
 from configparser import RawConfigParser
 
-from inmanta.const import ResourceState
+from inmanta.const import ResourceState, DONE_STATES
 from collections import defaultdict
 from asyncpg import UndefinedTableError
 import copy
@@ -1807,6 +1807,10 @@ class ConfigurationModel(BaseDocument):
 
     @property
     def done(self) -> int:
+        # Keep resources which are deployed in done, even when a repair operation
+        # changes its state to deploying again.
+        if self.deployed:
+            return self.total
         return self._done
 
     @classmethod
@@ -1990,13 +1994,14 @@ class ConfigurationModel(BaseDocument):
                         WHERE environment=$1 AND version=$2 AND
                               total=(SELECT COUNT(*)
                                      FROM Resource
-                                     WHERE environment=$1 AND model=$2 AND status NOT IN('available', 'deploying')
+                                     WHERE environment=$1 AND model=$2 AND status = any($6::resourcestate[])
                     )"""
         values = [cls._get_value(environment),
                   cls._get_value(version),
                   cls._get_value(ResourceState.deployed),
                   cls._get_value(const.VersionState.failed),
-                  cls._get_value(const.VersionState.success)]
+                  cls._get_value(const.VersionState.success),
+                  cls._get_value(DONE_STATES)]
         await cls._execute_query(query, *values)
 
     @classmethod

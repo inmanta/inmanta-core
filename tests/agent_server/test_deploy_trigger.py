@@ -5,11 +5,9 @@ import pytest
 from agent_server.conftest import (
     get_resource,
     _deploy_resources,
-    log_contains,
-    log_doesnt_contain,
     get_agent,
 )
-from utils import retry_limited, AsyncClosing
+from utils import retry_limited, AsyncClosing, log_contains, log_doesnt_contain
 
 
 @pytest.mark.asyncio(timeout=150)
@@ -44,7 +42,7 @@ async def test_deploy_trigger(
             def is_deployed():
                 return resource_container.Provider.readcount("agent1", "key1") == a1
 
-            await retry_limited(is_deployed, 0.1)
+            await retry_limited(is_deployed, 1)
             log_contains(
                 caplog,
                 "agent",
