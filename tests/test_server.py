@@ -385,7 +385,7 @@ async def test_resource_update(postgresql_client, client, server, environment):
     now = datetime.now()
     changes = {x: {"owner": {"old": "root", "current": "inmanta"}} for x in resource_ids}
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", finished=now, changes=changes)
-    assert(result.code == 500)
+    assert(result.code == 400)
 
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
                                                   status=const.ResourceState.deployed,
