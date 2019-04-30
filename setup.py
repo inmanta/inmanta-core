@@ -20,7 +20,7 @@ requires = [
 ]
 
 setup(
-    version="2019.2",
+    version="2019.3",
     python_requires='>=3.6', # also update classifiers
     # Meta data
     name="inmanta",
