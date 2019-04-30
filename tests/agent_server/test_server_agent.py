@@ -752,7 +752,7 @@ async def test_spontaneous_repair(resource_container, server, client):
 
 
 @pytest.mark.asyncio(timeout=30)
-async def test_failing_deploy_no_handler(resource_container, server, client):
+async def test_failing_deploy_no_handler(resource_container, server, client, async_finalizer):
     """
         dryrun and deploy a configuration model
     """
@@ -771,6 +771,7 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
         code_loader=False,
     )
     agent.add_end_point_name("agent1")
+    async_finalizer.add(agent.stop)
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -813,8 +814,6 @@ async def test_failing_deploy_no_handler(resource_container, server, client):
     assert any("traceback" in log["kwargs"] for log in logs), "\n".join(
         result.result["resources"][0]["actions"][0]["messages"]
     )
-
-    await agent.stop()
 
 
 @pytest.mark.asyncio
@@ -1472,7 +1471,7 @@ async def test_unkown_parameters(resource_container, client, server):
 
 
 @pytest.mark.asyncio()
-async def test_fail(resource_container, client, server):
+async def test_fail(resource_container, client, server, async_finalizer):
     """
         Test results when a step fails
     """
@@ -1491,6 +1490,7 @@ async def test_fail(resource_container, client, server):
         poolsize=10,
     )
     agent.add_end_point_name("agent1")
+    async_finalizer.add(agent.stop)
     await agent.start()
     await retry_limited(lambda: len(server.get_slice("session")._sessions) == 1, 10)
 
@@ -1570,8 +1570,6 @@ async def test_fail(resource_container, client, server):
     assert states["test::Resource[agent1,key=key3],v=%d" % version] == "skipped"
     assert states["test::Resource[agent1,key=key4],v=%d" % version] == "skipped"
     assert states["test::Resource[agent1,key=key5],v=%d" % version] == "skipped"
-
-    await agent.stop()
 
 
 @pytest.mark.asyncio(timeout=15)
@@ -3273,7 +3271,7 @@ succ    2    2    2    0
 @pytest.mark.parametrize("dep_state", dep_states, ids=lambda x: x.name)
 @pytest.mark.asyncio
 async def test_deploy_and_events(
-    client, server, environment, resource_container, self_state, dep_state
+    client, server, environment, resource_container, self_state, dep_state, async_finalizer,
 ):
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
@@ -3286,6 +3284,7 @@ async def test_deploy_and_events(
         code_loader=False,
     )
     agent.add_end_point_name("agent1")
+    async_finalizer.add(agent.stop)
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
@@ -3362,8 +3361,6 @@ async def test_deploy_and_events(
     else:
         assert len(events) == 1
         assert len(events[0]) == expected_events
-
-    await agent.stop()
 
 
 @pytest.mark.asyncio
