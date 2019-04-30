@@ -34,11 +34,12 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import gen, locks, process, ioloop
-from typing import Dict, Any, Generator, Tuple
+from typing import Dict, Any, Generator
 
 from inmanta import const
 from inmanta import data, config
 from inmanta.protocol.common import attach_warnings
+from inmanta.protocol.exceptions import BadRequest
 from inmanta.reporter import InfluxReporter
 from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
@@ -46,8 +47,7 @@ from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.types import JsonType, Apireturn
 from inmanta.util import hash_file
-from inmanta.const import UNDEPLOYABLE_STATES, STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, \
-    TRANSIENT_STATES
+from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
 
 from typing import List, TYPE_CHECKING
@@ -61,14 +61,15 @@ if TYPE_CHECKING:
 DBLIMIT = 100000
 
 
-def error_and_log(message:str, **context) -> Tuple[int, JsonType]:
+def error_and_log(message: str, **context) -> None:
     """
     :param message: message to return both to logger and to remote caller
     :param context: additional context to attach to log
     """
-    ctx =  ",".join([f"{k}: {v}" for k, v in context.items()])
-    LOGGER.error("%s %s",message, ctx)
-    return 500, {"message": message}
+    ctx = ",".join([f"{k}: {v}" for k, v in context.items()])
+    LOGGER.error("%s %s", message, ctx)
+    raise BadRequest(message)
+
 
 class ResourceActionLogLine(logging.LogRecord):
     """ A special log record that is used to report log lines that come from the agent
@@ -1441,7 +1442,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if is_resource_action_finished:
             # this resource action is finished
             if status is None:
-                return error_and_log(
+                error_and_log(
                     "Cannot finish an action without a status.",
                     resource_ids=resource_ids,
                     action=action,
@@ -1450,35 +1451,35 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         if is_resource_state_update:
             # if status update, status is required
             if status is None:
-                return error_and_log("Cannot perform state update without a status.",
-                                     resource_ids=resource_ids,
-                                     action=action,
-                                     action_id=action_id)
+                error_and_log("Cannot perform state update without a status.",
+                              resource_ids=resource_ids,
+                              action=action,
+                              action_id=action_id)
             # and needs to be valid
             if status not in VALID_STATES_ON_STATE_UPDATE:
-                return error_and_log("Status %s is not valid on action %s" % (status, action),
-                                     resource_ids=resource_ids,
-                                     action=action,
-                                     action_id=action_id
-                                     )
+                error_and_log("Status %s is not valid on action %s" % (status, action),
+                              resource_ids=resource_ids,
+                              action=action,
+                              action_id=action_id
+                              )
             if status in TRANSIENT_STATES:
                 if not is_resource_action_finished:
                     pass
                 else:
-                    return error_and_log("The finished field must not be set for transient states",
-                                         status=status,
-                                         resource_ids=resource_ids,
-                                         action=action,
-                                         action_id=action_id)
+                    error_and_log("The finished field must not be set for transient states",
+                                  status=status,
+                                  resource_ids=resource_ids,
+                                  action=action,
+                                  action_id=action_id)
             else:
                 if is_resource_action_finished:
                     pass
                 else:
-                    return error_and_log("The finished field must be set for none transient states",
-                                     status=status,
-                                     resource_ids=resource_ids,
-                                     action=action,
-                                     action_id=action_id)
+                    error_and_log("The finished field must be set for none transient states",
+                                  status=status,
+                                  resource_ids=resource_ids,
+                                  action=action,
+                                  action_id=action_id)
 
         # validate resources
         resources = yield data.Resource.get_resources(env.id, resource_ids)

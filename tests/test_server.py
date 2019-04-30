@@ -387,9 +387,10 @@ async def test_resource_update(postgresql_client, client, server, environment):
     result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", finished=now, changes=changes)
     assert(result.code == 500)
 
-    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy", status=const.ResourceState.deployed,
+    result = await aclient.resource_action_update(environment, resource_ids, action_id, "deploy",
+                                                  status=const.ResourceState.deployed,
                                                   finished=now, changes=changes)
-    assert(result.code == 200)
+    assert (result.code == 200)
 
     result = await client.get_version(environment, version)
     assert(result.code == 200)
