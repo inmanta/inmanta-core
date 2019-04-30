@@ -611,11 +611,19 @@ async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resourc
     await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert not cm.deployed
+    assert cm.done == 0
 
     await resource.update_fields(status=resource_state)
     await data.ConfigurationModel.mark_done_if_done(env.id, cm.version)
     cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
     assert cm.deployed == should_be_deployed
+    assert cm.done == (1 if should_be_deployed else 0)
+
+    # Make sure that a done resource stays in done even when a repair is running
+    await resource.update_fields(status=const.ResourceState.deploying)
+    cm = await data.ConfigurationModel.get_one(version=version, environment=env.id)
+    assert cm.deployed == should_be_deployed
+    assert cm.done == (1 if should_be_deployed else 0)
 
 
 @pytest.mark.asyncio

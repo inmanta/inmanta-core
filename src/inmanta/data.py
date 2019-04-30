@@ -1807,6 +1807,10 @@ class ConfigurationModel(BaseDocument):
 
     @property
     def done(self) -> int:
+        # Keep resources which are deployed in done, even when a repair operation
+        # changes its state to deploying again.
+        if self.deployed:
+            return self.total
         return self._done
 
     @classmethod
