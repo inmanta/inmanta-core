@@ -43,7 +43,7 @@ Currently, the Inmanta project is mainly developed and maintained by `Inmanta nv
     architecture
     language
     moduleguides
-    developers
+    module_developers
     platform_developers
     administrators
     faq
