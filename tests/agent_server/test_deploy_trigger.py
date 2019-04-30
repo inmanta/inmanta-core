@@ -44,7 +44,7 @@ async def test_deploy_trigger(
             def is_deployed():
                 return resource_container.Provider.readcount("agent1", "key1") == a1
 
-            await retry_limited(is_deployed, 0.1)
+            await retry_limited(is_deployed, 1)
             log_contains(
                 caplog,
                 "agent",
