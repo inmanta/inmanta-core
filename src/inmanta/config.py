@@ -289,7 +289,7 @@ state_dir = Option("config", "state_dir", "/var/lib/inmanta",
                    "The directory where the server stores its state")
 
 log_dir = Option("config", "log_dir", "/var/log/inmanta",
-                 "The directory where the resource action log is stored.")
+                 "The directory where the resource action log is stored and the logs of auto-started agents.")
 
 
 def get_executable():
