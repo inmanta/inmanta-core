@@ -422,4 +422,4 @@ configuration.
 Next steps
 ___________________
 
-:doc:`guides`
+:doc:`module_developers`
