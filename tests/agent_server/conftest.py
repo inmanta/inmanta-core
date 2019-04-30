@@ -518,6 +518,10 @@ def resource_container():
         result = await client.get_version(env_id, version)
         assert result.code == 200
         now = time.time()
+        logger.info(
+            "waiting with waiters, %s resources done",
+            result.result["model"]["done"],
+        )
         while (result.result["model"]["total"] - result.result["model"]["done"]) > 0:
             if now + timeout < time.time():
                 raise Exception("Timeout")

@@ -578,7 +578,6 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
 @pytest.mark.parametrize("resource_state, should_be_deployed", [
     (const.ResourceState.unavailable, True),
     (const.ResourceState.skipped, True),
-    (const.ResourceState.dry, True),
     (const.ResourceState.deployed, True),
     (const.ResourceState.failed, True),
     (const.ResourceState.deploying, False),
@@ -586,7 +585,7 @@ async def test_model_set_ready(init_dataclasses_and_load_schema):
     (const.ResourceState.cancelled, True),
     (const.ResourceState.undefined, True),
     (const.ResourceState.skipped_for_undefined, True),
-    (const.ResourceState.processing_events, True),
+    (const.ResourceState.processing_events, False),
 ])
 @pytest.mark.asyncio
 async def test_model_mark_done_if_done(init_dataclasses_and_load_schema, resource_state, should_be_deployed):
