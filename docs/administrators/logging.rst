@@ -29,9 +29,9 @@ Resource action logs
 --------------------
 
 The resource action log files contain information about actions performed on a specific resource. Each environment has one
-resource action log file. The filename of this log file looks as follows: ``<server
-.resource-action-log-prefix>-<environment-id>.log``. The prefix is configurable with the
-``purge-resource-action-logs-interval`` option as described in the :ref:`Inmanta configuration reference<config_reference>`.
+resource action log file. The filename of this log file looks as follows:
+``<server.resource-action-log-prefix>-<environment-id>.log``. The prefix can be configured with the configuration option
+:inmanta.config:option:`server.resource-action-log-prefix`.
 
 The resource action log file contains information about the following resource action:
 
