@@ -36,10 +36,10 @@ class InmantaBootloader(object):
     def get_server_slices(self) -> List[ServerSlice]:
         return [self.get_server_slice(), self.get_agent_manager_slice()]
 
-    async def start(self) -> Generator[Any, None, None]:
+    async def start(self) -> None:
         for mypart in self.get_server_slices():
             self.restserver.add_slice(mypart)
         await self.restserver.start()
 
-    async def stop(self) -> Generator[Any, None, None]:
+    async def stop(self) -> None:
         await self.restserver.stop()

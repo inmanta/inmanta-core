@@ -28,7 +28,7 @@ from inmanta.types import JsonType
 from inmanta.protocol import common, exceptions
 from inmanta import config as inmanta_config
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping, Generator  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -279,7 +279,7 @@ class RESTBase(object):
         message: Dict[str, Any],
         request_headers: Mapping[str, str],
         auth=None,
-    ) -> Generator[Any, Any, common.Response]:
+    ) -> common.Response:
 
         headers: Dict[str, str] = {}
         try:

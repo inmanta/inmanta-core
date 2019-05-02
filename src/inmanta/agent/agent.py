@@ -37,9 +37,8 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-from typing import Tuple, Optional, Generator, Any, Dict, List, TYPE_CHECKING
+from typing import Tuple, Optional, Any, Dict, List, TYPE_CHECKING
 from inmanta.agent.handler import ResourceHandler
-from inmanta.types import NoneGen
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -119,7 +118,7 @@ class ResourceAction(object):
         action_id: uuid.UUID,
         start: float,
         status: const.ResourceState = const.ResourceState.deploying
-    ) -> NoneGen:
+    ) -> None:
         await self.scheduler.get_client().resource_action_update(
             tid=self.scheduler._env_id,
             resource_ids=[str(self.resource.id)],
@@ -136,7 +135,7 @@ class ResourceAction(object):
         cache: AgentCache,
         start: float,
         event_only: bool=False
-    ) -> Generator[Any, Any, Tuple[bool, bool]]:
+    ) -> Tuple[bool, bool]:
         """
             :param ctx The context to use during execution of this deploy
             :param events Possible events that are available for this resource
@@ -176,7 +175,7 @@ class ResourceAction(object):
             send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
 
             try:
-                await asyncio.get_running_loop().run_in_executor(
+                await asyncio.get_event_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
                 )
 
@@ -198,7 +197,7 @@ class ResourceAction(object):
                     resource_id=str(self.resource.id)
                 )
 
-                await asyncio.get_running_loop().run_in_executor(
+                await asyncio.get_event_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
                 )
             except Exception:
@@ -215,7 +214,7 @@ class ResourceAction(object):
         return [resource.resource_id.resource_str()
                 for resource, result in zip(self.dependencies, results) if not result.success]
 
-    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
+    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
         self.logger.log(const.LogLevel.TRACE.value, "Entering %s %s", self.gid, self.resource)
         cache.open_version(self.resource.id.version)
 
@@ -329,7 +328,7 @@ class RemoteResourceAction(ResourceAction):
         super(RemoteResourceAction, self).__init__(scheduler, None, gid, reason)
         self.resource_id = resource_id
 
-    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> NoneGen:
+    async def execute(self, dummy: "ResourceAction", generation: "Dict[str, ResourceAction]", cache: AgentCache) -> None:
         await dummy.future
         try:
             result = await self.scheduler.get_client().get_resource(self.scheduler.agent._env_id, str(self.resource_id),
@@ -677,8 +676,8 @@ class AgentInstance(object):
             return False
         return True
 
-    async def get_provider(self, resource: Resource) -> Generator[Any, Any, ResourceHandler]:
-        provider = await asyncio.get_running_loop().run_in_executor(
+    async def get_provider(self, resource: Resource) -> ResourceHandler:
+        provider = await asyncio.get_event_loop().run_in_executor(
             self.provider_thread_pool, handler.Commander.get_provider, self._cache, self, resource
         )
         provider.set_cache(self._cache)
@@ -793,7 +792,7 @@ class AgentInstance(object):
                                                                                        "desired": "Unable to find a handler"}})
                         else:
                             try:
-                                await asyncio.get_running_loop().run_in_executor(
+                                await asyncio.get_event_loop().run_in_executor(
                                     self.thread_pool, provider.execute, ctx, resource, True
                                 )
 
@@ -850,7 +849,7 @@ class AgentInstance(object):
                 try:
                     self._cache.open_version(version)
                     provider = await self.get_provider(resource_obj)
-                    result = await asyncio.get_running_loop().run_in_executor(
+                    result = await asyncio.get_event_loop().run_in_executor(
                         self.thread_pool, provider.check_facts, ctx, resource_obj
                     )
 
@@ -973,7 +972,7 @@ class Agent(SessionEndpoint):
         else:
             return self.pause(agent)
 
-    async def on_reconnect(self) -> NoneGen:
+    async def on_reconnect(self) -> None:
         for name in self._instances.keys():
             result = await self._client.get_state(tid=self._env_id, sid=self.sessionid, agent=name)
             if result.code == 200:
@@ -985,7 +984,7 @@ class Agent(SessionEndpoint):
             else:
                 LOGGER.warning("could not get state from the server")
 
-    async def on_disconnect(self) -> NoneGen:
+    async def on_disconnect(self) -> None:
         LOGGER.warning("Connection to server lost, taking agents offline")
         for agent_instance in self._instances.values():
             agent_instance.pause("Connection to server lost")
@@ -1015,7 +1014,7 @@ class Agent(SessionEndpoint):
                             LOGGER.exception("Failed to install handler %s for %s", rt, name)
 
     async def _install(self, hash_value, module_name, module_source, module_requires):
-        loop = asyncio.get_running_loop()
+        loop = asyncio.get_event_loop()
 
         await loop.run_in_executor(self.thread_pool, self._env.install_from_list, module_requires, True)
         await loop.run_in_executor(self.thread_pool, self._loader.deploy_version, hash_value, module_name, module_source)

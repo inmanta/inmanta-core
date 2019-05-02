@@ -17,7 +17,7 @@
 """
 
 import re
-from typing import Set, Dict, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr, Generator
+from typing import Set, Dict, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr
 
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
 
@@ -86,9 +86,7 @@ class RESTClient(RESTBase):
 
         return "%s://%s:%d" % (protocol, host, port)
 
-    async def call(
-        self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None
-    ) -> Generator[Any, Any, common.Result]:
+    async def call(self, properties: common.MethodProperties, args: List, kwargs: Dict[str, Any] = None) -> common.Result:
         if kwargs is None:
             kwargs = {}
 

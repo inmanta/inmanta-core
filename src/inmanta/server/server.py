@@ -35,7 +35,7 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import locks
-from typing import Dict, Any, Generator
+from typing import Dict, Any
 
 from inmanta import const
 from inmanta import data, config
@@ -775,7 +775,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
     @protocol.handle(methods.get_resources_for_agent, env="tid")
     async def get_resources_for_agent(
         self, env: data.Environment, agent: str, version: str, sid: uuid.UUID, incremental_deploy: bool
-    ) -> Generator[Any, Any, JsonType]:
+    ) -> Apireturn:
         if not self.agentmanager.is_primary(env, sid, agent):
             return 409, {"message": "This agent is not currently the primary for the endpoint %s (sid: %s)" % (agent, sid)}
         if incremental_deploy:
@@ -786,9 +786,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             result = await self.get_all_resources_for_agent(env, agent, version)
         return result
 
-    async def get_all_resources_for_agent(
-        self, env: data.Environment, agent: str, version: str
-    ) -> Generator[Any, Any, JsonType]:
+    async def get_all_resources_for_agent(self, env: data.Environment, agent: str, version: str) -> Apireturn:
         started = datetime.datetime.now()
         if version is None:
             version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)
@@ -819,7 +817,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
-    async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Generator[Any, Any, JsonType]:
+    async def get_resource_increment_for_agent(self, env: data.Environment, agent: str) -> Apireturn:
         started = datetime.datetime.now()
 
         version = await data.ConfigurationModel.get_version_nr_latest_version(env.id)

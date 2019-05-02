@@ -29,7 +29,7 @@ import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
-from inmanta.types import NoneGen, JsonType
+from inmanta.types import JsonType
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -81,7 +81,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
-    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> NoneGen:
+    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
             An rpc like call
         """
@@ -128,32 +128,32 @@ class RESTHandler(tornado.web.RequestHandler):
                     LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
                 self._transport.end_request()
 
-    async def head(self, *args: str, **kwargs: str) -> NoneGen:
+    async def head(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
 
-    async def get(self, *args: str, **kwargs: str) -> NoneGen:
+    async def get(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
 
-    async def post(self, *args: str, **kwargs: str) -> NoneGen:
+    async def post(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
 
-    async def delete(self, *args: str, **kwargs: str) -> NoneGen:
+    async def delete(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
 
-    async def patch(self, *args: str, **kwargs: str) -> NoneGen:
+    async def patch(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
 
-    async def put(self, *args: str, **kwargs: str) -> NoneGen:
+    async def put(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
@@ -218,7 +218,7 @@ class RESTServer(RESTBase):
 
     async def start(
         self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
-    ) -> NoneGen:
+    ) -> None:
         """
             Start the server on the current ioloop
         """
@@ -265,6 +265,6 @@ class RESTServer(RESTBase):
         if self._http_server is not None:
             self._http_server.stop()
 
-    async def join(self) -> NoneGen:
+    async def join(self) -> None:
         await self.idle_event.wait()
         await self._http_server.close_all_connections()

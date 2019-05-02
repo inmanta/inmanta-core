@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 import inmanta.protocol.endpoints
-from inmanta.types import JsonType, NoneGen
+from inmanta.types import JsonType
 from inmanta.util import Scheduler
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
@@ -96,7 +96,7 @@ class Server(endpoints.Endpoint):
 
     id = property(get_id)
 
-    async def start(self) -> NoneGen:
+    async def start(self) -> None:
         """
             Start the transport.
 
@@ -118,7 +118,7 @@ class Server(endpoints.Endpoint):
 
         await self._transport.start(self.get_slices().values(), self._handlers)
 
-    async def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         """
             Stop the transport.
 
@@ -151,17 +151,17 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self.running: bool = False  # for debugging
 
     @abc.abstractmethod
-    async def prestart(self, server: Server) -> NoneGen:
+    async def prestart(self, server: Server) -> None:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
 
     @abc.abstractmethod
-    async def start(self) -> NoneGen:
+    async def start(self) -> None:
         """
             Start the server slice.
         """
         self.running = True
 
-    async def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         self.running = False
         self._sched.stop()
 

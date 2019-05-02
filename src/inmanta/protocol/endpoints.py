@@ -27,7 +27,6 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Gener
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
-from inmanta.types import NoneGen
 from . import common
 from .rest import client
 
@@ -193,7 +192,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         else:
             self._env_id = environment_id
 
-    async def start(self) -> NoneGen:
+    async def start(self) -> None:
         """
             Connect to the server and use a heartbeat and long-poll for two-way communication
         """
@@ -202,18 +201,18 @@ class SessionEndpoint(Endpoint, CallTarget):
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
         self.add_future(self.perform_heartbeat())
 
-    async def stop(self) -> NoneGen:
+    async def stop(self) -> None:
         await super(SessionEndpoint, self).stop()
         self._sched.stop()
         self.running = False
 
-    async def on_reconnect(self) -> NoneGen:
+    async def on_reconnect(self) -> None:
         pass
 
-    async def on_disconnect(self) -> NoneGen:
+    async def on_disconnect(self) -> None:
         pass
 
-    async def perform_heartbeat(self) -> NoneGen:
+    async def perform_heartbeat(self) -> None:
         """
             Start a continuous heartbeat call
         """
