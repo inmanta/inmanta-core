@@ -47,7 +47,7 @@ from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.types import Apireturn
-from inmanta.util import hash_file, handle_exception_sno
+from inmanta.util import hash_file
 from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
 
@@ -1858,7 +1858,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                     LOGGER.debug("Verifying correct branch")
 
                     sub_process = await asyncio.create_subprocess_exec(
-                        "git", ["branch"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=project_dir
+                        "git", "branch", stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=project_dir
                     )
 
                     out, _, _ = await asyncio.gather(
@@ -1922,7 +1922,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                 await comp.insert()
                 await data.Report.insert_many(stages)
             except Exception as exc:
-                handle_exception_sno(exc)
+                LOGGER.warning("An exception occurred that should not happen.", exc_info=exc)
 
     @protocol.handle(methods.get_reports, env="tid")
     async def get_reports(self, env, start=None, end=None, limit=None):

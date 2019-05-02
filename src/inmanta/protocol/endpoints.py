@@ -21,7 +21,7 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Future, ensure_future, Task, sleep
+from asyncio import Future, ensure_future, Task, sleep, CancelledError
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
@@ -81,7 +81,6 @@ class Endpoint(object):
         self._node_name: str = inmanta_config.nodename.get()
         self._end_point_names: List[str] = []
         self._targets: List[CallTarget] = []
-        self._stop_tasks: Set[Task] = set()
 
     def add_call_target(self, target: CallTarget) -> None:
         self._targets.append(target)
@@ -90,18 +89,17 @@ class Endpoint(object):
     def call_targets(self) -> List[CallTarget]:
         return self._targets
 
-    def add_future(self, future: Future) -> None:
+    def add_future(self, future: Union[Future, Coroutine]) -> None:
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
-
         def handle_result(f: Future) -> None:
             try:
                 f.result()
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        ensure_future(future).add_done_callback(handle_result)
+        return ensure_future(future).add_done_callback(handle_result)
 
     def get_end_point_names(self) -> List[str]:
         return self._end_point_names
@@ -133,30 +131,10 @@ class Endpoint(object):
 
     node_name = property(get_node_name)
 
-    async def await_stop(self, coro: Future) -> Any:
-        """ Await the given coroutine or future and cancel the created task when the endpoint is stopped.
-        """
-        task = ensure_future(coro)
-        self._stop_tasks.add(task)
-
-        result = await task
-
-        try:
-            self._stop_tasks.remove(task)
-        except KeyError:
-            pass
-
-        return result
-
     async def stop(self) -> None:
         """ Stop this endpoint
         """
-        try:
-            while True:
-                task = self._stop_tasks.pop()
-                task.cancel()
-        except KeyError:
-            pass
+        pass
 
 
 class SessionEndpoint(Endpoint, CallTarget):
@@ -176,6 +154,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
+        self._heartbeat_coro: Optional[Task] = None
 
         self.add_call_target(self)
 
@@ -200,12 +179,18 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        self.add_future(self.perform_heartbeat())
+        self._heartbeat_coro = self.add_future(self.perform_heartbeat())
 
     async def stop(self) -> None:
         await super(SessionEndpoint, self).stop()
         self._sched.stop()
-        self.running = False
+        if self._heartbeat_coro is not None:
+            self._heartbeat_coro.cancel()
+            try:
+                await self._heartbeat_coro
+            except CancelledError:
+                pass
+            self._heartbeat_coro = None
 
     async def on_reconnect(self) -> None:
         pass
@@ -221,36 +206,40 @@ class SessionEndpoint(Endpoint, CallTarget):
             raise Exception("AgentEndpoint not started")
 
         connected: bool = False
-        while self.running:
-            LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
-            result = await self._client.heartbeat(
-                sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
-            )
-            LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
-            if result.code == 200:
-                if not connected:
-                    connected = True
-                    self.add_future(self.on_reconnect())
-                if result.result is not None:
-                    if "method_calls" in result.result:
-                        method_calls: List[common.Request] = [
-                            common.Request.from_dict(req) for req in result.result["method_calls"]
-                        ]
-                        # FIXME: reuse transport?
-                        transport = self._transport(self)
-
-                        for method_call in method_calls:
-                            await self.dispatch_method(transport, method_call)
-            else:
-                LOGGER.warning(
-                    "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
-                    result.code,
-                    result.result,
-                    self.reconnect_delay,
+        try:
+            while True:
+                LOGGER.log(3, "sending heartbeat for %s", str(self.sessionid))
+                result = await self._client.heartbeat(
+                    sid=str(self.sessionid), tid=str(self._env_id), endpoint_names=self.end_point_names, nodename=self.node_name
                 )
-                connected = False
-                await self.on_disconnect()
-                await self.await_stop(sleep(self.reconnect_delay))
+                LOGGER.log(3, "returned heartbeat for %s", str(self.sessionid))
+                if result.code == 200:
+                    if not connected:
+                        connected = True
+                        self.add_future(self.on_reconnect())
+                    if result.result is not None:
+                        if "method_calls" in result.result:
+                            method_calls: List[common.Request] = [
+                                common.Request.from_dict(req) for req in result.result["method_calls"]
+                            ]
+                            # FIXME: reuse transport?
+                            transport = self._transport(self)
+
+                            for method_call in method_calls:
+                                self.add_future(self.dispatch_method(transport, method_call))
+                else:
+                    LOGGER.warning(
+                        "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
+                        result.code,
+                        result.result,
+                        self.reconnect_delay,
+                    )
+                    connected = False
+                    await self.on_disconnect()
+                    await sleep(self.reconnect_delay)
+
+        except CancelledError:
+            pass
 
     async def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
         if self._client is None:
