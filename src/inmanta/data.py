@@ -2296,6 +2296,7 @@ def set_connection_pool(pool):
 
 
 async def disconnect():
+    LOGGER.debug("Disconnecting data classes")
     for cls in _classes:
         await cls.close_connection_pool()
 

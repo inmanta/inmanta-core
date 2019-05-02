@@ -23,9 +23,9 @@ from datetime import datetime
 import enum
 
 from tornado import escape
-from inmanta import const
+from inmanta import const, util
 from inmanta.types import JsonType
-from inmanta.protocol import common, exceptions
+from inmanta.protocol import common, exceptions, endpoints
 from inmanta import config as inmanta_config
 
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401
@@ -245,7 +245,7 @@ class CallArguments(object):
 
 
 # Shared
-class RESTBase(object):
+class RESTBase(util.TaskHandler):
     """
         Base class for REST based client and servers
     """

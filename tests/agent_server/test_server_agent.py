@@ -2992,18 +2992,13 @@ async def test_bad_post_get_facts(resource_container, client, server, environmen
 
 
 @pytest.mark.asyncio
-async def test_bad_post_events(resource_container, environment, server, client, caplog):
+async def test_bad_post_events(resource_container, environment, server, agent, client, caplog):
     """
         Send and receive events within one agent
     """
     caplog.set_level(logging.ERROR)
 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
-    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
-    agent.add_end_point_name("agent1")
-    await agent.start()
-    await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
     version = int(time.time())
 
@@ -3049,8 +3044,6 @@ async def test_bad_post_events(resource_container, environment, server, client, 
     caplog.clear()
 
     # Nothing is reported as events don't have pre and post
-
-    await agent.stop()
 
 
 @pytest.mark.asyncio

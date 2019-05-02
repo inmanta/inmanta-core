@@ -15,9 +15,12 @@
 
     Contact: code@inmanta.com
 """
+from _asyncio import Task
+from asyncio import CancelledError
+
 import inmanta.protocol.endpoints
 from inmanta.types import JsonType
-from inmanta.util import Scheduler, add_future
+from inmanta.util import Scheduler, add_future, TaskHandler
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
@@ -28,7 +31,7 @@ from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
-from typing import Dict, Tuple, Callable, Optional, List, Union, Coroutine
+from typing import Dict, Tuple, Callable, Optional, List, Union, Coroutine, Set
 
 import logging
 import asyncio
@@ -128,15 +131,18 @@ class Server(endpoints.Endpoint):
         await super(Server, self).stop()
         if not self.running:
             return
+
         self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         await self._transport.stop()
         for endpoint in reversed(list(self.get_slices().values())):
+            LOGGER.debug("Stopping %s", endpoint)
             await endpoint.stop()
+
         await self._transport.join()
 
 
-class ServerSlice(inmanta.protocol.endpoints.CallTarget):
+class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):
     """
         An API serving part of the server.
     """
@@ -148,9 +154,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self._handlers: List[routing.Rule] = []
         self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
         self.running: bool = False  # for debugging
-
-    def add_future(self, future: Union[asyncio.Future, Coroutine]) -> asyncio.Task:
-        return add_future(future)
+        self._background_tasks: Set[Task] = set()
 
     @abc.abstractmethod
     async def prestart(self, server: Server) -> None:
@@ -166,6 +170,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
     async def stop(self) -> None:
         self.running = False
         self._sched.stop()
+        await super(ServerSlice, self).stop()
 
     name = property(lambda self: self._name)
 

@@ -27,13 +27,13 @@ import warnings
 import uuid
 import datetime
 import enum
-from asyncio import ensure_future, CancelledError, Future, sleep, Task
+from asyncio import ensure_future, CancelledError, Future, sleep, Task, gather
 from logging import Logger
 
 import pkg_resources
 from pkg_resources import DistributionNotFound
 from tornado.ioloop import IOLoop
-from typing import Callable, Dict, Union, Tuple, List, Coroutine
+from typing import Callable, Dict, Union, Tuple, List, Coroutine, Set
 from tornado import gen
 
 from inmanta.types import JsonType
@@ -214,7 +214,7 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
     """
         Add a future to the ioloop to be handled, but do not require the result.
     """
-    def handle_result(f: Future) -> None:
+    def handle_result(f: Task) -> None:
         try:
             f.result()
         except Exception as e:
@@ -229,3 +229,67 @@ async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float
     start = time.time()
     while time.time() - start < timeout and not fun():
         await sleep(interval)
+
+
+class TaskHandler(object):
+    """
+        This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
+        are reported. If stop is invoked, all background tasks are cancelled.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self._background_tasks: Set[Task] = set()
+
+    def add_future(self, future: Union[Future, Coroutine]) -> Task:
+        """ Add a future to the event loop and report any exceptions if they occur
+        """
+        def handle_result(f: Task) -> None:
+            try:
+                f.result()
+            except Exception as e:
+                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
+
+        task = ensure_future(future)
+        task.add_done_callback(handle_result)
+        return task
+
+    def add_background_task(self, future: Union[Future, Coroutine]) -> None:
+        """ Add a background task to the event loop. When this slice is stopped, the task is cancelled
+        """
+        task = ensure_future(future)
+
+        def handle_result(f: Task) -> None:
+            try:
+                f.result()
+            except CancelledError:
+                pass
+            except Exception as e:
+                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
+            finally:
+                if f in self._background_tasks:
+                    self._background_tasks.remove(f)
+
+        task.add_done_callback(handle_result)
+        self._background_tasks.add(task)
+
+        return task
+
+    async def wait_for_tasks(self) -> None:
+        """ Wait for all background tasks to finish
+        """
+        LOGGER.debug("Waiting for all background tasks of %s to finish", self)
+        await gather(*self._background_tasks)
+
+    async def stop(self) -> None:
+        """ Stop all background tasks by requestinng a cancel
+        """
+        try:
+            while True:
+                task = self._background_tasks.pop()
+                task.cancel()
+                try:
+                    await task
+                except CancelledError:
+                    pass
+        except KeyError:
+            pass

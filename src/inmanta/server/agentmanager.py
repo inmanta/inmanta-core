@@ -15,7 +15,8 @@
 
     Contact: code@inmanta.com
 """
-
+from _asyncio import Task
+from asyncio import CancelledError
 
 from tornado import locks
 from tornado import process
@@ -24,8 +25,7 @@ from tornado import process
 from inmanta.config import Config
 from inmanta import data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
-from inmanta.asyncutil import retry_limited
-from inmanta.util import add_future
+from inmanta.util import add_future, retry_limited
 from . import config as server_config
 from inmanta.types import Apireturn
 
@@ -98,9 +98,9 @@ async def wait_for_proc_bounded(procs: List[process.Subprocess], timeout: float=
 
 
 class AgentManager(ServerSlice, SessionListener):
-    '''
+    """
     This class contains all server functionality related to the management of agents
-    '''
+    """
 
     def __init__(self, restserver: protocol.Server, closesessionsonstart: bool=True, fact_back_off: int=None) -> None:
         super(AgentManager, self).__init__(SLICE_AGENT_MANAGER)
@@ -163,7 +163,7 @@ class AgentManager(ServerSlice, SessionListener):
         await super().start()
         self.add_future(self.start_agents())
         if self.closesessionsonstart:
-            self.add_future(self.clean_db())
+            self.add_background_task(self.clean_db())
 
     async def stop(self) -> None:
         await super().stop()
@@ -324,10 +324,7 @@ class AgentManager(ServerSlice, SessionListener):
         await agent.update_fields(last_failover=datetime.now(), primary=instance.id)
         add_future(session.get_client().set_state(agent.name, True))
 
-    def is_primary(self,
-                   env: data.Environment,
-                   sid: uuid.UUID,
-                   agent: str):
+    def is_primary(self, env: data.Environment, sid: uuid.UUID, agent: str) -> bool:
         prim = self.tid_endpoint_to_session.get((env.id, agent), None)
         if prim is None:
             return False

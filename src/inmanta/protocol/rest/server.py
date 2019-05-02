@@ -18,12 +18,13 @@
 import asyncio
 import ssl
 import uuid
+from asyncio import CancelledError
 
 from typing import Optional, Dict, List
 
 import tornado
 from pyformance import timer
-from tornado import httpserver, web, routing
+from tornado import httpserver, web, routing, iostream
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
@@ -88,6 +89,9 @@ class RESTHandler(tornado.web.RequestHandler):
         if call_config is None:
             raise exceptions.NotFound("This method does not exist")
 
+        if not self._transport.running:
+            return
+
         with timer("rpc." + call_config.method_name).time():
             self._transport.start_request()
             self.set_header("Access-Control-Allow-Origin", "*")
@@ -121,9 +125,15 @@ class RESTHandler(tornado.web.RequestHandler):
             except exceptions.BaseException as e:
                 self.respond(e.to_body(), {}, e.to_status())
 
+            except CancelledError:
+                self.respond({"message": "Request is cancelled on the server"}, {}, 500)
+
             finally:
                 try:
                     await self.finish()
+                except iostream.StreamClosedError:
+                    # The connection has been closed already.
+                    pass
                 except Exception:
                     LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
                 self._transport.end_request()
@@ -131,32 +141,44 @@ class RESTHandler(tornado.web.RequestHandler):
     async def head(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        await self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+        )
 
     async def get(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        await self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+        )
 
     async def post(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        await self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+        )
 
     async def delete(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        await self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+        )
 
     async def patch(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        await self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+        )
 
     async def put(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        await self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+        )
 
     def options(self, *args: str, **kwargs: str) -> None:
         if args:
@@ -203,6 +225,7 @@ class RESTServer(RESTBase):
         # event indicating no more in flight requests
         self.idle_event = asyncio.Event()
         self.idle_event.set()
+        self.running = False
 
     def start_request(self):
         self.idle_event.clear()
@@ -254,6 +277,7 @@ class RESTServer(RESTBase):
         else:
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
         self._http_server.listen(port)
+        self.running = True
 
         LOGGER.debug("Start REST transport")
 
@@ -261,6 +285,7 @@ class RESTServer(RESTBase):
         """
             Stop the current server
         """
+        self.running = True
         LOGGER.debug("Stopping Server Rest Endpoint")
         if self._http_server is not None:
             self._http_server.stop()

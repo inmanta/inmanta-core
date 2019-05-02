@@ -21,13 +21,13 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Task, sleep, CancelledError
+from asyncio import Task, sleep, CancelledError, Future, ensure_future
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
-from inmanta.util import add_future
+from inmanta.util import add_future, TaskHandler
 from . import common
 from .rest import client
 
@@ -72,12 +72,13 @@ class CallTarget(object):
         return url_map
 
 
-class Endpoint(object):
+class Endpoint(TaskHandler):
     """
         An end-point in the rpc framework
     """
 
     def __init__(self, name: str):
+        super(Endpoint, self).__init__()
         self._name: str = name
         self._node_name: str = inmanta_config.nodename.get()
         self._end_point_names: List[str] = []
@@ -123,7 +124,7 @@ class Endpoint(object):
     async def stop(self) -> None:
         """ Stop this endpoint
         """
-        pass
+        await super(Endpoint, self).stop()
 
 
 class SessionEndpoint(Endpoint, CallTarget):
@@ -168,18 +169,11 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        self._heartbeat_coro = add_future(self.perform_heartbeat())
+        self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:
         await super(SessionEndpoint, self).stop()
         self._sched.stop()
-        if self._heartbeat_coro is not None:
-            self._heartbeat_coro.cancel()
-            try:
-                await self._heartbeat_coro
-            except CancelledError:
-                pass
-            self._heartbeat_coro = None
 
     async def on_reconnect(self) -> None:
         pass

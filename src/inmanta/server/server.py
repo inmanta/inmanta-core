@@ -18,6 +18,7 @@
 import asyncio
 import base64
 import subprocess
+from asyncio import CancelledError
 from collections import defaultdict
 import datetime
 import difflib
@@ -143,7 +144,7 @@ class Server(protocol.ServerSlice):
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
 
-        add_future(self._purge_versions())
+        self.add_background_task(self._purge_versions())
         self.start_metric_reporters()
 
         await super().start()
@@ -849,7 +850,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "timestamp": now.isoformat(timespec='microseconds'),
             "args": []
         }
-        add_future(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
+        self.add_background_task(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
                                                started=now, finished=now, status=const.ResourceState.deployed,
                                                # does this require a different ResourceAction?
                                                action=const.ResourceAction.deploy, changes={}, messages=[logline],
@@ -1786,7 +1787,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
         self._recompiles[env.id] = self
-        add_future(self._recompile_environment(env.id, update_repo, wait, metadata))
+        self.add_background_task(self._recompile_environment(env.id, update_repo, wait, metadata))
 
     async def _run_compile_stage(self, name, cmd, cwd, **kwargs):
         start = datetime.datetime.now()
@@ -1903,6 +1904,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             result = await self._run_compile_stage("Recompiling configuration model", cmd, project_dir, env=os.environ.copy())
 
             stages.append(result)
+        except CancelledError:
+            pass
+
         except Exception:
             LOGGER.exception("An error occured while recompiling")
 
