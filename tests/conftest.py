@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import concurrent
 import os
 import tempfile
 import random
@@ -60,6 +60,7 @@ from pyformance.registry import MetricsRegistry
 from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -271,7 +272,11 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
 
     yield ibl.restserver
 
-    await asyncio.wait_for(ibl.stop(), 10)
+    try:
+        await asyncio.wait_for(ibl.stop(), 15)
+    except concurrent.futures.TimeoutError:
+        logger.exception("Timeout during stop of the server in teardown")
+
     shutil.rmtree(state_dir)
 
 
@@ -335,8 +340,10 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     await ibl.start()
 
     yield ibl.restserver
-
-    await asyncio.wait_for(ibl.stop(), 10)
+    try:
+        await asyncio.wait_for(ibl.stop(), 15)
+    except concurrent.futures.TimeoutError:
+        logger.exception("Timeout during stop of the server in teardown")
 
     shutil.rmtree(state_dir)
 

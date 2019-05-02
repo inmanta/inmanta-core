@@ -207,3 +207,12 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def handle_exception_sno(self, exc: Exception) -> None:
+    """ This function handles an exception that Should Not Occur. During testing this method is replaced with one that
+    makes the test fail.
+    """
+    LOGGER.warning("An exception occurred that should not happen.", exc_info=exc)
+    with open("crap.log", "a") as fd:
+        fd.write(str(exc))

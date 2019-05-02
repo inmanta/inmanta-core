@@ -229,7 +229,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def set_connection_pool(cls, pool):
         if cls._connection_pool:
-            raise Exception("Connection already set!")
+            raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
         cls._connection_pool = pool
 
     @classmethod

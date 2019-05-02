@@ -21,16 +21,14 @@ import time
 
 import pytest
 
-from agent_server.conftest import (
-    _wait_until_deployment_finishes,
-    _wait_for_n_deploying,
-)
+from agent_server.conftest import _wait_until_deployment_finishes, _wait_for_n_deploying
 from inmanta import const, config
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
 from utils import retry_limited
 
 logger = logging.getLogger("inmanta.test.send_events")
+
 
 @pytest.mark.asyncio
 async def test_send_events(resource_container, environment, server, client, agent):
@@ -61,19 +59,11 @@ async def test_send_events(resource_container, environment, server, client, agen
         },
     ]
 
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-    )
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(
-        environment, version, True, const.AgentTriggerMethod.push_full_deploy
-    )
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -98,23 +88,13 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    agent2 = Agent(
-        hostname="node2",
-        environment=environment,
-        agent_map={"agent2": "localhost"},
-        code_loader=False,
-    )
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
     agent2.add_end_point_name("agent2")
     await agent2.start()
@@ -142,19 +122,11 @@ async def test_send_events_cross_agent(resource_container, environment, server, 
         },
     ]
 
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-    )
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(
-        environment, version, True, const.AgentTriggerMethod.push_full_deploy
-    )
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -184,23 +156,13 @@ async def test_send_events_cross_agent_deploying(
     agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
 
     resource_container.Provider.reset()
-    agent = Agent(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
 
-    agent2 = Agent(
-        hostname="node2",
-        environment=environment,
-        agent_map={"agent2": "localhost"},
-        code_loader=False,
-    )
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
     agent2.add_end_point_name("agent2")
     await agent2.start()
@@ -228,19 +190,11 @@ async def test_send_events_cross_agent_deploying(
         },
     ]
 
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-    )
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(
-        environment, version, True, const.AgentTriggerMethod.push_full_deploy
-    )
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -249,9 +203,7 @@ async def test_send_events_cross_agent_deploying(
     await _wait_for_n_deploying(client, environment, version, 1)
 
     # restart deploy
-    result = await client.release_version(
-        environment, version, True, const.AgentTriggerMethod.push_full_deploy
-    )
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     await resource_container.wait_for_done_with_waiters(client, environment, version)
@@ -272,12 +224,7 @@ async def test_send_events_cross_agent_restart(
     config.Config.set("config", "agent-deploy-interval", "0")
     config.Config.set("config", "agent-repair-interval", "0")
     resource_container.Provider.reset()
-    agent2 = Agent(
-        hostname="node2",
-        environment=environment,
-        agent_map={"agent2": "localhost"},
-        code_loader=False,
-    )
+    agent2 = Agent(hostname="node2", environment=environment, agent_map={"agent2": "localhost"}, code_loader=False)
     async_finalizer.add(agent2.stop)
     agent2.add_end_point_name("agent2")
     await agent2.start()
@@ -305,19 +252,11 @@ async def test_send_events_cross_agent_restart(
         },
     ]
 
-    result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=resources,
-        unknowns=[],
-        version_info={},
-    )
+    result = await client.put_version(tid=environment, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # do a deploy
-    result = await client.release_version(
-        environment, version, True, const.AgentTriggerMethod.push_full_deploy
-    )
+    result = await client.release_version(environment, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
 
     result = await client.get_version(environment, version)
@@ -331,12 +270,7 @@ async def test_send_events_cross_agent_restart(
     assert resource_container.Provider.get("agent2", "key2") == "value2"
 
     # start agent 1 and wait for it to finish
-    agent = Agent(
-        hostname="node1",
-        environment=environment,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
+    agent = Agent(hostname="node1", environment=environment, agent_map={"agent1": "localhost"}, code_loader=False)
     async_finalizer.add(agent.stop)
     agent.add_end_point_name("agent1")
     await agent.start()

@@ -21,9 +21,7 @@ import time
 import uuid
 import pytest
 
-from agent_server.conftest import (
-    _wait_until_deployment_finishes,
-)
+from agent_server.conftest import _wait_until_deployment_finishes
 from inmanta import const, execute, data
 from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
@@ -50,12 +48,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     result = await client_multi.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(
-        hostname="node1",
-        environment=env_id,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
 
@@ -119,12 +112,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
 
     status = {"test::Resource[agent2,key=key4]": const.ResourceState.undefined}
     result = await client_multi.put_version(
-        tid=env_id,
-        version=version,
-        resources=resources,
-        resource_state=status,
-        unknowns=[],
-        version_info={},
+        tid=env_id, version=version, resources=resources, resource_state=status, unknowns=[], version_info={}
     )
     assert result.code == 200
 
@@ -133,10 +121,7 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert undep == ["test::Resource[agent2,key=key4]"]
 
     undep = await mod_db.get_skipped_for_undeployable()
-    assert undep == [
-        "test::Resource[agent2,key=key5]",
-        "test::Resource[agent2,key=key6]",
-    ]
+    assert undep == ["test::Resource[agent2,key=key5]", "test::Resource[agent2,key=key6]"]
 
     # request a dryrun
     result = await client_multi.dryrun_request(env_id, version)
@@ -162,26 +147,16 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert changes[resources[0]["id"]]["changes"]["purged"]["current"]
     assert not changes[resources[0]["id"]]["changes"]["purged"]["desired"]
     assert changes[resources[0]["id"]]["changes"]["value"]["current"] is None
-    assert (
-        changes[resources[0]["id"]]["changes"]["value"]["desired"]
-        == resources[0]["value"]
-    )
+    assert changes[resources[0]["id"]]["changes"]["value"]["desired"] == resources[0]["value"]
 
-    assert (
-        changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
-    )
-    assert (
-        changes[resources[1]["id"]]["changes"]["value"]["desired"]
-        == resources[1]["value"]
-    )
+    assert changes[resources[1]["id"]]["changes"]["value"]["current"] == "incorrect_value"
+    assert changes[resources[1]["id"]]["changes"]["value"]["desired"] == resources[1]["value"]
 
     assert not changes[resources[2]["id"]]["changes"]["purged"]["current"]
     assert changes[resources[2]["id"]]["changes"]["purged"]["desired"]
 
     # do a deploy
-    result = await client_multi.release_version(
-        env_id, version, True, const.AgentTriggerMethod.push_full_deploy
-    )
+    result = await client_multi.release_version(env_id, version, True, const.AgentTriggerMethod.push_full_deploy)
     assert result.code == 200
     assert not result.result["model"]["deployed"]
     assert result.result["model"]["released"]
@@ -202,26 +177,8 @@ async def test_dryrun_and_deploy(server_multi, client_multi, resource_container)
     assert not resource_container.Provider.isset("agent1", "key3")
 
     actions = await data.ResourceAction.get_list()
-    assert (
-        sum(
-            [
-                len(x.resource_version_ids)
-                for x in actions
-                if x.status == const.ResourceState.undefined
-            ]
-        )
-        == 1
-    )
-    assert (
-        sum(
-            [
-                len(x.resource_version_ids)
-                for x in actions
-                if x.status == const.ResourceState.skipped_for_undefined
-            ]
-        )
-        == 2
-    )
+    assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.undefined]) == 1
+    assert sum([len(x.resource_version_ids) for x in actions if x.status == const.ResourceState.skipped_for_undefined]) == 2
 
     await agent.stop()
 
@@ -240,12 +197,7 @@ async def test_dryrun_failures(resource_container, server, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(
-        hostname="node1",
-        environment=env_id,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -279,9 +231,7 @@ async def test_dryrun_failures(resource_container, server, client):
         },
     ]
 
-    result = await client.put_version(
-        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}
-    )
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
@@ -314,19 +264,11 @@ async def test_dryrun_failures(resource_container, server, client):
         assert change["current"] == "FAILED"
         assert change["desired"] == msg
 
-    assert_handler_failed(
-        "test::Noprov[agent1,key=key1],v=%d" % version, "Unable to find a handler"
-    )
-    assert_handler_failed(
-        "test::FailFast[agent1,key=key2],v=%d" % version, "Handler failed"
-    )
-    assert_handler_failed(
-        "test::DoesNotExist[agent1,key=key2],v=%d" % version,
-        "Resource Deserialization Failed",
-    )
+    assert_handler_failed("test::Noprov[agent1,key=key1],v=%d" % version, "Unable to find a handler")
+    assert_handler_failed("test::FailFast[agent1,key=key2],v=%d" % version, "Handler failed")
+    assert_handler_failed("test::DoesNotExist[agent1,key=key2],v=%d" % version, "Resource Deserialization Failed")
 
     await agent.stop()
-
 
 
 @pytest.mark.asyncio(timeout=30)
@@ -343,12 +285,7 @@ async def test_dryrun_scale(resource_container, server, client):
     result = await client.create_environment(project_id=project_id, name="dev")
     env_id = result.result["environment"]["id"]
 
-    agent = Agent(
-        hostname="node1",
-        environment=env_id,
-        agent_map={"agent1": "localhost"},
-        code_loader=False,
-    )
+    agent = Agent(hostname="node1", environment=env_id, agent_map={"agent1": "localhost"}, code_loader=False)
     agent.add_end_point_name("agent1")
     await agent.start()
     await retry_limited(lambda: len(agentmanager.sessions) == 1, 10)
@@ -368,9 +305,7 @@ async def test_dryrun_scale(resource_container, server, client):
             }
         )
 
-    result = await client.put_version(
-        tid=env_id, version=version, resources=resources, unknowns=[], version_info={}
-    )
+    result = await client.put_version(tid=env_id, version=version, resources=resources, unknowns=[], version_info={})
     assert result.code == 200
 
     # request a dryrun
@@ -393,5 +328,3 @@ async def test_dryrun_scale(resource_container, server, client):
     assert result.code == 200
 
     await agent.stop()
-
-

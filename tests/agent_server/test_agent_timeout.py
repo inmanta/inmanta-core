@@ -26,9 +26,7 @@ from utils import retry_limited, log_index
 
 
 @pytest.mark.asyncio
-async def test_agent_disconnect(
-    resource_container, environment, server, client, async_finalizer, caplog
-):
+async def test_agent_disconnect(resource_container, environment, server, client, async_finalizer, caplog):
     caplog.set_level(logging.INFO)
     config.Config.set("config", "server-timeout", "1")
     config.Config.set("config", "agent-reconnect-delay", "1")
@@ -37,11 +35,7 @@ async def test_agent_disconnect(
 
     version = int(time.time())
     result = await client.put_version(
-        tid=environment,
-        version=version,
-        resources=[get_resource(version)],
-        unknowns=[],
-        version_info={},
+        tid=environment, version=version, resources=[get_resource(version)], unknowns=[], version_info={}
     )
     assert result.code == 200
 
@@ -58,23 +52,6 @@ async def test_agent_disconnect(
 
     await retry_limited(disconnected, 1)
 
-    i = log_index(
-        caplog,
-        "inmanta.agent.agent.agent1",
-        logging.INFO,
-        "Agent assuming primary role for agent1",
-    )
-    i = log_index(
-        caplog,
-        "inmanta.agent.agent",
-        logging.WARNING,
-        "Connection to server lost, taking agents offline",
-        i,
-    )
-    log_index(
-        caplog,
-        "inmanta.agent.agent.agent1",
-        logging.INFO,
-        "Agent agent1 stopped because Connection to server lost",
-        i,
-    )
+    i = log_index(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Agent assuming primary role for agent1")
+    i = log_index(caplog, "inmanta.agent.agent", logging.WARNING, "Connection to server lost, taking agents offline", i)
+    log_index(caplog, "inmanta.agent.agent.agent1", logging.INFO, "Agent agent1 stopped because Connection to server lost", i)

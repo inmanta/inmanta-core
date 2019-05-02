@@ -101,7 +101,7 @@ class Endpoint(object):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        ioloop.IOLoop.current().add_future(ensure_future(future), handle_result)
+        ensure_future(future).add_done_callback(handle_result)
 
     def get_end_point_names(self) -> List[str]:
         return self._end_point_names
@@ -200,7 +200,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
+        self.add_future(self.perform_heartbeat())
 
     async def stop(self) -> NoneGen:
         await super(SessionEndpoint, self).stop()

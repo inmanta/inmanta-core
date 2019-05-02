@@ -34,7 +34,7 @@ import json
 
 import dateutil.parser
 import asyncpg
-from tornado import locks, ioloop
+from tornado import locks
 from typing import Dict, Any, Generator
 
 from inmanta import const
@@ -47,14 +47,13 @@ from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.types import JsonType, Apireturn
-from inmanta.util import hash_file
+from inmanta.util import hash_file, handle_exception_sno
 from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
 
 from typing import List, TYPE_CHECKING
 
 LOGGER = logging.getLogger(__name__)
-agent_lock = locks.Lock()
 
 if TYPE_CHECKING:
     from inmanta.server.agentmanager import AgentManager
@@ -144,8 +143,7 @@ class Server(protocol.ServerSlice):
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
 
-        ioloop.IOLoop.current().add_callback(self._purge_versions)
-
+        self.add_future(self._purge_versions())
         self.start_metric_reporters()
 
         await super().start()
@@ -1793,7 +1791,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
         self._recompiles[env.id] = self
-        ioloop.IOLoop.current().add_callback(self._recompile_environment, env.id, update_repo, wait, metadata)
+        self.add_future(self._recompile_environment(env.id, update_repo, wait, metadata))
 
     async def _run_compile_stage(self, name, cmd, cwd, **kwargs):
         start = datetime.datetime.now()
@@ -1912,17 +1910,21 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             stages.append(result)
         except Exception:
             LOGGER.exception("An error occured while recompiling")
+
         finally:
-            end = datetime.datetime.now()
-            self._recompiles[environment_id] = end
+            try:
+                end = datetime.datetime.now()
+                self._recompiles[environment_id] = end
 
-            comp = data.Compile(environment=environment_id, started=requested, completed=end)
+                comp = data.Compile(environment=environment_id, started=requested, completed=end)
 
-            for stage in stages:
-                stage.compile = comp.id
+                for stage in stages:
+                    stage.compile = comp.id
 
-            await comp.insert()
-            await data.Report.insert_many(stages)
+                await comp.insert()
+                await data.Report.insert_many(stages)
+            except Exception as exc:
+                handle_exception_sno(exc)
 
     @protocol.handle(methods.get_reports, env="tid")
     async def get_reports(self, env, start=None, end=None, limit=None):

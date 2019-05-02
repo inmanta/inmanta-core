@@ -181,7 +181,7 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
 
-        IOLoop.current().add_future(ensure_future(future), handle_result)
+        ensure_future(future).add_done_callback(handle_result)
 
     def schedule(self, call: Callable, interval: int = 60) -> None:
         self._sched.add_action(call, interval)
