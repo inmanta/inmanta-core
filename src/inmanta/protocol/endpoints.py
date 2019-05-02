@@ -21,7 +21,7 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Future, ensure_future, Task, create_task, sleep
+from asyncio import Future, ensure_future, Task, sleep
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
@@ -136,7 +136,7 @@ class Endpoint(object):
     async def await_stop(self, coro: Future) -> Any:
         """ Await the given coroutine or future and cancel the created task when the endpoint is stopped.
         """
-        task = create_task(coro)
+        task = ensure_future(coro)
         self._stop_tasks.add(task)
 
         result = await task
