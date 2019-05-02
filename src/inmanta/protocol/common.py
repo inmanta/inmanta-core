@@ -29,7 +29,7 @@ import jwt
 
 from tornado import web
 from urllib import parse
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, cast, TYPE_CHECKING  # noqa: F401
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, cast, TYPE_CHECKING  # noqa: F401
 
 from inmanta import execute, const, util
 from inmanta import config as inmanta_config
@@ -48,7 +48,7 @@ class ArgOption(object):
         Argument options to transform arguments before dispatch
     """
 
-    def __init__(self, header: Optional[str] = None, reply_header: bool = True, getter: Optional[Generator] = None) -> None:
+    def __init__(self, header: Optional[str] = None, reply_header: bool = True, getter: Optional[Callable] = None) -> None:
         """
             :param header: Map this argument to a header with the following name.
             :param reply_header: If the argument is mapped to a header, this header will also be included in the reply

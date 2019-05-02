@@ -26,7 +26,7 @@ from inmanta import data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
 from inmanta.asyncutil import retry_limited
 from . import config as server_config
-from inmanta.types import Nonen, Apireturn
+from inmanta.types import Apireturn
 
 import logging
 import os
@@ -124,7 +124,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         self.closesessionsonstart: bool = closesessionsonstart
 
-    async def prestart(self, server: protocol.Server) -> Nonen:
+    async def prestart(self, server: protocol.Server) -> None:
         await ServerSlice.prestart(self, server)
 
         preserver = server.get_slice(SLICE_SERVER)
@@ -215,7 +215,7 @@ class AgentManager(ServerSlice, SessionListener):
             if env is not None:
                 await self.verify_reschedule(env, session.endpoint_names)
 
-    async def expire_session(self, session: protocol.Session, now: float) -> Nonen:
+    async def expire_session(self, session: protocol.Session, now: float) -> None:
         if not self.running:
             return
         with (await self.session_lock.acquire()):
@@ -261,7 +261,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         return session_list
 
-    async def flush_agent_presence(self, session: protocol.Session, now: float) -> Nonen:
+    async def flush_agent_presence(self, session: protocol.Session, now: float) -> None:
         tid = session.tid
         sid = session.get_id()
 
@@ -277,7 +277,7 @@ class AgentManager(ServerSlice, SessionListener):
 
         await aps.update_fields(last_seen=now)
 
-    async def verify_reschedule(self, env: data.Environment, enpoints: str) -> Nonen:
+    async def verify_reschedule(self, env: data.Environment, enpoints: str) -> None:
         """
              only call under session lock
         """
@@ -292,7 +292,7 @@ class AgentManager(ServerSlice, SessionListener):
         for agent in needswork:
             await self.reschedule(env, agent)
 
-    async def reschedule(self, env: data.Environment, agent: data.Agent) -> Nonen:
+    async def reschedule(self, env: data.Environment, agent: data.Agent) -> None:
         """
              only call under session lock
         """
@@ -317,7 +317,7 @@ class AgentManager(ServerSlice, SessionListener):
         agent: data.Agent,
         instance: data.AgentInstance,
         session: protocol.Session
-    ) -> Nonen:
+    ) -> None:
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
         await agent.update_fields(last_failover=datetime.now(), primary=instance.id)
@@ -332,7 +332,7 @@ class AgentManager(ServerSlice, SessionListener):
             return False
         return prim.get_id() == sid
 
-    async def clean_db(self) -> Nonen:
+    async def clean_db(self) -> None:
         with (await self.session_lock.acquire()):
             LOGGER.debug("Cleaning server session DB")
 
@@ -636,7 +636,7 @@ ssl=True
         else:
             return 404, {"message": "resource_id parameter is required."}
 
-    async def start_agents(self) -> Nonen:
+    async def start_agents(self) -> None:
         """
             Ensure that autostarted agents of each environment are started when AUTOSTART_ON_START is true. This method
             is called on server start.
@@ -649,14 +649,14 @@ ssl=True
                 agent_list = [a.name for a in agents]
                 await self._ensure_agents(env, agent_list)
 
-    async def restart_agents(self, env: data.Environment) -> Nonen:
+    async def restart_agents(self, env: data.Environment) -> None:
         agents = await data.Agent.get_list(environment=env.id)
         autostart = await env.get(data.AUTOSTART_ON_START)
         if autostart:
             agent_list = [a.name for a in agents]
             await self._ensure_agents(env, agent_list, True)
 
-    async def stop_agents(self, env: data.Environment) -> Nonen:
+    async def stop_agents(self, env: data.Environment) -> None:
         """
             Stop all agents for this environment and close sessions
         """
