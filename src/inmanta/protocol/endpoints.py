@@ -94,6 +94,7 @@ class Endpoint(object):
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
+
         def handle_result(f: Future) -> None:
             try:
                 f.result()
@@ -277,9 +278,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 body[key] = [v.decode("latin-1") for v in value]
 
         # FIXME: why create a new transport instance on each call? keep-alive?
-        response: common.Response = await transport._execute_call(
-            kwargs, method_call.method, config, body, method_call.headers
-        )
+        response: common.Response = await transport._execute_call(kwargs, method_call.method, config, body, method_call.headers)
 
         if response.status_code == 500:
             msg = ""
@@ -364,6 +363,7 @@ class SessionClient(Client):
     """
         A client that communicates with server endpoints over a session.
     """
+
     def __init__(self, name: str, sid: uuid.UUID, timeout: int = 120) -> None:
         super().__init__(name, timeout)
         self._sid = sid

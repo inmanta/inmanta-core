@@ -35,7 +35,7 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import locks
-from typing import Dict, Any
+from typing import Dict
 
 from inmanta import const
 from inmanta import data, config
@@ -46,7 +46,7 @@ from inmanta.server import protocol, SLICE_SERVER
 from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
-from inmanta.types import JsonType, Apireturn
+from inmanta.types import Apireturn
 from inmanta.util import hash_file, handle_exception_sno
 from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods

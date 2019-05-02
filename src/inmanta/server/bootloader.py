@@ -19,7 +19,7 @@ from inmanta.server import server
 from inmanta.server.protocol import Server, ServerSlice
 from inmanta.server.agentmanager import AgentManager
 
-from typing import List, Generator, Any
+from typing import List
 
 
 class InmantaBootloader(object):

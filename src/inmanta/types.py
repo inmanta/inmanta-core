@@ -16,7 +16,7 @@
     Contact: code@inmanta.com
 """
 # This file defines named type definition for the Inmanta code base
-from typing import Generator, Any, Tuple, Dict
+from typing import Any, Tuple, Dict
 
 JsonType = Dict[str, Any]
 Apireturn = Tuple[int, JsonType]

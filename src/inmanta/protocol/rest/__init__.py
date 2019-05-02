@@ -46,9 +46,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(
-    auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
-) -> None:
+def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod) -> None:
     """
         Authorize a request based on the given data
     """

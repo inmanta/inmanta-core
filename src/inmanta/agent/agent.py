@@ -37,7 +37,7 @@ from tornado.concurrent import Future
 from inmanta.agent.cache import AgentCache
 from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
-from typing import Tuple, Optional, Any, Dict, List, TYPE_CHECKING
+from typing import Tuple, Optional, Dict, List, TYPE_CHECKING
 from inmanta.agent.handler import ResourceHandler
 
 LOGGER = logging.getLogger(__name__)
