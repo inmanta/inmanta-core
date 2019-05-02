@@ -22,11 +22,12 @@ import inspect
 import itertools
 import logging
 import socket
+import time
 import warnings
 import uuid
 import datetime
 import enum
-from asyncio import ensure_future, CancelledError
+from asyncio import ensure_future, CancelledError, Future, sleep, Task
 from logging import Logger
 
 import pkg_resources
@@ -207,3 +208,24 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
 
     LOGGER.error("Unable to serialize %s", o)
     raise TypeError(repr(o) + " is not JSON serializable")
+
+
+def add_future(future: Union[Future, Coroutine]) -> Task:
+    """
+        Add a future to the ioloop to be handled, but do not require the result.
+    """
+    def handle_result(f: Future) -> None:
+        try:
+            f.result()
+        except Exception as e:
+            LOGGER.exception("An exception occurred while handling a future: %s", str(e))
+
+    task = ensure_future(future)
+    task.add_done_callback(handle_result)
+    return task
+
+
+async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float = 0.1) -> None:
+    start = time.time()
+    while time.time() - start < timeout and not fun():
+        await sleep(interval)

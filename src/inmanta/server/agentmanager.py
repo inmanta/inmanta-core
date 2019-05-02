@@ -25,6 +25,7 @@ from inmanta.config import Config
 from inmanta import data
 from inmanta.server import protocol, SLICE_AGENT_MANAGER, SLICE_SESSION_MANAGER, SLICE_SERVER
 from inmanta.asyncutil import retry_limited
+from inmanta.util import add_future
 from . import config as server_config
 from inmanta.types import Apireturn
 
@@ -321,7 +322,7 @@ class AgentManager(ServerSlice, SessionListener):
         LOGGER.debug("set session %s as primary for agent %s in env %s" % (session.get_id(), agent.name, env.id))
         self.tid_endpoint_to_session[(env.id, agent.name)] = session
         await agent.update_fields(last_failover=datetime.now(), primary=instance.id)
-        self.add_future(session.get_client().set_state(agent.name, True))
+        add_future(session.get_client().set_state(agent.name, True))
 
     def is_primary(self,
                    env: data.Environment,
@@ -623,8 +624,7 @@ ssl=True
 
                 client = self.get_agent_client(env_id, res.agent)
                 if client is not None:
-                    future = client.get_parameter(str(env_id), res.agent, res.to_dict())
-                    self.add_future(future)
+                    add_future(client.get_parameter(str(env_id), res.agent, res.to_dict()))
 
                 self._fact_resource_block_set[resource_id] = now
 

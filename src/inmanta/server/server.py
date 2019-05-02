@@ -47,7 +47,7 @@ from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.types import Apireturn
-from inmanta.util import hash_file
+from inmanta.util import hash_file, add_future
 from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
 
@@ -143,7 +143,7 @@ class Server(protocol.ServerSlice):
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
 
-        self.add_future(self._purge_versions())
+        add_future(self._purge_versions())
         self.start_metric_reporters()
 
         await super().start()
@@ -849,11 +849,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "timestamp": now.isoformat(timespec='microseconds'),
             "args": []
         }
-        self.add_future(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
-                                                    started=now, finished=now, status=const.ResourceState.deployed,
-                                                    # does this require a different ResourceAction?
-                                                    action=const.ResourceAction.deploy, changes={}, messages=[logline],
-                                                    change=const.Change.nochange, send_events=False, keep_increment_cache=True))
+        add_future(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
+                                               started=now, finished=now, status=const.ResourceState.deployed,
+                                               # does this require a different ResourceAction?
+                                               action=const.ResourceAction.deploy, changes={}, messages=[logline],
+                                               change=const.Change.nochange, send_events=False, keep_increment_cache=True))
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 
@@ -1152,8 +1152,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                         incremental_deploy = False
                     else:
                         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                    future = client.trigger(env.id, agent, incremental_deploy)
-                    self.add_future(future)
+                    add_future(client.trigger(env.id, agent, incremental_deploy))
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
 
@@ -1200,8 +1199,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             client = self.get_agent_client(env.id, agent)
             if client is not None:
                 incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                future = client.trigger(env.id, agent, incremental_deploy)
-                self.add_future(future)
+                add_future(client.trigger(env.id, agent, incremental_deploy))
                 present.add(agent)
             else:
                 absent.add(agent)
@@ -1232,8 +1230,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         for agent in agents:
             client = self.get_agent_client(env.id, agent)
             if client is not None:
-                future = client.do_dryrun(env.id, dryrun.id, agent, version_id)
-                self.add_future(future)
+                add_future(client.do_dryrun(env.id, dryrun.id, agent, version_id))
             else:
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
 
@@ -1789,7 +1786,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             LOGGER.info("Last recompile longer than %s ago (last was at %s)", wait_time, last_recompile)
 
         self._recompiles[env.id] = self
-        self.add_future(self._recompile_environment(env.id, update_repo, wait, metadata))
+        add_future(self._recompile_environment(env.id, update_repo, wait, metadata))
 
     async def _run_compile_stage(self, name, cmd, cwd, **kwargs):
         start = datetime.datetime.now()

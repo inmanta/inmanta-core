@@ -17,7 +17,7 @@
 """
 import inmanta.protocol.endpoints
 from inmanta.types import JsonType
-from inmanta.util import Scheduler
+from inmanta.util import Scheduler, add_future
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
@@ -28,14 +28,13 @@ from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
-from typing import Dict, Tuple, Callable, Optional, List, Union
+from typing import Dict, Tuple, Callable, Optional, List, Union, Coroutine
 
 import logging
 import asyncio
 import time
 import uuid
 import abc
-from asyncio.tasks import ensure_future
 
 
 LOGGER = logging.getLogger(__name__)
@@ -150,6 +149,9 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
         self._sched = Scheduler("server slice")  # FIXME: why has each slice its own scheduler?
         self.running: bool = False  # for debugging
 
+    def add_future(self, future: Union[asyncio.Future, Coroutine]) -> asyncio.Task:
+        return add_future(future)
+
     @abc.abstractmethod
     async def prestart(self, server: Server) -> None:
         """Called by the RestServer host prior to start, can be used to collect references to other server slices"""
@@ -169,19 +171,6 @@ class ServerSlice(inmanta.protocol.endpoints.CallTarget):
 
     def get_handlers(self) -> List[routing.Rule]:
         return self._handlers
-
-    def add_future(self, future: asyncio.Future) -> None:
-        """
-            Add a future to the ioloop to be handled, but do not require the result.
-        """
-
-        def handle_result(f: asyncio.Future) -> None:
-            try:
-                f.result()
-            except Exception as e:
-                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
-
-        ensure_future(future).add_done_callback(handle_result)
 
     def schedule(self, call: Callable, interval: int = 60) -> None:
         self._sched.add_action(call, interval)

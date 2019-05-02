@@ -21,12 +21,13 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Future, ensure_future, Task, sleep, CancelledError
+from asyncio import Task, sleep, CancelledError
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
+from inmanta.util import add_future
 from . import common
 from .rest import client
 
@@ -88,18 +89,6 @@ class Endpoint(object):
     @property
     def call_targets(self) -> List[CallTarget]:
         return self._targets
-
-    def add_future(self, future: Union[Future, Coroutine]) -> None:
-        """
-            Add a future to the ioloop to be handled, but do not require the result.
-        """
-        def handle_result(f: Future) -> None:
-            try:
-                f.result()
-            except Exception as e:
-                LOGGER.exception("An exception occurred while handling a future: %s", str(e))
-
-        return ensure_future(future).add_done_callback(handle_result)
 
     def get_end_point_names(self) -> List[str]:
         return self._end_point_names
@@ -179,7 +168,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         assert self._env_id is not None
         LOGGER.log(3, "Starting agent for %s", str(self.sessionid))
         self._client = SessionClient(self.name, self.sessionid, timeout=self.server_timeout)
-        self._heartbeat_coro = self.add_future(self.perform_heartbeat())
+        self._heartbeat_coro = add_future(self.perform_heartbeat())
 
     async def stop(self) -> None:
         await super(SessionEndpoint, self).stop()
@@ -216,7 +205,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 if result.code == 200:
                     if not connected:
                         connected = True
-                        self.add_future(self.on_reconnect())
+                        add_future(self.on_reconnect())
                     if result.result is not None:
                         if "method_calls" in result.result:
                             method_calls: List[common.Request] = [
@@ -226,7 +215,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                             transport = self._transport(self)
 
                             for method_call in method_calls:
-                                self.add_future(self.dispatch_method(transport, method_call))
+                                add_future(self.dispatch_method(transport, method_call))
                 else:
                     LOGGER.warning(
                         "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
@@ -237,7 +226,6 @@ class SessionEndpoint(Endpoint, CallTarget):
                     connected = False
                     await self.on_disconnect()
                     await sleep(self.reconnect_delay)
-
         except CancelledError:
             pass
 
@@ -256,7 +244,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 "No such method",
             )
             LOGGER.error(msg)
-            self.add_future(self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500}))
+            add_future(self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500}))
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query

@@ -17,6 +17,7 @@
 """
 
 import re
+from asyncio import CancelledError
 from typing import Set, Dict, Tuple, Optional, List, Any, TYPE_CHECKING, AnyStr
 
 from tornado.httpclient import HTTPRequest, AsyncHTTPClient, HTTPError
@@ -130,6 +131,8 @@ class RESTClient(RESTBase):
                 return common.Result(code=e.code, result=result)
 
             return common.Result(code=e.code, result={"message": str(e)})
+        except CancelledError:
+            raise
         except Exception as e:
             LOGGER.exception("Failed to send request")
             return common.Result(code=500, result={"message": str(e)})

@@ -39,6 +39,7 @@ from inmanta.agent import config as cfg
 from inmanta.agent.reporting import collect_report
 from typing import Tuple, Optional, Dict, List, TYPE_CHECKING
 from inmanta.agent.handler import ResourceHandler
+from inmanta.util import add_future
 
 LOGGER = logging.getLogger(__name__)
 GET_RESOURCE_BACKOFF = 5
@@ -92,7 +93,6 @@ class ResourceAction(object):
         self.undeployable: Optional[const.ResourceState] = None
         self.reason: str = reason
         self.logger: Logger = self.scheduler.logger
-        self._exec_waiter = None
 
     def is_running(self) -> bool:
         return self.running
@@ -104,14 +104,6 @@ class ResourceAction(object):
         if not self.is_running() and not self.is_done():
             LOGGER.info("Cancelled deploy of %s %s", self.gid, self.resource)
             self.future.set_result(ResourceActionResult(False, False, True))
-
-    def kill(self) -> None:
-        """ Try to end as fast as possible
-        """
-        self.cancel()
-        self.future.cancel()
-        if self._exec_waiter is not None:
-            self._exec_waiter.cancel()
 
     async def send_in_progress(
         self,
@@ -490,10 +482,10 @@ class ResourceScheduler(object):
         # Dispatch all actions
         # Will block on dependencies and dummy
         for r in self.generation.values():
-            self.agent.add_future(r.execute(dummy, self.generation, self.cache))
+            add_future(r.execute(dummy, self.generation, self.cache))
 
         # Listen for completion
-        self.agent.add_future(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+        add_future(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
 
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
@@ -505,7 +497,7 @@ class ResourceScheduler(object):
                 return
             if self._resume_reason is not None:
                 self.logger.info("Resuming run '%s'", self._resume_reason)
-                self.agent.add_future(
+                add_future(
                     self.agent.get_latest_version_for_agent(
                         reason=self._resume_reason, incremental_deploy=False, is_repair_run=True
                     )
@@ -528,12 +520,6 @@ class ResourceScheduler(object):
 
     def get_client(self):
         return self.agent.get_client()
-
-    async def stop(self):
-        """ Stop and cancel all resources
-        """
-        for ra in self.generation.values():
-            ra.kill()
 
 
 class AgentInstance(object):
@@ -583,7 +569,6 @@ class AgentInstance(object):
     async def stop(self):
         self.provider_thread_pool.shutdown(wait=False)
         self.thread_pool.shutdown(wait=False)
-        await self._nq.stop()
 
     @property
     def environment(self):
@@ -598,9 +583,6 @@ class AgentInstance(object):
 
     def is_enabled(self):
         return self._enabled
-
-    def add_future(self, future):
-        self.process.add_future(future)
 
     def unpause(self):
         if self.is_enabled():
@@ -742,7 +724,7 @@ class AgentInstance(object):
                     self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
 
     async def dryrun(self, dry_run_id, version):
-        self.add_future(self.do_run_dryrun(version, dry_run_id))
+        add_future(self.do_run_dryrun(version, dry_run_id))
         return 200
 
     async def do_run_dryrun(self, version, dry_run_id):
@@ -1031,9 +1013,10 @@ class Agent(SessionEndpoint):
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
-        future = self._instances[agent].get_latest_version_for_agent(reason="call to trigger_update",
-                                                                     incremental_deploy=incremental_deploy)
-        self.add_future(future)
+        add_future(self._instances[agent].get_latest_version_for_agent(
+            reason="call to trigger_update",
+            incremental_deploy=incremental_deploy)
+        )
         return 200
 
     @protocol.handle(methods.resource_event, env="tid", agent="id")
