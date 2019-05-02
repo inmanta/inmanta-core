@@ -109,6 +109,7 @@ class ResourceAction(object):
     def kill(self) -> None:
         """ Try to end as fast as possible
         """
+        self.cancel()
         self.future.cancel()
         if self._exec_waiter is not None:
             self._exec_waiter.cancel()
@@ -175,11 +176,9 @@ class ResourceAction(object):
             send_event = (hasattr(self.resource, "send_event") and self.resource.send_event)
 
             try:
-                self._exec_waiter = asyncio.get_running_loop().run_in_executor(
+                await asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.execute, ctx, self.resource
                 )
-                await self._exec_waiter
-                self._exec_waiter = None
 
             except Exception as e:
                 ctx.set_status(const.ResourceState.failed)
@@ -198,11 +197,10 @@ class ResourceAction(object):
                     "Sending events to %(resource_id)s because of modified dependencies",
                     resource_id=str(self.resource.id)
                 )
-                self._exec_waiter = asyncio.get_running_loop().run_in_executor(
+
+                await asyncio.get_running_loop().run_in_executor(
                     self.scheduler.agent.thread_pool, provider.process_events, ctx, self.resource, events
                 )
-                await self._exec_waiter
-                self._exec_waiter = None
             except Exception:
                 ctx.exception("Could not send events for %(resource_id)s",
                               resource_id=str(self.resource.id),

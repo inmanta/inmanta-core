@@ -126,6 +126,7 @@ class Server(endpoints.Endpoint):
             This prevents database connection from being closed too early. This order in which the endpoint
             are started, is hardcoded in the get_server_slices() method in server/bootloader.py
         """
+        await super(Server, self).stop()
         if not self.running:
             return
         self.running = False

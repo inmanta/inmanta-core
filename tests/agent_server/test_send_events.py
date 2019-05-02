@@ -30,7 +30,7 @@ from inmanta.agent.agent import Agent
 from inmanta.server import SLICE_AGENT_MANAGER
 from utils import retry_limited
 
-logger = logging.getLogger("inmanta.test.server_agent")
+logger = logging.getLogger("inmanta.test.send_events")
 
 @pytest.mark.asyncio
 async def test_send_events(resource_container, environment, server, client, agent):

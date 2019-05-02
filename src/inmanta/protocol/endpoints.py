@@ -21,8 +21,8 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Future, ensure_future
-from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator  # noqa: F401
+from asyncio import Future, ensure_future, Task, create_task, sleep
+from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
 from inmanta import util
@@ -31,7 +31,7 @@ from inmanta.types import NoneGen
 from . import common
 from .rest import client
 
-from tornado import ioloop, gen
+from tornado import ioloop
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 
@@ -82,6 +82,7 @@ class Endpoint(object):
         self._node_name: str = inmanta_config.nodename.get()
         self._end_point_names: List[str] = []
         self._targets: List[CallTarget] = []
+        self._stop_tasks: Set[Task] = set()
 
     def add_call_target(self, target: CallTarget) -> None:
         self._targets.append(target)
@@ -94,7 +95,6 @@ class Endpoint(object):
         """
             Add a future to the ioloop to be handled, but do not require the result.
         """
-
         def handle_result(f: Future) -> None:
             try:
                 f.result()
@@ -132,6 +132,31 @@ class Endpoint(object):
         return self._node_name
 
     node_name = property(get_node_name)
+
+    async def await_stop(self, coro: Future) -> Any:
+        """ Await the given coroutine or future and cancel the created task when the endpoint is stopped.
+        """
+        task = create_task(coro)
+        self._stop_tasks.add(task)
+
+        result = await task
+
+        try:
+            self._stop_tasks.remove(task)
+        except KeyError:
+            pass
+
+        return result
+
+    async def stop(self) -> None:
+        """ Stop this endpoint
+        """
+        try:
+            while True:
+                task = self._stop_tasks.pop()
+                task.cancel()
+        except KeyError:
+            pass
 
 
 class SessionEndpoint(Endpoint, CallTarget):
@@ -178,6 +203,7 @@ class SessionEndpoint(Endpoint, CallTarget):
         ioloop.IOLoop.current().add_callback(self.perform_heartbeat)
 
     async def stop(self) -> NoneGen:
+        await super(SessionEndpoint, self).stop()
         self._sched.stop()
         self.running = False
 
@@ -224,7 +250,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 )
                 connected = False
                 await self.on_disconnect()
-                await gen.sleep(self.reconnect_delay)
+                await self.await_stop(sleep(self.reconnect_delay))
 
     async def dispatch_method(self, transport: client.RESTClient, method_call: common.Request) -> None:
         if self._client is None:
