@@ -3,7 +3,7 @@ ARG branch
 
 RUN yum install -y epel-release
 RUN curl --silent --location https://dl.yarnpkg.com/rpm/yarn.repo >/etc/yum.repos.d/yarn.repo
-RUN yum install -y git gcc mongodb sudo git tar findutils make procps-ng python36 python36-devel git nodejs-grunt-cli gcc-c++ gcc make yarn
+RUN yum install -y git gcc mongodb sudo git tar findutils make procps-ng python36 python36-devel git nodejs-grunt-cli gcc-c++ gcc make yarn postgresql
 
 # install the server
 RUN mkdir -p /opt/inmanta
@@ -23,5 +23,5 @@ ADD misc/docker-server.cfg /etc/inmanta/server.cfg
 RUN /opt/inmanta/env/bin/pip install -U -r/code/requirements.txt
 RUN /opt/inmanta/env/bin/pip install /code
 
-CMD /opt/inmanta/env/bin/python3 -m inmanta.app -c /etc/inmanta/server.cfg -vvv server
+CMD until PGPASSWORD="postgres" psql -h "postgres" -U "postgres" -c '\q'; do sleep 1; done && /opt/inmanta/env/bin/python3 -m inmanta.app -c /etc/inmanta/server.cfg -vvv server
 EXPOSE 8888
