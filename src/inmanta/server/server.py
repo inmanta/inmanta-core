@@ -48,7 +48,7 @@ from inmanta.ast import type
 from inmanta.resources import Id
 from inmanta.server import config as opt
 from inmanta.types import Apireturn
-from inmanta.util import hash_file, add_future
+from inmanta.util import hash_file
 from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
 
@@ -101,7 +101,7 @@ class Server(protocol.ServerSlice):
         information
     """
 
-    def __init__(self, database_host=None, database_port=None, agent_no_log=False):
+    def __init__(self, agent_no_log=False):
         super().__init__(name=SLICE_SERVER)
         LOGGER.info("Starting server endpoint")
 
@@ -114,8 +114,6 @@ class Server(protocol.ServerSlice):
         self.dryrun_lock = locks.Lock()
         self._fact_expire = opt.server_fact_expire.get()
         self._fact_renew = opt.server_fact_renew.get()
-        self._database_host = database_host
-        self._database_port = database_port
 
         self._resource_action_loggers: Dict[uuid.UUID, logging.Logger] = {}
         self._resource_action_handlers: Dict[uuid.UUID, logging.Handler] = {}
@@ -129,17 +127,6 @@ class Server(protocol.ServerSlice):
         self.agentmanager: "AgentManager" = server.get_slice("agentmanager")
 
     async def start(self):
-        if self._database_host is None:
-            self._database_host = opt.db_host.get()
-
-        if self._database_port is None:
-            self._database_port = opt.db_port.get()
-
-        database_username = opt.db_username.get()
-        database_password = opt.db_password.get()
-        await data.connect(self._database_host, self._database_port, opt.db_name.get(), database_username, database_password)
-        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), self._database_host, self._database_port)
-
         self.schedule(self.renew_expired_facts, self._fact_renew)
         self.schedule(self._purge_versions, opt.server_purge_version_interval.get())
         self.schedule(data.ResourceAction.purge_logs, opt.server_purge_resource_action_logs_interval.get())
@@ -152,7 +139,6 @@ class Server(protocol.ServerSlice):
     async def stop(self):
         await super().stop()
         self._close_resource_action_loggers()
-        await data.disconnect()
         self.stop_metric_reporters()
 
     def stop_metric_reporters(self) -> None:
@@ -1165,7 +1151,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
                         incremental_deploy = False
                     else:
                         incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                    add_future(client.trigger(env.id, agent, incremental_deploy))
+                    self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
                 else:
                     LOGGER.warning("Agent %s from model %s in env %s is not available for a deploy", agent, version_id, env.id)
 
@@ -1212,7 +1198,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             client = self.get_agent_client(env.id, agent)
             if client is not None:
                 incremental_deploy = agent_trigger_method is const.AgentTriggerMethod.push_incremental_deploy
-                add_future(client.trigger(env.id, agent, incremental_deploy))
+                self.add_background_task(client.trigger(env.id, agent, incremental_deploy))
                 present.add(agent)
             else:
                 absent.add(agent)
@@ -1243,7 +1229,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         for agent in agents:
             client = self.get_agent_client(env.id, agent)
             if client is not None:
-                add_future(client.do_dryrun(env.id, dryrun.id, agent, version_id))
+                self.add_background_task(client.do_dryrun(env.id, dryrun.id, agent, version_id))
             else:
                 LOGGER.warning("Agent %s from model %s in env %s is not available for a dryrun", agent, version_id, env.id)
 

@@ -142,42 +142,42 @@ class RESTHandler(tornado.web.RequestHandler):
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._transport.add_background_task(
-            self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+            self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs), cancel_on_stop=False
         )
 
     async def get(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._transport.add_background_task(
-            self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+            self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs), cancel_on_stop=False
         )
 
     async def post(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._transport.add_background_task(
-            self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+            self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs), cancel_on_stop=False
         )
 
     async def delete(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._transport.add_background_task(
-            self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+            self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs), cancel_on_stop=False
         )
 
     async def patch(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._transport.add_background_task(
-            self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+            self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs), cancel_on_stop=False
         )
 
     async def put(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
         await self._transport.add_background_task(
-            self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+            self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs), cancel_on_stop=False
         )
 
     def options(self, *args: str, **kwargs: str) -> None:
@@ -293,3 +293,6 @@ class RESTServer(RESTBase):
     async def join(self) -> None:
         await self.idle_event.wait()
         await self._http_server.close_all_connections()
+
+        # Call stop for inflight coroutines. This should move to stop.
+        await super(RESTServer, self).stop()

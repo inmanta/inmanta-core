@@ -24,7 +24,7 @@ from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
 
-from inmanta import config as inmanta_config
+from inmanta import config as inmanta_config, data
 from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 
 from tornado import gen, queues, web, routing
@@ -110,6 +110,8 @@ class Server(endpoints.Endpoint):
         LOGGER.debug("Starting Server Rest Endpoint")
         self.running = True
 
+        await self.connect_database()
+
         for slice in self.get_slices().values():
             await slice.prestart(self)
 
@@ -139,6 +141,23 @@ class Server(endpoints.Endpoint):
             await endpoint.stop()
 
         await self._transport.join()
+        await self.disconnect_database()
+
+    async def connect_database(self) -> None:
+        """ Connect to the database
+        """
+        database_host = opt.db_host.get()
+        database_port = opt.db_port.get()
+
+        database_username = opt.db_username.get()
+        database_password = opt.db_password.get()
+        await data.connect(database_host, database_port, opt.db_name.get(), database_username, database_password)
+        LOGGER.info("Connected to PostgreSQL database %s on %s:%d", opt.db_name.get(), database_host, database_port)
+
+    async def disconnect_database(self) -> None:
+        """ Disconnect the database
+        """
+        await data.disconnect()
 
 
 class ServerSlice(inmanta.protocol.endpoints.CallTarget, TaskHandler):

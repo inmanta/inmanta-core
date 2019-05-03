@@ -239,6 +239,7 @@ class TaskHandler(object):
     def __init__(self) -> None:
         super().__init__()
         self._background_tasks: Set[Task] = set()
+        self._await_tasks: Set[Task] = set()
 
     def add_future(self, future: Union[Future, Coroutine]) -> Task:
         """ Add a future to the event loop and report any exceptions if they occur
@@ -253,36 +254,40 @@ class TaskHandler(object):
         task.add_done_callback(handle_result)
         return task
 
-    def add_background_task(self, future: Union[Future, Coroutine]) -> None:
-        """ Add a background task to the event loop. When this slice is stopped, the task is cancelled
+    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> None:
+        """ Add a background task to the event loop. When stop is called, the task is cancelled.
+
+        :param future: The future or coroutine to run as background task.
+        :param cancel_on_stop: Cancel the task when stop is called. If false, the coroutine is awaited.
         """
         task = ensure_future(future)
 
-        def handle_result(f: Task) -> None:
+        def handle_result(task: Task) -> None:
             try:
-                f.result()
+                task.result()
             except CancelledError:
-                pass
+                LOGGER.warning("Task %s was cancelled.", task)
+
             except Exception as e:
                 LOGGER.exception("An exception occurred while handling a future: %s", str(e))
             finally:
-                if f in self._background_tasks:
-                    self._background_tasks.remove(f)
+                if task in self._background_tasks:
+                    self._background_tasks.remove(task)
 
         task.add_done_callback(handle_result)
         self._background_tasks.add(task)
 
-        return task
+        if not cancel_on_stop:
+            self._await_tasks.add(task)
 
-    async def wait_for_tasks(self) -> None:
-        """ Wait for all background tasks to finish
-        """
-        LOGGER.debug("Waiting for all background tasks of %s to finish", self)
-        await gather(*self._background_tasks)
+        return task
 
     async def stop(self) -> None:
         """ Stop all background tasks by requestinng a cancel
         """
+        await gather(*self._await_tasks)
+        self._background_tasks.difference_update(self._await_tasks)
+
         try:
             while True:
                 task = self._background_tasks.pop()

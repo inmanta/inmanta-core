@@ -485,7 +485,7 @@ class ResourceScheduler(object):
             add_future(r.execute(dummy, self.generation, self.cache))
 
         # Listen for completion
-        add_future(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
+        self.agent.process.add_background_task(self.mark_deployment_as_finished(self.generation.values(), reason, gid))
 
         # Start running
         dummy.future.set_result(ResourceActionResult(True, False, False))
@@ -497,7 +497,7 @@ class ResourceScheduler(object):
                 return
             if self._resume_reason is not None:
                 self.logger.info("Resuming run '%s'", self._resume_reason)
-                add_future(
+                self.agent.process.add_background_task(
                     self.agent.get_latest_version_for_agent(
                         reason=self._resume_reason, incremental_deploy=False, is_repair_run=True
                     )
@@ -724,7 +724,7 @@ class AgentInstance(object):
                     self._nq.reload(resources, undeployable, reason=reason, is_repair=is_repair_run)
 
     async def dryrun(self, dry_run_id, version):
-        add_future(self.do_run_dryrun(version, dry_run_id))
+        self.process.add_background_task(self.do_run_dryrun(version, dry_run_id))
         return 200
 
     async def do_run_dryrun(self, version, dry_run_id):
@@ -1013,7 +1013,7 @@ class Agent(SessionEndpoint):
             return 500, "Agent is not _enabled"
 
         LOGGER.info("Agent %s got a trigger to update in environment %s", agent, env)
-        add_future(self._instances[agent].get_latest_version_for_agent(
+        self.add_background_task(self._instances[agent].get_latest_version_for_agent(
             reason="call to trigger_update",
             incremental_deploy=incremental_deploy)
         )

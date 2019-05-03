@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Gener
 from inmanta import config as inmanta_config
 from inmanta import util
 from inmanta.protocol.common import UrlMethod
-from inmanta.util import add_future, TaskHandler
+from inmanta.util import TaskHandler
 from . import common
 from .rest import client
 
@@ -199,7 +199,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                 if result.code == 200:
                     if not connected:
                         connected = True
-                        add_future(self.on_reconnect())
+                        self.add_background_task(self.on_reconnect())
                     if result.result is not None:
                         if "method_calls" in result.result:
                             method_calls: List[common.Request] = [
@@ -209,7 +209,7 @@ class SessionEndpoint(Endpoint, CallTarget):
                             transport = self._transport(self)
 
                             for method_call in method_calls:
-                                add_future(self.dispatch_method(transport, method_call))
+                                self.add_background_task(self.dispatch_method(transport, method_call))
                 else:
                     LOGGER.warning(
                         "Heartbeat failed with status %d and message: %s, going to sleep for %d s",
@@ -238,7 +238,9 @@ class SessionEndpoint(Endpoint, CallTarget):
                 "No such method",
             )
             LOGGER.error(msg)
-            add_future(self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500}))
+            self.add_background_task(
+                self._client.heartbeat_reply(self.sessionid, method_call.reply_id, {"result": msg, "code": 500})
+            )
 
         body = method_call.body or {}
         query_string = parse.urlparse(method_call.url).query
