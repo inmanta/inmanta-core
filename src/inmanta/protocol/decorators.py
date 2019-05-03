@@ -15,10 +15,10 @@
 
     Contact: code@inmanta.com
 """
-from asyncio import Future
+from inmanta.types import Apireturn
 from . import common
 
-from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 
 class handle(object):  # noqa: N801
@@ -33,7 +33,7 @@ class handle(object):  # noqa: N801
         self.method = method
         self.mapping: Dict[str, str] = kwargs
 
-    def __call__(self, function: Callable[..., Future]):
+    def __call__(self, function: Callable[..., Coroutine[Any, Any, Apireturn]]):
         """
             The wrapping
         """
