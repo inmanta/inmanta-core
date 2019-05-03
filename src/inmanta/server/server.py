@@ -346,7 +346,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         LOGGER.info("Done renewing expired parameters")
 
     @protocol.handle(methods.get_param, param_id="id", env="tid")
-    async def get_param(self, env: data.Environment, param_id: str, resource_id: str=None) -> Apireturn:
+    async def get_param(self, env: data.Environment, param_id: str, resource_id: Optional[str]=None) -> Apireturn:
         if resource_id is None:
             params = await data.Parameter.get_list(environment=env.id, name=param_id)
         else:
@@ -909,7 +909,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environment": env.id, "agent": agent, "version": version, "resources": deploy_model}
 
     @protocol.handle(methods.list_versions, env="tid")
-    async def list_version(self, env: data.Environment, start: int=None, limit: int=None) -> Apireturn:
+    async def list_version(self, env: data.Environment, start: Optional[int]=None, limit: Optional[int]=None) -> Apireturn:
         if (start is None and limit is not None) or (limit is None and start is not None):
             return 500, {"message": "Start and limit should always be set together."}
 
@@ -932,7 +932,12 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.get_version, version_id="id", env="tid")
     async def get_version(
-            self, env: data.Environment, version_id: int, include_logs: bool=None, log_filter: str=None, limit: int=0
+            self,
+            env: data.Environment,
+            version_id: int,
+            include_logs: Optional[bool]=None,
+            log_filter: Optional[str]=None,
+            limit: Optional[int]=0
     ) -> Apireturn:
         version = await data.ConfigurationModel.get_version(env.id, version_id)
         if version is None:
@@ -1144,7 +1149,11 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
     @protocol.handle(methods.release_version, version_id="id", env="tid")
     async def release_version(
-            self, env: data.Environment, version_id: int, push: bool, agent_trigger_method: const.AgentTriggerMethod=None
+            self,
+            env: data.Environment,
+            version_id: int,
+            push: bool,
+            agent_trigger_method: Optional[const.AgentTriggerMethod]=None
     ) -> Apireturn:
         model = await data.ConfigurationModel.get_version(env.id, version_id)
         if model is None:
@@ -1299,7 +1308,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"dryrun": dryrun}
 
     @protocol.handle(methods.dryrun_list, env="tid")
-    async def dryrun_list(self, env: data.Environment, version: int=None) -> Apireturn:
+    async def dryrun_list(self, env: data.Environment, version: Optional[int]=None) -> Apireturn:
         query_args = {}
         query_args["environment"] = env.id
         if version is not None:
@@ -1721,7 +1730,7 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
         return 200, {"environments": dicts}  # @UndefinedVariable
 
     @protocol.handle(methods.delete_environment, environment_id="id")
-    async def delete_environment(self, environment_id: data.Environment) -> Apireturn:
+    async def delete_environment(self, environment_id: uuid.UUID) -> Apireturn:
         env = await data.Environment.get_by_id(environment_id)
         if env is None:
             return 404, {"message": "The environment with given id does not exist."}
