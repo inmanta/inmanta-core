@@ -1,6 +1,6 @@
 v 2019.3 (2019-06-30)
 Changes in this release:
-- Various bugfixes (#....)
+- Various bugfixes (#1148)
 - Use native coroutines everywhere (async def)
 
 v 2019.2 (2019-04-30)
