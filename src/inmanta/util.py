@@ -112,6 +112,7 @@ class Scheduler(object):
     """
         An event scheduler class
     """
+
     def __init__(self, name: str) -> None:
         self.name = name
         self._scheduled: Dict[Callable, object] = {}
@@ -135,11 +136,7 @@ class Scheduler(object):
             LOGGER.info("Calling %s" % action)
             if action in self._scheduled:
                 try:
-                    ensure_future_and_handle_exception(
-                        LOGGER,
-                        "Uncaught exception while executing scheduled action",
-                        action()
-                    )
+                    ensure_future_and_handle_exception(LOGGER, "Uncaught exception while executing scheduled action", action())
                 except Exception:
                     LOGGER.exception("Uncaught exception while executing scheduled action")
                 finally:
@@ -180,7 +177,7 @@ def get_free_tcp_port() -> str:
         Semi safe method for getting a random port. This may contain a race condition.
     """
     tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcp.bind(('', 0))
+    tcp.bind(("", 0))
     _addr, port = tcp.getsockname()
     tcp.close()
     return str(port)
@@ -194,7 +191,7 @@ def custom_json_encoder(o: object) -> Union[Dict, str, List]:
         return str(o)
 
     if isinstance(o, datetime.datetime):
-        return o.isoformat(timespec='microseconds')
+        return o.isoformat(timespec="microseconds")
 
     if hasattr(o, "to_dict"):
         return o.to_dict()
@@ -214,6 +211,7 @@ def add_future(future: Union[Future, Coroutine]) -> Task:
     """
         Add a future to the ioloop to be handled, but do not require the result.
     """
+
     def handle_result(f: Task) -> None:
         try:
             f.result()
@@ -231,19 +229,27 @@ async def retry_limited(fun: Callable[[], bool], timeout: float, interval: float
         await sleep(interval)
 
 
+class StoppedException(Exception):
+    """ This exception is raised when a background task is added to the taskhandler when it is shutting down.
+    """
+
+
 class TaskHandler(object):
     """
         This class provides a method to add a background task based on a coroutine. When the coroutine ends, any exceptions
         are reported. If stop is invoked, all background tasks are cancelled.
     """
+
     def __init__(self) -> None:
         super().__init__()
         self._background_tasks: Set[Task] = set()
         self._await_tasks: Set[Task] = set()
+        self._stopped = False
 
     def add_future(self, future: Union[Future, Coroutine]) -> Task:
         """ Add a future to the event loop and report any exceptions if they occur
         """
+
         def handle_result(f: Task) -> None:
             try:
                 f.result()
@@ -254,12 +260,16 @@ class TaskHandler(object):
         task.add_done_callback(handle_result)
         return task
 
-    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> None:
+    def add_background_task(self, future: Union[Future, Coroutine], cancel_on_stop=True) -> Task:
         """ Add a background task to the event loop. When stop is called, the task is cancelled.
 
         :param future: The future or coroutine to run as background task.
         :param cancel_on_stop: Cancel the task when stop is called. If false, the coroutine is awaited.
         """
+        if self._stopped:
+            LOGGER.warning("Not adding background task because we are stopping.")
+            raise StoppedException("A background tasks are not added to the event loop while stopping")
+
         task = ensure_future(future)
 
         def handle_result(task: Task) -> None:
@@ -285,16 +295,17 @@ class TaskHandler(object):
     async def stop(self) -> None:
         """ Stop all background tasks by requestinng a cancel
         """
+        self._stopped = True
         await gather(*self._await_tasks)
         self._background_tasks.difference_update(self._await_tasks)
 
+        cancelled_tasks = []
         try:
             while True:
                 task = self._background_tasks.pop()
                 task.cancel()
-                try:
-                    await task
-                except CancelledError:
-                    pass
+                cancelled_tasks.append(task)
         except KeyError:
             pass
+
+        await gather(*cancelled_tasks, return_exceptions=True)

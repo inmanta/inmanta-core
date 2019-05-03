@@ -84,6 +84,7 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
     server.add_background_task.side_effect = futures
     am = AgentManager(server, False)
     am.add_background_task = futures
+    am.add_future = futures
     am.running = True
 
     async def assert_agent(name: str, state: str, sid: UUID):
@@ -288,6 +289,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     server.add_background_task.side_effect = futures
     am = AgentManager(server, False)
     am.add_background_task = futures
+    am.add_future = futures
     am.running = True
 
     async def assert_agent(name: str, state: str, sid: UUID):
@@ -346,6 +348,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
     # failover
     am = AgentManager(server, False)
     am.add_background_task = futures
+    am.add_future = futures
     am.running = True
     await am.clean_db()
 

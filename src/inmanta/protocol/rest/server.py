@@ -285,7 +285,7 @@ class RESTServer(RESTBase):
         """
             Stop the current server
         """
-        self.running = True
+        self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         if self._http_server is not None:
             self._http_server.stop()

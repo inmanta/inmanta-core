@@ -172,8 +172,8 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.add_background_task(self.perform_heartbeat())
 
     async def stop(self) -> None:
-        await super(SessionEndpoint, self).stop()
         self._sched.stop()
+        await super(SessionEndpoint, self).stop()
 
     async def on_reconnect(self) -> None:
         pass

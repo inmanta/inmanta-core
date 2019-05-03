@@ -138,7 +138,7 @@ class AgentManager(ServerSlice, SessionListener):
         self.add_background_task(self.register_session(session, datetime.now()))
 
     def expire(self, session: protocol.Session, timeout: float) -> None:
-        self.add_background_task(self.expire_session(session, datetime.now()))
+        self.add_future(self.expire_session(session, datetime.now()))
 
     def seen(self, session: protocol.Session, endpoint_names: List[str]) -> None:
         if set(session.endpoint_names) != set(endpoint_names):
