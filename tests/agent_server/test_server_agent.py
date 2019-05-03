@@ -2998,8 +2998,6 @@ async def test_bad_post_events(resource_container, environment, server, agent, c
     """
     caplog.set_level(logging.ERROR)
 
-    agentmanager = server.get_slice(SLICE_AGENT_MANAGER)
-
     version = int(time.time())
 
     res_id_1 = "test::BadPost[agent1,key=key1],v=%d" % version
@@ -3464,10 +3462,3 @@ async def test_agent_lockout(resource_container, environment, server, client, as
 
     result = await agent2._instances["agent1"].get_client().get_resources_for_agent(tid=environment, agent="agent1")
     assert result.code == 409
-
-
-@pytest.mark.asyncio
-async def test_agent_stop(server, agent):
-    assert agent._heartbeat_coro is not None
-    await agent.stop()
-    assert agent._heartbeat_coro is None

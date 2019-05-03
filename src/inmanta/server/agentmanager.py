@@ -15,9 +15,6 @@
 
     Contact: code@inmanta.com
 """
-from _asyncio import Task
-from asyncio import CancelledError
-
 from tornado import locks
 from tornado import process
 

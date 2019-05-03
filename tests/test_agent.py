@@ -15,9 +15,7 @@
 
     Contact: code@inmanta.com
 """
-from inmanta import agent
 import pytest
-from utils import retry_limited
 from inmanta.agent import reporting
 from inmanta.server import SLICE_SESSION_MANAGER
 

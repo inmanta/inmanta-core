@@ -25,7 +25,7 @@ import enum
 from tornado import escape
 from inmanta import const, util
 from inmanta.types import JsonType
-from inmanta.protocol import common, exceptions, endpoints
+from inmanta.protocol import common, exceptions
 from inmanta import config as inmanta_config
 
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401

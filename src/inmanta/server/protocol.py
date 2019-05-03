@@ -16,11 +16,10 @@
     Contact: code@inmanta.com
 """
 from _asyncio import Task
-from asyncio import CancelledError
 
 import inmanta.protocol.endpoints
 from inmanta.types import JsonType
-from inmanta.util import Scheduler, add_future, TaskHandler
+from inmanta.util import Scheduler, TaskHandler
 from inmanta.protocol import Client, handle, methods
 from inmanta.protocol import common, endpoints
 from inmanta.protocol.rest import server
@@ -31,7 +30,7 @@ from inmanta.server import config as opt, SLICE_SESSION_MANAGER
 from tornado import gen, queues, web, routing
 from tornado.ioloop import IOLoop
 
-from typing import Dict, Tuple, Callable, Optional, List, Union, Coroutine, Set
+from typing import Dict, Tuple, Callable, Optional, List, Union, Set
 
 import logging
 import asyncio

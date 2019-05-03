@@ -850,11 +850,23 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
             "timestamp": now.isoformat(timespec='microseconds'),
             "args": []
         }
-        self.add_background_task(self.resource_action_update(env, neg_increment, action_id=uuid.uuid4(),
-                                               started=now, finished=now, status=const.ResourceState.deployed,
-                                               # does this require a different ResourceAction?
-                                               action=const.ResourceAction.deploy, changes={}, messages=[logline],
-                                               change=const.Change.nochange, send_events=False, keep_increment_cache=True))
+        self.add_background_task(
+            self.resource_action_update(
+                env,
+                neg_increment,
+                action_id=uuid.uuid4(),
+                started=now,
+                finished=now,
+                status=const.ResourceState.deployed,
+                # does this require a different ResourceAction?
+                action=const.ResourceAction.deploy,
+                changes={},
+                messages=[logline],
+                change=const.Change.nochange,
+                send_events=False,
+                keep_increment_cache=True
+            )
+        )
 
         resources = await data.Resource.get_resources_for_version(env.id, version, agent)
 

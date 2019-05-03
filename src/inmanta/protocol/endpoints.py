@@ -21,7 +21,7 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Task, sleep, CancelledError, Future, ensure_future
+from asyncio import Task, sleep, CancelledError
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
