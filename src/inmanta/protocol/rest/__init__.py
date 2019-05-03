@@ -22,13 +22,13 @@ import uuid
 from datetime import datetime
 import enum
 
-from tornado import gen, escape
-from inmanta import const
+from tornado import escape
+from inmanta import const, util
 from inmanta.types import JsonType
 from inmanta.protocol import common, exceptions
 from inmanta import config as inmanta_config
 
-from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping, Generator  # noqa: F401
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING, cast, Mapping  # noqa: F401
 
 LOGGER: logging.Logger = logging.getLogger(__name__)
 INMANTA_MT_HEADER = "X-Inmanta-tid"
@@ -46,9 +46,7 @@ ServerSlice.server [1] -- RestServer.endpoints [1:]
 """
 
 
-def authorize_request(
-    auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod
-) -> None:
+def authorize_request(auth_data: Dict[str, str], metadata: Dict[str, str], message: JsonType, config: common.UrlMethod) -> None:
     """
         Authorize a request based on the given data
     """
@@ -187,8 +185,7 @@ class CallArguments(object):
         else:
             raise exceptions.BadRequest("Invalid request. Field '%s' is required." % arg_name)
 
-    @gen.coroutine
-    def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
+    async def _run_getters(self, arg: str, value: Optional[Any]) -> Optional[Any]:
         """
             Run ant available getters on value
         """
@@ -196,14 +193,13 @@ class CallArguments(object):
             return value
 
         try:
-            value = yield self._properties.arg_options[arg].getter(value, self._metadata)
+            value = await self._properties.arg_options[arg].getter(value, self._metadata)
             return value
         except Exception as e:
             LOGGER.exception("Failed to use getter for arg %s", arg)
             raise e
 
-    @gen.coroutine
-    def process(self) -> None:
+    async def process(self) -> None:
         """
             Process the message
         """
@@ -232,7 +228,7 @@ class CallArguments(object):
             value = self._process_typing(arg, value)
 
             # run getters
-            value = yield self._run_getters(arg, value)
+            value = await self._run_getters(arg, value)
 
             self._call_args[arg] = value
 
@@ -249,7 +245,7 @@ class CallArguments(object):
 
 
 # Shared
-class RESTBase(object):
+class RESTBase(util.TaskHandler):
     """
         Base class for REST based client and servers
     """
@@ -273,8 +269,7 @@ class RESTBase(object):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         raise NotImplementedError()
 
-    @gen.coroutine
-    def _execute_call(
+    async def _execute_call(
         self,
         kwargs: Dict[str, str],
         http_method: str,
@@ -282,7 +277,7 @@ class RESTBase(object):
         message: Dict[str, Any],
         request_headers: Mapping[str, str],
         auth=None,
-    ) -> Generator[Any, Any, common.Response]:
+    ) -> common.Response:
 
         headers: Dict[str, str] = {}
         try:
@@ -305,7 +300,7 @@ class RESTBase(object):
                     raise exceptions.BadRequest("the sid %s is not valid." % message["sid"])
 
             arguments = CallArguments(config.properties, message, request_headers)
-            yield arguments.process()
+            await arguments.process()
             authorize_request(auth, arguments.metadata, arguments.call_args, config)
 
             # rename arguments if handler requests this
@@ -322,7 +317,7 @@ class RESTBase(object):
                 ", ".join(["%s='%s'" % (name, common.shorten(str(value))) for name, value in arguments.call_args.items()]),
             )
 
-            result = yield config.handler(**arguments.call_args)
+            result = await config.handler(**arguments.call_args)
 
             if result is None:
                 raise exceptions.BadRequest(

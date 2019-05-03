@@ -18,18 +18,19 @@
 import asyncio
 import ssl
 import uuid
+from asyncio import CancelledError
 
 from typing import Optional, Dict, List
 
 import tornado
 from pyformance import timer
-from tornado import gen, httpserver, web, routing
+from tornado import httpserver, web, routing, iostream
 
 import inmanta.protocol.endpoints
 from inmanta import config as inmanta_config, const
 from inmanta.protocol import exceptions, common
 from inmanta.protocol.rest import LOGGER, CONTENT_TYPE, JSON_CONTENT, RESTBase
-from inmanta.types import NoneGen, JsonType
+from inmanta.types import JsonType
 
 
 class RESTHandler(tornado.web.RequestHandler):
@@ -81,13 +82,15 @@ class RESTHandler(tornado.web.RequestHandler):
 
         self.set_status(status)
 
-    @gen.coroutine
-    def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> NoneGen:
+    async def _call(self, kwargs: Dict[str, str], http_method: str, call_config: common.UrlMethod) -> None:
         """
             An rpc like call
         """
         if call_config is None:
             raise exceptions.NotFound("This method does not exist")
+
+        if not self._transport.running:
+            return
 
         with timer("rpc." + call_config.method_name).time():
             self._transport.start_request()
@@ -108,7 +111,7 @@ class RESTHandler(tornado.web.RequestHandler):
 
                 auth_enabled: bool = inmanta_config.Config.get("server", "auth", False)
                 if not auth_enabled or auth_token is not None:
-                    result = yield self._transport._execute_call(
+                    result = await self._transport._execute_call(
                         kwargs, http_method, call_config, message, request_headers, auth_token
                     )
                     self.respond(result.body, result.headers, result.status_code)
@@ -122,48 +125,60 @@ class RESTHandler(tornado.web.RequestHandler):
             except exceptions.BaseException as e:
                 self.respond(e.to_body(), {}, e.to_status())
 
+            except CancelledError:
+                self.respond({"message": "Request is cancelled on the server"}, {}, 500)
+
             finally:
                 try:
-                    yield self.finish()
+                    await self.finish()
+                except iostream.StreamClosedError:
+                    # The connection has been closed already.
+                    pass
                 except Exception:
                     LOGGER.exception("An exception occurred responding to %s", self.request.remote_ip)
                 self._transport.end_request()
 
-    @gen.coroutine
-    def head(self, *args: str, **kwargs: str) -> NoneGen:
+    async def head(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="HEAD", call_config=self._get_config("HEAD"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def get(self, *args: str, **kwargs: str) -> NoneGen:
+    async def get(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="GET", call_config=self._get_config("GET"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def post(self, *args: str, **kwargs: str) -> NoneGen:
+    async def post(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="POST", call_config=self._get_config("POST"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def delete(self, *args: str, **kwargs: str) -> NoneGen:
+    async def delete(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="DELETE", call_config=self._get_config("DELETE"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def patch(self, *args: str, **kwargs: str) -> NoneGen:
+    async def patch(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="PATCH", call_config=self._get_config("PATCH"), kwargs=kwargs), cancel_on_stop=False
+        )
 
-    @gen.coroutine
-    def put(self, *args: str, **kwargs: str) -> NoneGen:
+    async def put(self, *args: str, **kwargs: str) -> None:
         if args:
             raise Exception("Only named groups are support in url patterns")
-        yield self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs)
+        await self._transport.add_background_task(
+            self._call(http_method="PUT", call_config=self._get_config("PUT"), kwargs=kwargs), cancel_on_stop=False
+        )
 
     def options(self, *args: str, **kwargs: str) -> None:
         if args:
@@ -210,6 +225,7 @@ class RESTServer(RESTBase):
         # event indicating no more in flight requests
         self.idle_event = asyncio.Event()
         self.idle_event.set()
+        self.running = False
 
     def start_request(self):
         self.idle_event.clear()
@@ -223,8 +239,9 @@ class RESTServer(RESTBase):
     def validate_sid(self, sid: uuid.UUID) -> bool:
         return self.session_manager.validate_sid(sid)
 
-    @gen.coroutine
-    def start(self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []) -> NoneGen:
+    async def start(
+        self, targets: List[inmanta.protocol.endpoints.CallTarget], additional_rules: List[routing.Rule] = []
+    ) -> None:
         """
             Start the server on the current ioloop
         """
@@ -260,6 +277,7 @@ class RESTServer(RESTBase):
         else:
             self._http_server = httpserver.HTTPServer(application, decompress_request=True)
         self._http_server.listen(port)
+        self.running = True
 
         LOGGER.debug("Start REST transport")
 
@@ -267,11 +285,11 @@ class RESTServer(RESTBase):
         """
             Stop the current server
         """
+        self.running = False
         LOGGER.debug("Stopping Server Rest Endpoint")
         if self._http_server is not None:
             self._http_server.stop()
 
-    @gen.coroutine
-    def join(self) -> NoneGen:
-        yield self.idle_event.wait()
-        yield self._http_server.close_all_connections()
+    async def join(self) -> None:
+        await self.idle_event.wait()
+        await self._http_server.close_all_connections()

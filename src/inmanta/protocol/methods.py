@@ -23,28 +23,24 @@ from inmanta import data, const
 from .common import ArgOption
 from .decorators import method
 from . import exceptions
-from tornado import gen
 
 from typing import Any
 
 
-@gen.coroutine
-def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
+async def convert_environment(env: uuid.UUID, metadata: dict) -> data.Environment:
     metadata[const.INMANTA_URN + "env"] = str(env)
-    env = yield data.Environment.get_by_id(env)
+    env = await data.Environment.get_by_id(env)
     if env is None:
         raise exceptions.NotFound("the given environment id does not exist!")
     return env
 
 
-@gen.coroutine
-def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
+async def add_env(env: uuid.UUID, metadata: dict) -> uuid.UUID:
     metadata[const.INMANTA_URN + "env"] = str(env)
     return env
 
 
-@gen.coroutine
-def ignore_env(obj: Any, metadata: dict) -> Any:
+async def ignore_env(obj: Any, metadata: dict) -> Any:
     """
         This mapper only adds an env all for authz
     """
@@ -100,7 +96,7 @@ def get_project(id: uuid.UUID):
 # Methods for working with environments
 @method(method_name="environment", operation="PUT", client_types=["api"])
 def create_environment(
-        project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: uuid.UUID = None
+    project_id: uuid.UUID, name: str, repository: str = None, branch: str = None, environment_id: uuid.UUID = None
 ):
     """
         Create a new environment
@@ -399,11 +395,7 @@ def get_resource(
 
 @method(method_name="resource", operation="GET", index=True, agent_server=True, arg_options=ENV_OPTS, client_types=["agent"])
 def get_resources_for_agent(
-    tid: uuid.UUID,
-    agent: str,
-    sid: uuid.UUID = None,
-    version: int = None,
-    incremental_deploy: bool = False
+    tid: uuid.UUID, agent: str, sid: uuid.UUID = None, version: int = None, incremental_deploy: bool = False
 ):
     """
         Return the most recent state for the resources associated with agent, or the version requested
@@ -519,8 +511,11 @@ def release_version(tid: uuid.UUID, id: int, push: bool = False, agent_trigger_m
 
 
 @method(method_name="deploy", operation="POST", arg_options=ENV_OPTS, client_types=["api"])
-def deploy(tid: uuid.UUID, agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
-           agents: list = None):
+def deploy(
+    tid: uuid.UUID,
+    agent_trigger_method: const.AgentTriggerMethod = const.AgentTriggerMethod.push_full_deploy,
+    agents: list = None,
+):
     """
         Notify agents to perform a deploy now.
 

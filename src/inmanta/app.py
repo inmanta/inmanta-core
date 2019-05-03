@@ -89,8 +89,7 @@ def dump_threads():
     sys.stdout.flush()
 
 
-@gen.coroutine
-def dump_ioloop_running():
+async def dump_ioloop_running():
     # dump async IO
     print("----- Async IO tasks ----")
     for task in asyncio.all_tasks():
@@ -137,8 +136,7 @@ def setup_signal_handlers(shutdown_function):
     signal.signal(signal.SIGUSR1, handle_signal_dump)
 
 
-@gen.coroutine
-def safe_shutdown_wrapper(shutdown_function):
+async def safe_shutdown_wrapper(shutdown_function):
     """
         Wait 10 seconds to gracefully shutdown the instance.
         Afterwards stop the IOLoop
@@ -147,7 +145,7 @@ def safe_shutdown_wrapper(shutdown_function):
     future = shutdown_function()
     try:
         timeout = IOLoop.current().time() + const.SHUTDOWN_GRACE_IOLOOP
-        yield gen.with_timeout(timeout, future)
+        await gen.with_timeout(timeout, future)
     except TimeoutError:
         pass
     finally:

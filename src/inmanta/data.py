@@ -229,7 +229,7 @@ class BaseDocument(object, metaclass=DocumentMeta):
     @classmethod
     def set_connection_pool(cls, pool):
         if cls._connection_pool:
-            raise Exception("Connection already set!")
+            raise Exception(f"Connection already set on {cls} ({cls._connection_pool}!")
         cls._connection_pool = pool
 
     @classmethod
@@ -2296,6 +2296,7 @@ def set_connection_pool(pool):
 
 
 async def disconnect():
+    LOGGER.debug("Disconnecting data classes")
     for cls in _classes:
         await cls.close_connection_pool()
 
