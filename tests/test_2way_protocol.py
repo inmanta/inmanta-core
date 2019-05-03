@@ -109,8 +109,8 @@ def no_tid_check():
 
 
 @pytest.mark.asyncio
-async def test_2way_protocol(unused_tcp_port, no_tid_check):
-    configure(unused_tcp_port)
+async def test_2way_protocol(unused_tcp_port, no_tid_check, postgres_db, database_name):
+    configure(unused_tcp_port, database_name, postgres_db.port)
 
     rs = Server()
     server = SessionSpy()
@@ -138,8 +138,7 @@ async def test_2way_protocol(unused_tcp_port, no_tid_check):
     await agent.stop()
 
 
-def configure(unused_tcp_port):
-
+def configure(unused_tcp_port, database_name, database_port):
     from inmanta.config import Config
 
     import inmanta.agent.config  # noqa: F401
@@ -152,6 +151,9 @@ def configure(unused_tcp_port):
     Config.set("compiler_rest_transport", "port", free_port)
     Config.set("client_rest_transport", "port", free_port)
     Config.set("cmdline_rest_transport", "port", free_port)
+    Config.set("database", "name", database_name)
+    Config.set("database", "host", "localhost")
+    Config.set("database", "port", str(database_port))
 
 
 async def check_sessions(sessions):
@@ -162,10 +164,10 @@ async def check_sessions(sessions):
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio(timeout=30)
-async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer):
+async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
     from inmanta.config import Config
 
-    configure(unused_tcp_port)
+    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 
@@ -220,10 +222,10 @@ async def test_agent_timeout(unused_tcp_port, no_tid_check, async_finalizer):
 
 @pytest.mark.slowtest
 @pytest.mark.asyncio(timeout=30)
-async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer):
+async def test_server_timeout(unused_tcp_port, no_tid_check, async_finalizer, postgres_db, database_name):
     from inmanta.config import Config
 
-    configure(unused_tcp_port)
+    configure(unused_tcp_port, database_name, postgres_db.port)
 
     Config.set("server", "agent-timeout", "1")
 

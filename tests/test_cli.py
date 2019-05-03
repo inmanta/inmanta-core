@@ -17,6 +17,8 @@
 """
 import pytest
 
+from inmanta import data
+
 
 @pytest.mark.asyncio
 async def test_project(server, client, cli):
@@ -180,6 +182,8 @@ async def test_version(server, client, environment, cli, push_method):
 
 @pytest.mark.asyncio
 async def test_param(server, client, environment, cli):
+    await client.set_setting(environment, data.SERVER_COMPILE, False)
+
     result = await cli.run("param", "set", "-e", environment, "--name", "var1", "--value", "value1")
     assert result.exit_code == 0
     assert "value1" in result.output

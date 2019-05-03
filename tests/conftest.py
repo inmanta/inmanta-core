@@ -15,7 +15,7 @@
 
     Contact: code@inmanta.com
 """
-
+import concurrent
 import os
 import tempfile
 import random
@@ -60,6 +60,7 @@ from pyformance.registry import MetricsRegistry
 from inmanta.util import get_free_tcp_port
 
 asyncio.set_event_loop_policy(AnyThreadEventLoopPolicy())
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -141,6 +142,7 @@ async def clean_db(postgresql_client, create_db):
         2) Dropped tables: All tables which are not part of the inmanta schema. Some tests create additional tables, which are
                            not part of the Inmanta schema. These should be cleaned-up before running a new test.
     """
+    yield
     tables_in_db = await postgresql_client.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
     tables_in_db = [x["table_name"] for x in tables_in_db]
     tables_to_preserve = [x.table_name() for x in data._classes]
@@ -262,7 +264,7 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
     config.Config.set("client_rest_transport", "port", port)
     config.Config.set("cmdline_rest_transport", "port", port)
     config.Config.set("config", "executable", os.path.abspath(os.path.join(__file__, "../../src/inmanta/app.py")))
-    config.Config.set("server", "agent-timeout", "10")
+    config.Config.set("server", "agent-timeout", "2")
     config.Config.set("server", "auto-recompile-wait", "0")
     config.Config.set("agent", "agent-repair-interval", "0")
 
@@ -271,7 +273,12 @@ async def server(event_loop, inmanta_config, postgres_db, database_name, clean_r
 
     yield ibl.restserver
 
-    await asyncio.wait_for(ibl.stop(), 10)
+    try:
+        await asyncio.wait_for(ibl.stop(), 15)
+    except concurrent.futures.TimeoutError:
+        logger.exception("Timeout during stop of the server in teardown")
+
+    logger.info("Server clean up done")
     shutil.rmtree(state_dir)
 
 
@@ -335,8 +342,10 @@ async def server_multi(event_loop, inmanta_config, postgres_db, database_name, r
     await ibl.start()
 
     yield ibl.restserver
-
-    await asyncio.wait_for(ibl.stop(), 10)
+    try:
+        await asyncio.wait_for(ibl.stop(), 15)
+    except concurrent.futures.TimeoutError:
+        logger.exception("Timeout during stop of the server in teardown")
 
     shutil.rmtree(state_dir)
 

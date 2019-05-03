@@ -16,8 +16,7 @@
     Contact: code@inmanta.com
 """
 # This file defines named type definition for the Inmanta code base
-from typing import Generator, Any, Tuple, Dict
+from typing import Any, Tuple, Dict
 
-NoneGen = Generator[Any, Any, None]
 JsonType = Dict[str, Any]
-Apireturn = Generator[Any, Any, Tuple[int, JsonType]]
+Apireturn = Tuple[int, JsonType]

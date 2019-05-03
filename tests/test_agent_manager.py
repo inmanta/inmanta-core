@@ -81,8 +81,9 @@ async def test_primary_selection(init_dataclasses_and_load_schema):
 
     server = Mock()
     futures = Collector()
-    server.add_future.side_effect = futures
+    server.add_background_task.side_effect = futures
     am = AgentManager(server, False)
+    am.add_background_task = futures
     am.add_future = futures
     am.running = True
 
@@ -180,9 +181,9 @@ async def test_api(init_dataclasses_and_load_schema):
 
     server = Mock()
     futures = Collector()
-    server.add_future.side_effect = futures
+    server.add_background_task.side_effect = futures
     am = AgentManager(server, False)
-    am.add_future = futures
+    am.add_background_task = futures
     am.running = True
 
     # one session
@@ -285,8 +286,9 @@ async def test_db_clean(init_dataclasses_and_load_schema):
 
     server = Mock()
     futures = Collector()
-    server.add_future.side_effect = futures
+    server.add_background_task.side_effect = futures
     am = AgentManager(server, False)
+    am.add_background_task = futures
     am.add_future = futures
     am.running = True
 
@@ -345,6 +347,7 @@ async def test_db_clean(init_dataclasses_and_load_schema):
 
     # failover
     am = AgentManager(server, False)
+    am.add_background_task = futures
     am.add_future = futures
     am.running = True
     await am.clean_db()

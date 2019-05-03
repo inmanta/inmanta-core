@@ -163,7 +163,7 @@ async def test_diff(client):
 
 
 @pytest.mark.asyncio
-async def test_client_files_bad(client):
+async def test_client_files_bad(server, client):
     (hash, content, body) = make_random_file()
     # Create the file
     result = await client.upload_file(id=hash + "a", content=body)
