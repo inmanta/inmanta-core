@@ -293,6 +293,3 @@ class RESTServer(RESTBase):
     async def join(self) -> None:
         await self.idle_event.wait()
         await self._http_server.close_all_connections()
-
-        # Call stop for inflight coroutines. This should move to stop.
-        await super(RESTServer, self).stop()
