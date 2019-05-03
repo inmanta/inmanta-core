@@ -1940,8 +1940,9 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             LOGGER.info("Recompiling configuration model")
             server_address = opt.server_address.get()
+            server_port = opt.transport_port.get()
             cmd = inmanta_path + ["-vvv", "export", "-e", str(environment_id), "--server_address", server_address,
-                                  "--server_port", opt.transport_port.get(), "--metadata", json.dumps(metadata)]
+                                  "--server_port", str(server_port), "--metadata", json.dumps(metadata)]
             if config.Config.get("server", "auth", False):
                 token = encode_token(["compiler", "api"], str(environment_id))
                 cmd.append("--token")
