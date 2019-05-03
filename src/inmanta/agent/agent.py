@@ -73,7 +73,6 @@ class ResourceAction(object):
     resource: Resource
     resource_id: Id
     future: ResourceActionResultFuture
-    _exec_waiter: Optional[asyncio.Task]
 
     def __init__(self, scheduler: "ResourceScheduler", resource: Resource, gid: uuid.UUID, reason: str) -> None:
         """

@@ -21,7 +21,7 @@ import uuid
 from collections import defaultdict
 
 from urllib import parse
-from asyncio import Task, sleep, CancelledError
+from asyncio import sleep, CancelledError
 from typing import Any, Dict, List, Optional, Union, Tuple, Set, Callable, Generator, Coroutine  # noqa: F401
 
 from inmanta import config as inmanta_config
@@ -144,8 +144,6 @@ class SessionEndpoint(Endpoint, CallTarget):
         self.running: bool = True
         self.server_timeout = timeout
         self.reconnect_delay = reconnect_delay
-        self._heartbeat_coro: Optional[Task] = None
-
         self.add_call_target(self)
 
     def get_environment(self) -> Optional[uuid.UUID]:
