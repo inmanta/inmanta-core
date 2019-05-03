@@ -1903,6 +1903,8 @@ angular.module('inmantaApi.config', []).constant('inmantaConfig', {
 
             stages.append(result)
         except CancelledError:
+            # This compile was cancelled. Catch it here otherwise a warning will be printed in the logs because of an
+            # unhandled exception in a backgrounded coroutine.
             pass
 
         except Exception:
