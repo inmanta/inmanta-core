@@ -36,7 +36,7 @@ import json
 import dateutil.parser
 import asyncpg
 from tornado import locks
-from typing import Dict, Any, Optional, Union, cast, Set
+from typing import Dict, Any, Optional, Union, Set, List, TYPE_CHECKING
 
 from inmanta import const
 from inmanta import data, config
@@ -51,8 +51,6 @@ from inmanta.types import Apireturn, JsonType
 from inmanta.util import hash_file
 from inmanta.const import STATE_UPDATE, VALID_STATES_ON_STATE_UPDATE, TERMINAL_STATES, TRANSIENT_STATES
 from inmanta.protocol import encode_token, methods
-
-from typing import List, TYPE_CHECKING
 
 LOGGER = logging.getLogger(__name__)
 
