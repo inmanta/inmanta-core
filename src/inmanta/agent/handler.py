@@ -72,8 +72,14 @@ class ResourcePurged(Exception):
     """
 
 
-def cache(f=None, ignore: typing.List[str]=[], timeout: int=5000, for_version: bool=True, cache_none: bool=True,
-          cacheNone: bool=True):  # noqa: N803
+def cache(
+    f=None,
+    ignore: typing.List[str]=[],
+    timeout: int=5000,
+    for_version: bool=True,
+    cache_none: bool=True,
+    cacheNone: bool=True  # noqa: N803
+):
     """
         decorator for methods in resource handlers to provide caching
 
