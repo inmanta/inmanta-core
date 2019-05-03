@@ -38,7 +38,7 @@ db_password = Option("database", "password", None, "The password that belong to 
 #############################
 # server_rest_transport
 #############################
-transport_port = Option("server_rest_transport", "port", 8888, "The port on which the server listens for connections")
+transport_port = Option("server_rest_transport", "port", 8888, "The port on which the server listens for connections", is_int)
 
 #############################
 # Influxdb

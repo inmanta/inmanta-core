@@ -317,7 +317,7 @@ class TransportConfig(object):
     """
         A class to register the config options for Client classes
     """
-    def __init__(self, name: str, port: int=8888) -> None:
+    def __init__(self, name: str, port: int = 8888) -> None:
         self.prefix = "%s_rest_transport" % name
         self.host = Option(self.prefix, "host", "localhost", "IP address or hostname of the server", is_str)
         self.port = Option(self.prefix, "port", port, "Server port", is_int)

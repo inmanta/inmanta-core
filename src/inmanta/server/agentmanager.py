@@ -531,7 +531,7 @@ class AgentManager(ServerSlice, SessionListener):
             :return: A string that contains the config file content.
         """
         environment_id = str(env.id)
-        port: int = Config.get("server_rest_transport", "port", "8888")
+        port: int = Config.get("server_rest_transport", "port", 8888)
 
         privatestatedir: str = os.path.join(Config.get("config", "state-dir", "/var/lib/inmanta"), environment_id)
 
